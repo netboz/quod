@@ -40,8 +40,7 @@ gui_call(_, _, _, _) -> {error, invalid_presentation}.
 
 init(Req, _) ->
     {Peer, _} = cowboy_req:peer(Req),
-    {cowboy_websocket, Req, #{peer => Peer},
-     #{max_frame_size => 2 * ?QUOD_CLIENT_GOAL_REQUEST_BYTES + 4096}}.
+    {cowboy_websocket, Req, #{peer => Peer}, #{max_frame_size => infinity}}.
 websocket_init(S) -> {ok, S}.
 
 websocket_handle({text, Bytes}, S) ->
@@ -63,7 +62,12 @@ decode_command(Bytes) ->
                 <<_:512>> = Signature = Decode(Signature64),
                 <<_:256>> = Anchor = Decode(Anchor64),
                 Kind = case KindText of <<"world">> -> world; <<"gui_hud">> -> gui_hud;
+                         <<"navigation">> -> navigation;
                          <<"gui_question">> -> gui_question; <<"gui_operations">> -> gui_operations;
+                         <<"source_access">> -> source_access;
+                         <<"eidolons">> -> eidolons; <<"eidolon">> -> eidolon;
+                         <<"menu">> -> menu; <<"hud_commands">> -> hud_commands;
+                         <<"eidolon_scene">> -> eidolon_scene;
                          <<"controller_preferences">> -> controller_preferences end,
                 {open, Session, Decode(Request64), Signature, Ns, Anchor, Kind};
             #{<<"type">> := <<"gui_prepared">>, <<"token">> := Token64,
@@ -78,7 +82,6 @@ decode_command(Bytes) ->
                 <<_:256>> = Token = base64:decode(Token64,#{mode => urlsafe,padding => false}),
                 Value = case Ack of
                     #{<<"want">> := Ids} when is_list(Ids) -> {want,Ids};
-                    #{<<"through">> := Index} when is_integer(Index),Index >= 0 -> {through,Index};
                     #{<<"complete">> := true} -> complete
                 end,
                 {terrain_ack,View,Token,Value};
@@ -89,6 +92,7 @@ decode_command(Bytes) ->
                 true = Seq > 0 andalso Seq < (1 bsl 64),
                 {terrain_interest,View,Seq,{X,Y,Z}};
             #{<<"type">> := <<"ack">>} = Ack -> Ack;
+            #{<<"type">> := <<"close">>} -> close_view;
             _ -> error
         end
     catch error:_ -> error end.
@@ -109,12 +113,15 @@ command({gui_prepared, Token, Accepted}, S) -> gui_prepared(Token, Accepted, S);
 command({gui_activated, Token, Status}, S) -> gui_activated(Token, Status, S);
 command({open, Session, Bytes, Signature, Ns, Anchor, Kind}, S) ->
     open_request(Session,Bytes,Signature,Ns,Anchor,Kind,S);
+command(close_view,S) -> {ok,release(S)};
 command(#{<<"type">> := <<"ack">>, <<"view">> := View, <<"tick">> := Tick,<<"origin_seq">> := OriginSequence},
         S = #{view := View, pid := Pid, ref := Ref, tick := Tick,origin_sequence := OriginSequence}) ->
     quod_physics:ack(Pid, Ref, binary_to_integer(Tick),binary_to_integer(OriginSequence)), {ok, S};
 command(#{<<"type">> := <<"ack">>}, S) -> {ok, S};
 command(_, S) -> {reply, {close, 1008, <<"invalid view command">>}, S}.
 
+open_request(_,_,_,_,_,_,S = #{pending := refresh}) ->
+    reply(#{type => unavailable,reason => dependency_recovering},S);
 open_request(Session,Bytes,Signature,Ns,Anchor,Kind,S) ->
     case quod_client_goal:decode(Bytes) of
         {ok, #{mode := read, agent_namespace := Source, agent_genesis_anchor := SourceAnchor,
@@ -151,13 +158,18 @@ open_worker(Session,Bytes,Signature,Expiry,S = #{namespace := Ns}) ->
             Timed = case maps:get(installed,S,false) of
                 true -> S#{candidate_timer => Timer};
                 false ->
-                    case maps:get(kind,S) of world -> true = quod_reg:subscribe({physics, Ns}); _ -> ok end,
+                    case maps:get(kind,S) of
+                        K when K =:= world; K =:= eidolon_scene -> true = quod_reg:subscribe({physics,Ns});
+                        _ -> ok
+                    end,
                     S#{timer => Timer}
             end,
             Owner = self(), Ref = make_ref(), Peer = maps:get(peer,S),
+            Trace = open_span_start(maps:get(kind,S)),
             {Pid,M} = spawn_monitor(fun() ->
                 receive {open,Ref} ->
-                    Result = quod_client_goal_ingress:submit(read,Session,Bytes,Signature,Peer),
+                    Result = quod_trace:with_context(Trace, fun() ->
+                        quod_client_goal_ingress:submit(read,Session,Bytes,Signature,Peer) end),
                     Owner ! {view_opened,Ref,Result}
                 end
             end),
@@ -181,7 +193,7 @@ view_request(world,#{goal_text := Text,parser_version := Version},Ns,Anchor) ->
             case quod_wire_term:is_ground(Instance) andalso quod_wire_term:is_symbol(Mode)
                  andalso length(Dependencies) =:= length(Rows)
                  andalso quod_wire_term:encode_canonical(Goal) =:= quod_wire_term:encode_canonical(Expected)
-                 andalso element(1,quod_client_result:encode({read,Dependencies,fail})) =:= ok of
+                 andalso element(1,quod_client_result:encode({read,[{N,A,H,[]} || {N,A,H} <- Dependencies],fail})) =:= ok of
                 true -> {ok,Instance,Dependencies};
                 false -> error
             end;
@@ -202,11 +214,15 @@ view_request(Kind,#{goal_text := Text,parser_version := Version},Ns,Anchor) ->
         _ -> error
     end.
 
-gui_view_goal(gui_hud,{_,{0}}) ->
-    {ok,hud,{gui_pending_questions,{0}}};
-gui_view_goal(gui_question,{_,Question,{0}}) ->
+gui_view_goal(gui_hud,{_,<<"quod:gui">>,{_,{0}}}) ->
+    {ok,hud,{'::',<<"quod:gui">>,{gui_pending_questions,{0}}}};
+gui_view_goal(hud_commands,{_,<<"quod:gui">>,{_,{0}}}) ->
+    {ok,hud_commands,{'::',<<"quod:gui">>,{hud_commands,{0}}}};
+gui_view_goal(navigation,{_,<<"quod:user">>,{_,{0}}}) ->
+    {ok,navigation,{'::',<<"quod:user">>,{account_navigation,{0}}}};
+gui_view_goal(gui_question,{_,<<"quod:gui">>,{_,Question,{0}}}) ->
     case quod_wire_term:is_ground(Question) of
-        true -> {ok,Question,{gui_question_form,Question,{0}}};
+        true -> {ok,Question,{'::',<<"quod:gui">>,{gui_question_form,Question,{0}}}};
         false -> error
     end;
 gui_view_goal(gui_operations,{_,Subject,{0}}) ->
@@ -214,15 +230,39 @@ gui_view_goal(gui_operations,{_,Subject,{0}}) ->
         true -> {ok,Subject,{gui_operations,Subject,{0}}};
         false -> error
     end;
-gui_view_goal(controller_preferences,{_,Human,{0}}) ->
+gui_view_goal(controller_preferences,{_,<<"quod:user">>,{_,Human,{0}}}) ->
     case quod_wire_term:is_ground(Human) of
-        true -> {ok,Human,{controller_preferences_view,Human,{0}}};
+        true -> {ok,Human,{'::',<<"quod:user">>,{controller_preferences_view,Human,{0}}}};
+        false -> error
+    end;
+gui_view_goal(source_access,{_,Target = {_,Ns,Anchor},_,{0}})
+  when is_binary(Ns), byte_size(Ns) > 0,
+       is_binary(Anchor), byte_size(Anchor) =:= 32 ->
+    case quod_wire_term:encode_canonical(Target) =:=
+         quod_wire_term:encode_canonical({ontology_ref,Ns,Anchor}) of
+        true -> {ok,Target,{prolog_inspect,Target,presentation,{0}}};
+        false -> error
+    end;
+gui_view_goal(eidolons,{_,Entity,{0}}) ->
+    case quod_wire_term:is_ground(Entity) of
+        true -> {ok,Entity,{entity_eidolons,Entity,{0}}};
+        false -> error
+    end;
+gui_view_goal(menu,{_,Entity,{0}}) ->
+    case quod_wire_term:is_ground(Entity) of
+        true -> {ok,Entity,{client_menu,Entity,{0}}};
+        false -> error
+    end;
+gui_view_goal(Kind,{_,Entity,Choice,{0}}) when Kind =:= eidolon; Kind =:= eidolon_scene ->
+    case quod_wire_term:is_ground({Entity,Choice}) of
+        true -> {ok,Entity,{client_eidolon,Entity,Choice,{0}}};
         false -> error
     end;
 gui_view_goal(_,_) -> error.
 
 open_result({ok, #{request_digest := Digest, request := #{not_after_ms := Expiry}} = Evidence,
-             {normalized, {read, Dependencies, Outcome}}}, S) ->
+             {normalized, {read, Reads, Outcome}}}, S) ->
+    Dependencies = [{N,A,H} || {N,A,H,_} <- Reads],
     case Outcome of
         {error, _} -> reply(#{type => unavailable, reason => proof_unavailable}, release(S));
         _ ->
@@ -249,9 +289,7 @@ open_result(_, S) -> reply(#{type => unavailable, reason => view_not_authorized_
 %% A fresh proof may replace an unchanged view without retiring its consumer.
 %% Actual dependency changes still take the ordinary invalidation/read path.
 install_dependencies(Dependencies,Pending,S = #{candidate_timer := _}) ->
-    Retained = lists:sort([{Ns,maps:get(Ns,maps:get(anchors,S)),H} ||
-        {Ns,H} <- maps:to_list(maps:get(heights,S))] ++
-        [{Ns,Anchor,H} || {Ns,Anchor,H,_} <- maps:values(maps:get(follows,S))]),
+    Retained = view_dependencies(S),
     case lists:sort(Dependencies) =:= Retained andalso dependencies_ready(S)
          andalso dependency_owners_current(S) of
         true -> snapshot_dependencies(S#{pending => Pending});
@@ -265,6 +303,11 @@ install_dependencies(Dependencies,Pending,S) ->
         {ok,Followed} -> snapshot_dependencies(Followed);
         {error,Followed} -> reply(#{type => unavailable,reason => dependency_unavailable},release(Followed))
     end.
+
+view_dependencies(S) ->
+    lists:sort([{Ns,maps:get(Ns,maps:get(anchors,S)),H} ||
+        {Ns,H} <- maps:to_list(maps:get(heights,S))] ++
+        [{Ns,Anchor,H} || {Ns,Anchor,H,_} <- maps:values(maps:get(follows,S))]).
 
 dependency_owners_current(S) ->
     Owners = maps:get(owners,S),
@@ -381,12 +424,16 @@ snapshot_response(Message,S = #{snapshots := Requests}) ->
                  quod_simplex:genesis_hash(Ns) =:= maps:get(Ns,maps:get(anchors,S)) of
                 true ->
                     case Readiness of
-                        ready -> dependency_height(Ns,Height,Next);
+                        ready -> case maps:get(pending,Next,none) of
+                            refresh -> resume_projection(Next#{local_ready :=
+                                (maps:get(local_ready,Next))#{Ns => true}});
+                            _ -> dependency_height(Ns,Height,Next)
+                        end;
                         {recovering,Recovery} -> dependency_recovering(Recovery,Next)
                     end;
-                false -> refresh(Next,dependency_owner_changed)
+                false -> local_dependency_lost(Pid,Next)
             end;
-        {{error,_},_,Remaining} -> refresh(S#{snapshots := Remaining},dependency_owner_changed);
+        {{error,_},{Pid,_},Remaining} -> local_dependency_lost(Pid,S#{snapshots := Remaining});
         _ -> {ok,S}
     end;
 snapshot_response(_,S) -> {ok,S}.
@@ -394,8 +441,16 @@ snapshot_response(_,S) -> {ok,S}.
 resume_projection(S = #{pending := {Digest, Expiry, Outcome}}) ->
     case {Expiry > quod_time:now_ms() andalso candidate_live(S),dependencies_ready(S)} of
         {false,_} -> reply(#{type => unavailable,reason => expired},release(S));
-        {true,true} -> open_view(Outcome,Digest,Expiry,maps:remove(pending,S));
+        {true,true} ->
+            open_span_event(<<"dependencies_ready">>),
+            open_view(Outcome,Digest,Expiry,maps:remove(pending,S));
         {true,false} -> {ok,S}
+    end;
+resume_projection(S = #{pending := refresh}) ->
+    case dependencies_ready(S) andalso not maps:is_key(opening,S)
+         andalso dependency_owners_current(S) of
+        true -> refresh(maps:remove(pending,S),dependency_recovered);
+        false -> {ok,S}
     end;
 resume_projection(S) -> {ok,S}.
 
@@ -405,35 +460,54 @@ dependencies_ready(S) ->
     lists:all(fun(R) -> R =:= true end,maps:values(maps:get(local_ready,S))) andalso
     lists:all(fun({_,_,_,R}) -> R end,maps:values(maps:get(follows,S))).
 
+open_view({answers, Height, [Binding]}, Digest, Expiry, S = #{kind := eidolon_scene}) ->
+    {ok, Pairs} = quod_client_result:decode_binding(Binding),
+    case proplists:get_value(<<"View">>,Pairs,missing) of
+        {eidolon_scene,{entity_ref,Ns,A,Entity},Marks,Selection,Exposures}
+          when Ns =:= map_get(namespace,S), A =:= map_get(anchor,S),
+               is_list(Marks), is_list(Exposures) ->
+            open_subject(Entity,Selection,Marks,Digest,Height,Expiry,S#{exposures => Exposures});
+        _ -> reply(#{type => unavailable,reason => invalid_projection},release(S))
+    end;
 open_view({answers, Height, [Binding]}, Digest, Expiry, S = #{kind := Kind})
-  when Kind =:= gui_hud; Kind =:= gui_question; Kind =:= gui_operations; Kind =:= controller_preferences ->
+  when Kind =:= gui_hud; Kind =:= gui_question; Kind =:= gui_operations;
+       Kind =:= controller_preferences; Kind =:= source_access; Kind =:= navigation; Kind =:= eidolons; Kind =:= eidolon;
+       Kind =:= menu; Kind =:= hud_commands ->
     {ok, Pairs} = quod_client_result:decode_binding(Binding),
     case proplists:get_value(<<"View">>, Pairs, missing) of
         missing -> reply(#{type => unavailable, reason => invalid_projection},release(S));
-        View ->
-            Next = projection_deadline(S,Expiry),
-            case view_receiver(Kind,Next) of
-                {ok,Receiver,Registered} ->
-                    reply(maps:merge(#{type => projection,kind => Kind,view => b64(Digest),height => decimal(Height),
-                        expires_ms => decimal(Expiry),value => quod_client_goal_parser:value_text(View)},Receiver),
-                        retire_gui_presentations(Kind,View,Registered#{installed => true}));
-                {error,Reason} -> reply(#{type => unavailable,reason => Reason},release(Next))
-            end
+        View -> open_value(View,Height,Digest,Expiry,S)
     end;
 open_view({answers, Height, [Binding]}, Digest, Expiry, S) ->
     {ok, Pairs} = quod_client_result:decode_binding(Binding),
     case proplists:get_value(<<"View">>, Pairs) of
-        {world_view,{entity_ref,Ns,Anchor,Instance},Marks,Selection}
-          when Ns =:= map_get(namespace,S), Anchor =:= map_get(anchor,S),is_list(Marks) ->
-            case quod_wire_term:encode_canonical(Instance) =:=
-                 quod_wire_term:encode_canonical(maps:get(instance,S)) of
-                true -> open_selection(Selection,Marks,Digest,Height,Expiry,S#{instance := Instance});
-                false -> reply(#{type => unavailable,reason => invalid_projection},release(S))
-            end;
+        {world_view,{entity_ref,Ns,Anchor,Instance},Name,Marks,Selection}
+          when Ns =:= map_get(namespace,S), Anchor =:= map_get(anchor,S),is_list(Marks),
+               (Name =:= unnamed orelse is_binary(Name)) ->
+            open_subject(Instance,Selection,Marks,Digest,Height,Expiry,S#{subject_name => Name});
         _ -> reply(#{type => unavailable, reason => invalid_projection}, release(S))
     end;
 open_view(_, _, _, S) ->
     reply(#{type => unavailable, reason => view_not_authorized_or_ready}, release(S)).
+
+open_subject(Instance,Selection,Marks,Digest,Height,Expiry,S) ->
+    case quod_wire_term:encode_canonical(Instance) =:=
+         quod_wire_term:encode_canonical(maps:get(instance,S)) of
+        true -> open_selection(Selection,Marks,Digest,Height,Expiry,S#{instance := Instance});
+        false -> reply(#{type => unavailable,reason => invalid_projection},release(S))
+    end.
+
+open_value(View,Height,Digest,Expiry,S = #{kind := Kind}) ->
+    Next = projection_deadline(S,Expiry),
+    case view_receiver(Kind,Next) of
+        {ok,Receiver,Registered} ->
+            reply(maps:merge(#{type => projection,kind => Kind,view => b64(Digest),height => decimal(Height),
+                expires_ms => decimal(Expiry),value => quod_client_goal_parser:value_text(View),
+                dependencies => quod_client_goal_parser:value_text(
+                    [{dependency,N,A,H} || {N,A,H} <- view_dependencies(Next)])},Receiver),
+                retire_gui_presentations(Kind,View,Registered#{installed => true}));
+        {error,Reason} -> reply(#{type => unavailable,reason => Reason},release(Next))
+    end.
 
 %% The signed read identifies the human; its session token alone does not.
 %% This is a process address, not a presence fact or a pending-question list.
@@ -458,13 +532,14 @@ view_receiver(gui_hud, S = #{source := Ns,namespace := Ns,source_anchor := Ancho
 view_receiver(gui_hud,_) -> {error,invalid_receiver_identity};
 view_receiver(_,S) -> {ok,#{},S}.
 
-open_selection({simulation_view,World = {world_ref,Ns,Anchor,Instance},Authority,
-                Epoch,Generation,Token,Structure,Control},Marks,Digest,Height,Expiry,S)
+open_selection({simulation_view,World = {world_ref,_,_,_},Authority,
+                Epoch,Generation,Token,Structure,Control,
+                ViewFrame = {view_frame,{entity_ref,Ns,Anchor,Instance},Frames,BodyFrames}},Marks,Digest,Height,Expiry,S)
   when Ns =:= map_get(namespace,S), Anchor =:= map_get(anchor,S),
-       Instance =:= map_get(instance,S) ->
+       Instance =:= map_get(instance,S), is_list(Frames), is_list(BodyFrames) ->
             Expected = #{fence => {World, Authority, Epoch, Generation},
                          structure => Structure, incarnation => Token,control => Control,
-                         terrain => terrain_bindings(Marks)},
+                         terrain => terrain_bindings(Marks),view_frame => ViewFrame},
             case quod_reg:where({physics_world, World}) of
                 Pid when is_pid(Pid) ->
                     attach(Pid, Expected, Marks, Digest, Height, Expiry, S);
@@ -505,6 +580,7 @@ attach_current(Pid,Expected,Marks,Digest,Height,Expiry,S) ->
                             reply(#{type => projection,selection => active,view => View, height => decimal(Height),expires_ms => decimal(Expiry),
                                     marks => quod_client_goal_parser:value_text(Marks),
                                     control => quod_client_goal_parser:value_text(maps:get(control,Expected)),
+                                    view_frame => quod_client_goal_parser:value_text(maps:get(view_frame,Expected)),
                                     frame => frame_json(Frame, Bodies, maps:get(control,Expected))}, Next);
                         false -> reply(#{type => unavailable,reason => expired},release(Watched))
                     end;
@@ -567,6 +643,7 @@ terrain_bindings(Marks) ->
 
 mark_body({relative, _, Pose}, Depicts) -> mark_body(Pose, Depicts);
 mark_body({body_pose, Id, R}, {depicts, _, <<_:256>>, _}) -> {Id, R};
+mark_body({body_frame_pose, Id, R}, {depicts, _, <<_:256>>, _}) -> {Id, R};
 mark_body({transform, _, _, _, _, _, _}, _) -> none.
 
 websocket_info({quod_gui_request, From,
@@ -583,10 +660,12 @@ websocket_info({timeout, Timer, {gui_resource, Token}}, S) ->
 
 websocket_info({view_opened,Ref,Result},S = #{opening := {Ref,_,_},timer := _}) ->
     {ok,S#{opening_result => Result}};
+websocket_info({'DOWN',M,process,Pid,_},S = #{opening := {_,Pid,M},pending := refresh}) ->
+    resume_projection(maps:without([opening,opening_result],S));
 websocket_info({'DOWN',M,process,Pid,_},S = #{opening := {_,Pid,M}}) ->
     Clean = maps:without([opening,opening_result],S),
     case maps:find(opening_result,S) of
-        {ok,Result} -> open_result(Result,Clean);
+        {ok,Result} -> open_span_event(<<"proof_returned">>), open_result(Result,Clean);
         error -> case maps:is_key(timer,Clean) of
             true -> reply(#{type => unavailable,reason => proof_unavailable},release(Clean));
             false -> finish_cleanup(Clean)
@@ -610,19 +689,25 @@ websocket_info({timeout, Timer, expired}, S = #{timer := Timer}) ->
     reply(#{type => unavailable, reason => expired}, release(S));
 websocket_info({timeout,Timer,expired},S = #{candidate_timer := Timer}) ->
     reply(#{type => unavailable,reason => expired},release(S));
-websocket_info({'DOWN', M, process, _, _}, S = #{dependency_monitors := Monitors})
-  when is_map_key(M,Monitors) -> refresh(S,dependency_owner_changed);
+websocket_info({'DOWN', M, process, Pid, _}, S = #{dependency_monitors := Monitors})
+  when is_map_key(M,Monitors) ->
+    case maps:is_key(Pid,maps:get(owners,S)) of
+        true -> local_dependency_lost(Pid,S);
+        false -> refresh(S,dependency_owner_changed)
+    end;
 websocket_info({quod_foreign_follow, Ref, NoticeRef, {Ns,Anchor}, Notice},
                S = #{follows := Follows}) ->
     quod_foreign_log:ack(Ref,NoticeRef),
     case maps:get(Ref,Follows,none) of
         {Ns,Anchor,Height,Ready} ->
             case Notice of
+                {certified,H,_} when H >= Height, map_get(pending,S) =:= refresh ->
+                    resume_projection(S#{follows := Follows#{Ref => {Ns,Anchor,H,true}}});
                 {certified,H,_} when H > Height -> refresh(S,durable_gap);
                 {certified,Height,_} when Ready =:= false ->
                     resume_projection(S#{follows := Follows#{Ref => {Ns,Anchor,Height,true}}});
                 {certified,Height,_} -> {ok,S};
-                _ when Ready -> refresh(S,dependency_recovering);
+                _ when Ready -> suspend_projection(S#{follows := Follows#{Ref => {Ns,Anchor,Height,false}}});
                 _ -> {ok,S}
             end;
         _ -> {ok,S}
@@ -633,7 +718,8 @@ websocket_info({replay_started, Recovery = {_,_}, _}, S = #{owners := _}) ->
     dependency_recovering(Recovery,S);
 websocket_info({replay_ready, Recovery = {Owner, _}, _}, S = #{owners := Owners,local_ready := Ready}) ->
     case maps:find(Owner,Owners) of
-        {ok,Ns} when map_get(Ns,Ready) =:= {recovering,Recovery} -> refresh(S,dependency_recovered);
+        {ok,Ns} when map_get(Ns,Ready) =:= {recovering,Recovery} ->
+            resume_projection(S#{local_ready := Ready#{Ns => true}});
         _ -> {ok,S}
     end;
 websocket_info({gproc,registered,M,_},S = #{dependency_names := Names})
@@ -656,9 +742,33 @@ dependency_recovering(Recovery = {Owner,_},S = #{owners := Owners,local_ready :=
     case maps:find(Owner,Owners) of
         {ok,Ns} when map_get(Ns,Ready) =:= {recovering,Recovery} -> {ok,S};
         {ok,Ns} ->
-            Next = (detach(S))#{local_ready := Ready#{Ns => {recovering,Recovery}}},
-            reply(#{type => unavailable,reason => dependency_recovering},Next);
+            suspend_projection(S#{local_ready := Ready#{Ns => {recovering,Recovery}}});
         error -> {ok,S}
+    end.
+
+%% Recovery retires the answer, not its subscriptions or original deadline.
+%% A fresh signed read is requested only after every retained dependency is ready
+%% and a cancelled opening worker has actually exited.
+suspend_projection(S) ->
+    case S of #{opening := {_,Worker,_}} -> exit(Worker,kill); _ -> ok end,
+    _ = case S of #{candidate_timer := Timer} -> erlang:cancel_timer(Timer); _ -> ok end,
+    Next = maps:without([opening_result,candidate_timer,installed],detach(S)),
+    reply(#{type => unavailable,reason => dependency_recovering},Next#{pending => refresh}).
+
+local_dependency_lost(Pid,S = #{owners := Owners,dependency_monitors := Monitors}) ->
+    case maps:take(Pid,Owners) of
+        {Ns,Remaining} ->
+            Retained = maps:filter(fun(M,Owner) ->
+                case Owner =:= Pid of true -> demonitor(M,[flush]),false; false -> true end
+            end,Monitors),
+            Name = quod_reg:monitor_name({quod_prolog,Ns},follow),
+            %% Registration may precede the loss notice. Subscribe first, then
+            %% inspect through the same handler used by the name notification.
+            self() ! {gproc,registered,Name,quod_reg:name({quod_prolog,Ns})},
+            suspend_projection(S#{owners := Remaining,dependency_monitors := Retained,
+                dependency_names := (maps:get(dependency_names,S))#{Name => Ns},
+                local_ready := (maps:get(local_ready,S))#{Ns => false}});
+        error -> resume_projection(S)
     end.
 
 local_dependency_registered(M,S = #{dependency_names := Names}) ->
@@ -675,9 +785,11 @@ local_dependency_registered(M,S = #{dependency_names := Names}) ->
                         Pid,get_stats,{Pid,Ns},maps:get(snapshots,Next))}};
                 _ -> {ok,Next}
             end;
+        {undefined,_} -> {ok,S};
         _ -> reply(#{type => unavailable,reason => dependency_unavailable},release(S))
     end.
 
+dependency_height(_,_,S = #{pending := refresh}) -> {ok,S};
 dependency_height(Ns,Height,S = #{heights := Heights,local_ready := Ready}) ->
     case {maps:find(Ns,Heights),maps:get(Ns,Ready,false)} of
         {{ok,_},{recovering,_}} -> {ok,S};
@@ -715,21 +827,25 @@ control_feedback(Frame,Control = {control,Principal,_,_}) ->
     Origin = case Row of #{result_origin := O} -> O; _ -> maps:get(origin,Frame) end,
     Feedback#{origin_mm => [decimal(N) || N <- tuple_to_list(Origin)]}.
 
-reply(Message, S) ->
+reply(Message0, S) ->
+    Message = case {maps:get(kind,S,none),Message0} of
+        {world,#{type := projection}} -> Message0#{name =>
+            case maps:get(subject_name,S) of unnamed -> null; Name -> Name end};
+        {eidolon_scene,#{type := projection}} -> Message0#{kind => eidolon_scene,
+            exposures => quod_client_goal_parser:value_text(maps:get(exposures,S,[]))};
+        _ -> Message0
+    end,
     Encoded = iolist_to_binary(json:encode(Message)),
-    case byte_size(Encoded) =< ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES of
-        true ->
-            case Message of
-                %% Quiet views still own a live signed lease. Only an admitted
-                %% projection bounds the transport idle window; the existing
-                %% absolute expiry and revocation paths remain authoritative.
-                #{type := projection,expires_ms := Expiry} ->
-                    {[{set_options,#{idle_timeout => max(0,binary_to_integer(Expiry)-quod_time:now_ms())}},
-                      {text,Encoded}],S};
-                _ -> {reply,{text,Encoded},S}
-            end;
-        false -> {reply, {close, 1009, <<"simulation projection exceeds reply encoding limit">>}, release(S)}
+    case Message of #{type := projection} -> open_span_end(ok); _ -> ok end,
+    case Message of
+        %% Allocation belongs to the admitted proof and authored resources.
+        %% Quiet views retain their original signed lease.
+        #{type := projection,expires_ms := Expiry} ->
+            {[{set_options,#{idle_timeout => max(0,binary_to_integer(Expiry)-quod_time:now_ms())}},
+              {text,Encoded}],S};
+        _ -> {reply,{text,Encoded},S}
     end.
+
 decimal(N) -> integer_to_binary(N).
 b64(B) -> base64:encode(B, #{mode => urlsafe, padding => false}).
 
@@ -738,7 +854,28 @@ detach(S) ->
         quod_physics:unwatch(Pid, Ref), demonitor(M, [flush]); _ -> ok end,
     maps:without([pid,ref,monitor,view,tick,origin_sequence,height,bodies,control],S).
 
+%% Tracing only. One span covers a view's opening, from its signed open to the
+%% projection that answers it or the release that gives it up. The proof
+%% worker's spans are its children and events mark the stages between. It
+%% lives beside the view's state, never in it.
+open_span_start(Kind) ->
+    open_span_end({error,superseded}),
+    {Ctx,Span} = quod_trace:start_span(quod_trace:context(),<<"quod.client.view_open">>,server,
+                                       #{'quod.view.kind' => atom_to_binary(Kind,utf8)}),
+    put(quod_view_open_span,{Ctx,Span}), Ctx.
+open_span_event(Name) ->
+    case get(quod_view_open_span) of
+        {Ctx,_} -> _ = quod_trace:add_event(Ctx,Name,#{}), ok;
+        undefined -> ok
+    end.
+open_span_end(Result) ->
+    case erase(quod_view_open_span) of
+        {_,Span} -> quod_trace:finish_span(Span,Result);
+        undefined -> ok
+    end.
+
 release(S) ->
+    open_span_end({error,released}),
     HasGui = map_size(maps:get(gui_resources,S,#{})) > 0,
     case {HasGui,maps:find(receiver_key,S)} of
         {false,{ok,Key}} -> true = gproc:unreg(quod_reg:name(Key));
@@ -755,7 +892,10 @@ release(S) ->
     _ = [catch gen_server:receive_response(Request,0) ||
         {Request,_} <- gen_server:reqids_to_list(maps:get(snapshots,S,gen_server:reqids_new()))],
     [unfollow(Ref) || Ref <- maps:keys(maps:get(follows,S,#{}))],
-    case S of #{kind := world,namespace := Ns,timer := _} -> quod_reg:unsubscribe({physics,Ns}); _ -> ok end,
+    case S of
+        #{kind := K,namespace := Ns,timer := _} when K =:= world; K =:= eidolon_scene -> quod_reg:unsubscribe({physics,Ns});
+        _ -> ok
+    end,
     case maps:find(follow_requests,S) of
         {ok, Requests} ->
             case gen_server:reqids_size(Requests) of
@@ -799,9 +939,6 @@ gui_prepare(From, Agent, Connection, <<_:256>> = Request, Question, Descriptor,
                                 question => quod_client_goal_parser:value_text(Question),
                                 descriptor => quod_client_goal_parser:value_text(Descriptor)},
                             Encoded = iolist_to_binary(json:encode(Message)),
-                            case byte_size(Encoded) =< ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES of
-                                false -> gui_reply(From,{error,unsupported_presentation},S);
-                                true ->
                                     TimerResult = try {ok,erlang:start_timer(Bound-Now,self(),{gui_resource,Token})}
                                                   catch error:badarg -> error end,
                                     case TimerResult of
@@ -811,7 +948,6 @@ gui_prepare(From, Agent, Connection, <<_:256>> = Request, Question, Descriptor,
                                             {reply,{text,Encoded},S#{gui_resources => Resources#{Token => Resource}}};
                                         error -> gui_reply(From,{error,invalid_presentation_deadline},S)
                                     end
-                            end
                     end;
                 none -> gui_reply(From,{error,presentation_capacity},S)
             end;

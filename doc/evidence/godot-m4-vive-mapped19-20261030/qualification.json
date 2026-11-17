@@ -1,0 +1,183 @@
+{
+  "scope": "Case19 physical mapped read-only current-space-panel opportunity, expired sign-in before any recorded trigger edge/activation; normal retirement.",
+  "protocol_retirement_passed": true,
+  "physical_mapped_action": "UNRUN/inconclusive: zero recorded native edges, zero target-button activations, no actual human answer supplied.",
+  "manual_instructions": [
+    "status",
+    "status",
+    "stop",
+    "finish"
+  ],
+  "original_bounds": {
+    "startup": 30,
+    "single_inventory": 5,
+    "participant": 1800,
+    "close": 60,
+    "wrapper": 2100
+  },
+  "client_runtime_server_driver_wrapper_exits": [
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "case_eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "runtime-stdout": true,
+    "runtime-stderr": true,
+    "client-stdout": true,
+    "client-stderr": true
+  },
+  "wrapper_eof": {
+    "stdout": true,
+    "stderr": true
+  },
+  "reader_errors": [],
+  "case_elapsed_seconds": 964.3448796272278,
+  "timeout_or_stack": false,
+  "target_diagnostics": [],
+  "ordinary_launch_focus_dispatches": 1,
+  "extra_focus_dispatches": 0,
+  "ordinary_owned_close_dispatches": 1,
+  "focus_listener_started": false,
+  "actual_frame_cue_markers": [
+    "M4_VIVE_LOOK_CUE READY frame=2",
+    "M4_VIVE_LOOK_CUE WAITING frame=52041"
+  ],
+  "baseline_snapshot_utc": "2026-10-30T21:07:12.8318037+00:00",
+  "baseline_native_head_both_hands_high_models_visible": true,
+  "baseline_window_has_focus_literal": false,
+  "later_withdrawal_snapshot_utc": "2026-10-30T21:22:06.6237373+00:00",
+  "later_native_head_hands_high_models_hidden": true,
+  "later_world_accepted": false,
+  "later_operation_available": false,
+  "later_controller_available": false,
+  "later_operation_status": "Sign-in expired; reconnect explicitly.",
+  "observed_withdrawal": "Expired sign-in and unavailable world/controller/operation presentation. Full event order and cause of each view transition are not exposed.",
+  "assignment_scope": "Presentation revision/location withdraw to null; this is not proof the durable agent assignment moved.",
+  "baseline_flags": {
+    "location_operations_count": 0,
+    "world_accepted": true,
+    "operation_available": true,
+    "controller_available": true,
+    "assignment_revision": "1",
+    "current_location_sha256": "f7b3fb4119dfa536984d5cb03b93cc392e4061ce1761f03e1890cf4da349729a",
+    "current_location_present": true,
+    "pending": 0,
+    "busy": false,
+    "sources": [
+      {
+        "hand": "left",
+        "tracked": true,
+        "bindings": [
+          "select",
+          "drive",
+          "snap",
+          "teleport"
+        ],
+        "reason": ""
+      },
+      {
+        "hand": "right",
+        "tracked": true,
+        "bindings": [
+          "select",
+          "menu"
+        ],
+        "reason": ""
+      }
+    ]
+  },
+  "withdrawal_flags": {
+    "location_operations_count": 0,
+    "world_accepted": false,
+    "operation_available": false,
+    "controller_available": false,
+    "operation_status_matches_signin_expired": true,
+    "assignment_revision": null,
+    "current_location_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "pending": 0,
+    "busy": false,
+    "source_edge_counts": [
+      {
+        "hand": "left",
+        "edges": 0
+      },
+      {
+        "hand": "right",
+        "edges": 0
+      }
+    ]
+  },
+  "target_button_counts": [
+    0,
+    0
+  ],
+  "recorded_source_edges": [
+    0,
+    0
+  ],
+  "human_interval": "Root delivered one left-trigger instruction before21:07:36UTC; no human answer/look interval reached worker at binding. Samples are separate instants, not pixels.",
+  "no_90sample_menu_submit_travel_or_synthetic_input": true,
+  "final_metrics": {
+    "Running": false,
+    "Subscriptions": 0,
+    "sources": 0,
+    "appearances": 0,
+    "MenuRedraws": 0,
+    "LateCallbacks": 0,
+    "captures": 0,
+    "DriveRequests": 0,
+    "StopRequests": 0,
+    "SnapRequests": 0,
+    "TeleportRequests": 0,
+    "resources": {
+      "Acquisitions": 2,
+      "Releases": 2,
+      "Decodes": 1,
+      "InstancesCreated": 2,
+      "InstancesReleased": 2,
+      "NodesBuilt": 114,
+      "TexturesDecoded": 1,
+      "LiveTemplates": 0,
+      "LiveLeases": 0
+    }
+  },
+  "owned_client_incarnation_retired": true,
+  "runtime_processes_after_reported": [],
+  "calibration_unchanged_reported": true,
+  "hdmi_restored_disabled": true,
+  "fresh_closure_other_displays_and_current_configs_unchanged": true,
+  "current_config_files": 76,
+  "payload_manifest_sha256": "9073b314599bd64531792acd63cbcd2e21ef54b73a41b25cd041260a4433fb08",
+  "supplied_inputs": 94,
+  "export_files": 196,
+  "diagnostic_nondistributable": true,
+  "new_production_test_spec_or_policy_changes": 0,
+  "driver_delta": "Existing cache-based digest owner reused byte-for-byte; new case path/label only. Control, guards and deadlines unchanged.",
+  "builds_or_unchanged_suite_recounts": 0,
+  "failed_binder01": "Retained true1: expected numeric edge count but actual schema stores a list; both lists are empty. Correction checks type and length, reuses completed display and exact-stat stream qualification.",
+  "api_private_reference": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product19/api-dump.raw",
+    "bytes": 774771360,
+    "driver_recorded_sha256": "c3b1fd4d865befa73ad7e3ede29ef778329f33d076097fd2612393fe2d17ad62",
+    "stat_key": [
+      2050,
+      3408477,
+      774771360,
+      1793395344628795204,
+      1793395346468306276
+    ],
+    "parsed": false,
+    "hashed_again": false,
+    "scope": "Original completed-driver digest plus post-exit stat identity only; no entry counts, returned-status or pixels."
+  },
+  "full_M4_accepted": false,
+  "remaining": [
+    "Actual physical mapped GUI/action qualification; no new case20 authority.",
+    "Canonical ninety-draw readiness, physical lifecycle/travel/exit/comfort remain scoped gaps.",
+    "Broader ontology editing and terrain delivery remain separate; no M5/commit."
+  ]
+}

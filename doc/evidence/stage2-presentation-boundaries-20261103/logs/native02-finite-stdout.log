@@ -1,0 +1,10 @@
+PASS one existing HTTP response owner, no replay
+PASS actual Transport reports exact resource quantity and allowance without numeric loss
+PASS existing definite resource refusal remains definite
+PASS one existing HTTP response owner, no replay
+PASS actual Transport reports exact resource quantity and allowance without numeric loss
+PASS existing definite resource refusal remains definite
+PASS one existing HTTP response owner, no replay
+PASS unchanged uncertain refusal is not relabelled unsent
+PASS malformed resource data does not become a definite authenticated refusal
+RESOURCE_ERROR_PASS checks=9

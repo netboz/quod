@@ -1,0 +1,59 @@
+{
+  "label": "onboarding-context-baseline10",
+  "qualification_phase": "onboarding-context",
+  "passed": false,
+  "physical": false,
+  "native_runtime_started": false,
+  "hardware_queried": false,
+  "display_or_focus_action": false,
+  "manifest": "doc/evidence/godot-onboarding-usability-20261101/inputs/client-onboarding-context-baseline10-manifest.json",
+  "manifest_sha256": "151c8e0aa1badfe52137040685e9bf02e87fa273ada742634d14cdbc027bbb94",
+  "sources": {
+    "doc/evidence/godot-onboarding-usability-20261101/run.py": "6c41f1ad4d9c4185582ad4475a14fbc9edbae9ce6b294087e03a40497773409f",
+    "doc/evidence/godot-onboarding-usability-20261101/hashes.py": "36226eb6eb22aa41ee6aa39b205f8037cde4e6a66f647bf52b160b0715bd4245",
+    "doc/evidence/godot-m4-vive-physical-20261029/environment.py": "c3a54c8ce4d8360f8711e027d31f7a98f29cf3b9b4436c43a84984cf2c1f20f9"
+  },
+  "reader_errors": [],
+  "children": {
+    "client": {
+      "command": [
+        "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-onboarding-context-baseline10/source/client/godot/dist/quod.x86_64",
+        "--headless",
+        "--audio-driver",
+        "Dummy",
+        "--xr-mode",
+        "off",
+        "--rendering-method",
+        "gl_compatibility",
+        "--rendering-driver",
+        "opengl3",
+        "--",
+        "--qualification",
+        "--profile",
+        "/data/quod-m4-vr-ca84d4f8-20261029/private/onboarding-context-baseline10/identity"
+      ],
+      "true_exit": 1
+    }
+  },
+  "eof": {
+    "client-stdout": true,
+    "client-stderr": true
+  },
+  "build_export_digest_reused": true,
+  "streams": {
+    "client-stdout.raw": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/onboarding-context-baseline10/client-stdout.raw",
+      "sha256": "df05d44464a6cfc678854924cd352b05220705fabd878b3330930dbf4e21d018",
+      "bytes": 3330,
+      "public_sha256": "8cf198e9647a8f34d61f60e1538488819962512c78b42956a866c9d29b2a639e"
+    },
+    "client-stderr.raw": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/onboarding-context-baseline10/client-stderr.raw",
+      "sha256": "3b77f215c71b6436a06011836f89e47d2a005ba346d2fc0336e2eec4424b47b4",
+      "bytes": 2790,
+      "public_sha256": "0df7f2ecb986da454caac953329c9ea73068610c489d15ab9cdf405f01b59943"
+    }
+  },
+  "diagnostics": [],
+  "elapsed_seconds": 1.1287424030015245
+}

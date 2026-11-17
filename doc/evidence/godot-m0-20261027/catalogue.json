@@ -1,0 +1,78 @@
+{
+  "network_id": "ZkscwdY8-_n9r2jfXhGDa0mZrlNIDsM_fubDEV1B3yo",
+  "height": 69,
+  "ontologies": [
+    {
+      "anchor": "36_cfRT-t9tZrZN_PsJ27wCx4ZBswNnx4PPeMo9nOVo",
+      "namespace": "quod:agent"
+    },
+    {
+      "anchor": "HqYBDsc-2aJqodjiR7xuaEYqudwyqlEbxMrvU_nyGg8",
+      "namespace": "quod:environment"
+    },
+    {
+      "anchor": "Qd1EcxQPVajkAXPfSuVlsT1xzz6-vuhNRBGeSone2vk",
+      "namespace": "quod:environment:eidolons"
+    },
+    {
+      "anchor": "gaA16tyth3gQ9w0oROEG6Jd8UIWkJU_dv6TSYioBgqM",
+      "namespace": "quod:gui"
+    },
+    {
+      "anchor": "V93YnOXRLNS6O0eRKWOSaEue0qlnlFtKA62bTegrUSI",
+      "namespace": "quod:human_user"
+    },
+    {
+      "anchor": "dgIVjZGVmYOkM1Tp3g_pOpW6onKhVBdzT1whOq0m064",
+      "namespace": "quod:lens"
+    },
+    {
+      "anchor": "Tc67DIqcy7orOsEzzhwpnlqM0R8-gVL2P6ZZiTvanJU",
+      "namespace": "quod:licence"
+    },
+    {
+      "anchor": "hSdReczxnq6Og_35iS_sKFUM5NZ8oFpgB-hluIGtlFg",
+      "namespace": "quod:lobby"
+    },
+    {
+      "anchor": "Ug9co8THQBP3MUM4Pm3OUcAdB_IrGK90M6CCMShJ4sE",
+      "namespace": "quod:material"
+    },
+    {
+      "anchor": "IPDnqjlZJ3G1liUuHjdKY3fhDeNP5f8s3t5K2ksz5yg",
+      "namespace": "quod:material:eidolons"
+    },
+    {
+      "anchor": "yhcyFMBQ51C66lZYrD6l53R2srg3n0zHB61bz1cEKiQ",
+      "namespace": "quod:measure"
+    },
+    {
+      "anchor": "ZKAi3oO86psaTazAW1Mw7pjfTUpEHO2DdxBIezdcAHQ",
+      "namespace": "quod:modelling"
+    },
+    {
+      "anchor": "Nwno_o4Vc_62s4tZ-SwJIAL0qjIAyuphqf3ju4-iRnc",
+      "namespace": "quod:names"
+    },
+    {
+      "anchor": "6J8LE84ZBTBrcJjV8hi0_52KQvS1WaaMh8hZ548gay0",
+      "namespace": "quod:node"
+    },
+    {
+      "anchor": "qjK0mk31Quhd9RH-UaZ2qt0MTfYIvfXzYpcvkdCAWaI",
+      "namespace": "quod:prolog"
+    },
+    {
+      "anchor": "eF7nD8dXaAiqErP9eSa4kqxsnJRtq5ccW7FwW6GkLlk",
+      "namespace": "quod:prolog:eidolons"
+    },
+    {
+      "anchor": "W8DlaBEICoyQuh0DQK4uCPX6b5Y6a3Sz6YUi9q8K99U",
+      "namespace": "quod:rendering"
+    },
+    {
+      "anchor": "mG7BfsdBwU8jZPGZ-WYehjf62dECbimLxYRjVwKXrr0",
+      "namespace": "quod:signup"
+    }
+  ]
+}

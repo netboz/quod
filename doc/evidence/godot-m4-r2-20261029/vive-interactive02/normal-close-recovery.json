@@ -1,0 +1,12 @@
+{
+  "preflight_failure": "export template did not run editor-only --script override",
+  "owned_pid": 834994,
+  "close_command": [
+    "hyprctl",
+    "dispatch",
+    "hl.dsp.window.close({window=\"address:0x557166652050\"})"
+  ],
+  "delivery_exit": 0,
+  "process_exit_notification": true,
+  "watchdog_seconds": 60
+}

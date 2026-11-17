@@ -1,0 +1,17 @@
+{
+  "scope": "New case10 publication correction only; prior sealed evidence and actual driver result are untouched.",
+  "producer_result_preserved": true,
+  "rule": "LHB hardware identifier -> base-station-serial-redacted",
+  "changes": [
+    {
+      "published_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-retest-20261030/native-vive-product10/runtime-stderr.log",
+      "producer_published_sha256": "863d2318e2d1cd31723246a8e5e2722f4240b7bb35ccba89fe8248e787377d1f",
+      "current_published_sha256": "ae16e26c675a957e736b98eb89d1901f84234068981395d0c7ebb01e3dba2de0",
+      "replacements": 4,
+      "preserved_original": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product10/publication-originals/runtime-stderr.log",
+      "original_mode": 384,
+      "raw_source_sha256": "fe947ab57de5dbb1179804fe342ebbb85b13bdf2351122ccc6949e2e0efdc45b"
+    }
+  ],
+  "credentials_or_stores_copied": false
+}

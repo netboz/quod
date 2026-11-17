@@ -1,0 +1,39 @@
+ID            = quod
+Name          = quod
+Submit Date   = 2026-11-05T11:11:19+01:00
+Type          = service
+Priority      = 50
+Datacenters   = qengho
+Namespace     = default
+Node Pool     = default
+Status        = running
+Periodic      = false
+Parameterized = false
+
+Summary
+Task Group  Queued  Starting  Running  Failed  Complete  Lost  Unknown
+quod-cloud  0       0         2        2       249       2     0
+quod-node   0       0         8        0       1010      2     0
+
+Latest Deployment
+ID          = 5a5dd173
+Status      = successful
+Description = Deployment completed successfully
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-cloud  2        2       2        0          2026-11-05T10:31:25Z
+quod-node   8        8       8        0          2026-11-05T11:31:25+01:00
+
+Allocations
+ID        Node ID   Task Group  Version  Desired  Status   Created    Modified
+1c00b2c1  3e390ebd  quod-node   252      run      running  1d18h ago  1d6h ago
+027ea895  75b1a578  quod-node   252      run      running  1d18h ago  1d6h ago
+14820b98  e37f93bb  quod-cloud  252      run      running  1d18h ago  1d6h ago
+2231fd08  c8f9edef  quod-node   252      run      running  1d18h ago  1d6h ago
+4ae5de68  3e390ebd  quod-node   252      run      running  1d18h ago  1d6h ago
+571d367c  e37f93bb  quod-cloud  252      run      running  1d18h ago  1d6h ago
+89b41efb  75b1a578  quod-node   252      run      running  1d18h ago  1d6h ago
+a22ca8a6  c8f9edef  quod-node   252      run      running  1d18h ago  1d6h ago
+a30d16c4  3e390ebd  quod-node   252      run      running  1d18h ago  1d6h ago
+bc0a8b1e  75b1a578  quod-node   252      run      running  1d18h ago  1d6h ago

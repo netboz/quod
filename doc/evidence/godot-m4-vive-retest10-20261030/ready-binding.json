@@ -1,0 +1,18 @@
+{
+  "case": "native-vive-product10",
+  "owned": {
+    "session_id": 87118,
+    "pid": 123870,
+    "address": "0x55f6292e2380",
+    "client_elapsed_seconds": 170,
+    "conservative_participant_remaining": 1630
+  },
+  "first_draw_observed": true,
+  "actual_app_payload": {
+    "dll": "ca0fd3be6c207a17f15a6c83254d3cb5cfe1944f3c023614542d5aa4634181dc",
+    "pck": "591d84a27dc2752d86f9a148d9950c9c21f91f7c153802b20e1cfe6f47213578",
+    "engine": "02310d903099bada10c86cedc90bbc11ef0bec8254d6e607d1a53f6150ab0268"
+  },
+  "physical_samples_or_gestures_authorized": false,
+  "readiness_limits": "Current actual head High; latest status both canonical aim/grip missing and tracked counts0. Not headset/pose/comfort acceptance. Manual absolute anchor unexposed; conservative lower bound uses actual client elapsed and needs current refresh before any later step."
+}

@@ -1,0 +1,33 @@
+{
+  "bindings": [
+    {
+      "View": "eidolon_scene(entity_ref(<<\"predicate-content-4\">>,<<\"\\x9E\\\\x9\\sv\\xF2\\\\xF5\\\\xCE\\ZZ\\x7\\\\\"\\xB7\\\\x90\\\\x1B\\*E\\xC8\\\\xCE\\\\x12\\\\x83\\i\\xCD\\\\xCE\\\\xF3\\\\xD6\\\\x9\\ \\xC9\\yn0\\xE1\\\">>,ontology_ref(<<\"predicate-content-4\">>,<<\"\\x9E\\\\x9\\sv\\xF2\\\\xF5\\\\xCE\\ZZ\\x7\\\\\"\\xB7\\\\x90\\\\x1B\\*E\\xC8\\\\xCE\\\\x12\\\\x83\\i\\xCD\\\\xCE\\\\xF3\\\\xD6\\\\x9\\ \\xC9\\yn0\\xE1\\\">>)),[],nonphysical,[])"
+    }
+  ],
+  "result": "ok",
+  "height": 6,
+  "operation_id": "_vFjd5CMADl5oxtuO5mWVK-biGUf-xxxc8zPCL903QA",
+  "request_digest": "ipdAZS-UjQ81Qw5TCPhp5Oxgltx8WAIMuKkk9RW7gYM",
+  "dependencies": [
+    {
+      "height": "6",
+      "genesis_anchor": "gOfICCWrdR7_19wUfRZpokaE_ZdxEf1mPxtyZjZPdD4",
+      "ns": "human:0ixHKavX6v2C4x8tzSTV9pZ9kGPzB_oSnLnlOsxQaQE"
+    },
+    {
+      "height": "2",
+      "genesis_anchor": "nglzdvL1zlpaByK3kBsqRcjOEoNpzc7z1gkgyXluMOE",
+      "ns": "predicate-content-4"
+    },
+    {
+      "height": "3",
+      "genesis_anchor": "Z8rDVn9HOTgG3OxP9WqW7vSlaYppqP1D-ARRfInoOmI",
+      "ns": "quod:gui"
+    },
+    {
+      "height": "20",
+      "genesis_anchor": "h3xt5eVGmpLtaJOrhjoPWfMRlOCikPr4ZpmlkCtvTto",
+      "ns": "quod:root"
+    }
+  ]
+}

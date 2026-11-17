@@ -1,0 +1,33 @@
+--- doc/evidence/godot-m4-vive-preparation-20261030/verify_build.py
++++ doc/evidence/godot-m4-vive-preparation-20261030/verify_build02.py
+@@ -4,6 +4,10 @@
+ from pathlib import Path
+ from cache import Digests,TASK,raw
+ os.umask(0o077);root=Path.cwd();ev=Path(__file__).resolve().parent;d=Digests();h=d.h
++completed=TASK/'cache/physical-preparation01-build-verification-hashes.json'
++assert raw(completed)=='058d4d4e17f3e2a71020af61c5a9a4ddc7c8cab17cc3f8e5ff07697cac50f3af'
++for row in json.loads(completed.read_text())['records']:
++ k=tuple(row['stat_key']);assert k not in d.values or d.values[k]==row['sha256'];d.values[k]=row['sha256']
+ def load(p):return json.loads(Path(p).read_text())
+ base_path=root/'doc/evidence/godot-m4-presentation-20261030/inputs/client-presentation-final02-manifest.json'
+ assert h(base_path)=='7abf72a2c42027e889a8df268e1edbcdb2f90e3622bdf023e1e5c84824ae4ff2'
+@@ -59,16 +63,16 @@
+  q=ev/'logs'/('physical-preparation-build01-'+kind+'.log')
+  assert h(q)==r['sanitized_sha256'] and q.read_bytes()==re.sub(rb'(?i)LHR-[A-Za-z0-9]+',b'<device-serial-redacted>',p.read_bytes())
+ assert h(root/'client/godot/Main.cs')=='e9c010f71a9c1369fd5b451fe1d7fa275948089b3a96e69fe6d8f21b543fec1e'
+-cache=TASK/'cache/physical-preparation01-build-verification-hashes.json';d.write(cache)
++cache=TASK/'cache/physical-preparation01-build-verification02-hashes.json';d.write(cache)
+ report={'passed':True,'scope':'Compiled offline diagnostic; no functional/native/physical execution',
+  'accepted_input_manifest':str(base_path),'accepted_inputs':92,'staged_inputs':93,'live_production_inputs_changed':0,
+  'added_supplied_inputs':sorted(added),'staged_dispatch_overrides':sorted(changed),'presentation_check_retained':True,
+  'physical04_partial_unchanged':True,'exports':196,'export_bytes':sum(r['bytes'] for r in m['export_outputs'].values()),
+- 'dll':m['export_outputs']['data_quod_linuxbsd_x86_64/Quod.dll'],
++ 'dll':{'path':next(n for n in outputs if Path(n).name=='Quod.dll'),**m['export_outputs'][next(n for n in outputs if Path(n).name=='Quod.dll')]},
+  'pck':m['export_outputs']['quod.pck'],'engine':m['template'],'commands':commands,
+  'build_driver_exit':outer['true_child_exit'],'build_wrapper_exit':0,'build_explicit_completion':True,
+  'build_eof':outer['eof'],'timed_out':False,'reader_errors':[],
+  'native_and_physical':'UNRUN','distributable':False,'core189_and_server1432':'Unchanged evidence reused; no suite execution',
+  'digest_cache':{'path':str(cache),'sha256':raw(cache),'hits':d.hits,'new_files':d.new,'new_bytes':d.bytes}}
+-(ev/'inputs/build-verification01.json').write_text(json.dumps(report,indent=2)+'\n')
++(ev/'inputs/build-verification02.json').write_text(json.dumps(report,indent=2)+'\n')
+ print(json.dumps(report))

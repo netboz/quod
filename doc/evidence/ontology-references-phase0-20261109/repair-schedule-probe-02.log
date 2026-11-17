@@ -1,0 +1,11 @@
+======================== EUnit ========================
+quod_evidence_resolver_tests: persisted_cache_replays_at_startup_not_on_later_requests_test...HELD_OLD_PROJECTION pid=<0.127.0> owner=<0.107.0>
+RESUMED_OLD_PROJECTION pid=<0.127.0> held_request=<0.137.0>
+SNAPSHOT_CALL pid=<0.127.0> caller={quod_foreign_projection,materialize_turn,
+                                       1}
+SNAPSHOT_CALL pid=<0.137.0> caller={quod_foreign_log,with_snapshot_store,3}
+ASSERTED_SNAPSHOT_CALLS test=<0.87.0> pids=[<0.137.0>]
+[0.194 s] ok
+=======================================================
+  Test passed.
+SCHEDULE_PROBE_RESULT ok

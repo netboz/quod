@@ -1,0 +1,8 @@
+{
+  "path": "/home/yan/.cache/quod-m3a-artifacts/quod-godot-m3a-handoff-8d55a3f3-20261028-01/base.tar.gz",
+  "head": "69196a36caeeb06e6ee07982f1ab1988d7c16b43",
+  "sha256": "4ab75080d3a732353c95ceb4ab94c0b77c95dc3449e69a43eba6353a2f910821",
+  "git_archive_child_exit": 0,
+  "reused_existing_immutable_base": true,
+  "exit_provenance": "Original qualified git archive and independent original/coordinator reconstruction receipts; no new archive command was run"
+}

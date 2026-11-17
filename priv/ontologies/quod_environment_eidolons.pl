@@ -25,7 +25,7 @@ eidolon(sky_sphere_panoramic,
         [part(<<"sky">>, sky_sphere(Diameter), transform(0, 0, 0, 0, Rotation, 0),
               Surface, unlabelled, depicts(Ns, Anchor, Entity))]) :-
     panorama_asset(Panorama, Asset, _),
-    Surface = surface(Tint, 0, 1000, Brightness,
+    Surface = surface(Tint, 0, 1000, Brightness, 1000,
                       [texture(<<"base_colour">>, Asset, repeat(1000, 1000))]).
 
 panorama_asset(belfast_sunset_puresky,

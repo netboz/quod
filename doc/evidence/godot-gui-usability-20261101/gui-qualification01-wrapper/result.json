@@ -1,0 +1,26 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-gui-usability-20261101/qualify.py",
+    "--product",
+    "gui-product01",
+    "--diagnostic",
+    "gui-usability-final19",
+    "--signed",
+    "gui-signed18",
+    "--controls",
+    "gui-controls15-render",
+    "--layout",
+    "gui-layout15-render",
+    "--workspace",
+    "gui-workspace15-render",
+    "--outcomes",
+    "gui-outcomes19-render",
+    "--label",
+    "gui-qualification01"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 0.7055045460001566
+}

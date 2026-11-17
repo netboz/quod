@@ -1,0 +1,185 @@
+{
+  "pass_": true,
+  "unchanged_active_identity": true,
+  "unchanged_read_sync_calls": 0,
+  "actual_update_durable": true,
+  "crash_model": "process exit at fsync/rename seams; no power-cut claim",
+  "children": [
+    {
+      "label": "storage-initial-01",
+      "command": [
+        "strace",
+        "-f",
+        "-qq",
+        "-e",
+        "trace=openat,write,fsync,fdatasync,rename,renameat,renameat2",
+        "-o",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m0-20261027/logs/storage-detail-04/storage-initial-01.strace",
+        "/tmp/quod-godot-m0-export/m0.x86_64",
+        "--headless"
+      ],
+      "mode": "save",
+      "child_exit": 0,
+      "expected_exit": 0
+    },
+    {
+      "label": "storage-read-01",
+      "command": [
+        "strace",
+        "-f",
+        "-qq",
+        "-e",
+        "trace=openat,write,fsync,fdatasync,rename,renameat,renameat2",
+        "-o",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m0-20261027/logs/storage-detail-04/storage-read-01.strace",
+        "/tmp/quod-godot-m0-export/m0.x86_64",
+        "--headless"
+      ],
+      "mode": "read",
+      "child_exit": 0,
+      "expected_exit": 0
+    },
+    {
+      "label": "storage-read-02",
+      "command": [
+        "strace",
+        "-f",
+        "-qq",
+        "-e",
+        "trace=openat,write,fsync,fdatasync,rename,renameat,renameat2",
+        "-o",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m0-20261027/logs/storage-detail-04/storage-read-02.strace",
+        "/tmp/quod-godot-m0-export/m0.x86_64",
+        "--headless"
+      ],
+      "mode": "read",
+      "child_exit": 0,
+      "expected_exit": 0
+    },
+    {
+      "label": "storage-crash-before-01",
+      "command": [
+        "strace",
+        "-f",
+        "-qq",
+        "-e",
+        "trace=openat,write,fsync,fdatasync,rename,renameat,renameat2",
+        "-o",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m0-20261027/logs/storage-detail-04/storage-crash-before-01.strace",
+        "/tmp/quod-godot-m0-export/m0.x86_64",
+        "--headless"
+      ],
+      "mode": "crash-before-rename",
+      "child_exit": 86,
+      "expected_exit": 86
+    },
+    {
+      "label": "storage-before-recovery-01",
+      "command": [
+        "/tmp/quod-godot-m0-export/m0.x86_64",
+        "--headless"
+      ],
+      "mode": "read",
+      "child_exit": 0,
+      "expected_exit": 0
+    },
+    {
+      "label": "storage-crash-after-01",
+      "command": [
+        "strace",
+        "-f",
+        "-qq",
+        "-e",
+        "trace=openat,write,fsync,fdatasync,rename,renameat,renameat2",
+        "-o",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m0-20261027/logs/storage-detail-04/storage-crash-after-01.strace",
+        "/tmp/quod-godot-m0-export/m0.x86_64",
+        "--headless"
+      ],
+      "mode": "crash-after-rename",
+      "child_exit": 87,
+      "expected_exit": 87
+    },
+    {
+      "label": "storage-after-recovery-01",
+      "command": [
+        "/tmp/quod-godot-m0-export/m0.x86_64",
+        "--headless"
+      ],
+      "mode": "read",
+      "child_exit": 0,
+      "expected_exit": 0
+    },
+    {
+      "label": "storage-update-01",
+      "command": [
+        "strace",
+        "-f",
+        "-qq",
+        "-e",
+        "trace=openat,write,fsync,fdatasync,rename,renameat,renameat2",
+        "-o",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m0-20261027/logs/storage-detail-04/storage-update-01.strace",
+        "/tmp/quod-godot-m0-export/m0.x86_64",
+        "--headless"
+      ],
+      "mode": "save",
+      "child_exit": 0,
+      "expected_exit": 0
+    },
+    {
+      "label": "storage-update-recovery-01",
+      "command": [
+        "/tmp/quod-godot-m0-export/m0.x86_64",
+        "--headless"
+      ],
+      "mode": "read",
+      "child_exit": 0,
+      "expected_exit": 0
+    },
+    {
+      "label": "storage-second-writer-01",
+      "command": [
+        "/tmp/quod-godot-m0-export/m0.x86_64",
+        "--headless"
+      ],
+      "mode": "save",
+      "child_exit": 1,
+      "expected_exit": 1
+    },
+    {
+      "label": "storage-lock-owner",
+      "child_exit": 0
+    },
+    {
+      "label": "storage-permissions-01",
+      "command": [
+        "/tmp/quod-godot-m0-export/m0.x86_64",
+        "--headless"
+      ],
+      "mode": "read",
+      "child_exit": 1,
+      "expected_exit": 1
+    },
+    {
+      "label": "storage-corrupt-01",
+      "command": [
+        "/tmp/quod-godot-m0-export/m0.x86_64",
+        "--headless"
+      ],
+      "mode": "read",
+      "child_exit": 1,
+      "expected_exit": 1
+    },
+    {
+      "label": "storage-symlink-01",
+      "command": [
+        "/tmp/quod-godot-m0-export/m0.x86_64",
+        "--headless"
+      ],
+      "mode": "read",
+      "child_exit": 1,
+      "expected_exit": 1
+    }
+  ]
+}

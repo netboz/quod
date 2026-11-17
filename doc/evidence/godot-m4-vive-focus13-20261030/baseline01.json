@@ -1,0 +1,92 @@
+{
+  "capture": "baseline01",
+  "observed_at_monotonic": 14799.407766873,
+  "snapshot_phase": "geometry",
+  "node_utc": "2026-10-30T13:20:52.8230691+00:00",
+  "frames": 646,
+  "deadline_monotonic": 16557.403213295,
+  "remaining_seconds": 1757.9954430390007,
+  "compositor_instance_sha256": "fdb2f0232f78b8a23aa7c7f23adcfd476a7715e40e9eee04d8f1bbeeb20e29d7",
+  "active_owned": false,
+  "window_focused": false,
+  "lifecycle": {
+    "Active": true,
+    "ApplicationFocused": false,
+    "PresentationVisible": true,
+    "NativeRunning": true,
+    "PredictedDisplayTime": 2856977619228
+  },
+  "native_session": "Focused",
+  "head": {
+    "tracked": true,
+    "confidence": "High"
+  },
+  "sources": [
+    {
+      "hand": "left",
+      "current": true,
+      "aim": {
+        "tracked": true,
+        "confidence": "High"
+      },
+      "grip": {
+        "tracked": true,
+        "confidence": "High"
+      },
+      "models": 1,
+      "visible_roots": 0,
+      "visible_meshes": 0
+    },
+    {
+      "hand": "right",
+      "current": true,
+      "aim": {
+        "tracked": true,
+        "confidence": "High"
+      },
+      "grip": {
+        "tracked": true,
+        "confidence": "High"
+      },
+      "models": 1,
+      "visible_roots": 0,
+      "visible_meshes": 0
+    }
+  ],
+  "metrics": {
+    "Running": true,
+    "Subscriptions": 13,
+    "sources": 2,
+    "appearances": 2,
+    "MenuRedraws": 0,
+    "LateCallbacks": 0,
+    "captures": 0,
+    "DriveRequests": 0,
+    "StopRequests": 0,
+    "SnapRequests": 0,
+    "TeleportRequests": 0,
+    "resources": {
+      "Acquisitions": 2,
+      "Releases": 0,
+      "Decodes": 1,
+      "InstancesCreated": 2,
+      "InstancesReleased": 0,
+      "NodesBuilt": 114,
+      "TexturesDecoded": 1,
+      "LiveTemplates": 1,
+      "LiveLeases": 2
+    }
+  },
+  "raw_snapshot_sha256": "36d11f28d847af2b7e4aef83b55c76c0cf65b8122a5b0f40e2b615d369de229c",
+  "raw_snapshot_stat_key": [
+    2050,
+    1334677,
+    29029,
+    1793366452832304242,
+    1793366452832304242
+  ],
+  "raw_geometry_public": false,
+  "scope": "Recorded instants only. Current(0) is not a separate freshness proof. No human interval inferred.",
+  "actual_task_owner_binding_retained_privately": true,
+  "owner_binding_sha256": "445d6ac7f3e2c3257076fef24beaecc83fdb031d7c8f533b0e29501e7daf36de"
+}

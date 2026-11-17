@@ -1,0 +1,63 @@
+{
+  "passed": false,
+  "reader_errors": [],
+  "host_input_or_focus_action": false,
+  "software_native_Control_inputs": true,
+  "setup_Control_signals": true,
+  "no_headset_or_runtime": true,
+  "companion_not_distributed": true,
+  "production_auth_lifetime_unchanged": true,
+  "manifest_sha256": "7e17aaf6667a3f280570c9997540cd649030553c12f9c94e546c59fa2619b569",
+  "driver_inputs": {
+    "signed.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-current07/drivers/signed.py",
+      "sha256": "8eea2f27093e0ee11d2e04d9aca89ab4362799a502bd7e2aba23d3fec74626b4"
+    },
+    "isolation.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-current07/drivers/isolation.py",
+      "sha256": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8"
+    },
+    "hashes.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-current07/drivers/hashes.py",
+      "sha256": "2df13f387f7d127b47265dec1ead54f38736e42bf874a3b20ecfa1ba5f2be6d7"
+    }
+  },
+  "failure": "AssertionError: ",
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-attention-full-stdout": true,
+    "client-attention-full-stderr": true
+  },
+  "streams": {
+    "server-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-current07/server-stdout.raw",
+      "sha256": "fa7befcc74482c76e42c4f82a6b63a2c1bb7b117443d05eaa00ba2a35328b25c",
+      "bytes": 129
+    },
+    "client-attention-full-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-current07/client-attention-full-stderr.raw",
+      "sha256": "319dea1fd09f9cf57251531b3e2c39ebd77e44e0fc2e3c1e3439187824f8a189",
+      "bytes": 5102
+    },
+    "client-attention-full-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-current07/client-attention-full-stdout.raw",
+      "sha256": "8aca215ba2bc8fc9296e2f2c1d4d0da1c015f23af706512b46992e3a684f357f",
+      "bytes": 220457
+    },
+    "server-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-current07/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "native_input_count": 0,
+  "children": {
+    "server": {
+      "true_exit": 0
+    },
+    "client-attention-full": {
+      "true_exit": 1
+    }
+  }
+}

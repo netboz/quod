@@ -1,0 +1,24 @@
+{
+  "command": [
+    "env",
+    "M1B_PHASE=tools",
+    "M1B_NETWORK=TgzObQIz8Uymsz0breO_DgzYYT543W7njZ2siWLXdpw",
+    "M1B_ORIGINAL=/tmp/quod-m1b-journey-11-private/original.json",
+    "M1B_CONTROL_PORT=38505",
+    "DOTNET_ROOT=/tmp/quod-m1b-no-runtime",
+    "/tmp/quod-m1b-export-17/quod.x86_64",
+    "--display-driver",
+    "wayland",
+    "--",
+    "--qualification",
+    "--profile",
+    "/tmp/quod-m1b-tools-01-private/identity",
+    "--node",
+    "https://127.0.0.1:40837",
+    "--ca",
+    "/tmp/quod-m1b-live-04/backend-ca.pem"
+  ],
+  "exit": 1,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 17.336368874999607
+}

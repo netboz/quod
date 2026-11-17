@@ -1,0 +1,34 @@
+{
+  "all_selected_children_wrappers_zero_and_eof": true,
+  "certified_negative_application_presentation": "unqualified; original application completion unavailable",
+  "changed_inherited_copies_before_real_patch": 4,
+  "freeze_passed": true,
+  "freeze_true_child_exit": 0,
+  "historical_shutdown_fixed": false,
+  "human_HMD_accepted": false,
+  "materialization_tree": "/tmp/attention-review-278-materialize-h8643mv1",
+  "new_tar_members_types_bytes_modes_and_live_source_match": 746,
+  "packaged": false,
+  "product_export_bytes_recorded": 193598808,
+  "product_exports": 196,
+  "product_inputs": 98,
+  "product_manifest_sha256": "dce5fe3f690dec8e3b7fd54b2e8da622efaa5e61ff65c4330b09cb21833f05bf",
+  "scope": "bounded attention-review278 coordinator integration",
+  "selected_checks": {
+    "attention-review-auth-final07": 25,
+    "attention-review-composition08": 26,
+    "attention-review-current09": 121,
+    "attention-review-home-final09": 23,
+    "attention-review-identity-final09": 38,
+    "attention-review-outcome08": 18,
+    "attention-review-receiver-final06": 14,
+    "attention-review-references05": 15,
+    "attention-review-stale08": 20
+  },
+  "separate_patch_check_apply_exits": [
+    0,
+    0
+  ],
+  "snapshot_sha256": "aa7dd9750895413ba0a691156b6d3edfc8161959323721a380ae870f844ea6c3",
+  "source_delta_paths_materialized_independently": 746
+}

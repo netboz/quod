@@ -1,0 +1,227 @@
+{
+  "command": [
+    "docker",
+    "run",
+    "--rm",
+    "--network",
+    "none",
+    "--user",
+    "1000:1000",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/server-runtime-restoration05:/work:ro",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02:/input",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/material_policy.pl:/work/_build/prod/lib/quod/priv/ontologies/material_policy.pl:ro",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/stage2-owner-final02/lib:/compiler:ro",
+    "-w",
+    "/input",
+    "-e",
+    "ERL_FLAGS=+S 4:4 +SDio 2 +SDcpu 2",
+    "-e",
+    "ERL_CRASH_DUMP=/input/erl_crash.dump",
+    "--entrypoint",
+    "/bin/sh",
+    "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+    "-c",
+    "exec erl -noshell -pa /work/_build/prod/lib/*/ebin /work/_build/test/lib/quod/test /compiler/erlog/ebin /input/lib/*/ebin /input -eval \"$1\"",
+    "sh",
+    "{ok,quod_material_admission}=compile:file(\"/input/quod_material_admission.erl\",[report_errors,report_warnings,{d,'TEST'},{i,\"/input/include\"},{outdir,\"/input\"}]),{ok,quod_proof_session}=compile:file(\"/input/quod_proof_session.erl\",[report_errors,report_warnings,{d,'TEST'},{i,\"/input/include\"},{outdir,\"/input\"}]),{ok,quod_scope_session}=compile:file(\"/input/quod_scope_session.erl\",[report_errors,report_warnings,{d,'TEST'},{i,\"/input/include\"},{outdir,\"/input\"}]),{ok,quod_scope_wire}=compile:file(\"/input/quod_scope_wire.erl\",[report_errors,report_warnings,{d,'TEST'},{i,\"/input/include\"},{outdir,\"/input\"}]),{ok,quod_wire_term}=compile:file(\"/input/quod_wire_term.erl\",[report_errors,report_warnings,{d,'TEST'},{i,\"/input/include\"},{outdir,\"/input\"}]),{ok,quod_ontology_name}=compile:file(\"/input/quod_ontology_name.erl\",[report_errors,report_warnings,{d,'TEST'},{i,\"/input/include\"},{outdir,\"/input\"}]),{ok,quod_ask}=compile:file(\"/input/quod_ask.erl\",[report_errors,report_warnings,{d,'TEST'},{i,\"/input/include\"},{outdir,\"/input\"}]),{ok,answer_policy_checks}=compile:file(\"/input/answer_policy_checks.erl\",[report_errors,report_warnings,{d,'TEST'},{i,\"/input/include\"},{outdir,\"/input\"}]),{ok,quod_proof_answer_tests}=compile:file(\"/input/quod_proof_answer_tests.erl\",[report_errors,report_warnings,{d,'TEST'},{i,\"/input/include\"},{outdir,\"/input\"}]),{ok,quod_material_admission_tests}=compile:file(\"/input/quod_material_admission_tests.erl\",[report_errors,report_warnings,{d,'TEST'},{i,\"/input/include\"},{outdir,\"/input\"}]),{ok,quod_proof_session_tests}=compile:file(\"/input/quod_proof_session_tests.erl\",[report_errors,report_warnings,{d,'TEST'},{i,\"/input/include\"},{outdir,\"/input\"}]),{ok,quod_scope_session_tests}=compile:file(\"/input/quod_scope_session_tests.erl\",[report_errors,report_warnings,{d,'TEST'},{i,\"/input/include\"},{outdir,\"/input\"}]),{ok,quod_scope_wire_tests}=compile:file(\"/input/quod_scope_wire_tests.erl\",[report_errors,report_warnings,{d,'TEST'},{i,\"/input/include\"},{outdir,\"/input\"}]),case eunit:test([answer_policy_checks,quod_proof_answer_tests,quod_material_admission_tests,quod_proof_session_tests,quod_scope_session_tests,quod_scope_wire_tests],[verbose]) of ok->halt(0);error->halt(1) end."
+  ],
+  "inputs": {
+    "/home/yan/src/quod_worktrees/pearl-stone/src/quod_material_admission.erl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/quod_material_admission.erl",
+      "sha256": "ceef0436b16a5127d6e6ae30b60897470084b12cf7ecf28255608eed0753ce2a",
+      "mode": 33188
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/src/quod_proof_session.erl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/quod_proof_session.erl",
+      "sha256": "ee606a6fb1ef4c8e4fb5f59464c637a6ed42509034e67ba5c5a702a54d5c56a8",
+      "mode": 33188
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/src/quod_scope_session.erl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/quod_scope_session.erl",
+      "sha256": "d743d77e2d9cc5eb17b725b6cdc54a4de99e0f01f086abc7805e789ee34b77d9",
+      "mode": 33188
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/src/quod_scope_wire.erl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/quod_scope_wire.erl",
+      "sha256": "1a1273770b1a713616e06704e9969ca0f14cd7d294147720c6ddd00ae298e472",
+      "mode": 33188
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/src/quod_wire_term.erl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/quod_wire_term.erl",
+      "sha256": "693a2613a8e79c79094810c7777df846fd2b393d076809fb43faf5b989f2f5ff",
+      "mode": 33188
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/src/quod_ontology_name.erl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/quod_ontology_name.erl",
+      "sha256": "bade11fb98953f68ffaf63cd29f599189692c52b32ab943b8597bda2e87e6e9f",
+      "mode": 33188
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/src/predicates/quod_ask.erl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/quod_ask.erl",
+      "sha256": "e8eff6a298a631db396c7b84024e9edd57f25f32dd22f571440424bf9cac8b06",
+      "mode": 33188
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-client-policy-20261031/answer_policy_checks.erl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/answer_policy_checks.erl",
+      "sha256": "9d3762786bf3ca857678d44cb7cddecab39832eba6b9cc6d4bc681d553ddc82a",
+      "mode": 33188
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/test/quod_proof_answer_tests.erl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/quod_proof_answer_tests.erl",
+      "sha256": "51e943db04a4044d186593b265ed6d9873659908c25f44bd9a47ea63e1beedf2",
+      "mode": 33188
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/test/quod_material_admission_tests.erl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/quod_material_admission_tests.erl",
+      "sha256": "1bfa75d329e88077a80c5eb14464bd0663bcab0c3207158d23c58e54870984b6",
+      "mode": 33188
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/test/quod_proof_session_tests.erl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/quod_proof_session_tests.erl",
+      "sha256": "56c2907c266dbc38b515c3454fbb0e7cac4ea8b186a6529bc699a0378b01caf2",
+      "mode": 33188
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/test/quod_scope_session_tests.erl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/quod_scope_session_tests.erl",
+      "sha256": "020600800d1ff724cac916e734e16ac0727f614a1c5d6029d3f7eb876156fdfd",
+      "mode": 33188
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/test/quod_scope_wire_tests.erl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/quod_scope_wire_tests.erl",
+      "sha256": "c72ee60cd82efe9e3e9f8d580236e04d228140c75e79ebced79960f8582b31ef",
+      "mode": 33188
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/priv/ontologies/material_policy.pl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/material_policy.pl",
+      "sha256": "ad07dc60e23a47f7d55a81aecbeee528cfe3d00dc96b89b08463e33816706169",
+      "mode": 33188
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/include/quod_transport_limits.hrl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/include/quod_transport_limits.hrl",
+      "sha256": "0221f1df8a41184e7114a53ec61bb6c45528cc93bac3bd0cab637365366c09a3",
+      "mode": 33188
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/include/quod_ingress_limits.hrl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/include/quod_ingress_limits.hrl",
+      "sha256": "62389470e8b035526e2c79723996de3ddae97c39a7a433b9473dcf98742ea33a",
+      "mode": 33188
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/include/quod_dtx_owner.hrl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/include/quod_dtx_owner.hrl",
+      "sha256": "aabb061be7221f0b78ae7cc0e2a061af758328d19df9ecff959310bec34dd8ce",
+      "mode": 33188
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/include/quod_term_limits.hrl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/include/quod_term_limits.hrl",
+      "sha256": "affe244d7aa341161b29b1c9eb68c3c830bc12e449058e94c21e7cebfbd3e785",
+      "mode": 33188
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/include/quod_vm_limits.hrl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/include/quod_vm_limits.hrl",
+      "sha256": "032443e83f6157be144f774d01764dfe2059d6134ed7164f801d78c452a11bd0",
+      "mode": 33188
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/include/quod_c4_attempt.hrl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/include/quod_c4_attempt.hrl",
+      "sha256": "01ada5034fedcfebc909eb6ececf31aed3324b6081ae3d2987c542215342c663",
+      "mode": 33188
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/include/quod_client_goal_limits.hrl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/include/quod_client_goal_limits.hrl",
+      "sha256": "77b41a6cdb682a35433c01814eee99501edb8f38b93acff5e5cdaf119589f7b4",
+      "mode": 33188
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/include/quod_proof_limits.hrl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/include/quod_proof_limits.hrl",
+      "sha256": "e3d2641261eccfaf5491d5e48351d17f718c996a2612352ea7a9248d24f83cfd",
+      "mode": 33188
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/include/quod_directory_limits.hrl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/include/quod_directory_limits.hrl",
+      "sha256": "a7c360b5cd582ae6e34256a29691431e47447dafdda6d85955b5a3832ba3b4e0",
+      "mode": 33188
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/include/quod_ledger.hrl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/include/quod_ledger.hrl",
+      "sha256": "15b00d149bfee607701f3fd9f6a30ce661008af1ad11539da6e36836d773364d",
+      "mode": 33188
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/opentelemetry/include/otel_span.hrl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/lib/opentelemetry/include/otel_span.hrl",
+      "sha256": "f9dd7d7b538ef590dd2d04d70c5da7280253cc3198980ff08cd056e8983f338c",
+      "mode": 33188
+    },
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/opentelemetry/include/otel_sampler.hrl": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/lib/opentelemetry/include/otel_sampler.hrl",
+      "sha256": "c1deb497db20876be34db6af2b815a1bfd799c85fc34ed67d16ee78acb23598b",
+      "mode": 33188
+    },
+    "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/server-runtime-restoration05/_build/prod/lib/opentelemetry/ebin/opentelemetry.app": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-affected02/lib/opentelemetry/ebin/opentelemetry.app",
+      "sha256": "94028be7012f4f12f06dc8fbde3f591f6ff7339268efe1642e563761c3b33ce0",
+      "mode": 33188
+    }
+  },
+  "network": "none",
+  "hardware": false,
+  "true_exit": 1,
+  "passed": false,
+  "objects": {
+    "quod_wire_term.beam": {
+      "sha256": "943def044ffd956a9e4d84598ebcffcc9fa8e779d55748fd746eb272729bc184",
+      "bytes": 14412
+    },
+    "answer_policy_checks.beam": {
+      "sha256": "24100268630c02f125de646fca3b14d0ef81f150d9f4248f986a4833e2311e85",
+      "bytes": 3396
+    },
+    "quod_proof_session_tests.beam": {
+      "sha256": "c63fdd98093bcdee35e67e40ad71d32a0e68c8e60e57e3c991678e436be4c5c4",
+      "bytes": 33904
+    },
+    "quod_scope_wire_tests.beam": {
+      "sha256": "01c153e1ca8258f33a6530f23c72b6243df7909a76c5cb64bf0b3feb856f5e48",
+      "bytes": 56860
+    },
+    "quod_ask.beam": {
+      "sha256": "e80d47be410d5cafccae737dbe61adc01b4ba69a631703609e67bbb3c057b63a",
+      "bytes": 43484
+    },
+    "quod_material_admission.beam": {
+      "sha256": "c2f3e26f964dd4e555629cfd235ec8a54bdcb27ec9d4c3bd75fcaa6c27f85af4",
+      "bytes": 3592
+    },
+    "quod_material_admission_tests.beam": {
+      "sha256": "cc5822787079f0bb0049c417fbdd795f235aaf147d793a0e7284c61e712dd110",
+      "bytes": 15232
+    },
+    "quod_proof_answer_tests.beam": {
+      "sha256": "a9646714668ae404d18e44db0599f2e43cbacf66d6f819e011c3367795353350",
+      "bytes": 11948
+    },
+    "quod_proof_session.beam": {
+      "sha256": "f189de5be524fd32a9752d292b4e2ce53197c57bb150109f1d84f51c0c4b2c5c",
+      "bytes": 20172
+    },
+    "quod_scope_session.beam": {
+      "sha256": "ff40ece5ca56c6acc2ce44913e8af447a9d0a43ff9cdba7a759fa7e567be8a60",
+      "bytes": 36752
+    },
+    "quod_scope_session_tests.beam": {
+      "sha256": "cfbc974694a1324497ce885d371f6173ea830d80409c70049de6be26dd493dc9",
+      "bytes": 73432
+    },
+    "quod_ontology_name.beam": {
+      "sha256": "08f9720ea810c454f87e1e7b3e0688f7fa07e9d4b8c6061888be9050acf0ea52",
+      "bytes": 1556
+    },
+    "quod_scope_wire.beam": {
+      "sha256": "a00d76125e4985341cd3e20f6f4ea638635ba0ed23aaaa90dce0994c3beeb6bf",
+      "bytes": 19208
+    }
+  }
+}

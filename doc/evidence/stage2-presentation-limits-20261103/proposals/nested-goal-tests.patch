@@ -1,0 +1,40 @@
+--- a/test/quod_scope_wire_tests.erl
++++ b/test/quod_scope_wire_tests.erl
+@@ -499,7 +499,7 @@
+     ?assertException(error, badarg, binary_to_existing_atom(Symbol, utf8)).
+ 
+ payload_byte_bounds_are_exact_test() ->
+-    exact_payload_boundary(goal, ?QUOD_MAX_NESTED_GOAL_BYTES),
++    exact_payload_boundary(goal, ?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES),
+     exact_payload_boundary(answer, ?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES),
+     exact_failure_reason_payload_boundary(),
+     exact_payload_boundary(erlog_error, ?ERLOG_MAX_FAILURE_REASON_BYTES),
+--- a/test/quod_dtx_tests.erl
++++ b/test/quod_dtx_tests.erl
+@@ -751,19 +751,15 @@
+         quod_proof_session:stop(Session)
+     end.
+ 
+-oversized_goal_is_refused_before_invocation_exists_test() ->
++nested_goal_is_not_readmitted_against_signed_input_quota_test() ->
+     Session = session([]),
+     Id = <<3:128>>,
+-    try
+-        ?assertEqual({error, {too_large, goal}},
+-                     open(Session, Id, {pad, binary:copy(<<$p>>,
+-                         ?QUOD_MAX_NESTED_GOAL_BYTES + 1)})),
+-        ?assertEqual({error, unknown_invocation},
+-                     quod_proof_session:next(Session, Id)),
+-        ?assertEqual({[], 0}, quod_proof_session:transcript(Session))
+-    after
+-        quod_proof_session:stop(Session)
+-    end.
++    Goal = {pad,binary:copy(<<$p>>,160000)},
++    try
++        ?assertEqual(ok,open(Session,Id,Goal)),
++        {Entries,_}=quod_proof_session:transcript(Session),
++        ?assertMatch([_],Entries)
++    after quod_proof_session:stop(Session) end.
+ 
+ denied_transcript_keeps_request_and_never_executes_it_test() ->
+     Session = session([]),

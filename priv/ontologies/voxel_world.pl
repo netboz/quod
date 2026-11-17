@@ -1,7 +1,7 @@
 %% Composable terrain domain. The owning ontology supplies ACLs, physics
 %% configuration, resource policy and initial coverage. No actors are founded
 %% here, and exploration changes no durable facts.
-isa(voxel_world, physical_space).
+isa(voxel_world, quod:space:physical_space).
 isa(bounded_voxel_world, voxel_world).
 isa(unbounded_voxel_world, voxel_world).
 

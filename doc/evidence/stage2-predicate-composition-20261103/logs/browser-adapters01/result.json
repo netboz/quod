@@ -1,0 +1,11 @@
+{
+  "command": [
+    "node",
+    "--test",
+    "client/test/world.test.js",
+    "client/test/prolog-edit.test.js"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 0.1484667860004265
+}

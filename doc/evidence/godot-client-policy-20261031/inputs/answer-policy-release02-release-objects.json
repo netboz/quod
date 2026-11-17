@@ -1,0 +1,530 @@
+{
+  "_build/prod/lib/quod/ebin/quod_action_predicates.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_action_predicates.beam",
+    "sha256": "c7ce8d2cf456c3c1196a2e9255e7555b766957c19c6195236b3cb1b99aa4808f"
+  },
+  "_build/prod/lib/quod/ebin/quod_agent.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_agent.beam",
+    "sha256": "cdd5862f83ea04edbe8627ba2993fccd9f5be3be413f27f7115dadeb47bae342"
+  },
+  "_build/prod/lib/quod/ebin/quod_agent_identity.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_agent_identity.beam",
+    "sha256": "60c911b4b194f90cf4e37f38afdb1fd754ca3d2be941c6c7169ff8d55abcfd6f"
+  },
+  "_build/prod/lib/quod/ebin/quod_agent_observer.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_agent_observer.beam",
+    "sha256": "32ca34b615aaf845765eb83ae4ebb712a04417b468026900b2027934a2e077bb"
+  },
+  "_build/prod/lib/quod/ebin/quod_agent_predicates.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_agent_predicates.beam",
+    "sha256": "34502119b8c03b18be70cd4986e1dfca62d44d89d59405a92983e9b9fa086003"
+  },
+  "_build/prod/lib/quod/ebin/quod_agent_ref.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_agent_ref.beam",
+    "sha256": "15587c0deeb610535bac7be6ab4829e0f2d21b18e1a4f2f2899a6f94072a7888"
+  },
+  "_build/prod/lib/quod/ebin/quod_agent_vault.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_agent_vault.beam",
+    "sha256": "910f6ce627792c2b87af40a8a944d93b9e00583743293a01256650059d2be9e5"
+  },
+  "_build/prod/lib/quod/ebin/quod_agent_work_predicates.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_agent_work_predicates.beam",
+    "sha256": "e70942301e8554fdb5a95f5c47be121aca6cf2d93da4104179b46f4a61f9a6b5"
+  },
+  "_build/prod/lib/quod/ebin/quod_app.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_app.beam",
+    "sha256": "6e5dac59d726537a0f5b77b32131d852630ebae984c9154fcbf4dc5ff18c0083"
+  },
+  "_build/prod/lib/quod/ebin/quod_applied_certificate.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_applied_certificate.beam",
+    "sha256": "60cc85c426cfd0188770679563d88e770891105821709b5ed40526870be3de50"
+  },
+  "_build/prod/lib/quod/ebin/quod_ask.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_ask.beam",
+    "sha256": "b5e345f160b2898cd5e814ca711c70636a71d3731b392f571c04e677916be872"
+  },
+  "_build/prod/lib/quod/ebin/quod_ask_router.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_ask_router.beam",
+    "sha256": "89e08627d53668b6c9441da4629ea2be8ce8395a9862574dc231c5ea54d40ecf"
+  },
+  "_build/prod/lib/quod/ebin/quod_atomic.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_atomic.beam",
+    "sha256": "cd91910f8fbbd39e546ee5050f55906aaa457cab06c44ba76739bd4e00681edf"
+  },
+  "_build/prod/lib/quod/ebin/quod_atomic_admission.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_atomic_admission.beam",
+    "sha256": "5447b1bb9ca7871590e4c6a9610ac2252c08fdb5e37e753040f702927c995ad3"
+  },
+  "_build/prod/lib/quod/ebin/quod_attempt_span.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_attempt_span.beam",
+    "sha256": "35e2b78ae1393e8df8ace5297c0ee4b756154839b06216701fb828124a2beaa1"
+  },
+  "_build/prod/lib/quod/ebin/quod_brahms.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_brahms.beam",
+    "sha256": "24dcae4c0d8a620069bea2fc2ff2bddf3b3b27dd2eba46d731320e11b67ca20c"
+  },
+  "_build/prod/lib/quod/ebin/quod_brahms_population.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_brahms_population.beam",
+    "sha256": "384d5483b65b9e0c1747829a94782b5a401fcc0a3c311c563efeebc03338b7e7"
+  },
+  "_build/prod/lib/quod/ebin/quod_brahms_sampler.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_brahms_sampler.beam",
+    "sha256": "da252fdfedbcf3715669fcc9f308436d314f6569397427d9517c9f3a933d72b4"
+  },
+  "_build/prod/lib/quod/ebin/quod_brahms_sup.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_brahms_sup.beam",
+    "sha256": "bbd9fc1bb170cb013c6d58dccd6e781c519edc01b5c8aa873c000985b4017744"
+  },
+  "_build/prod/lib/quod/ebin/quod_c4_attempt.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_c4_attempt.beam",
+    "sha256": "33e61c5b97121eee9a4c01c6991c6589c5a94597450ca8c3fb32fcf67cd72d93"
+  },
+  "_build/prod/lib/quod/ebin/quod_c4_sampler_observation.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_c4_sampler_observation.beam",
+    "sha256": "a30a3b118567bf96b6b7fd2a973cbad106ee068ac29fbd9fff9be6b6afa81764"
+  },
+  "_build/prod/lib/quod/ebin/quod_c4_sdk_config.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_c4_sdk_config.beam",
+    "sha256": "0ea803f87ce2a9b74bcae64e0fe9ca3b2cc6b22d07b9cade7fdf342db4f09b59"
+  },
+  "_build/prod/lib/quod/ebin/quod_catchup.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_catchup.beam",
+    "sha256": "63bd734dd95a5b10883ae5c41e9670469d0c7f5012354df33cf289a7521f7ba8"
+  },
+  "_build/prod/lib/quod/ebin/quod_client.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_client.beam",
+    "sha256": "349dddeec24dd7c6b8951b161c8e8f47dd65a567c164d85ad4ce85daaf6ae91e"
+  },
+  "_build/prod/lib/quod/ebin/quod_client_auth.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_client_auth.beam",
+    "sha256": "4788eac2fd0c7812bfe406699b1c34821a285dd559b9c420beea4b5fcd52f248"
+  },
+  "_build/prod/lib/quod/ebin/quod_client_cursor.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_client_cursor.beam",
+    "sha256": "3a3c6a5b0c598f624a31b71d8963f0733cca9b7f7262bf070ec9e884b114e81f"
+  },
+  "_build/prod/lib/quod/ebin/quod_client_goal.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_client_goal.beam",
+    "sha256": "aacd6886d11c43df99675577290d9e9c6b335789708ad9005580aac986be1f7e"
+  },
+  "_build/prod/lib/quod/ebin/quod_client_goal_endpoint.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_client_goal_endpoint.beam",
+    "sha256": "a3621d6adaebb474830da335712e6853a598eb3886eafc0cce2c824327e92932"
+  },
+  "_build/prod/lib/quod/ebin/quod_client_goal_ingress.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_client_goal_ingress.beam",
+    "sha256": "6593995d3138fd8327887e7617987272daaf2582f9c3a749fc9bf3701b773d68"
+  },
+  "_build/prod/lib/quod/ebin/quod_client_goal_parser.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_client_goal_parser.beam",
+    "sha256": "7e0ff2bb429903e3177270d981658df5cf08124ad9049a26c49135f888fef13f"
+  },
+  "_build/prod/lib/quod/ebin/quod_client_goal_router.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_client_goal_router.beam",
+    "sha256": "521da9fab1cc337a69cc5651de97b4e11363ef3ea47e9b751371607ba15214e6"
+  },
+  "_build/prod/lib/quod/ebin/quod_client_goal_target.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_client_goal_target.beam",
+    "sha256": "e87212f2cd4e1238203bdfae97850028884fc0931d0c3ddf205d9308a78167d4"
+  },
+  "_build/prod/lib/quod/ebin/quod_client_http.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_client_http.beam",
+    "sha256": "9d484ba886ebc7b337d5a2612c397f9f6c61b05ad8884700cd5cc25c1f717be5"
+  },
+  "_build/prod/lib/quod/ebin/quod_client_result.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_client_result.beam",
+    "sha256": "da77c4c75f722070d30075a7da2411ed7029a08c33389f84289fdb18dde5baf5"
+  },
+  "_build/prod/lib/quod/ebin/quod_client_tls.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_client_tls.beam",
+    "sha256": "d9424c36b5e855591fc7f0fd26c050b48d1ac00d16b797f92d59a0a4fea3da94"
+  },
+  "_build/prod/lib/quod/ebin/quod_client_view.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_client_view.beam",
+    "sha256": "0615e0be3babdb56a0e8231a1baa542851683a2d0ff437cfa559e42c8540c6c8"
+  },
+  "_build/prod/lib/quod/ebin/quod_commit_validation.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_commit_validation.beam",
+    "sha256": "ed529a187eb71e2d8d35de08ca502b2f3fb81b731bc9eb8e67143c31564762ed"
+  },
+  "_build/prod/lib/quod/ebin/quod_committed_projection.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_committed_projection.beam",
+    "sha256": "d1c5b904ed6ece9647a1cba5d27ee8dc24ac937b4f69cbcba38697f23c0f3082"
+  },
+  "_build/prod/lib/quod/ebin/quod_committee_predicates.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_committee_predicates.beam",
+    "sha256": "357a6a2a13ce1a48f994d1055d65ff0839468c477f076bacef6b292d5aaa6f40"
+  },
+  "_build/prod/lib/quod/ebin/quod_common_primitives.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_common_primitives.beam",
+    "sha256": "c682324dd79818c6efbf5d4a11f07100d9c4c04784eebc528345e7014396a7cf"
+  },
+  "_build/prod/lib/quod/ebin/quod_conn.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_conn.beam",
+    "sha256": "e066e07954cc895b46507bcb138bd98e7581fa4bc373c527e193d328bf0e19bd"
+  },
+  "_build/prod/lib/quod/ebin/quod_consensus_trace.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_consensus_trace.beam",
+    "sha256": "d4c93b0567bdaf40961d3ea184bfdcf75193e88acc23eedc9bbef8205a196fc9"
+  },
+  "_build/prod/lib/quod/ebin/quod_diff.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_diff.beam",
+    "sha256": "1be549aaed1d7470a1979b5054c046089e07f7a7a2ec54a6edd2644d74b90781"
+  },
+  "_build/prod/lib/quod/ebin/quod_directory.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_directory.beam",
+    "sha256": "f8858c2a7a1aa39f0399ccdccadbdf8ee31935bdc1688ffe88654a31e94bd0a9"
+  },
+  "_build/prod/lib/quod/ebin/quod_directory_control.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_directory_control.beam",
+    "sha256": "78a925a55607c674faf7645ea1f54f642387396bc738821957bd74388bc4ba39"
+  },
+  "_build/prod/lib/quod/ebin/quod_directory_generation.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_directory_generation.beam",
+    "sha256": "887a8cb3ae6aaea6e02521b7d05d9c0f325dd35d396d851c9250e48b136025e1"
+  },
+  "_build/prod/lib/quod/ebin/quod_directory_predicates.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_directory_predicates.beam",
+    "sha256": "b86d36008fe5e45ac6e49aad64b11f2d18ad944ab5691f12b7a1acbdf5c2b889"
+  },
+  "_build/prod/lib/quod/ebin/quod_directory_shape.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_directory_shape.beam",
+    "sha256": "095071cb5f716326f3122863b840a8afe2f30960c5c7c44972bbff5679be9abf"
+  },
+  "_build/prod/lib/quod/ebin/quod_dtx.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_dtx.beam",
+    "sha256": "51cb91bb59eeba8d15ae975c7122ac9f79566c76506d6f95d434c3229eed80e4"
+  },
+  "_build/prod/lib/quod/ebin/quod_dtx_coordinator.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_dtx_coordinator.beam",
+    "sha256": "6d23d4fee0233c27e06c4246e7c0b9918a3500baff2c8a2c109bdcd342a59341"
+  },
+  "_build/prod/lib/quod/ebin/quod_dtx_current_view.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_dtx_current_view.beam",
+    "sha256": "64c9533b3e6a1eae839dfe0f52f04859c775414c2c3031bedfd179e57cdc89d9"
+  },
+  "_build/prod/lib/quod/ebin/quod_dtx_endpoint.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_dtx_endpoint.beam",
+    "sha256": "49e41db8c4747e9676d0cb4777f23a2663b631edf1ad7e9cb1f572fb633e0ba9"
+  },
+  "_build/prod/lib/quod/ebin/quod_dtx_owner.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_dtx_owner.beam",
+    "sha256": "760ee3eba68bce1e579d63134cd10d901a2a095d3c646c38d0644000c88c630b"
+  },
+  "_build/prod/lib/quod/ebin/quod_dtx_phase_index.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_dtx_phase_index.beam",
+    "sha256": "505dcc4f094902456cb8ba0077f5426f08f1c6f6ba55812a31d794376cdd37ca"
+  },
+  "_build/prod/lib/quod/ebin/quod_dtx_recovery.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_dtx_recovery.beam",
+    "sha256": "f228dfb946634cb79c070bc2eabb8c0221b8b568e68458ac195b2ec80847b093"
+  },
+  "_build/prod/lib/quod/ebin/quod_durable_term.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_durable_term.beam",
+    "sha256": "02b00f894f89e7f6f25bdb44899a51f1cb2c3af0f064e9c3bc2ffdd7cf9848e5"
+  },
+  "_build/prod/lib/quod/ebin/quod_effect.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_effect.beam",
+    "sha256": "561d41531da67d38dec8c859ef03483263db904082955e4cbba22a84135ec067"
+  },
+  "_build/prod/lib/quod/ebin/quod_effect_journal.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_effect_journal.beam",
+    "sha256": "59d2689df2b1496b680141ba6653645fb79dcca5a87d079f2bcc89a2310d2381"
+  },
+  "_build/prod/lib/quod/ebin/quod_erlog_db_local_prove.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_erlog_db_local_prove.beam",
+    "sha256": "43e7a1c6537d57d0f1374468db8ce99936acdb03c61052e8c7ae8f0e9c18c640"
+  },
+  "_build/prod/lib/quod/ebin/quod_erlog_db_mvcc.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_erlog_db_mvcc.beam",
+    "sha256": "a7c0435c406fe699410a20ae1653bc2ce4b46e054696af7c24de9406f8020e33"
+  },
+  "_build/prod/lib/quod/ebin/quod_explorer.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_explorer.beam",
+    "sha256": "59865c9c657381bd623959813db46a4c908aeb444c97ea1f858f7dbc1e52b347"
+  },
+  "_build/prod/lib/quod/ebin/quod_explorer_http.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_explorer_http.beam",
+    "sha256": "5240051e2ea65ff623c1897d2bf058186e9536fb1f69959ce0dd3e80794283bb"
+  },
+  "_build/prod/lib/quod/ebin/quod_explorer_ws.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_explorer_ws.beam",
+    "sha256": "e08b283594fde345e1ffc1d451ab131df8ff7cb2432e93d6bdc5df9c1bac2e23"
+  },
+  "_build/prod/lib/quod/ebin/quod_feed.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_feed.beam",
+    "sha256": "b485cc31361faa46c010ffedf90764adba72d8b67cddcf27cc8d1423579edcfb"
+  },
+  "_build/prod/lib/quod/ebin/quod_file.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_file.beam",
+    "sha256": "1038e6d1ed0fa21aad6a5b5434e700b759f1153105cd31ef48237852ad072217"
+  },
+  "_build/prod/lib/quod/ebin/quod_foreign_log.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_foreign_log.beam",
+    "sha256": "046a6e422820812f4d66646aa48c7d13f93c8fc8b6ce9b8f39172c248db155e5"
+  },
+  "_build/prod/lib/quod/ebin/quod_foreign_projection.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_foreign_projection.beam",
+    "sha256": "bcd51b94bc1f09c9f342cd9fe9e30f6128f757d36e51ee2e400790886ea3b4c4"
+  },
+  "_build/prod/lib/quod/ebin/quod_gui_predicates.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_gui_predicates.beam",
+    "sha256": "636a2e8dd13a1644053e8168398ffb7550f199ba46fd1f34ce92e0007f881788"
+  },
+  "_build/prod/lib/quod/ebin/quod_gui_presentation.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_gui_presentation.beam",
+    "sha256": "89714e00e7c2539382201722153d35545910e17ac64990d2af803e4f680f7aef"
+  },
+  "_build/prod/lib/quod/ebin/quod_http_headers_h.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_http_headers_h.beam",
+    "sha256": "201919426ec6fcffd9649cef109f730f051d9549f7a2a77f763d4f2e0460d5ea"
+  },
+  "_build/prod/lib/quod/ebin/quod_http_listener.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_http_listener.beam",
+    "sha256": "9d11fe9793a7041516d43c31666a6c6d367d581d904b260164277a94b9a430fd"
+  },
+  "_build/prod/lib/quod/ebin/quod_identity.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_identity.beam",
+    "sha256": "f479d6f8eb9539b6601b0b1fdf32f12ab0f4d0f675ea39d1c9649a5faad1971d"
+  },
+  "_build/prod/lib/quod/ebin/quod_ingress_state.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_ingress_state.beam",
+    "sha256": "ce6238471718e5ba9f47780d52733de762760db29d9d89ab3b150ab2ca25b489"
+  },
+  "_build/prod/lib/quod/ebin/quod_ledger.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_ledger.beam",
+    "sha256": "4985c17a79c40c369423e182d7599e21b0b41cc79aa45838a3c7481f81219268"
+  },
+  "_build/prod/lib/quod/ebin/quod_ledger_store.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_ledger_store.beam",
+    "sha256": "9b68fcee0d9eb363230a111e573a1e4554db285c76fcc54dcfdd545f0e24fad7"
+  },
+  "_build/prod/lib/quod/ebin/quod_link.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_link.beam",
+    "sha256": "424d40fb6391217f364a7e58eea751b4b1aab551d2d22275a9c2636f68a98c06"
+  },
+  "_build/prod/lib/quod/ebin/quod_log_formatter.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_log_formatter.beam",
+    "sha256": "f0af8e4ace6357e7517abd303aacdb10ba176f0bb8707a4eee1e7c30ce8e090c"
+  },
+  "_build/prod/lib/quod/ebin/quod_material_admission.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_material_admission.beam",
+    "sha256": "1d8617a6cc8a3801e8febaa053c8c4c20434b4eb9e5bbb8db02e1c7261f3dffd"
+  },
+  "_build/prod/lib/quod/ebin/quod_metrics.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_metrics.beam",
+    "sha256": "a5769fafbfb688b74bfefa0e1cbd4549f5bf51f616bfb875679f08a7196ace69"
+  },
+  "_build/prod/lib/quod/ebin/quod_namespace_manager.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_namespace_manager.beam",
+    "sha256": "a824eda3215d3a00132c7b18d0709a07dabe7cc6c5d0b92f1ceebcd1c94da007"
+  },
+  "_build/prod/lib/quod/ebin/quod_node_actor.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_node_actor.beam",
+    "sha256": "93d21f7ac1ed31de32ca08b003a9055715ff283cb0906d8fbf85290de267d806"
+  },
+  "_build/prod/lib/quod/ebin/quod_ns.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_ns.beam",
+    "sha256": "fa304f1869862cca3130b75594f5b877ff204c7c9d29eb7f6fc727762761edb2"
+  },
+  "_build/prod/lib/quod/ebin/quod_ns_sup.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_ns_sup.beam",
+    "sha256": "589429b119f4ad04aa5f72c9055319b1216c6b0838e8c64904ad7dccb431728a"
+  },
+  "_build/prod/lib/quod/ebin/quod_observation.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_observation.beam",
+    "sha256": "f13e1373bee5e28c02ac04eae8490f333df3685caf3916a50d7679edceae6750"
+  },
+  "_build/prod/lib/quod/ebin/quod_ontology.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_ontology.beam",
+    "sha256": "a14e6e779bccf6bf6038c2ad65bd9fbfda85c7ae8a71254761dee00bd392880d"
+  },
+  "_build/prod/lib/quod/ebin/quod_ontology_name.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_ontology_name.beam",
+    "sha256": "b45f8f21c272ae0341cd11fff14c4109e3c6a5f2eb9d56033292b2381c0a1081"
+  },
+  "_build/prod/lib/quod/ebin/quod_ontology_predicates.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_ontology_predicates.beam",
+    "sha256": "a59246329570b2e54a1fd1be6c36784c4a7ff97aea0a479f9bc8da286948aa43"
+  },
+  "_build/prod/lib/quod/ebin/quod_operation.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_operation.beam",
+    "sha256": "b6344a06caf6c079c4b42bccca456f85906bab39f4b04efac12ef186333adbff"
+  },
+  "_build/prod/lib/quod/ebin/quod_operation_vector.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_operation_vector.beam",
+    "sha256": "5af22bef1ebf12183459078ee2969081535bd3147dde3d2dc577b55f45881224"
+  },
+  "_build/prod/lib/quod/ebin/quod_outcome.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_outcome.beam",
+    "sha256": "7fd2260730af63a748eaf4f2182534add41a98b5f02ccd74f90247bbbb412d2e"
+  },
+  "_build/prod/lib/quod/ebin/quod_peer_route.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_peer_route.beam",
+    "sha256": "eb0251ef7545a8a89fa0b45a68dc84fb40ab3bfcc85b7f48fbedfd18761d8949"
+  },
+  "_build/prod/lib/quod/ebin/quod_physics.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_physics.beam",
+    "sha256": "93b2db4952afd46278571795af0be45b0a9c1f9ec97d8516e5024be5233dbcdf"
+  },
+  "_build/prod/lib/quod/ebin/quod_physics_coordinates.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_physics_coordinates.beam",
+    "sha256": "10dec70f3875c906eec76703a6f47cefbd71ec94f2c073dec8335c0afc976f52"
+  },
+  "_build/prod/lib/quod/ebin/quod_physics_frames.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_physics_frames.beam",
+    "sha256": "10da79172c317362fe8a4df63f34473a368e852e565bd0a0694f7708aea6f944"
+  },
+  "_build/prod/lib/quod/ebin/quod_physics_native.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_physics_native.beam",
+    "sha256": "1558fb8f43419e60d8ad61618354045a9a1ac2ff4c408522b5fc3a0353dc4f99"
+  },
+  "_build/prod/lib/quod/ebin/quod_physics_predicates.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_physics_predicates.beam",
+    "sha256": "82cc8776d7f2807459c23227da02b59816e4fdc0c12307e3b21213ad88b3b53a"
+  },
+  "_build/prod/lib/quod/ebin/quod_predicates.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_predicates.beam",
+    "sha256": "d7631eb18057875df1fa61616e767c223ce6d6d342ba105e1672d50eacf14bbd"
+  },
+  "_build/prod/lib/quod/ebin/quod_process.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_process.beam",
+    "sha256": "741d27b7a35365cc3589d8f9d2d1e8852cb1001b750b810725c1bb49ef1aeb37"
+  },
+  "_build/prod/lib/quod/ebin/quod_prolog.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_prolog.beam",
+    "sha256": "f5d00d4d1eb1c41a70502dbb60887ddb85bc840a85a8cc1b7f0227b0572bfcac"
+  },
+  "_build/prod/lib/quod/ebin/quod_proof_context.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_proof_context.beam",
+    "sha256": "cdb1383fc7d90558f0e42532113460293a622e4e617cc73a3051c253dfb98f0b"
+  },
+  "_build/prod/lib/quod/ebin/quod_proof_continuation.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_proof_continuation.beam",
+    "sha256": "2b11409ed3b58a54edac531e7bedaf126e1a4fd85e4b8b557136e9e51a62960d"
+  },
+  "_build/prod/lib/quod/ebin/quod_proof_savepoint.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_proof_savepoint.beam",
+    "sha256": "955606da0ce26db49cbf4b996ff3e334c244b6e61b392bb0f433f98a08c8fc9b"
+  },
+  "_build/prod/lib/quod/ebin/quod_proof_scope.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_proof_scope.beam",
+    "sha256": "28cde774f908c14266d0b6beffd03575be2c0d304ecf1f1d3ba5de88f6c7a610"
+  },
+  "_build/prod/lib/quod/ebin/quod_proof_session.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_proof_session.beam",
+    "sha256": "e1812517dbcc07779c1d64d904c288d6296c56a5ed69c6af1adbcf136b1550db"
+  },
+  "_build/prod/lib/quod/ebin/quod_quic.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_quic.beam",
+    "sha256": "f0704e5a1af2187484fb42c136852fb485336d7ac34296562e63339d72f71ea4"
+  },
+  "_build/prod/lib/quod/ebin/quod_quorum.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_quorum.beam",
+    "sha256": "06f8aaf1adae2eeebe04ee694550232e55a839f201185fa46d2e9d77e6481ceb"
+  },
+  "_build/prod/lib/quod/ebin/quod_rate.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_rate.beam",
+    "sha256": "e0ab39429c7e735fdd36b8acd6bfb8ddf1254bfa8bf1a1feb3c4e68747952145"
+  },
+  "_build/prod/lib/quod/ebin/quod_read_certificate.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_read_certificate.beam",
+    "sha256": "da63440a31d789821d9f5d1651ec99789ea069e0bded6eac3f3ffe8015b284a5"
+  },
+  "_build/prod/lib/quod/ebin/quod_read_set.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_read_set.beam",
+    "sha256": "ad6095c29c7e8c3bcd22cdd0631a3116086b47c5a81e2e806a6c6e863677cd11"
+  },
+  "_build/prod/lib/quod/ebin/quod_reg.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_reg.beam",
+    "sha256": "8be4d0026bebd298be25ba8a861de67bae3fd1e4693d07684170c3c0880b19d5"
+  },
+  "_build/prod/lib/quod/ebin/quod_relay.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_relay.beam",
+    "sha256": "4d7310df85fc68381ae3b67eac8d181e6b4f848d90cb83b66d515467a244ea87"
+  },
+  "_build/prod/lib/quod/ebin/quod_resource_basis.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_resource_basis.beam",
+    "sha256": "aa65d93e54ad022b27403c5590921807ae9b4d3d173f062ca7155d80755ab89b"
+  },
+  "_build/prod/lib/quod/ebin/quod_runtime.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_runtime.beam",
+    "sha256": "da90784a7aa8989504b54f875a66ff09ff052fbb328c4e6956f64714639a3dee"
+  },
+  "_build/prod/lib/quod/ebin/quod_runtime_predicates.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_runtime_predicates.beam",
+    "sha256": "90ff0d1148bd3efa84ec934ee1e7c991f07b7c49fa3b05bb447431e40ded94d0"
+  },
+  "_build/prod/lib/quod/ebin/quod_safe_term.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_safe_term.beam",
+    "sha256": "8c20f84a5a19bd9aa2ffd54045da4a6f7ee062035254dbbf8e8cab8afadf4e23"
+  },
+  "_build/prod/lib/quod/ebin/quod_schema.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_schema.beam",
+    "sha256": "08efa100157d428cc42e53c06e7fd7f221972c8e485bf4d3a439fed33a833360"
+  },
+  "_build/prod/lib/quod/ebin/quod_scope_session.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_scope_session.beam",
+    "sha256": "9e5791adf3575fa6ca6990ea08f663f7c0f22ec03387344fda4f3a55d9f9a041"
+  },
+  "_build/prod/lib/quod/ebin/quod_scope_wire.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_scope_wire.beam",
+    "sha256": "1a9db0d7b194f9b211f2f8384fca6663821d44807da46d240f74dfeb6ff8a369"
+  },
+  "_build/prod/lib/quod/ebin/quod_selection_basis.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_selection_basis.beam",
+    "sha256": "ced34163a3fc13098a0f4558d5d7844a9fd8ffba40dc13d5e8f4aab933a42314"
+  },
+  "_build/prod/lib/quod/ebin/quod_signing_journal.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_signing_journal.beam",
+    "sha256": "30c0c8478a832257b3205ae6cc2643bb0372136b7365add6be61262bbb955ea4"
+  },
+  "_build/prod/lib/quod/ebin/quod_simplex.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_simplex.beam",
+    "sha256": "e2422473c4f5072edb4986ae118a3e03eddc076e239458f7e499d4efe03d52a7"
+  },
+  "_build/prod/lib/quod/ebin/quod_sup.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_sup.beam",
+    "sha256": "aa438d60a779c82effd63c1c0803e60ceb36f09f90c633ad44f8fd406472e3a8"
+  },
+  "_build/prod/lib/quod/ebin/quod_system_ontology.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_system_ontology.beam",
+    "sha256": "85cf8c10e4d2a0c60ba610c4166b66c0cbb3a2316ca5933e7e1f37c3875a2de4"
+  },
+  "_build/prod/lib/quod/ebin/quod_terrain_wire.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_terrain_wire.beam",
+    "sha256": "742fe4af1cfe6870eeab6459c15eabc2c24c6f54ed3aa22089edb01eaff818f5"
+  },
+  "_build/prod/lib/quod/ebin/quod_time.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_time.beam",
+    "sha256": "64691e3fad14cbf6ace15fbb119ba1d134b85c497f60b323fa853982400d9442"
+  },
+  "_build/prod/lib/quod/ebin/quod_trace.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_trace.beam",
+    "sha256": "454c0184a5d42a191ce927c1f788fcf329f8c9be183f970e51f1ef491546e2fc"
+  },
+  "_build/prod/lib/quod/ebin/quod_transaction.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_transaction.beam",
+    "sha256": "178897a44dbdec43e1fa65890c172901031f3679cc9d90768454ed398d1dc214"
+  },
+  "_build/prod/lib/quod/ebin/quod_transaction_predicates.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_transaction_predicates.beam",
+    "sha256": "4a5502ed94541455f77c1d8a2165abd654bdac7bb48568668c009bdc10f6a167"
+  },
+  "_build/prod/lib/quod/ebin/quod_transaction_scope.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_transaction_scope.beam",
+    "sha256": "5b67a0372cc0878d37f615e6aea3a1802b909e193c4396d53517033535a0aae7"
+  },
+  "_build/prod/lib/quod/ebin/quod_voxel.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_voxel.beam",
+    "sha256": "68258eed4ecfa30b25aebe7dd937c23a66b50df0931b9d5e1b3b2ad67d50e47f"
+  },
+  "_build/prod/lib/quod/ebin/quod_wire_term.beam": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/_build/prod/lib/quod/ebin/quod_wire_term.beam",
+    "sha256": "5ed2d72271bdb56ab75c7501d3d37a59dcfd424f5823b4c4acfafccd3b3153da"
+  },
+  "priv/native/quod_physics.so": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-release02/gate-artifacts/release/priv/native/quod_physics.so",
+    "sha256": "1c869335a24d3db74ac1da806490873690141e6a28b19fc3c856bb10a577f0c2"
+  }
+}

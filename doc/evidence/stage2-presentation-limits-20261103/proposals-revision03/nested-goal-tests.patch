@@ -1,0 +1,109 @@
+--- a/test/quod_scope_wire_tests.erl
++++ b/test/quod_scope_wire_tests.erl
+@@ -499,7 +499,7 @@
+     ?assertException(error, badarg, binary_to_existing_atom(Symbol, utf8)).
+ 
+ payload_byte_bounds_are_exact_test() ->
+-    exact_payload_boundary(goal, ?QUOD_MAX_NESTED_GOAL_BYTES),
++    exact_payload_boundary(goal, ?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES),
+     exact_payload_boundary(answer, ?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES),
+     exact_failure_reason_payload_boundary(),
+     exact_payload_boundary(erlog_error, ?ERLOG_MAX_FAILURE_REASON_BYTES),
+--- a/test/quod_dtx_tests.erl
++++ b/test/quod_dtx_tests.erl
+@@ -751,24 +751,39 @@
+         quod_proof_session:stop(Session)
+     end.
+ 
+-oversized_goal_is_refused_before_invocation_exists_test() ->
++binary_heavy_nested_goal_uses_complete_plan_admission_test() ->
+     Session = session([]),
+-    Id = <<3:128>>,
+-    try
+-        ?assertEqual({error, {too_large, goal}},
+-                     open(Session, Id, {pad, binary:copy(<<$p>>,
+-                         ?QUOD_MAX_NESTED_GOAL_BYTES + 1)})),
+-        ?assertEqual({error, unknown_invocation},
+-                     quod_proof_session:next(Session, Id)),
+-        ?assertEqual({[], 0}, quod_proof_session:transcript(Session))
+-    after
+-        quod_proof_session:stop(Session)
+-    end.
++    Value = binary:copy(<<$p>>,160000),
++    Goal = {assertz,{large_value,Value}},
++    try
++        {_Id,{solution,_}} = first(Session,Goal),
++        {ok,Plan} = quod_dtx:seal_session(Session,bind()),
++        {ok,Bytes} = quod_dtx:encode(Plan),
++        {ok,Decoded} = quod_dtx:decode(Bytes),
++        {Entries,_} = quod_proof_session:transcript(Session),
++        ?assertEqual(Entries,quod_ct:plan_material(transcript,Decoded)),
++        [{_,_,Blob,allowed,1,_,active}] = Entries,
++        ?assertEqual({ok,Goal},quod_wire_term:decode_canonical(Blob,?QUOD_MAX_PLAN_ENVELOPE_BYTES))
++    after quod_proof_session:stop(Session) end.
++
++binary_heavy_cancel_and_malformed_goal_preserve_transcript_lifecycle_test() ->
++    Session = session([]), Id = <<3:128>>, BadId = <<4:128>>,
++    Goal = {pad,binary:copy(<<$p>>,160000)},
++    try
++        ?assertEqual({error,{protocol_error,bad_payload}},open(Session,BadId,{pad,self()})),
++        ?assertEqual({error,unknown_invocation},quod_proof_session:next(Session,BadId)),
++        ?assertEqual({[],0},quod_proof_session:transcript(Session)),
++        ok = open(Session,Id,Goal),
++        ok = quod_proof_session:cancel(Session,Id),
++        ?assertEqual({error,unknown_invocation},quod_proof_session:next(Session,Id)),
++        ?assertMatch({[{Id,_,_,allowed,0,_,cancelled}],_},quod_proof_session:transcript(Session)),
++        ?assertEqual([],quod_proof_session:local_changes(Session))
++    after quod_proof_session:stop(Session) end.
+ 
+ denied_transcript_keeps_request_and_never_executes_it_test() ->
+     Session = session([]),
+     InvocationId = <<19:128>>,
+-    RequestedGoal = {assertz, {must_not_run, true}},
++    RequestedGoal = {assertz, {must_not_run, binary:copy(<<$d>>,160000)}},
+     try
+         ok = quod_proof_session:open(
+                Session, InvocationId, RequestedGoal, denied, ctx(),
+--- a/test/quod_proof_answer_tests.erl
++++ b/test/quod_proof_answer_tests.erl
+@@ -13,7 +13,7 @@
+     end).
+ 
+ producer_enforces_exact_canonical_quantity_test() ->
+-    Value = binary:copy(<<"a">>, 80000),
++    Value = binary:copy(<<"a">>, 160000),
+     Answer = {answer_value, Value},
+     {ok, Bytes} = quod_wire_term:encode_canonical(Answer),
+     Actual = byte_size(Bytes),
+--- a/test/quod_scope_session_tests.erl
++++ b/test/quod_scope_session_tests.erl
+@@ -1714,3 +1714,29 @@
+ 
+ id(N) -> <<N:128>>.
+ key(N) -> <<N:256>>.
++
++binary_heavy_nested_scope_preserves_authorization_and_cancellation_test() ->
++    lists:foreach(fun(Allowed) ->
++        Facts = case Allowed of true -> [{can_invoke,{'_'},{'_'},{'_'},{'_'}}]; false -> [] end,
++        {Handle,MRef} = quod_scope_session:start(id(95),key(96),self(),
++            <<"quod:large-nested">>,key(97),0,committed(Facts),self(),
++            #{principal => {node,key(98)},request_binding => none,
++              deadline_ms => quod_time:mono_ms()+5000}),
++        {quod_scope_session,Worker,_,ProofId,SessionRef,_,_} = Handle,
++        Invocation = id(99), Value = binary:copy(<<$v>>,160000),
++        try
++            {ok,Opened} = quod_scope_session:invoke_open(Handle,Invocation,{'=',Value,Value},
++                [{<<"quod:origin">>,key(100)}],quod_transaction_scope:empty_selection()),
++            ?assertEqual({opened,Invocation},receive_scope_reply(Worker,ProofId,SessionRef,Opened)),
++            {ok,Next} = quod_scope_session:invoke_next(Handle,Invocation,1),
++            Reply = receive_scope_reply(Worker,ProofId,SessionRef,Next),
++            case Allowed of
++                true -> ?assertMatch({solution,1,_,_,false},Reply);
++                false -> ?assertMatch({complete,1,[{not_allowed,<<"quod:large-nested">>}|_],false},Reply)
++            end
++        after
++            ok = quod_scope_session:close(Handle),
++            receive {'DOWN',MRef,process,Worker,_} -> ok
++            after 1000 -> error(large_scope_not_retired) end
++        end
++    end,[true,false]).

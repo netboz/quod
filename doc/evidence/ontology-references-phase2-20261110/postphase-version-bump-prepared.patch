@@ -1,0 +1,21 @@
+--- a/src/quod.app.src
++++ b/src/quod.app.src
+@@ -1,6 +1,6 @@
+ {application, quod,
+  [{description, "Quod - a Prolog/Brahms P2P node over QUIC"},
+-  {vsn, "0.7.282"},
++  {vsn, "0.7.283"},
+   %% processes register through gproc (via tuples), not local names.
+   {registered, []},
+   {mod, {quod_app, []}},
+--- a/rebar.config
++++ b/rebar.config
+@@ -52,7 +52,7 @@
+ 
+ %%% --- Release (relx) -> native bin/quod ------------------------------------
+ {relx,
+- [{release, {quod, "0.7.282"}, [opentelemetry_exporter,
++ [{release, {quod, "0.7.283"}, [opentelemetry_exporter,
+                               {opentelemetry, temporary},
+                               quod, crypto, gproc, cowboy, quic, erlog, hocon,
+                               prometheus, prometheus_httpd, sasl]},

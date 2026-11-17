@@ -1,0 +1,46 @@
+{
+  "reads": [
+    {
+      "issueKey": "QUO-65",
+      "status": "in-review",
+      "progress": 80,
+      "ownUUID": "ed9cd520-b2a4-4607-a8f5-ff99d08f3e46",
+      "route": "installed explicit-project MCP caller",
+      "rawReceipt": "_build/godot-m4-r1-coordinator-verification-20261029/tracker-item.json",
+      "rawReceiptSHA256": "22f964d29151a6cf7e670be1b2bfc059937618a260105e9eb7ff95c5bae2683e"
+    },
+    {
+      "issueKey": "QUO-60",
+      "status": "in-development",
+      "progress": 67,
+      "ownUUID": "ed9cd520-b2a4-4607-a8f5-ff99d08f3e46",
+      "route": "installed explicit-project MCP caller",
+      "rawReceipt": "_build/godot-m4-r1-coordinator-verification-20261029/tracker-parent.json",
+      "rawReceiptSHA256": "ceeba171ab06c0208f06cabf79ac1270ba57510b40a6edb4f8e311732dff7fb8"
+    }
+  ],
+  "radar": {
+    "windowHours": 24,
+    "totalThreads": 1,
+    "threads": [
+      {
+        "actor": "Yan Guiborat",
+        "title": "M4 \u2014 Operate Godot spaces with desktop and OpenXR controls",
+        "issueKey": "QUO-65",
+        "itemIds": [
+          "tsk_01M5YNM08XZDSB9AERHSBMCPYZ"
+        ],
+        "state": "in-review",
+        "lastActivityAt": 1793250700730,
+        "agentDriven": false
+      }
+    ],
+    "sameItem": [],
+    "waitingOnYou": [],
+    "youHandedOff": [],
+    "truncated": false
+  },
+  "mutations": false,
+  "sharedBodyPublicationRetried": false,
+  "localReadsAreSharedPublicationProof": false
+}

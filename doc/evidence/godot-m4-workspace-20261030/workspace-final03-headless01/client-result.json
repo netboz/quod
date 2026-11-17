@@ -1,0 +1,1 @@
+{"reports":[{"pixels":[1850,496],"target":"(1190, 243), (205, 31)","clip":"(28, 22), (1794, 452)","accessible":true},{"pixels":[600,900],"target":"(353, 339), (205, 31)","clip":"(28, 22), (544, 856)","accessible":true}],"checks":["the actual Current space operations control remains fully inside the shared workspace at (1850, 496)"]}

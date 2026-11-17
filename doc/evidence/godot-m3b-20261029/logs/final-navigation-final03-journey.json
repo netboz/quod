@@ -1,0 +1,33 @@
+{
+  "command": [
+    "python3",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m3b-20261029/inputs/final-navigation-final03-drivers/journey.py",
+    "--journey",
+    "navigation",
+    "--export",
+    "/home/yan/.cache/quod-m3b-artifacts/quod-m3b-client-final03/source/client/godot/dist/quod.x86_64",
+    "--backend-port",
+    "40727",
+    "--backend-ca",
+    "/home/yan/.cache/quod-m3b-artifacts/private/quod-m3b-live-final-navigation-final03-server/backend-ca.pem",
+    "--control-port",
+    "43359",
+    "--network",
+    "4mUbiiDXubok3QPz3C6RwIABEezWfrYzFAr2QhSpaOM",
+    "--evidence",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m3b-20261029/final-navigation-final03",
+    "--private",
+    "/home/yan/.cache/quod-m3b-artifacts/private/final-navigation-final03",
+    "--desktop"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T02:30:46Z",
+  "elapsed_seconds": 149.37841892242432,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/tmp/quod-m3b-8b352c53/private/logs/final-navigation-final03-journey.log",
+  "raw_sha256": "81ba07a2b931cd1c9012c2b8a48fad4340947426bab7b0fbc9441c7a236282f2",
+  "sanitized_sha256": "81ba07a2b931cd1c9012c2b8a48fad4340947426bab7b0fbc9441c7a236282f2",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

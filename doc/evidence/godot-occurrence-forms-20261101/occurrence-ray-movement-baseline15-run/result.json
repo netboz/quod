@@ -1,0 +1,15 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-occurrence-forms-20261101/native.py",
+    "occurrence-ray-movement-baseline15",
+    "--manifest",
+    "doc/evidence/godot-occurrence-forms-20261101/inputs/client-occurrence-candidate15-manifest.json",
+    "--phase",
+    "controller-input"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 2.1711533530033194
+}

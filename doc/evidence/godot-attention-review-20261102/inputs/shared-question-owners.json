@@ -1,0 +1,51 @@
+{
+  "qualified_manifest": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source-manifest.json",
+  "manifest_sha256": "a248a8c3df61c80d248af8762e0fe4cf3fd5c6e6f7ad50540c1e1f33f65cd869",
+  "sources": {
+    "priv/ontologies/gui_instance.pl": {
+      "sha256": "3ba66deb9d36308a783b61583b260b82783de36b1b9fd729d9b23d8ce95107c0",
+      "qualified_stage_path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source/priv/ontologies/gui_instance.pl",
+      "stage_stat_key": [
+        2050,
+        15486279,
+        20173,
+        1793210464636688796,
+        1793483608362901889
+      ],
+      "live_stat_key": [
+        66305,
+        32557926,
+        20173,
+        1793210464636688796,
+        1793210464636688796
+      ],
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/retained-gui_instance.pl",
+      "copy_mode": 33188,
+      "copy_sha256": "3ba66deb9d36308a783b61583b260b82783de36b1b9fd729d9b23d8ce95107c0",
+      "stage_exact_stat_in_authenticated_parent": true
+    },
+    "priv/ontologies/user_instance.pl": {
+      "sha256": "2993ac2ef2e3a9ab2142780dbb21b28c271d44130db5ead43901023e9fa00b99",
+      "qualified_stage_path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source/priv/ontologies/user_instance.pl",
+      "stage_stat_key": [
+        2050,
+        15486307,
+        32061,
+        1793236946849559244,
+        1793483608366921836
+      ],
+      "live_stat_key": [
+        66305,
+        32557974,
+        32061,
+        1793236946849559244,
+        1793236946849559244
+      ],
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/inputs/retained-user_instance.pl",
+      "copy_mode": 33188,
+      "copy_sha256": "2993ac2ef2e3a9ab2142780dbb21b28c271d44130db5ead43901023e9fa00b99",
+      "stage_exact_stat_in_authenticated_parent": true
+    }
+  },
+  "reason": "These unchanged actual fixture-stage resources own question and HUD state; current fourteen-source overlay vector remains explicit in each run. No extra provider/runtime rebuilt."
+}

@@ -1,0 +1,76 @@
+{
+  "label": "gui-layout-final06-render",
+  "qualification_phase": "gui-usability",
+  "passed": true,
+  "physical": false,
+  "native_runtime_started": false,
+  "hardware_queried": false,
+  "display_or_focus_action": false,
+  "manifest": "doc/evidence/godot-gui-usability-20261101/inputs/client-gui-usability-candidate06-manifest.json",
+  "manifest_sha256": "a2c561af0f4b774285d45461cc14c0e4e759bb26f45896fd4291feb673e4a8b3",
+  "sources": {
+    "doc/evidence/godot-gui-usability-20261101/run.py": "21ec1c769455e43d5498179902b95392792a11f5fec4663a291bdc804c4a4153",
+    "doc/evidence/godot-gui-usability-20261101/hashes.py": "da62500b1b377a809c6619cbfa2f622e77c4b3e809115ed2f165b5bc3c97ab64",
+    "doc/evidence/godot-m4-vive-physical-20261029/environment.py": "c3a54c8ce4d8360f8711e027d31f7a98f29cf3b9b4436c43a84984cf2c1f20f9"
+  },
+  "reader_errors": [],
+  "children": {
+    "client": {
+      "command": [
+        "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-gui-usability-candidate06/source/client/godot/dist/quod.x86_64",
+        "--display-driver",
+        "wayland",
+        "--audio-driver",
+        "Dummy",
+        "--xr-mode",
+        "off",
+        "--rendering-method",
+        "gl_compatibility",
+        "--rendering-driver",
+        "opengl3",
+        "--",
+        "--qualification",
+        "--profile",
+        "/data/quod-m4-vr-ca84d4f8-20261029/private/gui-layout-final06-render/identity"
+      ],
+      "true_exit": 0
+    }
+  },
+  "eof": {
+    "client-stdout": true,
+    "client-stderr": true
+  },
+  "build_export_digest_reused": true,
+  "explicit_completion": true,
+  "streams": {
+    "client-stdout.raw": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/gui-layout-final06-render/client-stdout.raw",
+      "sha256": "c8dbd8474983a874953f67334c0ef81f5e3e6653d7c94675d352341fc49d5ec6",
+      "bytes": 4371,
+      "public_sha256": "f0767ae14f92b1935b54f5c836ac39c951501f9ca42be52b755814a572cc83b0"
+    },
+    "client-stderr.raw": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/gui-layout-final06-render/client-stderr.raw",
+      "sha256": "9faee901efd231152076fcde9be460be08252114e7e7d68aad945d86f14ffc85",
+      "bytes": 137,
+      "public_sha256": "91270bebc3f403f7c67a7c1ee424c92bb05335733f2dd43e5a0861a5030cac8d"
+    }
+  },
+  "diagnostics": [],
+  "client_result_sha256": "33be1dd9796102176cae2fae6d79c0f8e79ea5d4043e101812fde3f9d28c10ec",
+  "client_report_passed": true,
+  "checks": [
+    "actual authored row raster retained",
+    "explicit authored row retains interleaved action and field order",
+    "authored layout preserves exact local values",
+    "actual authored grid raster retained",
+    "explicit authored grid retains interleaved action and field order",
+    "authored layout preserves exact local values",
+    "actual authored column raster retained",
+    "explicit authored column retains interleaved action and field order",
+    "authored layout preserves exact local values"
+  ],
+  "prior_checks": [],
+  "total_checks": 9,
+  "elapsed_seconds": 2.646766039018985
+}

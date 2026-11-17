@@ -1,0 +1,25 @@
+{
+  "command": [
+    "erl",
+    "+S",
+    "4:4",
+    "+SDio",
+    "2",
+    "+SDcpu",
+    "2",
+    "-noshell",
+    "-pa",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/erlog/ebin",
+    "-eval",
+    "lists:foreach(fun(F)->{ok,Forms}=epp:parse_file(F,[\"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-remaining-admission/proposal-compile07/source/include\", \"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-remaining-admission/proposal-compile07/source/_build/default/lib/erlog/src\"],[]),io:format(\"SOURCE ~s~nINCLUDES ~p~nEST ~p~nERRORS ~p~n\",[F,[P||{attribute,_,file,{P,_}}<-Forms],[Fs||{attribute,_,record,{est,Fs}}<-Forms],[E||{error,E}<-Forms]]) end,[\"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-remaining-admission/proposal-compile07/source/src/quod_erlog_db_local_prove.erl\", \"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-remaining-admission/proposal-compile07/source/_build/default/lib/erlog/src/erlog_int.erl\"]),halt(0)."
+  ],
+  "true_exit": 0,
+  "stdout_eof": true,
+  "stderr_eof": true,
+  "preprocessing_only": true,
+  "proposed_modules_executed": false,
+  "source_hashes": {
+    "_build/stage2-remaining-admission/proposal-compile07/source/src/quod_erlog_db_local_prove.erl": "795b5b57960d6584a43fd2858b6e1e99927b8228b4641f4aeba0340f97ee5684",
+    "_build/stage2-remaining-admission/proposal-compile07/source/_build/default/lib/erlog/src/erlog_int.erl": "3d24510c60da34323a9bc02ed2fea8fbee4bf9e2c1426fd35b8c233069b8ed0c"
+  }
+}

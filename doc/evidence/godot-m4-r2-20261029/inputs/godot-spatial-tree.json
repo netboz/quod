@@ -1,0 +1,178 @@
+[
+  {
+    "name": "openxr_spatial_anchor.compat.inc",
+    "path": "modules/openxr/extensions/spatial_entities/openxr_spatial_anchor.compat.inc",
+    "sha": "d6aa094c489c5bc88bc82a3f3b75af0bd267e5f4",
+    "size": 2828,
+    "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/spatial_entities/openxr_spatial_anchor.compat.inc?ref=4.7.2-stable",
+    "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_anchor.compat.inc",
+    "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/d6aa094c489c5bc88bc82a3f3b75af0bd267e5f4",
+    "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_anchor.compat.inc",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/spatial_entities/openxr_spatial_anchor.compat.inc?ref=4.7.2-stable",
+      "git": "https://api.github.com/repos/godotengine/godot/git/blobs/d6aa094c489c5bc88bc82a3f3b75af0bd267e5f4",
+      "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_anchor.compat.inc"
+    }
+  },
+  {
+    "name": "openxr_spatial_anchor.cpp",
+    "path": "modules/openxr/extensions/spatial_entities/openxr_spatial_anchor.cpp",
+    "sha": "0be4ea600018405c19eb92ef51146710e56fd032",
+    "size": 54089,
+    "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/spatial_entities/openxr_spatial_anchor.cpp?ref=4.7.2-stable",
+    "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_anchor.cpp",
+    "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/0be4ea600018405c19eb92ef51146710e56fd032",
+    "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_anchor.cpp",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/spatial_entities/openxr_spatial_anchor.cpp?ref=4.7.2-stable",
+      "git": "https://api.github.com/repos/godotengine/godot/git/blobs/0be4ea600018405c19eb92ef51146710e56fd032",
+      "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_anchor.cpp"
+    }
+  },
+  {
+    "name": "openxr_spatial_anchor.h",
+    "path": "modules/openxr/extensions/spatial_entities/openxr_spatial_anchor.h",
+    "sha": "7c4fb00dbf72b7efdb6918badf957817044be2c2",
+    "size": 13507,
+    "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/spatial_entities/openxr_spatial_anchor.h?ref=4.7.2-stable",
+    "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_anchor.h",
+    "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/7c4fb00dbf72b7efdb6918badf957817044be2c2",
+    "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_anchor.h",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/spatial_entities/openxr_spatial_anchor.h?ref=4.7.2-stable",
+      "git": "https://api.github.com/repos/godotengine/godot/git/blobs/7c4fb00dbf72b7efdb6918badf957817044be2c2",
+      "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_anchor.h"
+    }
+  },
+  {
+    "name": "openxr_spatial_entities.cpp",
+    "path": "modules/openxr/extensions/spatial_entities/openxr_spatial_entities.cpp",
+    "sha": "ce67801ce7db3abce326e4a35078f238cf45a64e",
+    "size": 21598,
+    "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/spatial_entities/openxr_spatial_entities.cpp?ref=4.7.2-stable",
+    "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_entities.cpp",
+    "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/ce67801ce7db3abce326e4a35078f238cf45a64e",
+    "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_entities.cpp",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/spatial_entities/openxr_spatial_entities.cpp?ref=4.7.2-stable",
+      "git": "https://api.github.com/repos/godotengine/godot/git/blobs/ce67801ce7db3abce326e4a35078f238cf45a64e",
+      "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_entities.cpp"
+    }
+  },
+  {
+    "name": "openxr_spatial_entities.h",
+    "path": "modules/openxr/extensions/spatial_entities/openxr_spatial_entities.h",
+    "sha": "27ca2c5fd8aac50071bfa9964b9c1f6a76edbfc0",
+    "size": 9490,
+    "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/spatial_entities/openxr_spatial_entities.h?ref=4.7.2-stable",
+    "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_entities.h",
+    "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/27ca2c5fd8aac50071bfa9964b9c1f6a76edbfc0",
+    "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_entities.h",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/spatial_entities/openxr_spatial_entities.h?ref=4.7.2-stable",
+      "git": "https://api.github.com/repos/godotengine/godot/git/blobs/27ca2c5fd8aac50071bfa9964b9c1f6a76edbfc0",
+      "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_entities.h"
+    }
+  },
+  {
+    "name": "openxr_spatial_entity_extension.cpp",
+    "path": "modules/openxr/extensions/spatial_entities/openxr_spatial_entity_extension.cpp",
+    "sha": "c186cef83adee7f4ce6b484073f149e62c0d72ad",
+    "size": 52168,
+    "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/spatial_entities/openxr_spatial_entity_extension.cpp?ref=4.7.2-stable",
+    "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_entity_extension.cpp",
+    "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/c186cef83adee7f4ce6b484073f149e62c0d72ad",
+    "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_entity_extension.cpp",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/spatial_entities/openxr_spatial_entity_extension.cpp?ref=4.7.2-stable",
+      "git": "https://api.github.com/repos/godotengine/godot/git/blobs/c186cef83adee7f4ce6b484073f149e62c0d72ad",
+      "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_entity_extension.cpp"
+    }
+  },
+  {
+    "name": "openxr_spatial_entity_extension.h",
+    "path": "modules/openxr/extensions/spatial_entities/openxr_spatial_entity_extension.h",
+    "sha": "a62d1379da02fb5df03853db9a6c18415132f745",
+    "size": 14580,
+    "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/spatial_entities/openxr_spatial_entity_extension.h?ref=4.7.2-stable",
+    "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_entity_extension.h",
+    "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/a62d1379da02fb5df03853db9a6c18415132f745",
+    "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_entity_extension.h",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/spatial_entities/openxr_spatial_entity_extension.h?ref=4.7.2-stable",
+      "git": "https://api.github.com/repos/godotengine/godot/git/blobs/a62d1379da02fb5df03853db9a6c18415132f745",
+      "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_entity_extension.h"
+    }
+  },
+  {
+    "name": "openxr_spatial_marker_tracking.cpp",
+    "path": "modules/openxr/extensions/spatial_entities/openxr_spatial_marker_tracking.cpp",
+    "sha": "75fbaf61a9c527eaeb4e53a298c8c2f75e5fc772",
+    "size": 35085,
+    "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/spatial_entities/openxr_spatial_marker_tracking.cpp?ref=4.7.2-stable",
+    "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_marker_tracking.cpp",
+    "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/75fbaf61a9c527eaeb4e53a298c8c2f75e5fc772",
+    "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_marker_tracking.cpp",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/spatial_entities/openxr_spatial_marker_tracking.cpp?ref=4.7.2-stable",
+      "git": "https://api.github.com/repos/godotengine/godot/git/blobs/75fbaf61a9c527eaeb4e53a298c8c2f75e5fc772",
+      "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_marker_tracking.cpp"
+    }
+  },
+  {
+    "name": "openxr_spatial_marker_tracking.h",
+    "path": "modules/openxr/extensions/spatial_entities/openxr_spatial_marker_tracking.h",
+    "sha": "26d8c36a44b1566613ee3cf8f9ad177e8b7724e2",
+    "size": 12438,
+    "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/spatial_entities/openxr_spatial_marker_tracking.h?ref=4.7.2-stable",
+    "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_marker_tracking.h",
+    "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/26d8c36a44b1566613ee3cf8f9ad177e8b7724e2",
+    "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_marker_tracking.h",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/spatial_entities/openxr_spatial_marker_tracking.h?ref=4.7.2-stable",
+      "git": "https://api.github.com/repos/godotengine/godot/git/blobs/26d8c36a44b1566613ee3cf8f9ad177e8b7724e2",
+      "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_marker_tracking.h"
+    }
+  },
+  {
+    "name": "openxr_spatial_plane_tracking.cpp",
+    "path": "modules/openxr/extensions/spatial_entities/openxr_spatial_plane_tracking.cpp",
+    "sha": "f5900995e9776b2da2fdfa494566cec77ffcdfc5",
+    "size": 35709,
+    "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/spatial_entities/openxr_spatial_plane_tracking.cpp?ref=4.7.2-stable",
+    "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_plane_tracking.cpp",
+    "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/f5900995e9776b2da2fdfa494566cec77ffcdfc5",
+    "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_plane_tracking.cpp",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/spatial_entities/openxr_spatial_plane_tracking.cpp?ref=4.7.2-stable",
+      "git": "https://api.github.com/repos/godotengine/godot/git/blobs/f5900995e9776b2da2fdfa494566cec77ffcdfc5",
+      "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_plane_tracking.cpp"
+    }
+  },
+  {
+    "name": "openxr_spatial_plane_tracking.h",
+    "path": "modules/openxr/extensions/spatial_entities/openxr_spatial_plane_tracking.h",
+    "sha": "da80e8a6b0c8d7ff93ae680c2e2cf85669ac695b",
+    "size": 10355,
+    "url": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/spatial_entities/openxr_spatial_plane_tracking.h?ref=4.7.2-stable",
+    "html_url": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_plane_tracking.h",
+    "git_url": "https://api.github.com/repos/godotengine/godot/git/blobs/da80e8a6b0c8d7ff93ae680c2e2cf85669ac695b",
+    "download_url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_plane_tracking.h",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/godotengine/godot/contents/modules/openxr/extensions/spatial_entities/openxr_spatial_plane_tracking.h?ref=4.7.2-stable",
+      "git": "https://api.github.com/repos/godotengine/godot/git/blobs/da80e8a6b0c8d7ff93ae680c2e2cf85669ac695b",
+      "html": "https://github.com/godotengine/godot/blob/4.7.2-stable/modules/openxr/extensions/spatial_entities/openxr_spatial_plane_tracking.h"
+    }
+  }
+]

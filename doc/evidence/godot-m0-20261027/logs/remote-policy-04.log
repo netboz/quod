@@ -1,0 +1,62 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Running Common Test suites...
+%%% quod_ask_SUITE: 
+%%% quod_ask_SUITE ==> init_per_suite: FAILED
+%%% quod_ask_SUITE ==> {{badmatch,{error,bad_directory}},
+ [{quod_ask_SUITE,start_node,8,
+                  [{file,"/tmp/quod-m0-validation-01/test/quod_ask_SUITE.erl"},
+                   {line,3141}]},
+  {quod_ask_SUITE,init_per_suite,1,
+                  [{file,"/tmp/quod-m0-validation-01/test/quod_ask_SUITE.erl"},
+                   {line,488}]},
+  {test_server,ts_tc,3,[{file,"test_server.erl"},{line,1796}]},
+  {test_server,run_test_case_eval1,6,[{file,"test_server.erl"},{line,1393}]},
+  {test_server,run_test_case_eval,9,[{file,"test_server.erl"},{line,1237}]}]}
+
+%%% quod_ask_SUITE ==> proof_policy_refusal_local_and_remote: SKIPPED
+%%% quod_ask_SUITE ==> {tc_auto_skip,
+    {failed,
+        {quod_ask_SUITE,init_per_suite,
+            {'EXIT',
+                {{badmatch,{error,bad_directory}},
+                 [{quod_ask_SUITE,start_node,8,
+                      [{file,
+                           "/tmp/quod-m0-validation-01/test/quod_ask_SUITE.erl"},
+                       {line,3141}]},
+                  {quod_ask_SUITE,init_per_suite,1,
+                      [{file,
+                           "/tmp/quod-m0-validation-01/test/quod_ask_SUITE.erl"},
+                       {line,488}]},
+                  {test_server,ts_tc,3,[{file,"test_server.erl"},{line,1796}]},
+                  {test_server,run_test_case_eval1,6,
+                      [{file,"test_server.erl"},{line,1393}]},
+                  {test_server,run_test_case_eval,9,
+                      [{file,"test_server.erl"},{line,1237}]}]}}}}}
+
+%%% quod_ask_SUITE ==> end_per_suite: SKIPPED
+%%% quod_ask_SUITE ==> {tc_auto_skip,
+    {failed,
+        {quod_ask_SUITE,init_per_suite,
+            {'EXIT',
+                {{badmatch,{error,bad_directory}},
+                 [{quod_ask_SUITE,start_node,8,
+                      [{file,
+                           "/tmp/quod-m0-validation-01/test/quod_ask_SUITE.erl"},
+                       {line,3141}]},
+                  {quod_ask_SUITE,init_per_suite,1,
+                      [{file,
+                           "/tmp/quod-m0-validation-01/test/quod_ask_SUITE.erl"},
+                       {line,488}]},
+                  {test_server,ts_tc,3,[{file,"test_server.erl"},{line,1796}]},
+                  {test_server,run_test_case_eval1,6,
+                      [{file,"test_server.erl"},{line,1393}]},
+                  {test_server,run_test_case_eval,9,
+                      [{file,"test_server.erl"},{line,1237}]}]}}}}}
+EXPERIMENTAL: Writing retry specification at /tmp/quod-m0-validation-01/_build/test/logs/retry.spec
+              call rebar3 ct with '--retry' to re-run failing cases.
+Skipped 1 (0, 1) tests. Passed 0 tests. 
+Results written to "/tmp/quod-m0-validation-01/_build/test/logs/index.html".
+===> Failures occurred running tests: 1

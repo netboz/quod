@@ -1,0 +1,2 @@
+{"free_bytes": 806782402560, "new_destinations_absent": true, "parent_source_entries": 25707, "passed": true, "root_custody_reply": "case11 instruction: root86 links occurred after accepted freeze; post-link cache authenticated.", "scope": "Metadata/cache coverage and prepared-source syntax/adaptation only; no source qualification or live process/socket/display inspection.", "source_or_readonly_object_links_created": false}
+{"uncached_prior_source": {"live": {"entries": 0, "bytes": 0}, "previous-materialization": {"entries": 0, "bytes": 0}}}

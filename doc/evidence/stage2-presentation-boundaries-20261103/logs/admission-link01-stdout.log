@@ -1,0 +1,30 @@
+======================== EUnit ========================
+module 'quod_link_tests'
+  quod_link_tests: peer_key_normalizes_transport_identity_test...[0.001 s] ok
+  quod_link_tests: header_roundtrip_test...[0.002 s] ok
+  quod_link_tests: header_keeps_remainder_test...ok
+  quod_link_tests: header_split_buffers_test...ok
+  quod_link_tests: header_bad_nodeid_rejected_test...ok
+  quod_link_tests: header_bad_learn_policy_rejected_test...ok
+  quod_link_tests: compressed_header_identity_rejected_before_expansion_test...ok
+  quod_link_tests: frame_layout_test...ok
+  quod_link_tests: frame_roundtrip_test...ok
+  quod_link_tests: coalesced_frames_test...ok
+  quod_link_tests: split_frame_reassembles_test...ok
+  quod_link_tests: partial_header_buffers_test...ok
+  quod_link_tests: whole_then_partial_test...ok
+  quod_link_tests: large_frame_waits_for_complete_declared_payload_test...[0.020 s] ok
+  quod_link_tests: unrepresentable_iodata_refuses_before_allocation_or_enqueue_test...[0.009 s] ok
+  quod_link_tests: catchup_bootstrap_and_opaque_page_test...[0.061 s] ok
+  quod_link_tests: -catchup_bootstrap_uses_one_absolute_deadline_test_/0-fun-1-...[5.001 s] ok
+  quod_link_tests: catchup_bootstrap_atomic_ordered_send_test...[0.027 s] ok
+  quod_link_tests: catchup_server_send_acceptance_precedes_next_admission_test...[0.022 s] ok
+  quod_link_tests: catchup_batch_violation_stops_publication_test...[0.021 s] ok
+  quod_link_tests: catchup_missing_owner_returns_credit_test...ok
+  quod_link_tests: catchup_source_owner_death_resets_exact_link_test...ok
+  quod_link_tests: catchup_changed_binding_retires_link_test...ok
+  quod_link_tests: catchup_producer_death_retires_link_test...ok
+  quod_link_tests: catchup_failed_terminal_send_never_returns_credit_test...[0.002 s] ok
+  [done in 5.241 s]
+=======================================================
+  All 25 tests passed.

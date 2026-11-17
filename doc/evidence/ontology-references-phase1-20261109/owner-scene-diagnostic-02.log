@@ -1,0 +1,41 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;31mF[0m[0;32m.[0m[0;32m.[0m
+Failures:
+
+  1) quod_source_view_tests:class_owned_scene/0
+[0;31m     Failure/Error: ?assertMatch({ fail , _ }, RevokedRead)
+       expected: = { fail , _ }
+            got: {ok,
+                  [#{<<"V0">> =>
+                      {eidolon_scene,
+                       {entity_ref,<<"display-store">>,
+                        <<195,135,207,102,54,186,69,117,99,189,254,235,82,151,
+                          47,79,151,203,14,145,155,240,109,250,118,174,167,113,
+                          243,89,109,53>>,
+                        item},
+                       [{mark,<<"selected">>,<<"group">>,[],
+                         {transform,100,200,300,0,45,0},
+                         no_surface,unlabelled,
+                         {depicts,<<"display-store">>,
+                          <<195,135,207,102,54,186,69,117,99,189,254,235,82,
+                            151,47,79,151,203,14,145,155,240,109,250,118,174,
+                            167,113,243,89,109,53>>,
+                          item}},
+                        {mark,<<"selected/card">>,<<"group">>,[],
+                         {relative,<<"selected">>,{transform,0,0,0,0,0,0}},
+                         no_surface,
+                         {label,<<"Updated">>,<<"above">>},
+                         depicts_nothing}],
+                       nonphysical,[]}}],
+                  10}[0m
+[0;36m     %% eunit_proc.erl:593:in `eunit_proc:run_group/2`[0m
+[0;36m     Output: [0m
+[0;36m     Output: [0m
+
+Finished in 4.119 seconds
+[0;31m3 tests, 1 failures
+[0m===> Error running tests

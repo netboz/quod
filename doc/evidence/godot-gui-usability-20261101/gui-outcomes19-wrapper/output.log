@@ -1,0 +1,26 @@
+PASS received committed outcome is explicitly distinct from a current draft at 26
+PASS presentation retains the exact supplied outcome without altering its state
+PASS native received-outcome label is readable within its actual clipping viewport
+PASS actual outcome presentation raster retained
+PASS received refused outcome is explicitly distinct from a current draft at 26
+PASS presentation retains the exact supplied outcome without altering its state
+PASS native received-outcome label is readable within its actual clipping viewport
+PASS actual outcome presentation raster retained
+PASS received unknown outcome is explicitly distinct from a current draft at 26
+PASS presentation retains the exact supplied outcome without altering its state
+PASS native received-outcome label is readable within its actual clipping viewport
+PASS actual outcome presentation raster retained
+PASS received committed outcome is explicitly distinct from a current draft at 48
+PASS presentation retains the exact supplied outcome without altering its state
+PASS native received-outcome label is readable within its actual clipping viewport
+PASS actual outcome presentation raster retained
+PASS received refused outcome is explicitly distinct from a current draft at 48
+PASS presentation retains the exact supplied outcome without altering its state
+PASS native received-outcome label is readable within its actual clipping viewport
+PASS actual outcome presentation raster retained
+PASS received unknown outcome is explicitly distinct from a current draft at 48
+PASS presentation retains the exact supplied outcome without altering its state
+PASS native received-outcome label is readable within its actual clipping viewport
+PASS actual outcome presentation raster retained
+GUI_OUTCOMES_PASS
+{"passed": true, "children": {"client": 0}, "eof": {"client-stdout": true, "client-stderr": true}, "failure": null, "checks": 24}

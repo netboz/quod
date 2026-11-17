@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m1b-20261028/freeze-client.py", line 44, in <module>
+    assert base64.b64encode(hashlib.sha512(archive.read_bytes()).digest()).decode() == row['contentHash'], package
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: BouncyCastle.Cryptography

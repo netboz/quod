@@ -1,0 +1,41 @@
+[
+  {
+    "command": [
+      "hyprctl",
+      "dispatch",
+      "hl.dsp.focus({window=\"address:0x5571667b4010\"})"
+    ],
+    "child_exit": 0,
+    "stdout": "ok\n",
+    "stderr": "",
+    "owned_pid": 913500,
+    "before_pid": 5072,
+    "after_pid": 913500
+  },
+  {
+    "command": [
+      "hyprctl",
+      "dispatch",
+      "hl.dsp.cursor.move({x=2966,y=1216})"
+    ],
+    "child_exit": 0,
+    "stdout": "ok\n",
+    "stderr": "",
+    "owned_pid": 913500,
+    "before_pid": 913500,
+    "after_pid": 913500
+  },
+  {
+    "command": [
+      "ydotool",
+      "click",
+      "0xC0"
+    ],
+    "child_exit": 0,
+    "stdout": "c0 110\n",
+    "stderr": "",
+    "owned_pid": 913500,
+    "before_pid": 913500,
+    "after_pid": 3625
+  }
+]

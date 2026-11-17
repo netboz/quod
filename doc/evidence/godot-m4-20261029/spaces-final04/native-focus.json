@@ -1,0 +1,587 @@
+[
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "space"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 540755,
+    "before_pid": 540755,
+    "after_pid": 540755
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "Return"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 540755,
+    "before_pid": 540755,
+    "after_pid": 540755
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "F24"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 540755,
+    "before_pid": 540755,
+    "after_pid": 540755
+  },
+  {
+    "command": [
+      "hyprctl",
+      "dispatch",
+      "hl.dsp.cursor.move({x=2812,y=742})"
+    ],
+    "child_exit": 0,
+    "stdout": "ok\n",
+    "stderr": "",
+    "owned_pid": 540755,
+    "before_pid": 540755,
+    "after_pid": 540755
+  },
+  {
+    "command": [
+      "ydotool",
+      "click",
+      "0xC0"
+    ],
+    "child_exit": 0,
+    "stdout": "c0 110\n",
+    "stderr": "",
+    "owned_pid": 540755,
+    "before_pid": 540755,
+    "after_pid": 540755
+  },
+  {
+    "command": [
+      "hyprctl",
+      "dispatch",
+      "hl.dsp.cursor.move({x=2812,y=578})"
+    ],
+    "child_exit": 0,
+    "stdout": "ok\n",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "ydotool",
+      "click",
+      "0xC0"
+    ],
+    "child_exit": 0,
+    "stdout": "c0 110\n",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "space"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "Return"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "F24"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "space"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "Return"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "F24"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "hyprctl",
+      "dispatch",
+      "hl.dsp.cursor.move({x=2812,y=742})"
+    ],
+    "child_exit": 0,
+    "stdout": "ok\n",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "ydotool",
+      "click",
+      "0xC0"
+    ],
+    "child_exit": 0,
+    "stdout": "c0 110\n",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "space"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "Return"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "F24"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "hyprctl",
+      "dispatch",
+      "hl.dsp.cursor.move({x=2812,y=742})"
+    ],
+    "child_exit": 0,
+    "stdout": "ok\n",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "ydotool",
+      "click",
+      "0xC0"
+    ],
+    "child_exit": 0,
+    "stdout": "c0 110\n",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "hyprctl",
+      "dispatch",
+      "hl.dsp.cursor.move({x=2843,y=525})"
+    ],
+    "child_exit": 0,
+    "stdout": "ok\n",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "ydotool",
+      "click",
+      "0xC0"
+    ],
+    "child_exit": 0,
+    "stdout": "c0 110\n",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "space"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "Return"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "F24"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "hyprctl",
+      "dispatch",
+      "hl.dsp.cursor.move({x=2812,y=742})"
+    ],
+    "child_exit": 0,
+    "stdout": "ok\n",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "ydotool",
+      "click",
+      "0xC0"
+    ],
+    "child_exit": 0,
+    "stdout": "c0 110\n",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "space"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "Return"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "F24"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "hyprctl",
+      "dispatch",
+      "hl.dsp.cursor.move({x=2812,y=692})"
+    ],
+    "child_exit": 0,
+    "stdout": "ok\n",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "ydotool",
+      "click",
+      "0xC0"
+    ],
+    "child_exit": 0,
+    "stdout": "c0 110\n",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "space"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "Return"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "F24"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "hyprctl",
+      "dispatch",
+      "hl.dsp.cursor.move({x=2812,y=742})"
+    ],
+    "child_exit": 0,
+    "stdout": "ok\n",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "ydotool",
+      "click",
+      "0xC0"
+    ],
+    "child_exit": 0,
+    "stdout": "c0 110\n",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "space"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "Return"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "F24"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "space"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "Return"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "F24"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "hyprctl",
+      "dispatch",
+      "hl.dsp.cursor.move({x=2812,y=742})"
+    ],
+    "child_exit": 0,
+    "stdout": "ok\n",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  },
+  {
+    "command": [
+      "ydotool",
+      "click",
+      "0xC0"
+    ],
+    "child_exit": 0,
+    "stdout": "c0 110\n",
+    "stderr": "",
+    "owned_pid": 541035,
+    "before_pid": 541035,
+    "after_pid": 541035
+  }
+]

@@ -1,0 +1,6 @@
+{
+  "failure": "211 exact-stat cache lacks manual_run.py; assertion before any fixture/client launch",
+  "payload_stat_checks_passed": 196,
+  "source_bytes_read_to_resolve": 2715,
+  "product_or_session_started": false
+}

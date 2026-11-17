@@ -1,0 +1,12 @@
+{
+  "head": "293cf6115c0a6b18315eccdbb42cbca396f443d3",
+  "files": {
+    "priv/ontologies/common_predicates.pl": "65a0d8dc83009939603d7875249d0826d1540652303773df9f970623a9a6dba2",
+    "priv/ontologies/gui_tools.pl": "e23cb85e063ceb90542fbadfae300487ac8381b3e33951fd0410abad61bb4f73",
+    "client/godot/Core/Eidolons.cs": "32d9962d715d4fbcf79e271730822df72a298d8340161f71a39f87b956be835b",
+    "client/godot/Core/Scene.cs": "51854d7c4229f1854286e0c05a8bc421803b0ba1e607c75c726d7a44cfc3f008",
+    "client/godot/EidolonPanel.cs": "f8c0bf9b882d64cf1b365867b5c9f739fbf2be716c22a687a3c2352c9bbff8d5",
+    "client/godot/SourcePanel.cs": "a9c9018d62b9fdf60eb5389f2837bfd72b4c1d41df0c9c2e4458d8805c359168",
+    "nimbalyst-local/plans/space-conceptual-architecture-review.md": "f67487a299e5c099761cdddba9d3acb150f0e79c932d32a271c2b353802b20fd"
+  }
+}

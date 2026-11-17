@@ -1,0 +1,85 @@
+{
+  "passed": true,
+  "head": "293cf6115c0a6b18315eccdbb42cbca396f443d3",
+  "software_only": true,
+  "production_delta": 0,
+  "changed_existing_files": {
+    "doc/evidence/godot-vr-visual-readiness-20261102/live.py": {
+      "added": 2,
+      "removed": 1,
+      "sha256": "f8a303159184ce3d7c9798ec21ad33f941bbef8e199557ebec5dcb61968c6dc6"
+    },
+    "doc/evidence/godot-vr-reliability-20261103/check_live.py": {
+      "added": 49,
+      "removed": 5,
+      "sha256": "a5ce866b24eb8ceba54248632b4a9ae52048b77245efc3437610b55ba7a3432a"
+    },
+    "doc/evidence/godot-vr-reliability-20261103/qualify.py": {
+      "added": 15,
+      "removed": 4,
+      "sha256": "dbc011d337ab315a8fbfce944d6eb927763514348dd453bddb7d46be86b0f624"
+    },
+    "nimbalyst-local/handoffs/godot-vr-reliability-result-20261103.md": {
+      "added": 82,
+      "removed": 17,
+      "sha256": "75b3bfbf9b21bda1e47a6e42b16ea2a63bbd9f615dc64c0ee2a40a97feb92f61"
+    }
+  },
+  "review_packet_manifest": "nimbalyst-local/review-packets/vr-reliability-claude01/manifest.json",
+  "review_packet_manifest_sha256": "9c738b4fdb4cb9683eff6d5cecfbdad31fc9724f54aa045b24124657df404bf8",
+  "old_packet_files_verified": 102,
+  "unchanged_workspace_packet_files": 98,
+  "old_tmp_snapshot_and_stage_lost": true,
+  "original_results_not_rewritten": true,
+  "preexisting_tracked_patch_unchanged": true,
+  "test_counts": {
+    "frame_checks": 34,
+    "admission_cases": 12,
+    "supervision_checks": 33,
+    "pipe_checks": 27,
+    "python_tests": 10,
+    "sum_mixed_units": 116,
+    "loop_tests": 8,
+    "direct_owner_tests": 1,
+    "wait_helper_tests": 1,
+    "real_pipe_children": 7
+  },
+  "qualification_phase_exits": {
+    "build": 0,
+    "admission": 0,
+    "supervision": 0,
+    "owned-pipes": 0,
+    "live-loop": 0
+  },
+  "qualification_wrapper_exit": 0,
+  "focused_child_and_wrapper_exit": 0,
+  "baseline_child_and_wrapper_exit": 1,
+  "baseline_assertion_failures": 4,
+  "qualification_elapsed_seconds": 5.299574895999967,
+  "preserved_bounds": {
+    "preparation_seconds": 180,
+    "participant_seconds": 1800,
+    "normal_close_seconds": 60,
+    "outer_seconds": 2100,
+    "authentication": "original absolute expiry"
+  },
+  "built_artifacts": {
+    "artifacts/bin/Offline": "a4c0b46fda05d068813a7120a72317c7c29e373a2a463f860ab592fef68d9683",
+    "artifacts/bin/Offline.deps.json": "c386280ffff0e72be835cd73a1657b82dcd0973e829465346c4480538dee6c14",
+    "artifacts/bin/Offline.dll": "42d3b58e7fe956dde68fa2f4387ba0919abeaeafb114f3e70e28fff01d6e9cd6",
+    "artifacts/bin/Offline.pdb": "c01850f56a8d9c0d2807d60a7fd826167201bc8b71257a3c571ed4b51b245548",
+    "artifacts/bin/Offline.runtimeconfig.json": "f9bc8e9f0c46247078ed47309f19a7576b4b94e4300e9de0003917d6bd2d667a"
+  },
+  "admission_directories": 12,
+  "admission_files": 4,
+  "remaining_limits": [
+    "No XR/native application/human test",
+    "No native concurrent render callback or parent stdin/compositor loop coverage",
+    "Simultaneous admission winning branch not recorded",
+    "Intermittent native shutdown, focus, controller availability and crash cause unresolved",
+    "Old temporary archive and DLL not recoverable",
+    "Tracker collaborative body publication failed"
+  ],
+  "boundary_manifest": "nimbalyst-local/review-packets/vr-reliability-remediation01/manifest.json",
+  "boundary_receipt": "nimbalyst-local/review-packets/vr-reliability-remediation01/result.json"
+}

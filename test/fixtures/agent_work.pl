@@ -1,5 +1,5 @@
 agent_work_goal(actor, Cursor, Key, finish_work(Key), 5000) :-
-    findall(K, (work_pending(K), agent_work_after(Cursor, K)), Keys),
+    findall(K, (work_pending(K), (Cursor = start ; Cursor = after(Previous), K @> Previous)), Keys),
     sort(Keys, [Key|_]).
 
 finish_work(Key) :-

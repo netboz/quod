@@ -1,0 +1,22 @@
+{
+  "command": [
+    "bwrap",
+    "--ro-bind",
+    "/usr",
+    "/usr",
+    "--symlink",
+    "usr/lib",
+    "/lib",
+    "--symlink",
+    "usr/lib",
+    "/lib64",
+    "--json-status-fd",
+    "3",
+    "--",
+    "/usr/bin/bash",
+    "-c",
+    "exit 7"
+  ],
+  "wrapper_exit": 7,
+  "status": "{ \"child-pid\": 38, \"mnt-namespace\": 4026533407 }\n{ \"exit-code\": 7 }\n"
+}

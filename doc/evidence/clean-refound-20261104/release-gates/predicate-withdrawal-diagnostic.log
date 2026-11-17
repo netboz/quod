@@ -1,0 +1,49 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_predicate_withdrawal_tests: -signed_contents_and_selected_editor_withdraw_test_/0-fun-24-...*failed*
+in function quod_predicate_withdrawal_tests:'-signed_contents_and_selected_editor_withdraw_test_/0-fun-24-'/0 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_predicate_withdrawal_tests.erl, line 41)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+in call from eunit_proc:run_group/2 (eunit_proc.erl, line 593)
+**error:{assert,[{module,quod_predicate_withdrawal_tests},
+         {line,41},
+         {expression,"contains ( Before , likes )"},
+         {expected,true},
+         {value,false}]}
+  output:<<"WITHDRAW_BEFORE #{<<"expires_ms">> => <<"1793811334420">>,
+                  <<"height">> => <<"4">>,<<"marks">> => <<"[]">>,
+                  <<"name">> => null,<<"selection">> => <<"unavailable">>,
+                  <<"type">> => <<"projection">>,
+                  <<"view">> =>
+                      <<"L5NcJaAO7bnt2LiktKNMoLkDYMGUM7M1ABfhWEha6qM">>}
+WITHDRAW_MEMBERS {ok,[#{<<"V0">> => {4},
+                        <<"V1">> =>
+                            [{entity_ref,<<"predicate-withdrawal">>,
+                                 <<231,238,160,46,27,171,10,111,242,185,110,30,
+                                   160,132,14,140,207,146,13,1,188,246,1,24,68,
+                                   49,37,100,128,252,250,26>>,
+                                 {predicate,{'/',likes,2}}},
+                             {entity_ref,<<"predicate-withdrawal">>,
+                                 <<231,238,160,46,27,171,10,111,242,185,110,30,
+                                   160,132,14,140,207,146,13,1,188,246,1,24,68,
+                                   49,37,100,128,252,250,26>>,
+                                 {predicate,{'/',unaffected,1}}},
+                             {entity_ref,<<"predicate-withdrawal">>,
+                                 <<231,238,160,46,27,171,10,111,242,185,110,30,
+                                   160,132,14,140,207,146,13,1,188,246,1,24,68,
+                                   49,37,100,128,252,250,26>>,
+                                 {predicate,{'/',empty_defined,1}}}]}],
+                     4}
+">>
+
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 0.
+===> Error running tests

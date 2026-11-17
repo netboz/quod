@@ -1,0 +1,47 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-space-experience-20261101/owner.py",
+    "space-name-owner02"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 1,
+  "timed_out": false,
+  "driver_inputs": {
+    "build.py": "0efc61bcf6a37ec51ee4ffc4a5084ca40f1559b1e6f4d6e2d432ebcc5b800021",
+    "hashes.py": "7022574d7150446c2f1572729fb221c12efef1e11147714e148073549cb2f388",
+    "isolation.py": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8",
+    "owner.py": "e7621048ad3bcd80e2faaad0718cb66a3b967a5e3950e7af134e530c3f156cb4",
+    "run.py": "20ace533ea6238853b692dde4a651472517e4bf91a4cacdd966f348fc37b1afd",
+    "serve.py": "74c0797677f768c4cfda458f2eda8390dfb257b22efb2d283faab1a25802783e",
+    "signed.py": "8ec788200f5b2d1f37092f121d5805d2e7ef17959116fda20afb6da4ac58a034",
+    "package.py": "e43ddf3de584c3313da081d4bbe3dcf05744af84b97d070e892a1b8d8744f16f"
+  },
+  "start_utc": "2026-11-01T15:23:32Z",
+  "elapsed_seconds": 2.274200201034546,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/space-name-owner02/stdout.raw",
+      "sha256": "5a08c2f222720d1dc0f6d5b96cc7ff6c7640577b4f8c4eb894f143b3c18a18dd",
+      "bytes": 156
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/space-name-owner02/stderr.raw",
+      "sha256": "46199af416caa48a10b19df561f0cc8f8bc51865aee03b0bcd575cfc9b95a761",
+      "bytes": 864
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/logs/space-name-owner02-stdout.log",
+      "sha256": "5a08c2f222720d1dc0f6d5b96cc7ff6c7640577b4f8c4eb894f143b3c18a18dd",
+      "bytes": 156
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/logs/space-name-owner02-stderr.log",
+      "sha256": "46199af416caa48a10b19df561f0cc8f8bc51865aee03b0bcd575cfc9b95a761",
+      "bytes": 864
+    }
+  }
+}

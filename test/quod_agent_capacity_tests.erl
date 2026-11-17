@@ -1,5 +1,6 @@
 -module(quod_agent_capacity_tests).
 -include_lib("eunit/include/eunit.hrl").
+-import(quod_agent_hosting_tests, [agent/1, agent_ref/2]).
 
 capacity_refuses_only_new_children_and_retries_on_slot_release_test_() ->
     {timeout, 60, fun() ->
@@ -18,9 +19,9 @@ capacity(#{namespace := Ns, reference := Ref,
            node := {agent_instance_ref, NodeNs, NodeAnchor, _} = Node, key := Key}) ->
     Other = setelement(4, Ref, other), Extra = setelement(4, Ref, extra),
     OtherKey = <<71:256>>, ExtraKey = <<72:256>>,
-    commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+    commit(Ns, agent({goal, {agent_hosted, agent_ref(Ns, actor), Node, 1, Key}})),
     {Owner, ActorPid} = installed(Ref),
-    commit(Ns, {goal, {agent_hosted, other, Node, 1, OtherKey}}),
+    commit(Ns, agent({goal, {agent_hosted, agent_ref(Ns, other), Node, 1, OtherKey}})),
     {Owner, OtherPid} = installed(Other),
     commit(Ns, {',', {assertz, {agent_host, extra, Node, 1, ExtraKey}},
                        {assertz, {agent_key, extra, ExtraKey, active}}}),

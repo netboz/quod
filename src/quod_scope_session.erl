@@ -19,7 +19,7 @@ a synchronous call to itself.
 -include("quod_ledger.hrl").
 
 -export([start/9, invoke_open/5, invoke_next/3, invoke_cancel/2, close/1,
-         seal/5, attest_plan/3, certify_reads/2, certify_reads_many/1,
+         read_set/1, seal/5, attest_plan/3, certify_reads/2, certify_reads_many/1,
          bind_group_effects/3,
          bind_operation_effect/3, submit_plan/5,
          materialize/4, restore_many/2, release_many/2,
@@ -28,7 +28,7 @@ a synchronous call to itself.
          pid/1, scope_id/1, identity/1, failure_reason/2]).
 
 -ifdef(TEST).
--export([test_answer_disposition/1, test_committed_submit_outcome/3,
+-export([test_committed_submit_outcome/3,
          test_await_remote_submit/5,
          test_normalize_read_certificate_result/1]).
 -endif.
@@ -106,18 +106,14 @@ start(<<_:128>> = ScopeId, <<_:256>> = ProofId, Origin,
                    undefined -> otel_ctx:new();
                    Context -> Context
                end,
-    MaxHeapWords = bytes_to_heap_words(?QUOD_SCOPE_WORKER_MAX_HEAP_BYTES),
     {Pid, WorkerMRef} =
-        spawn_opt(
+        spawn_monitor(
           fun() ->
               quod_trace:with_context(TraceCtx, fun() ->
                   init(ScopeId, ProofId, Origin, Ns, Anchor, Height,
                        Est, Engine, Ref, Opts)
               end)
-          end,
-          [monitor,
-           {max_heap_size,
-            #{size => MaxHeapWords, kill => true, error_logger => true}}]),
+          end),
     {{quod_scope_session, Pid, ScopeId, ProofId, Ref, Ns, Anchor},
      WorkerMRef}.
 
@@ -227,6 +223,42 @@ seal({remote_scope, _, _, _, _} = Handle, _OriginIdentity, Principal,
     remote_seal(Handle, Principal, RequestBinding);
 seal(_Handle, _OriginIdentity, _Principal, _RequestBinding, _OriginRole) ->
     {error, {protocol_error, session_binding}}.
+
+-doc "Return the existing monotonic read set without sealing a write plan.".
+-spec read_set(handle() | term()) -> {ok, map()} | {error, term()}.
+read_set({local_scope,_,_,_,_,Session}) ->
+    {ok,quod_proof_session:read_set(Session)};
+read_set({quod_scope_session,Pid,_,ProofId,SessionRef,_,_} = Handle) ->
+    case command_remaining_ms() of
+        0 -> {error,current_execution_limit()};
+        Remaining ->
+            Ref = make_ref(), Monitor = monitor(process,Pid),
+            Pid ! {scope_read_set,self(),ProofId,SessionRef,Ref},
+            try receive
+                {scope_reply,Pid,ProofId,SessionRef,Ref,{read_set,Reads}} -> {ok,Reads};
+                {'DOWN',Monitor,process,Pid,Reason} -> {error,failure_reason(Handle,Reason)}
+            after Remaining -> {error,current_execution_limit()}
+            end after demonitor(Monitor,[flush]) end
+    end;
+read_set({remote_scope,_,_,_,_} = Handle) ->
+    case bind_remote_router(Handle) of
+        {ok,Router,Monitor} ->
+            case command_remaining_ms() of
+                0 -> {error,current_execution_limit()};
+                Remaining -> case quod_ask_router:command(Handle,Remaining,scope_read_set) of
+                {ok,Ref} -> receive
+                    {quod_scope_event,Handle,Ref,_,_,{scope_read_set,Blob}} ->
+                        quod_scope_wire:decode_payload(read_set,Blob);
+                    {quod_scope_event,Handle,Ref,_,_,{scope_error,Reason}} -> {error,Reason};
+                    {quod_scope_down,Handle,Reason} -> {error,failure_reason(Handle,Reason)};
+                    {'DOWN',Monitor,process,Router,_} -> {error,failure_reason(Handle,unavailable)}
+                after Remaining -> remote_timeout(Handle,Ref,{error,current_execution_limit()}) end;
+                {sent,_} -> {error,{protocol_error,request_binding}};
+                {error,_} = Error -> Error
+                end
+            end;
+        {error,_} = Error -> Error
+    end.
 
 transient({local_scope,_,_,_,_,Session}) ->
     {ok,quod_proof_session:transient(Session)};
@@ -814,17 +846,13 @@ certify_local_read_plan(Ns, Target, Plan) ->
     end.
 
 certify_local_read_plan(Ns, Target, Plan, Deadline) ->
-    case quod_dtx:encode(Plan) of
-        {ok, PlanBlob} ->
-            case quod_simplex:history_view(Target, validator, Deadline) of
-                {ok, View} ->
-                    quod_dtx_current_view:certify_reads(
-                      Ns, {{local, View}, PlanBlob}, Deadline);
-                {error, _} ->
-                    {error, read_certificate_unavailable}
-            end;
+    {ok, PlanBlob} = quod_dtx:encode(Plan),
+    case quod_simplex:history_view(Target, validator, Deadline) of
+        {ok, View} ->
+            quod_dtx_current_view:certify_reads(
+              Ns, {{local, View}, PlanBlob}, Deadline);
         {error, _} ->
-            {error, {protocol_error, proof_engine}}
+            {error, read_certificate_unavailable}
     end.
 
 normalize_read_certificate_result({ok, _} = Result) -> Result;
@@ -1285,12 +1313,22 @@ init(ScopeId, ProofId, Origin, Ns, Anchor, Height,
                                session = Session},
             put(?RUNTIME, Runtime),
             run_loop(Ns, Session);
+        {error, {throw, {quod_ask_error, Reason}, _}} ->
+            start_failed(Origin, ProofId, Ref, Reason);
         {error, {Class, Reason, Stack}} ->
             logger:warning(
               "quod_scope_session[~s]: start failed: ~p:~p ~p",
               [Ns, Class, Reason, Stack]),
-            exit({scope_error, {protocol_error, proof_engine}})
+            start_failed(Origin, ProofId, Ref, {protocol_error, proof_engine})
     end.
+
+%% The origin may monitor this worker only after it has already exited, which
+%% reports `noproc` rather than the refusal. Tell the origin first: that message
+%% precedes any later 'DOWN' in its mailbox.
+-spec start_failed(pid(), <<_:256>>, reference(), term()) -> no_return().
+start_failed(Origin, ProofId, Ref, Reason) ->
+    Origin ! {scope_start_failed, self(), ProofId, Ref, Reason},
+    exit({scope_error, Reason}).
 
 start_session(Est, Opts) ->
     try {ok, quod_proof_session:start(Est, Opts)}
@@ -1350,6 +1388,13 @@ dispatch_message({scope_savepoint, Origin, ProofId, Ref,
             handled;
         false ->
             handled
+    end;
+dispatch_message({scope_read_set,Origin,ProofId,Ref,RequestRef}) ->
+    case valid_command(Origin,ProofId,Ref) of
+        true ->
+            send_reply(RequestRef,{read_set,quod_proof_session:read_set((runtime())#runtime.session)}),
+            handled;
+        false -> handled
     end;
 dispatch_message({scope_transient,Origin,ProofId,Ref,RequestRef}) ->
     case valid_command(Origin,ProofId,Ref) of
@@ -1436,7 +1481,7 @@ trace_invocation(Name, Fun) ->
 handle_open(RequestRef, InvocationId, Goal, Chain, Selection) ->
     Runtime0 = runtime(),
     Reply =
-        case valid_invocation_input(InvocationId, Goal, Chain, Selection) of
+        case valid_invocation_input(InvocationId, Chain, Selection) of
             false -> {error, {protocol_error, request_binding}};
             true ->
                 case maps:is_key(InvocationId, Runtime0#runtime.invocations) of
@@ -1485,7 +1530,7 @@ authorize_and_open_checked(InvocationId, Goal, Chain, Selection,
         ok ->
             Invocations = (runtime())#runtime.invocations,
             put_runtime(Runtime#runtime{
-              invocations = Invocations#{InvocationId => {1, 0}}}),
+              invocations = Invocations#{InvocationId => 1}}),
             {opened, InvocationId};
         {error, Reason} -> {error, Reason}
     end.
@@ -1494,13 +1539,13 @@ handle_next(RequestRef, InvocationId, ExpectedSeq)
   when is_integer(ExpectedSeq), ExpectedSeq > 0 ->
     Runtime0 = runtime(),
     case maps:find(InvocationId, Runtime0#runtime.invocations) of
-        {ok, {ExpectedSeq, Count}} ->
+        {ok, ExpectedSeq} ->
             begin_step(),
             Result = try quod_proof_session:next(
                            Runtime0#runtime.session, InvocationId)
                      after end_step()
                      end,
-            finish_next(RequestRef, InvocationId, ExpectedSeq, Count, Result);
+            finish_next(RequestRef, InvocationId, ExpectedSeq, Result);
         {ok, _Other} ->
             send_next_error(
               RequestRef, {protocol_error, answer_sequence}),
@@ -1514,19 +1559,14 @@ handle_next(RequestRef, _InvocationId, _ExpectedSeq) ->
     send_next_error(RequestRef, {protocol_error, bad_sequence}),
     handled.
 
-finish_next(RequestRef, InvocationId, Seq, Count, {solution, Solution}) ->
+finish_next(RequestRef, InvocationId, Seq, {solution, Solution}) ->
     Runtime0 = runtime(),
     Session = Runtime0#runtime.session,
     Prepared = with_session_access(
                  Session,
                  fun() ->
                      Dirty = quod_proof_session:dirty(Session),
-                     case {Count < ?QUOD_MAX_ANSWERS_PER_INVOCATION,
-                           answer_disposition(Solution)} of
-                         {true, ok} -> {solution_ready, Dirty};
-                         {false, _} -> {result_error, too_many_answers};
-                         {_, {error, Reason}} -> {result_error, Reason}
-                     end
+                     {solution_ready, Dirty}
                  end),
     case Prepared of
         {error, Reason} ->
@@ -1536,15 +1576,12 @@ finish_next(RequestRef, InvocationId, Seq, Count, {solution, Solution}) ->
             Invocations = Runtime0#runtime.invocations,
             put_runtime(Runtime0#runtime{
               invocations = Invocations#{
-                InvocationId => {Seq + 1, Count + 1}}}),
+                InvocationId => Seq + 1}}),
             Independent = quod_proof_session:independent_intent(Session, InvocationId),
-            send_reply(RequestRef, {solution, Seq, Solution, Dirty, Independent});
-        {result_error, Reason} ->
-            remove_invocation(InvocationId),
-            send_next_error(RequestRef, Reason)
+            send_reply(RequestRef, {solution, Seq, Solution, Dirty, Independent})
     end,
     handled;
-finish_next(RequestRef, InvocationId, Seq, _Count, {complete, Reasons}) ->
+finish_next(RequestRef, InvocationId, Seq, {complete, Reasons}) ->
     case checked_session_dirty((runtime())#runtime.session) of
         {ok, Dirty} ->
             remove_invocation_metadata(InvocationId),
@@ -1554,7 +1591,7 @@ finish_next(RequestRef, InvocationId, Seq, _Count, {complete, Reasons}) ->
             send_guard_error(RequestRef, Reason)
     end,
     handled;
-finish_next(RequestRef, InvocationId, _Seq, _Count, {error, Reason}) ->
+finish_next(RequestRef, InvocationId, _Seq, {error, Reason}) ->
     remove_invocation_metadata(InvocationId),
     send_next_error(RequestRef, Reason),
     handled.
@@ -1785,19 +1822,16 @@ drain_remote_event(Handle, RequestId) ->
     end.
 
 valid_batch_ids([First | Rest]) ->
-    valid_opaque_id(First) andalso valid_batch_ids(Rest, First, 1);
+    valid_opaque_id(First) andalso valid_batch_ids(Rest, First);
 valid_batch_ids(_) ->
     false.
 
-valid_batch_ids([], _Previous, _Count) ->
+valid_batch_ids([], _Previous) ->
     true;
-valid_batch_ids(_Ids, _Previous,
-                ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF) ->
-    false;
-valid_batch_ids([Id | Rest], Previous, Count) ->
+valid_batch_ids([Id | Rest], Previous) ->
     valid_opaque_id(Id) andalso Previous < Id andalso
-        valid_batch_ids(Rest, Id, Count + 1);
-valid_batch_ids(_Improper, _Previous, _Count) ->
+        valid_batch_ids(Rest, Id);
+valid_batch_ids(_Improper, _Previous) ->
     false.
 
 valid_opaque_id(<<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>>) -> true;
@@ -1932,7 +1966,7 @@ valid_command(Origin, ProofId, Ref) ->
         _ -> false
     end.
 
-valid_invocation_input(InvocationId, Goal, Chain, Selection) ->
+valid_invocation_input(InvocationId, Chain, Selection) ->
     is_binary(InvocationId) andalso byte_size(InvocationId) =:= 16 andalso
     %% A wire/co-hosted invocation ALWAYS carries its origin, so the chain is
     %% never empty here. This is load-bearing for the genesis host-entry policy:
@@ -1940,27 +1974,11 @@ valid_invocation_input(InvocationId, Goal, Chain, Selection) ->
     %% engine can present one, so a remote peer cannot forge `[]` to borrow the
     %% host-entry default admission.
     is_list(Chain) andalso Chain =/= [] andalso
-    length(Chain) < ?QUOD_MAX_ACTIVE_PROOF_DEPTH andalso
     lists:all(fun valid_identity/1, Chain) andalso
-    quod_transaction_scope:valid_selection(Selection) andalso
-    erlang:external_size(Goal) =< ?QUOD_MAX_NESTED_GOAL_BYTES.
-
-answer_disposition(Answer) ->
-    case erlang:external_size(Answer) =< ?QUOD_MAX_PROOF_ANSWER_BYTES of
-        true -> ok;
-        false -> {error, {too_large, answer}}
-    end.
-
--ifdef(TEST).
-test_answer_disposition(Answer) -> answer_disposition(Answer).
--endif.
+    quod_transaction_scope:valid_selection(Selection).
 
 valid_identity({Ns, <<_:256>>}) when is_binary(Ns), byte_size(Ns) > 0 -> true;
 valid_identity(_) -> false.
-
-bytes_to_heap_words(Bytes) when is_integer(Bytes), Bytes > 0 ->
-    WordBytes = erlang:system_info(wordsize),
-    (Bytes + WordBytes - 1) div WordBytes.
 
 runtime() ->
     case get(?RUNTIME) of

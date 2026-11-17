@@ -1,0 +1,145 @@
+{
+  "freeze_verified": true,
+  "source_label": "applied-carrier02",
+  "proposal_revision": "consolidated02",
+  "applied_production_delta": {
+    "added": 0,
+    "removed": 0
+  },
+  "proposal_delta": {
+    "main_proposal": {
+      "dependency_production": {
+        "files": 2,
+        "added": 23,
+        "removed": 51,
+        "net": -28
+      },
+      "dependency_tests": {
+        "files": 1,
+        "added": 16,
+        "removed": 23,
+        "net": -7
+      },
+      "specs": {
+        "files": 2,
+        "added": 21,
+        "removed": 9,
+        "net": 12
+      },
+      "repository_production": {
+        "files": 33,
+        "added": 396,
+        "removed": 560,
+        "net": -164
+      },
+      "tests": {
+        "files": 38,
+        "added": 452,
+        "removed": 268,
+        "net": 184
+      }
+    },
+    "namespace_increment": {
+      "tests": {
+        "files": 28,
+        "added": 126,
+        "removed": 38,
+        "net": 88
+      },
+      "repository_production": {
+        "files": 17,
+        "added": 87,
+        "removed": 49,
+        "net": 38
+      },
+      "specs": {
+        "files": 1,
+        "added": 22,
+        "removed": 0,
+        "net": 22
+      }
+    },
+    "combined_from_current_source": {
+      "repository_production": {
+        "files": 42,
+        "added": 483,
+        "removed": 609,
+        "net": -126
+      },
+      "tests": {
+        "files": 59,
+        "added": 578,
+        "removed": 306,
+        "net": 272
+      },
+      "dependency_production": {
+        "files": 2,
+        "added": 23,
+        "removed": 51,
+        "net": -28
+      },
+      "specs": {
+        "files": 2,
+        "added": 43,
+        "removed": 9,
+        "net": 34
+      },
+      "dependency_tests": {
+        "files": 1,
+        "added": 16,
+        "removed": 23,
+        "net": -7
+      }
+    },
+    "applied_production": {
+      "added": 0,
+      "removed": 0
+    },
+    "note": "Production includes TEST-only seams; tests/specs/dependency separate."
+  },
+  "files": 6391,
+  "archive_sha256": "06d25194e9b8d03c464657c94ae33ad22c94712bca33163fae61a86b951ce850",
+  "manifest_sha256": "8d5b624ef03666489db302bc3e3baf5e0a67d0b96c0f4f7129108967c92f04da",
+  "archive_bytes": 194959360,
+  "patches": {
+    "erlog-diagnostics.patch": "365222a87f7bce76d6c51e3de92656be805b60bb937f2bb76dc28b7dd33e1eb3",
+    "namespace-admission-CONDITIONAL.patch": "c901aa315e1a06d312021c6764412bfa2bbb026d0a49e8ec6c254a4386d3b235",
+    "remaining-owners.patch": "20df667750c420a6a3f95600531cca6c025b964ac39fe5197a75d07b69807ea3"
+  },
+  "prior_freezes_verified": {
+    "stage2-presentation-limits01": {
+      "archive_sha256": "18881cb54ef293d7d30d0455caedcdc26c609cfa9314daecd2cdf1520cae039c",
+      "manifest_sha256": "b60390bf3102d7d3eada27af57093e5c4d9c24b88bf3ad9e7c5158a39c1b9493"
+    },
+    "stage2-presentation-limits02": {
+      "archive_sha256": "72923108b0127b5a273a186a6bd0bbce88b2a72b559e1ffab6e85bcf8e7bd9db",
+      "manifest_sha256": "2b207facfd29fdc7f850d7b2d5c99950c4f410cf4944aaf0e6b8b390d433d630"
+    },
+    "stage2-presentation-limits03": {
+      "archive_sha256": "60bfc30714d2e105e038054430d1b9c312be7702d1232d357c70515ec74c59da",
+      "manifest_sha256": "6613faac6565b681b0ffa3de1e7e0d765d4f92ecb042cfc597e535055defb61d"
+    },
+    "stage2-presentation-limits04": {
+      "archive_sha256": "f00c923d28d90f28c1c05377c0d37d7f4d333416d69c4368409bdb648ad41749",
+      "manifest_sha256": "0b6147d5c88f43eaba4b46cfadf5cf63955827fea52e0b9f09145e153a5df22c"
+    },
+    "stage2-presentation-boundaries01": {
+      "archive_sha256": "a637c55b644113f36728a604d2827174a3e4d6731890d9bcab7edf58eb5dd67b",
+      "manifest_sha256": "cb973b7610a44343be0a0fc7377fbaae80e07f289085e4ce9f54a0451d2f6fa8"
+    },
+    "stage2-presentation-boundaries-parent01": {
+      "archive_sha256": "48e382f30281e482eefbb338e922a3a8368c88bd0cf67175f8e4e0513aa1c6d3",
+      "manifest_sha256": "4ea71de3c20aef15ad73bbb68e9d67555e2230f86c8bd998f7abbe88866b8a6e"
+    }
+  },
+  "proposed_modules_executed": false,
+  "dependency_pin_changed": false,
+  "storage_migration_performed": false,
+  "scope_accepted": false,
+  "large_signed_display_accepted": false,
+  "original_aggregate_30s_three_renewal_acceptance": "failed",
+  "whole_tree_acceptance": false,
+  "fixture_stores_profiles_credentials_and_beams_included": false,
+  "source_unchanged_after_freeze": true,
+  "approval": "Unapplied remainder requires consolidated application authority; dependency delivery and storage cutover remain separate."
+}

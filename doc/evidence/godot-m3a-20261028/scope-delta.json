@@ -1,0 +1,61 @@
+{
+  "groups": {
+    "production": {
+      "added": 791,
+      "removed": 181,
+      "files": [
+        "priv/ontologies/common_predicates.pl",
+        "priv/ontologies/gui_instance.pl",
+        "priv/ontologies/gui_scene.pl",
+        "priv/ontologies/lobby_instance.pl",
+        "priv/ontologies/lobby_worlds.pl",
+        "priv/ontologies/quod_physics.pl",
+        "priv/ontologies/quod_space.pl",
+        "priv/ontologies/user_instance.pl",
+        "priv/ontologies/voxel_world_view.pl",
+        "src/quod_client_view.erl",
+        "src/quod_physics.erl",
+        "src/quod_physics_coordinates.erl",
+        "src/quod_predicates.erl",
+        "src/quod_runtime.erl",
+        "src/quod_physics_frames.erl"
+      ],
+      "net": 610
+    },
+    "tests": {
+      "added": 657,
+      "removed": 28,
+      "files": [
+        "test/quod_agent_predicates_tests.erl",
+        "test/quod_ct.erl",
+        "test/quod_lifecycle_single_path_tests.erl",
+        "test/quod_physics_coordinates_tests.erl",
+        "test/quod_physics_tests.erl",
+        "test/quod_space_tests.erl"
+      ],
+      "net": 629
+    },
+    "specifications": {
+      "added": 150,
+      "removed": 27,
+      "files": [
+        "doc/godot-foundation-contract.md",
+        "doc/physics-native.md",
+        "doc/runtime-and-agents.md",
+        "doc/spaces.md"
+      ],
+      "net": 123
+    },
+    "preexisting-coordination": {
+      "added": 2,
+      "removed": 2,
+      "files": [
+        "nimbalyst-local/handoffs/godot-m3a-prompt.md"
+      ],
+      "net": 0
+    }
+  },
+  "archive_relocation_lines": 0,
+  "new_mutable_domain_relation": "physics_frame_member/5 in existing root ontology",
+  "new_server_process_types": 0
+}

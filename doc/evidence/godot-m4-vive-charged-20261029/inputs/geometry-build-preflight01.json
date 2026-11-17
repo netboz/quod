@@ -1,0 +1,43 @@
+{
+  "label": "charged-geometry-build01",
+  "pre_execution_copies": {
+    "doc/evidence/godot-m4-vive-charged-20261029/PhysicalChecks.cs": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/charged-geometry-build01/PhysicalChecks.cs",
+      "sha256": "7ca18fec757fd60858827395348afb933d103d327416d38eccb4863693156232",
+      "bytes": 17337
+    },
+    "doc/evidence/godot-m4-vive-charged-20261029/physical.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/charged-geometry-build01/physical.py",
+      "sha256": "d495ed1004136b3d3c949118dea5d630bf3b22a797dcb0b03238c162a96b73b2",
+      "bytes": 18095
+    },
+    "doc/evidence/godot-m4-vive-charged-20261029/build.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/charged-geometry-build01/build.py",
+      "sha256": "9c0865f72821ec33139ccf11149813729ee450b83b8646baffe4d3559539f0bd",
+      "bytes": 6860
+    },
+    "doc/evidence/godot-m4-vive-physical-20261029/environment.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/charged-geometry-build01/environment.py",
+      "sha256": "c3a54c8ce4d8360f8711e027d31f7a98f29cf3b9b4436c43a84984cf2c1f20f9",
+      "bytes": 1178
+    },
+    "doc/evidence/godot-m4-vive-physical-20261029/manual_run.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/charged-geometry-build01/manual_run.py",
+      "sha256": "08df30b590f09ffdc24f8aa4fc7b1a0a61637adb14d0f1c653c565c9e08dc89f",
+      "bytes": 2769
+    },
+    "client/native/tools/check.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/charged-geometry-build01/client-native-check.py",
+      "sha256": "7565d31ea95498ad104b8abcba15b0225ed76cb1fbb5a141bd1a375c41dda92c",
+      "bytes": 1442
+    },
+    "client/godot-tools/run.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/charged-geometry-build01/godot-tools-run.py",
+      "sha256": "0d44ff8edf9d57388a0f425e47721d421f5a8d052732084e355a94813fe0c8fb",
+      "bytes": 4092
+    }
+  },
+  "production_inputs_changed": 0,
+  "new_diagnostic_source": "Bounded readonly geometry; exact renderer composition; raw geometry private; source-only/nondistributable",
+  "python_ast_parse": true
+}

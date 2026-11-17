@@ -1,0 +1,65 @@
+[
+  {
+    "command": [
+      "rebar3",
+      "version"
+    ],
+    "child_exit": 0,
+    "stdout": "rebar 3.24.0 on Erlang/OTP 28 Erts 16.0.2\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "rustc",
+      "-Vv"
+    ],
+    "child_exit": 0,
+    "stdout": "rustc 1.99.0 (b940084d7 2026-09-28) (Arch Linux rust 1:1.99.0-1)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "cargo",
+      "--version"
+    ],
+    "child_exit": 0,
+    "stdout": "cargo 1.99.0 (5f94df478 2026-08-27) (Arch Linux rust 1:1.99.0-1)\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "node",
+      "--version"
+    ],
+    "child_exit": 0,
+    "stdout": "v26.10.0\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "npm",
+      "--version"
+    ],
+    "child_exit": 0,
+    "stdout": "12.2.0\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "dotnet",
+      "--info"
+    ],
+    "child_exit": 0,
+    "stdout": ".NET SDK:\n Version:           10.0.112\n Commit:            95017c711e\n Workload version:  10.0.100-manifests.63b36e85\n MSBuild version:   18.0.11\n\nRuntime Environment:\n OS Name:     arch\n OS Version:  \n OS Platform: Linux\n RID:         arch-x64\n Base Path:   /usr/share/dotnet/sdk/10.0.112/\n\n.NET workloads installed:\nThere are no installed workloads to display.\nConfigured to use workload sets when installing new manifests.\nNo workload sets are installed. Run \"dotnet workload restore\" to install a workload set.\n\nHost:\n  Version:      10.0.12\n  Architecture: x64\n  Commit:       95017c711e\n\n.NET SDKs installed:\n  10.0.112 [/usr/share/dotnet/sdk]\n\n.NET runtimes installed:\n  Microsoft.NETCore.App 10.0.12 [/usr/share/dotnet/shared/Microsoft.NETCore.App]\n\nOther architectures found:\n  None\n\nEnvironment variables:\n  Not set\n\nglobal.json file:\n  Not found\n\nLearn more:\n  https://aka.ms/dotnet/info\n\nDownload .NET:\n  https://aka.ms/dotnet/download\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "openssl",
+      "version"
+    ],
+    "child_exit": 0,
+    "stdout": "OpenSSL 3.6.5 29 Sep 2026 (Library: OpenSSL 3.6.5 29 Sep 2026)\n",
+    "stderr": ""
+  }
+]

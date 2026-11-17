@@ -1,0 +1,5 @@
+doc/evidence/ontology-references-phase1-20261109/class_selection_probe.erl:9:30: Warning: variable 'Manager' is unused
+%    9|     #{dir := Dir, manager := Manager} = F,
+%     |                              ^
+
+CLASSES [ontology,{':',quod,{':',space,space}}]

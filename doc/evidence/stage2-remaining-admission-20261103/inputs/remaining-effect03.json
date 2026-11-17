@@ -1,0 +1,43 @@
+{
+  "command": [
+    "docker",
+    "run",
+    "--rm",
+    "--init",
+    "--user",
+    "1000:1000",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source:/work:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone:/code:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-remaining-admission/remaining-effect03:/checks",
+    "-w",
+    "/code",
+    "-e",
+    "ERL_FLAGS=+S 4:4 +SDio 2 +SDcpu 2",
+    "--entrypoint",
+    "/bin/sh",
+    "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+    "-c",
+    "exec erl -noshell -pa /work/_build/test/checkouts/*/ebin /work/_build/test/lib/*/ebin /work/_build/test/lib/quod/test -eval \"$1\"",
+    "sh",
+    "true=code:add_patha(\"/checks\"),{ok,quod_ledger_artifact_tests}=compile:file(\"/checks/source/test/quod_ledger_artifact_tests.erl\",[export_all,{d,'TEST'},{outdir,\"/checks\"},{i,\"/checks/source/include\"},report_errors,report_warnings]),{ok,remaining_effect_node_checks}=compile:file(\"/checks/source/doc/evidence/stage2-remaining-admission-20261103/remaining_effect_node_checks.erl\",[export_all,{d,'TEST'},{outdir,\"/checks\"},{i,\"/checks/source/include\"},report_errors,report_warnings]),case eunit:test({remaining_effect_node_checks,valid_single_effect_is_not_byte_quota_test},[verbose]) of ok->halt(0);_->halt(1) end."
+  ],
+  "true_exit": 1,
+  "stdout_eof": true,
+  "stderr_eof": true,
+  "source_inputs": {
+    "test/quod_ledger_artifact_tests.erl": "b32b9fe3994c346420b94fba003c1ae68b487b9de1f59580c2378c0217c812ca",
+    "doc/evidence/stage2-remaining-admission-20261103/remaining_effect_node_checks.erl": "bdec96c1e28820105aae7c78748302c2744a9ef7f1945c1bf481cfa6cbc345b3",
+    "include/quod_transport_limits.hrl": "39d3d6788bae9c1443a68ef16d1debaa1ef6613877fed9654e2fa2ff96e2a969",
+    "include/quod_ingress_limits.hrl": "23f7f7ed40410f7b68c108fb64af98d42583d7356ca97492ac869ede0cecec98",
+    "include/quod_dtx_owner.hrl": "aabb061be7221f0b78ae7cc0e2a061af758328d19df9ecff959310bec34dd8ce",
+    "include/quod_vm_limits.hrl": "032443e83f6157be144f774d01764dfe2059d6134ed7164f801d78c452a11bd0",
+    "include/quod_c4_attempt.hrl": "01ada5034fedcfebc909eb6ececf31aed3324b6081ae3d2987c542215342c663",
+    "include/quod_client_goal_limits.hrl": "0fa6aac12385626349f98e40cad6189fa16478fea8a46503fe38dbbe63ee2aec",
+    "include/quod_proof_limits.hrl": "922e8e39a4a83eca34b175f2ef05e521cf92439da98b3160fed52174742dfdca",
+    "include/quod_directory_limits.hrl": "a7c360b5cd582ae6e34256a29691431e47447dafdda6d85955b5a3832ba3b4e0",
+    "include/quod_ledger.hrl": "15b00d149bfee607701f3fd9f6a30ce661008af1ad11539da6e36836d773364d"
+  }
+}

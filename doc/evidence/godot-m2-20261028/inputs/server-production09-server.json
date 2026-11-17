@@ -1,0 +1,59 @@
+{
+  "command": [
+    "docker",
+    "run",
+    "--rm",
+    "-i",
+    "--init",
+    "--network",
+    "host",
+    "--name",
+    "quod-m2-live-production09-server",
+    "-v",
+    "/home/yan/.cache/quod-m2-artifacts/quod-m2-gates02/source:/work:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone:/code:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m2-20261028:/evidence:ro",
+    "-v",
+    "/home/yan/.cache/quod-m2-artifacts/private/quod-m2-live-production09-server:/m1b",
+    "-v",
+    "/home/yan/.cache/quod-m2-artifacts/private/quod-m2-live-production09-server/tmp:/tmp",
+    "-w",
+    "/work",
+    "-e",
+    "QUOD_M2_PRIVATE=/m1b",
+    "-e",
+    "ERL_FLAGS=+S 4:4 +SDio 2 +SDcpu 2",
+    "--entrypoint",
+    "/bin/sh",
+    "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+    "-c",
+    "exec erl -noshell -pa /work/_build/prod/lib/*/ebin /work/_build/test/lib/quod/test -eval \"$1\"",
+    "sh",
+    "\n{ok,quod_lifecycle_single_path_tests}=compile:file(\"/m1b/quod_lifecycle_single_path_tests.erl\",[export_all,{outdir,\"/m1b/ebin\"},{i,\"/work/include\"}]),\n{ok,godot_m2_fixture}=compile:file(\"/evidence/godot_m2_fixture.erl\",[{outdir,\"/m1b/ebin\"}]),\ntrue=code:add_patha(\"/m1b/ebin\"),godot_m2_fixture:start(),halt().\n"
+  ],
+  "stage": "/home/yan/.cache/quod-m2-artifacts/quod-m2-gates02/source",
+  "profile": "prod",
+  "runtime_recompiled": false,
+  "worker_session": "8db34a85-ead5-4f20-b761-28a4a96a20c6",
+  "factory_adapter": {
+    "original_sha256": "e9819c39c7601ea2e983cd306128c63fd69fe02f7148dd8a90bda6d2df06237c",
+    "adapted_sha256": "b3ec78c56e8f18599a10d11373c0f74af2504daa4f60357e792fa18ecbb0b245",
+    "exact_replacements": [
+      {
+        "before": "_ = file:del_dir_r(Dir),\n    ok.",
+        "after": "ok.",
+        "reason": "Preserve private disposable fixture storage after stopping all owners; never include its credentials in source snapshots."
+      },
+      {
+        "before": "{ok, Journal} = quod_effect_journal:start_link(#{data_dir => Dir}),",
+        "after": "ok = application:set_env(quod, effect_journal_data_dir, Dir),\n    {ok, Journal} = quod_effect_journal:start_link(),",
+        "reason": "Existing production journal configuration and start_link/0; start_link/1 is TEST-only."
+      }
+    ]
+  },
+  "private_raw_log": "/home/yan/.cache/quod-m2-artifacts/private/quod-m2-live-production09-server/server-raw.log",
+  "child_exit": 0,
+  "elapsed_seconds": 212.86006057999475
+}

@@ -1,0 +1,7 @@
+{
+  "child_exit": 1,
+  "tool_chunk": "e21009",
+  "failure": "AssertionError at audit.py:25: whole tracked patch compared after intentional plan edit",
+  "runtime_launched": false,
+  "disposition": "Exclude only the intentionally changed plan from the inherited tracked-patch preservation comparison. The independent 848 source hash/mode checks remain unchanged."
+}

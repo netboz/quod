@@ -1,0 +1,10 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_prolog_ontology_tests: workbench_replace_uses_canonical_fact_identity_test...[0.062 s] ok
+quod_prolog_ontology_tests: compiler_data_helpers_have_no_implicit_following_test...[0.019 s] ok
+=======================================================
+  2 tests passed.

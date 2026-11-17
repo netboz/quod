@@ -26,6 +26,7 @@ replay_completion_test_() ->
 %% Each case has its own mailbox, including pubsub/call-trace traffic. Never
 %% weaken an assertion to accommodate a preceding test's messages.
 run_case(Case) ->
+    quod_agent_hosting_tests:with_host(fun(_) ->
     Parent = self(), Ref = make_ref(),
     {Pid, Mon} = spawn_monitor(fun() ->
         Result = try with_fixture(fun(F) -> exercise(Case, F) end) of
@@ -46,7 +47,8 @@ run_case(Case) ->
         exit(Pid, kill),
         receive {'DOWN', Mon, process, Pid, _} -> ok end,
         error({fixture_timeout, Case})
-    end.
+    end
+    end).
 
 exercise(member_idle, F) ->
     begin_member(F),

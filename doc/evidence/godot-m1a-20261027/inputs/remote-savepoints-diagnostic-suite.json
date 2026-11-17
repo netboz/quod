@@ -1,0 +1,5 @@
+{
+  "sha256": "cbbac8b2b39445fffe3c15270f1af7d151f3d5b6384244a712475e870c166d34",
+  "active_test_source_removed": true,
+  "purpose": "Temporary bounded trace wrapper; original signed test and assertions unchanged."
+}

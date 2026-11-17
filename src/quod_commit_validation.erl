@@ -841,11 +841,7 @@ exact_membership_parent(_Diff, _Est) ->
     false.
 
 diff_touches_membership(Diff) ->
-    lists:any(
-      fun({Kind, {{peer_admitted, _, _, _, _}, _Body}})
-            when Kind =:= assert; Kind =:= asserta; Kind =:= retract -> true;
-         (_) -> false
-      end, Diff).
+    quod_diff:touches_functor(Diff, {peer_admitted, 4}).
 
 is_membership_change(Change) ->
     quod_simplex:committee_delta(Change) =/= {[], []}.

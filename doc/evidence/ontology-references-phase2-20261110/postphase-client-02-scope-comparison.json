@@ -1,0 +1,9 @@
+{
+  "changed_since_server_gates": [
+    "client/godot/tests/SpaceChecks.cs"
+  ],
+  "new_campaign_script": [
+    "doc/evidence/ontology-references-phase2-20261110/postphase-client-gates-02.py"
+  ],
+  "server_source_ontology_tests_policy_inputs_unchanged": true
+}

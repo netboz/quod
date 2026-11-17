@@ -1,0 +1,12 @@
+{
+  "scope": "Metadata inspection only; no compiler or native run failed",
+  "actual_tool_result": {
+    "chunk_id": "3acac5",
+    "wall_time_seconds": 0.000009933,
+    "exit_code": 1,
+    "original_token_count": 22,
+    "output": "Traceback (most recent call last):\n  File \"<stdin>\", line 7, in <module>\nAssertionError\n"
+  },
+  "cause": "Verifier assumed Quod.dll was at export root. Actual manifest path is data_Quod_linuxbsd_x86_64/Quod.dll.",
+  "disposition": "Resolve unique actual basenames from the manifest; keep all build results unchanged and preserve this failed inspection."
+}

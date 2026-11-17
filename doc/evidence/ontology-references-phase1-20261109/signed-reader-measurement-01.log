@@ -1,0 +1,4 @@
+Exit 1. Production-only baseline reconstruction failed before measuring.
+AssertionError: error: client/godot/tests/ExportChecks.cs: No such file or directory
+Cause: git apply uses the first matching include/exclude pattern; the include preceded the test exclusion.
+The temporary reconstruction was discarded; no worktree files were changed.

@@ -1,0 +1,16 @@
+{
+  "scope": "Independent review while Claude Fable inspects frozen revision 02",
+  "confirmed": [
+    "All 992 revision-02 archive members and manifest/archive hashes verified independently.",
+    "All ten applied production source hashes match the frozen source.",
+    "Both proposal before-source hashes match current production; proposed runtime edits remain unapplied.",
+    "Revised endpoint proposal retains full-envelope send and receive checks against the existing transport policy."
+  ],
+  "open_review_question": {
+    "source": "src/quod_proof_session.erl:execution_budget/2",
+    "observation": "Uses total_heap_size and max_heap_size size/kill/error_logger without explicitly setting include_shared_binaries.",
+    "runtime_documentation": "https://www.erlang.org/docs/28/apps/erts/erlang.html",
+    "documented_behavior": "Off-heap shared binaries are excluded from max_heap_size by default unless the system default or process option enables inclusion.",
+    "status": "Sent to Claude for assessment of binary argument/result and post-proof serialization ownership. No exploit or runtime failure demonstrated; no production correction applied."
+  }
+}

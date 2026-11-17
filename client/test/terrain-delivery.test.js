@@ -11,7 +11,7 @@ import { createRenderResources } from '../src/render-resources.js'
 
 const payload = new Uint8Array(readFileSync(new URL('./fixtures/voxel-plane.qvt', import.meta.url)))
 const digest = createHash('sha256').update(payload).digest('hex')
-const terrain = 'mark(<<"land">>,<<"terrain">>,terrain_geometry(<<"qvt1">>,[material(9,surface(<<"#447722">>,0,900,0,[]))],view_distance(4000,1000,2000),resources(10000,40000,1000,1000,2)),body_pose(0,1),terrain_surfaces,unlabelled,depicts(<<"room">>,<<"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">>,land))'
+const terrain = 'mark(<<"land">>,<<"terrain">>,terrain_geometry(<<"qvt1">>,[material(9,surface(<<"#447722">>,0,900,0,1000,[]))],view_distance(4000,1000,2000),resources(10000,40000,1000,1000,2)),body_pose(0,1),terrain_surfaces,unlabelled,depicts(<<"room">>,<<"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">>,land))'
 const frame = { schema: 2, units: 'metres_seconds', space: 'local', origin_mm: ['0', '0', '0'], origin_seq: '0', world: 'room', authority: 'actor',
   epoch: '1', generation: '1', incarnation: 'token', structure: '1', tick: '1',
   poses: [{ body: '0', revision: '1', position: [0, 0, 0], rotation: [0, 0, 0, 1] }] }
@@ -114,7 +114,7 @@ test('an unauthorized aggregate is rejected before bytes or renderer allocations
   } finally { stream.close() }
 })
 
-test('content batches retain visible progress and acknowledge exact prefixes before final readiness', async () => {
+test('complete requested content installs atomically and releases its exact token', async () => {
   const failures = []
   let current
   const { socket, stream, view } = await connection(value => { current = value }, failures)
@@ -124,14 +124,9 @@ test('content batches retain visible progress and acknowledge exact prefixes bef
     socket.receive({ type: 'terrain_manifest', view, token, interest_seq: '0', chunks: [row,
       { ...row, index: 1, chunk: ['1', '0', '0'], origin_mm: ['4000', '0', '0'] }] })
     assert.deepEqual((await socket.next()).want, [0, 1])
-    socket.receive({ type: 'terrain_chunks', view, token, complete: false, chunks: [{ index: 0, payload: encoded }] })
-    assert.deepEqual(await socket.next(), { type: 'terrain_ack', view, token, through: 0 })
-    assert.equal(current.terrain.size, 1)
     assert.equal(current.terrainReady, false)
-    socket.receive({ type: 'simulation_frame', view, frame: { ...frame, tick: '2' } })
-    assert.equal((await socket.next()).tick, '2')
-    assert.equal(current.terrain.size, 1)
-    socket.receive({ type: 'terrain_chunks', view, token, complete: true, chunks: [{ index: 1, payload: encoded }] })
+    socket.receive({ type: 'terrain_chunks', view, token, complete: true,
+      chunks: [{ index: 0, payload: encoded }, { index: 1, payload: encoded }] })
     assert.deepEqual(await socket.next(), { type: 'terrain_ack', view, token, complete: true })
     assert.equal(current.terrain.size, 2)
     assert.equal(current.terrainReady, true)
@@ -139,7 +134,7 @@ test('content batches retain visible progress and acknowledge exact prefixes bef
   } finally { stream.close() }
 })
 
-test('a stale partial batch releases only its own ending without installing content', async () => {
+test('a stale completed set releases only its own token without installing content', async () => {
   const failures = []
   let current
   const { socket, stream, view } = await connection(value => { current = value }, failures)
@@ -149,9 +144,10 @@ test('a stale partial batch releases only its own ending without installing cont
       { ...row, index: 1, chunk: ['1', '0', '0'], origin_mm: ['4000', '0', '0'] }] })
     await socket.next()
     current.interest([2, 0, 0]); await socket.next()
-    socket.receive({ type: 'terrain_chunks', view, token, complete: false,
-      chunks: [{ index: 0, payload: Buffer.from(payload).toString('base64url') }] })
-    assert.deepEqual(await socket.next(), { type: 'terrain_ack', view, token, through: 0 })
+    socket.receive({ type: 'terrain_chunks', view, token, complete: true,
+      chunks: [{ index: 0, payload: Buffer.from(payload).toString('base64url') },
+        { index: 1, payload: Buffer.from(payload).toString('base64url') }] })
+    assert.deepEqual(await socket.next(), { type: 'terrain_ack', view, token, complete: true })
     assert.equal(current.terrain.size, 0)
     assert.equal(current.terrainReady, false)
     assert.deepEqual(failures, [])

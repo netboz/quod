@@ -1,0 +1,12 @@
+Error! Failed to eval: 
+{ok,quod_client_view}=compile:file("/stage/quod_client_view.erl",[{outdir,"/stage"},{i,"/stage"}]),
+{ok,quod_lobby_tests}=compile:file("/stage/quod_lobby_tests.erl",[{outdir,"/stage"},{i,"/work/include"}]),
+true=code:add_patha("/stage"),
+case eunit:test([{generator,fun quod_lobby_tests:authored_space_composition_preserves_world_test_/0},
+                {generator,fun quod_lobby_tests:inactive_physics_source_authoring_preserves_world_test_/0}],[verbose])
+of ok->halt(0);error->halt(1) end.
+
+
+Runtime terminating during boot ({{badmatch,error},[{erl_eval,expr,6,[{file,"erl_eval.erl"},{line,672}]},{erl_eval,exprs,6,[{file,"erl_eval.erl"},{line,276}]},{init,start_it,1,[]},{init,start_em,1,[]},{init,do_boot,3,[]}]})
+
+Crash dump is being written to: erl_crash.dump...

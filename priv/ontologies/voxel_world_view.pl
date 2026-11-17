@@ -39,4 +39,4 @@ voxel_set_view(W,Expected,View) :-
 
 voxel_validate_presentation(W) :-
     voxel_surface_mark(W,Mark),rendering_vocabulary(Ns,A),
-    Ns::(current_ontology_identity(Ns,A),well_formed_mark(Mark)).
+    in_ontology(Ns,A,well_formed_mark(Mark)).

@@ -1,0 +1,134 @@
+PASS strict two supported tracked neutral controllers and signed input predicate is byte-identical
+PASS compound stereo render predicate remains byte-identical
+PASS all preparation/domain setup and begin behavior remains byte-identical
+PASS first rendered callback compares against an actual preceding native-time sample
+PASS finite no-visual-frame failure bound awaits only visual readiness
+PASS visual event is immediate and strict interaction event is separate with no second wait
+PASS current signed world receiver and original unexpired sign-in gate visual admission
+PASS existing notification and both cleanup unsubscribe paths remain
+PASS after visual admission controller and authorization state changes remain observable
+PASS supervision delta is only visual admission marker and truthful failure label; timers/expiry/finish fences unchanged
+PASS unchanged real owner owned_commands.py
+PASS unchanged real owner pipe_ownership.py
+PASS unchanged real owner launch_spec.py
+PASS distinct literal client finish and fixture stop bytes retained
+PASS actual fixture command owner accepts stop-LF; a blank line is not its stop branch
+PASS exact run-card argv passes the actual three owner parsers without executing their launch bodies
+PASS future argv selects current server contract and locally delegated new companion
+PASS both future commands require tty:true and this artifact grants no launch
+  Determining projects to restore...
+  Restored /data/quod-m4-vr-ca84d4f8-20261029/builds/visual-readiness-offline01/OfflineChecks.csproj (in 409 ms).
+  OfflineChecks -> /data/quod-m4-vr-ca84d4f8-20261029/builds/visual-readiness-offline01/bin/Release/net10.0/OfflineChecks.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:04.30
+PASS no callbacks is an explicit zero
+PASS no callback does not invent a predicted-time sample
+PASS no callback does not invent a session transition
+PASS native calls and direct shouldRender remain unobserved
+PASS callbacks count even when render admission is false
+PASS first and last positive predicted times are retained
+PASS progress is counted independently of CanRender
+PASS false render admission is measured without manufactured rendered frames
+PASS unchanged state is not a transition
+PASS zero-based monotonic callback interval is retained with its frequency
+PASS recovery and withdrawal accumulate without resetting counters
+PASS visible focused and synchronized transitions are retained
+PASS transition binds its initiating and resulting states to the callback interval
+PASS a retained snapshot does not mutate with later samples
+PASS initial zero is not replaced by the first positive time
+PASS equal and decreasing times are distinguished from progression
+PASS nonpositive samples remain explicit
+PASS transition storage remains bounded while total and omitted counts stay truthful
+PASS the latest state and time remain current after retention fills
+PASS large callback sequences retain a bounded payload-free report
+PASS no callback cannot report visual readiness
+PASS missing advancing stereo cannot be replaced by positive time
+PASS visible but unfocused stereo is not visual ready
+PASS focused stereo still requires current head tracking
+PASS world withdrawal refuses visual admission
+PASS receiver withdrawal refuses visual admission
+PASS expired sign-in refuses visual admission
+PASS first qualifying callback immediately admits visual inspection without controller or model input
+PASS visual observation retains the first qualifying callback index
+PASS same callback never emits a duplicate milestone
+PASS withdrawal never emits a ready event
+PASS visual recovery does not reset or re-emit the milestone
+PASS visual notification does not reset callback or withdrawal evidence
+PASS a fresh observer owns an independent one-shot milestone
+FRAME_OBSERVATION_PASS {"checks":34,"synthetic":true,"native_runtime_started":false,"fixture_started":false,"rendered_frame_claim":false}
+PASS first real ready starts participant interval
+PASS synthetic Updating after saved281 visual sample sends no normal finish
+PASS Updating preserves all original deadlines
+PASS accepted again sends no finish and requires no renewed session
+PASS repeated READY is not a new interval
+PASS repeated READY cannot extend participant or authentic expiry
+PASS authentic absolute expiry dispatches normal finish
+PASS expiry plus later stop dispatch exactly once
+PASS explicit stop dispatches exactly once
+PASS original1800 participant cutoff dispatches exactly once
+PASS typed authentic expiry notification dispatches exactly once
+PASS original preparation cutoff remains bounded
+PASS native admission failure dispatches exactly once
+PASS late READY cannot rescue an expired preparation bound
+PASS late READY sends exactly one bounded finish without starting participant time
+PASS PREPARED does not start XR or participant time
+PASS unmapped begin neither dispatches nor queues work
+PASS mapped prepared begin dispatches exactly once
+PASS begin repeated preparation and status retain original bounds and expiry
+PASS signed Updating after begin neither closes nor repeats setup
+PASS stop after begin closes once and no later begin revives it
+PASS stop before begin closes once without any XR start
+PASS late begin cannot rescue original preparation cutoff
+PASS authentic earlier expiry refuses begin
+PASS unexpected READY before explicit begin cannot admit participant
+PASS repeated READY and begin never restart any deadline
+PASS uncertain begin write is fenced before I/O and never retried
+PASS early begin is ignored rather than saved for later setup
+PASS legacy interaction marker alone is not visual-test admission
+PASS missing left controller and unsettled model do not delay visual-test admission
+PASS no thirty-second controller wait or preparation cutoff after visual admission
+PASS later optional interaction readiness cannot extend the visual participant deadline
+PASS repeated visual readiness cannot restart the interval
+SUPERVISION_PASS {"checks": 33, "saved281_visual_sample": true, "real_decision_owner": "supervision.Supervision", "no_runtime_or_domain_work": true}
+PASS delegated authority does not queue an early begin before PREPARED
+PASS artifact-only preparation provides no launch/begin authorization
+PASS PREPARED without an exact mapped binding does not begin
+PASS local delegated mapped PREPARED dispatches one begin without parent round trip
+PASS local delegation preserves original preparation and authentic expiry
+PASS refresh withdrawal/reacceptance and repeated READY neither finish nor restart any bound
+PASS actual delivered lines match fenced dispatches with true child0 and both EOF
+PASS wrong pid refuses the exact owned mapping
+PASS wrong incarnation refuses the exact owned mapping
+PASS wrong address refuses the exact owned mapping
+PASS wrong executable dev/inode/start component 0 refuses dispatch
+PASS wrong executable dev/inode/start component 1 refuses dispatch
+PASS wrong executable dev/inode/start component 2 refuses dispatch
+PASS unmapped window refuses begin
+PASS ambiguous mapped address refuses begin
+PASS all mapping refusals delivered no begin or domain command
+PASS actual delivered lines match fenced dispatches with true child0 and both EOF
+PASS late begin at preparation_failure only dispatches one normal finish
+PASS actual delivered lines match fenced dispatches with true child0 and both EOF
+PASS late begin at auth_expired only dispatches one normal finish
+PASS actual delivered lines match fenced dispatches with true child0 and both EOF
+PASS stop before begin cannot revive or replay setup
+PASS actual delivered lines match fenced dispatches with true child0 and both EOF
+PASS mapped snapshot that reaches the original cutoff cannot send a late begin
+PASS actual delivered lines match fenced dispatches with true child0 and both EOF
+PASS original participant1800 cutoff keeps exactly one owned finish
+PASS actual delivered lines match fenced dispatches with true child0 and both EOF
+OWNED_COMMANDS_PASS {"checks": 27, "real_owner": "owned_commands.OwnedCommands + supervision.Supervision", "real_pipe_children": 7, "runtime_or_application_or_window": false, "host_input": false, "signals": 0, "eof": true}
+PASS fresh M1B_READY binds original-outcome resolution to its actual owned control port
+PASS Qt xcb and SteamVR selection are process-only overrides
+PASS actual display/socket/plugin settings are inherited without replacement
+PASS literal spaces and shell punctuation reach the finite child unchanged with true exit37 and EOF
+PASS Godot retains its explicit Wayland Vulkan mobile path
+PASS the current fixture endpoint and CA are exact literal arguments
+PASS invalid port is refused without invoking an application
+PASS invalid control_port is refused without invoking an application
+LAUNCH_SPEC_PASS {"checks": 8, "finite_child_exit": 37, "eof": true, "application_or_fixture_or_runtime": false}
+VISUAL_OFFLINE_COMPLETE {"source_checks": 18, "build_exit": 0, "check_exit": 0, "native_runtime_started": false}

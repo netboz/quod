@@ -1,0 +1,295 @@
+--- a/client/godot/Main.cs
++++ b/client/godot/Main.cs
+@@ -65,7 +65,6 @@
+     readonly LineEdit endpoint = new() { Name = "endpoint", PlaceholderText = "https://node:14570", Text = "https://localhost:14570", SizeFlagsHorizontal = SizeFlags.ExpandFill };
+     readonly LineEdit ca = new() { Name = "ca", PlaceholderText = "Optional trusted CA PEM path", SizeFlagsHorizontal = SizeFlags.ExpandFill };
+     readonly VBoxContainer body = new() { Name = "body", SizeFlagsHorizontal = SizeFlags.ExpandFill };
+-    readonly VBoxContainer questionHost=new() {Name="question-workspace",Visible=false,SizeFlagsVertical=SizeFlags.ExpandFill};
+     OperationsPanel? operations;
+     EidolonPanel? representations;
+     ScenePanel scene = null!;
+@@ -80,11 +79,9 @@
+         gui.SetContent(margin);workspaceContent=margin;
+         var shell=new VBoxContainer();margin.AddChild(shell);
+         var header=new HFlowContainer();shell.AddChild(header);header.AddChild(new Label { Text="Quod",ThemeTypeVariation="Heading" });
+-        Add(header,"attention","Your attention · 0",()=>{questions?.ShowAttention();return Task.CompletedTask;});
+         Add(header,"workspace-connection","Account",()=>{showConnection=!showConnection;UpdateWorkspace();return Task.CompletedTask;});
+         Add(header,"client-tools","Tools",()=>{toolsPanel.Visible=!toolsPanel.Visible;return Task.CompletedTask;});
+         shell.AddChild(place);place.AddChild(placeTitle);place.AddChild(accountActions);
+-        shell.AddChild(questionHost);
+         var scroll = workspaceScroll = new ScrollContainer { Name="workspace-scroll",FollowFocus = true,HorizontalScrollMode=ScrollContainer.ScrollMode.Disabled,SizeFlagsVertical=SizeFlags.ExpandFill }; shell.AddChild(scroll);
+         var root = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill }; scroll.AddChild(root);
+         root.AddChild(statusPanel);statusPanel.AddChild(status);
+@@ -167,7 +164,7 @@
+         return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
+     }
+     static HFlowContainer Row(Godot.Container parent) { var row = new HFlowContainer(); parent.AddChild(row); return row; }
+-    internal (string,Func<bool>,Action)[] WorkspaceMenuEntries()=>new[]{"workspace-show","workspace-move","workspace-hide","attention","workspace-text-larger","workspace-nearer","open-gui","create-operations","location-operations","inspect","local-controllers","stop-xr"}.Select(name=> {
++    internal (string,Func<bool>,Action)[] WorkspaceMenuEntries()=>new[]{"workspace-show","workspace-move","workspace-hide","workspace-text-larger","workspace-nearer","open-gui","create-operations","location-operations","inspect","local-controllers","stop-xr"}.Select(name=> {
+         var button=buttons[name];return(button.Text,(Func<bool>)(()=>!button.Disabled),(Action)(()=>button.EmitSignal(BaseButton.SignalName.Pressed)));
+     }).ToArray();
+     void Add(Godot.Container row, string name, string text, Func<Task> operation)
+@@ -284,7 +281,7 @@
+         };
+         preferences.Withdrawn += reason => { xr.Install(null);controllers.Text = "Controller mapping unavailable: " + reason; Notify(); };
+         _ = preferences.Start();
+-        questions?.Dispose(); questions = new(consumer, accounts, store!, questionHost, Notify,OverlayChanging); questions.Start();
++        questions?.Dispose(); questions = new(consumer, accounts, store!, body, Notify); questions.Start();
+         bool returnHome=home;
+         if(representations?.Resume(consumer,accounts,store!)!=true)home=true;
+         else home=returnHome;
+@@ -344,7 +341,7 @@
+     }
+     void WithdrawWorld(string reason)
+     { projection=null; controls?.Withdraw();xr.InvalidateWorld(); scene.Withdraw(); worldAccepted=false; status.Text="Space unavailable: " + reason; UpdateButtons(); }
+-    bool GuiOpen=>representations?.IsVisibleInTree()==true || backupDialog!=null || (localControllers?.IsVisibleInTree()??false) || questionHost.IsVisibleInTree();
++    bool GuiOpen=>representations?.IsVisibleInTree()==true || backupDialog!=null || (localControllers?.IsVisibleInTree()??false) || body.GetChildren().Any(n=>n is QuestionPanel c && c.IsVisibleInTree());
+     void UpdateWorkspace()
+     {
+         workspaceContent.Visible=!gui.Spatial || xr.WorkspaceVisible;
+@@ -353,10 +350,7 @@
+         location.Visible=controllers.Visible=connectionShell.Visible;
+         accountSetup.Visible=accounts!=null;
+         bool ready=accounts?.Setup!=null&&session is {IsExpired:false};
+-        bool attention=questions?.Showing==true;
+-        workspaceScroll.Visible=!attention;place.Visible=ready&&!attention;
+-        buttons["attention"].Text=questions?.Caption??"Your attention · 0";buttons["attention"].Visible=ready;
+-        buttons["workspace-settings"].Visible=!attention;
++        place.Visible=ready;
+         placeTitle.Text=navigationAvailable ? navigation?.Space==null ? "Not placed in a space" :
+             projection?.Name is {Length:>0} placeName ? "Current space · "+placeName : "Current space" : "Verifying current place…";
+         placeTitle.TooltipText=navigationAvailable ? navigation?.Location.ToString()??"" : "";
+@@ -366,7 +360,7 @@
+             : !worldAccepted ? "Contents unavailable. "+status.Text
+             : scene.Count==0 ? "No visible contents in this space." : "Select a visible subject. Viewing it does not enter it.";
+         if(!scene.Viewport.UseXR)scene.Visible=worldAccepted&&home;
+-        if(representations!=null)representations.Visible=!home&&ready&&!attention;
++        if(representations!=null)representations.Visible=!home&&ready;
+         buttons["resume-inspector"].Visible=ready&&home&&representations?.Current!=null;
+         buttons["create-operations"].Visible=buttons["location-operations"].Visible=home;
+         buttons["space-home"].ThemeTypeVariation=home ? "PrimaryAction" : "";
+@@ -377,8 +371,8 @@
+         buttons["workspace-move"].Text=xr.MovingWorkspace ? "Place panel" : "Move panel";
+     }
+     void OverlayChanging() { gui.Cancel();xr.Router.Cancel();scene.ReleaseInput();if(gui.Spatial&&!xr.WorkspaceVisible)xr.ShowWorkspace(); }
+-    void ShowHome(){questions?.Hide();OverlayChanging();home=true;workspaceScroll.ScrollVertical=0;UpdateWorkspace();}
+-    void ShowInspector(){questions?.Hide();OverlayChanging();home=false;workspaceScroll.ScrollVertical=0;UpdateWorkspace();}
++    void ShowHome(){OverlayChanging();home=true;workspaceScroll.ScrollVertical=0;UpdateWorkspace();}
++    void ShowInspector(){OverlayChanging();home=false;workspaceScroll.ScrollVertical=0;UpdateWorkspace();}
+     void SelectSubject(Term exact)
+     {if(accounts?.Human==null||session==null||operations?.IsWorking==true)return;EnsureRepresentations().Open(session,accounts,store!,exact);ShowInspector();}
+     public override void _Process(double delta) { xr.ContextChanged();scene.NavigationBlocked=GuiOpen || xr.Running;controls?.Tick(delta); }
+@@ -457,8 +451,7 @@
+     public override void _UnhandledKeyInput(InputEvent @event)
+     {
+         if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape }) {
+-            if(questions?.Showing==true)questions.Hide();
+-            else if (representations?.Visible == true) { representations.Cancel();ShowHome(); } else action?.Cancel();
++            if (representations?.Visible == true) { representations.Cancel();ShowHome(); } else action?.Cancel();
+             GetViewport().SetInputAsHandled(); Notify();
+         }
+     }
+@@ -483,7 +476,6 @@
+         buttons["setup"].Disabled |= accounts?.Prepared == null || accounts.Uncertain;
+         buttons["resolve"].Disabled |= accounts == null;
+         buttons["open-gui"].Disabled |= accounts?.Setup == null;
+-        buttons["attention"].Disabled |= questions==null;
+         buttons["create-operations"].Disabled |= accounts?.Setup == null;
+         buttons["location-operations"].Disabled |= accounts?.Setup == null || !navigationAvailable || navigation?.Space == null || !worldAccepted;
+         buttons["inspect"].Disabled |= accounts?.Human == null;
+@@ -518,8 +510,8 @@
+                 "disconnect"=>session!=null||busy,"resolve"=>uncertain, _=>name==next};
+         }
+         accountActions.Visible=ready;
+-        buttons["workspace-connection"].Visible=ready&&questions?.Showing!=true;
+-        buttons["client-tools"].Visible=ready&&questions?.Showing!=true;
++        buttons["workspace-connection"].Visible=ready;
++        buttons["client-tools"].Visible=ready;
+         SpatialGui.SetEditable(endpoint,!busy);SpatialGui.SetEditable(ca,!busy);
+     }
+     void Notify() { if(!disposed){UpdateOnboarding();UpdateWorkspace();representations?.RefreshContext();}xr?.ContextChanged();if (!disposed && IsInsideTree()) EmitSignal(SignalName.Changed); }
+--- a/client/godot/QuestionHub.cs
++++ b/client/godot/QuestionHub.cs
+@@ -14,23 +14,14 @@
+     readonly CancellationTokenSource lifetime = new();
+     readonly Dictionary<string, QuestionPanel> panels = [];
+     readonly Dictionary<string, (FormPanel Form, ulong Expires)> provisional = [];
+-    readonly ScrollContainer attention = new() { Name="attention-list",HorizontalScrollMode=ScrollContainer.ScrollMode.Disabled,SizeFlagsVertical=Control.SizeFlags.ExpandFill };
+-    readonly VBoxContainer choices = new() {SizeFlagsHorizontal=Control.SizeFlags.ExpandFill};
+-    readonly Label notice = new() {AutowrapMode=TextServer.AutowrapMode.WordSmart};
+-    readonly Action presentationChanging;
+     string? receiver, selected;
+     bool disposed;
+     Task selecting = Task.CompletedTask, receiving = Task.CompletedTask, retired = Task.CompletedTask;
+     public bool Ready { get; private set; }
+-    public bool Showing => host.Visible;
+-    public string Caption => "Your attention · "+panels.Count;
+     public Task Completion => Task.WhenAll(new[] { hud.Completion ?? Task.CompletedTask, selecting, receiving, retired }.Concat(panels.Values.Select(p => p.Completion)));
+-    public QuestionHub(SignedSession session, Accounts accounts, LocalStore store, VBoxContainer host, Action changed, Action presentationChanging)
++    public QuestionHub(SignedSession session, Accounts accounts, LocalStore store, VBoxContainer host, Action changed)
+     {
+         this.session = session; this.accounts = accounts; this.store = store; this.host = host; this.changed = changed;
+-        this.presentationChanging=presentationChanging;
+-        host.Hide();host.AddChild(attention);attention.AddChild(choices);choices.AddChild(notice);
+-        var later=SpatialGui.ActionButton("Hide attention","hide-attention");choices.AddChild(later);later.Pressed+=Hide;
+         var human = accounts.Human!;
+         hud = new(session, human, human, "gui_hud", SignedSession.ViewGoal(human, Term.Call("gui_pending_questions", Term.Variable("View"))));
+         hud.Projection += projection => {
+@@ -39,32 +30,17 @@
+             foreach (var q in references.Items) {
+                 q.Require("question_ref", 3); string id = q.ToString(); keep.Add(id);
+                 if (!panels.ContainsKey(id)) {
+-                    var panel = new QuestionPanel {Visible=false,SizeFlagsVertical=Control.SizeFlags.ExpandFill};host.AddChild(panel);panels[id]=panel;
+-                    choices.AddChild(panel.Choice);panel.Choice.TooltipText=id;
+-                    panel.Choice.Pressed+=()=>{if(!disposed&&panels.GetValueOrDefault(id)==panel)Present(panel);};
+-                    panel.HiddenByUser+=()=>{ShowAttention();panel.Choice.GrabFocus();};
+-                    panel.Open(session,accounts,q,changed);
++                    var panel = new QuestionPanel(); host.AddChild(panel); panels[id] = panel; panel.Open(session, accounts, q, changed);
+                 }
+             }
+             foreach (var id in panels.Keys.Except(keep).ToArray()) {
+-                var panel = panels[id];bool active=panel.Visible;panel.DisposeView();retired=Task.WhenAll(retired,panel.Completion);
+-                panel.Hide();panel.Choice.QueueFree();panel.QueueFree();panels.Remove(id);
+-                if(active)attention.Show();
++                var panel = panels[id]; panel.DisposeView(); retired = Task.WhenAll(retired, panel.Completion); panel.QueueFree(); panels.Remove(id);
+             }
+-            notice.Text=panels.Count==0 ? "Nothing needs your attention." : "Choose a request. Opening or hiding it sends no answer.";
+             if (selecting.IsCompleted) selecting = SelectReceiver(projection["receiver"]!); changed();
+         };
+-        hud.Withdrawn += _ => { receiver = null; Ready = false;notice.Text="Attention unavailable while authorization is being verified.";foreach (var p in panels.Values) p.Withdraw(); changed(); };
++        hud.Withdrawn += _ => { receiver = null; Ready = false; foreach (var p in panels.Values) p.Withdraw(); changed(); };
+         hud.Message += message => { var handling = Receive(message); receiving = receiving.IsCompleted ? handling : Task.WhenAll(receiving, handling); };
+     }
+-    void Present(QuestionPanel? selectedPanel)
+-    {
+-        if(disposed)return;presentationChanging();host.Show();attention.Visible=selectedPanel==null;
+-        foreach(var panel in panels.Values)panel.Visible=panel==selectedPanel;
+-        changed();
+-    }
+-    public void ShowAttention()=>Present(null);
+-    public void Hide(){if(disposed)return;presentationChanging();host.Hide();changed();}
+     public void Start() => _ = hud.Start();
+     async Task SelectReceiver(JsonNode descriptor)
+     {
+@@ -78,7 +54,7 @@
+             var reply = await session.Execute(accounts.Human, SignedSession.ViewGoal(accounts.Human, goal), "receiver", lifetime.Token);
+             if (!disposed && Json.Committed(reply)) { selected = token; Ready = receiver == token; changed(); }
+         } catch (Exception) when (disposed || lifetime.IsCancellationRequested) { }
+-        catch (Exception error) { notice.Text="Question receiver unavailable: "+error.Message;changed(); }
++        catch (Exception error) { host.AddChild(new Label { Text = "Question receiver unavailable: " + error.Message }); changed(); }
+     }
+     async Task Receive(JsonNode message)
+     {
+@@ -104,9 +80,9 @@
+                     var panel = new FormPanel { Visible = false }; host.AddChild(panel); panel.Present(form); panel.Lock(true);
+                     provisional[token] = (panel, expiry); accepted = true; _ = Expire(token, expiry);
+                 }
+-            } catch (Exception error) { notice.Text="Question presentation refused: "+error.Message;changed(); }
++            } catch (Exception error) { host.AddChild(new Label { Text = "Question presentation refused: " + error.Message }); changed(); }
+             await hud.Send(new() { ["type"] = "gui_prepared", ["token"] = token, ["accepted"] = accepted });
+-        } catch (Exception error) { if (!disposed) { notice.Text=error.Message;changed(); } }
++        } catch (Exception error) { if (!disposed) { host.AddChild(new Label { Text = error.Message }); changed(); } }
+     }
+     async Task Expire(string token, ulong expiry)
+     {
+@@ -118,11 +94,11 @@
+     {
+         if (disposed) return; disposed = true; lifetime.Cancel(); hud.Dispose();
+         foreach (var token in provisional.Keys.ToArray()) Retire(token);
+-        foreach (var panel in panels.Values) { panel.DisposeView(); retired = retired.IsCompleted ? panel.Completion : Task.WhenAll(retired, panel.Completion);panel.Choice.QueueFree();panel.QueueFree(); } panels.Clear();attention.QueueFree();host.Hide();
++        foreach (var panel in panels.Values) { panel.DisposeView(); retired = retired.IsCompleted ? panel.Completion : Task.WhenAll(retired, panel.Completion); panel.QueueFree(); } panels.Clear();
+     }
+ }
+ 
+-public sealed record QuestionDescriptor(Form Form, Term Opened, Term Revision, string Interaction, Term Source, Actor Responsible)
++public sealed record QuestionDescriptor(Form Form, Term Opened, Term Revision, string Interaction)
+ {
+     public static QuestionDescriptor Decode(Term value)
+     {
+@@ -133,18 +109,14 @@
+             throw new FormatException("Invalid question identity.");
+         string interaction = a[3].Kind == "atom" && a[3].Name == "awaiting" ? a[2].ToString() == view[0].ToString() ? "editable" : "stale" : "submitted";
+         if (interaction == "submitted") a[3].Require("submitted", 3);
+-        return new(Form.Decode(view[1], view[3], view[4]), a[2], view[0], interaction,a[0],Actor.FromTerm(a[1]));
++        return new(Form.Decode(view[1], view[3], view[4]), a[2], view[0], interaction);
+     }
+ }
+ 
+ public partial class QuestionPanel : VBoxContainer
+ {
+     readonly Label status = new() { AutowrapMode = TextServer.AutowrapMode.WordSmart };
+-    readonly FormPanel panel = new() {BodyMinimumHeight=0,SizeFlagsVertical=SizeFlags.ExpandFill};
+-    readonly Label source = new() {AutowrapMode=TextServer.AutowrapMode.WordSmart,SizeFlagsHorizontal=SizeFlags.ExpandFill};
+-    readonly Button cancel = SpatialGui.ActionButton("Cancel request","cancel-question");
+-    public Button Choice { get; }=SpatialGui.ActionButton("Request loading…","attention-request");
+-    public event Action? HiddenByUser;
++    readonly FormPanel panel = new();
+     readonly CancellationTokenSource lifetime = new();
+     SignedView? view;
+     QuestionDescriptor? current;
+@@ -160,10 +132,8 @@
+     {
+         this.accounts = accounts; var human = accounts.Human!;
+         var a = reference.Require("question_ref", 3); var target = new Actor(a[0].TextValue, Identity.Encode(a[1].Bytes), human.InstanceText);
+-        var heading=new HFlowContainer();AddChild(heading);heading.AddChild(source);
+-        var hide=SpatialGui.ActionButton("Later","hide-question");heading.AddChild(hide);hide.Pressed+=()=>HiddenByUser?.Invoke();
+-        AddChild(panel);var strip=new PanelContainer {ThemeTypeVariation="StatusPanel"};AddChild(strip);strip.AddChild(status);
+-        var cancellation=new HFlowContainer();AddChild(cancellation);cancellation.AddChild(cancel);
++        AddChild(status); AddChild(panel);
++        var cancel = new Button { Name = "cancel-question", Text = "Cancel this deferred question" }; AddChild(cancel);
+         view = new(session, human, target, "gui_question", SignedSession.ViewGoal(target, Term.Call("gui_question_form", a[2], Term.Variable("View"))));
+         view.Projection += message => {
+             generation++;
+@@ -171,10 +141,7 @@
+             if (current == null || next.Interaction == "submitted" && current.Interaction!="submitted") panel.Present(next.Form);
+             else if(current.Revision.ToString()==next.Revision.ToString())panel.RefreshAppearance(next.Form.Tree);
+             current = next; available = true; panel.Show(); panel.Lock(Locked || next.Interaction != "editable");
+-            source.Text="Requested by "+next.Responsible.InstanceText.TrimEnd('.');source.TooltipText=next.Source+"\n"+next.Responsible;
+-            string state=next.Interaction switch {"editable"=>"Draft","stale"=>"Stale form — your earlier draft is retained","submitted"=>"Submitted — awaiting result",_=>next.Interaction};
+-            status.Text=Locked&&next.Interaction=="editable" ? "Original work unresolved. Check its outcome before answering." : state;
+-            Choice.Text=next.Form.Tree.Label+" · "+state;cancel.Disabled=Locked||next.Interaction=="submitted";changed();
++            status.Text = "Deferred question: " + next.Interaction + "."; changed();
+         };
+         view.Withdrawn += reason => { Withdraw(); status.Text = reason; changed(); };
+         async Task Write(bool answer) {
+@@ -185,18 +152,17 @@
+                 var reply = await session.Execute(human, SignedSession.ViewGoal(target, goal), "question", lifetime.Token);
+                 if (reply["result"]?.ToString() == "fail" || (Json.Terminal(reply) &&
+                     (reply["status"]?.ToString() is "rejected" or "aborted" || reply["aggregate"]?.ToString() == "all_rejected"))) settled = false;
+-                if (!disposed && available && expected == generation) status.Text = Json.Committed(reply)
+-                    ? answer ? "Submitted — awaiting result." : "Cancellation committed." : "Action not confirmed. Check its original outcome.";
++                if (!disposed && available && expected == generation) status.Text = reply.ToJsonString();
+             } catch (Exception error) {
+                 if (error is ApiError { Definite: true }) settled = false;
+                 if (!disposed && available && expected == generation) status.Text = error.Message + " Check any retained original operation.";
+             }
+-            finally { busy = false; if (!disposed) { panel.Lock(Locked || !available || current?.Interaction != "editable");cancel.Disabled=Locked||!available||current?.Interaction=="submitted";changed(); } }
++            finally { busy = false; if (!disposed) { panel.Lock(Locked || !available || current?.Interaction != "editable"); changed(); } }
+         }
+         panel.Invoked += role => { if (!busy && current?.Form.Submit.ToString() == role) working = Write(true); };
+         cancel.Pressed += () => { if (!busy) working = Write(false); }; _ = view.Start();
+     }
+-    public void Withdraw() { generation++; available = false; status.Text = "Question unavailable.";Choice.Text="Request unavailable";source.Text="";source.TooltipText="";cancel.Disabled=true;panel.Hide(); panel.Lock(true); }
++    public void Withdraw() { generation++; available = false; status.Text = "Question unavailable."; panel.Hide(); panel.Lock(true); }
+     public void DisposeView() { if (disposed) return; disposed = true; lifetime.Cancel(); view?.Dispose(); panel.Clear(); }
+     public override void _ExitTree() => DisposeView();
+ }
+--- a/client/godot/FormPanel.cs
++++ b/client/godot/FormPanel.cs
+@@ -6,7 +6,6 @@
+ // remain exact and local; the offered binder and server validate submissions.
+ public partial class FormPanel : VBoxContainer
+ {
+-    public int BodyMinimumHeight { get; init; }=260;
+     public Form Descriptor { get; private set; } = null!;
+     public Dictionary<string, string> Draft { get; private set; } = [];
+     public event Action<string>? Invoked;
+@@ -138,7 +137,7 @@
+                 int footer=field.Children.Length;
+                 while(footer>0 && field.Children[footer-1].Family=="button")footer--;
+                 for(int i=0;i<field.Children.Length;i++)(i>=footer ? (Godot.Container)actions : fields).AddChild(Render(field.Children[i],enabled));
+-                column.AddChild(Wrap(new ScrollContainer { CustomMinimumSize=new(0,BodyMinimumHeight),SizeFlagsHorizontal=SizeFlags.ExpandFill,SizeFlagsVertical=SizeFlags.ExpandFill,HorizontalScrollMode=ScrollContainer.ScrollMode.Disabled,FollowFocus=true },fields));
++                column.AddChild(Wrap(new ScrollContainer { CustomMinimumSize=new(0,260),SizeFlagsHorizontal=SizeFlags.ExpandFill,SizeFlagsVertical=SizeFlags.ExpandFill,HorizontalScrollMode=ScrollContainer.ScrollMode.Disabled,FollowFocus=true },fields));
+                 column.AddChild(actions);content=column;
+             } else if (field.Kind == "tabs") {
+                 var tabs = new TabContainer();

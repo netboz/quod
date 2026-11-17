@@ -1,0 +1,51 @@
+{
+  "reference_distance_metres": 2.0,
+  "actual_case07_texture_pixels": [
+    1850,
+    496
+  ],
+  "representative_font_pixels": 16,
+  "method": "2 atan(size/(2 distance)), radians converted to degrees; nominal font em, not measured glyph cap height",
+  "unchanged": "panel height, initial world placement and ordinary GUI tree",
+  "limit": "The wider panel preserves density and avoids distortion; it does not prove comfortable reach, visible whole-panel coverage or that the reported physical distance issue is resolved. No native projection or pixel-return claim.",
+  "rows": [
+    {
+      "case": "retained-before",
+      "panel_metres": [
+        1.5,
+        1.0
+      ],
+      "metres_per_texture_pixel": [
+        0.0008108108108108108,
+        0.0020161290322580645
+      ],
+      "nominal_16px_em_degrees": [
+        0.3716469964759618,
+        0.9241054428615297
+      ],
+      "whole_panel_degrees": [
+        41.112090439166934,
+        28.072486935852957
+      ]
+    },
+    {
+      "case": "aspect-preserved",
+      "panel_metres": [
+        3.7298387096774195,
+        1.0
+      ],
+      "metres_per_texture_pixel": [
+        0.0020161290322580645,
+        0.0020161290322580645
+      ],
+      "nominal_16px_em_degrees": [
+        0.9241054428615297,
+        0.9241054428615297
+      ],
+      "whole_panel_degrees": [
+        85.99660376555231,
+        28.072486935852957
+      ]
+    }
+  ]
+}

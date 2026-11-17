@@ -1,0 +1,29 @@
+{
+  "source": "/home/yan/.cache/quod-m2-artifacts/private/quod-m2-live-development-01/tmp",
+  "retained_private_archive": "/home/yan/.cache/quod-m2-artifacts/private/quod-m2-live-development-01/retained-end-state02.tar.gz",
+  "archive_sha256": "cf163e44e4a4bc7eb5e5abe333ce3a5413b059f24009ccfa1f18c1fc30e88e2d",
+  "bytes": 1655559,
+  "pause_exit": 0,
+  "archive_command": [
+    "docker",
+    "run",
+    "--rm",
+    "--network",
+    "none",
+    "-v",
+    "/home/yan/.cache/quod-m2-artifacts/private/quod-m2-live-development-01/tmp:/input:ro",
+    "--entrypoint",
+    "tar",
+    "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+    "-C",
+    "/input",
+    "-czf",
+    "-",
+    "."
+  ],
+  "archive_exit": 0,
+  "archive_stderr": "",
+  "unpause_exit": 0,
+  "purpose": "Private end-state preservation before disposable fixture cleanup, no recovery/source qualification claim. No client work active. Private credentials remain outside source snapshots.",
+  "member_count": 139
+}

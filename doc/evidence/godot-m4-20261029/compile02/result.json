@@ -1,0 +1,13 @@
+{
+  "command": [
+    "env",
+    "NUGET_PACKAGES=/home/yan/src/quod_worktrees/pearl-stone/client/_build/godot-clean/nuget",
+    "dotnet",
+    "build",
+    "client/godot/Quod.csproj",
+    "--no-restore"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 5.0158026319986675
+}

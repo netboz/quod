@@ -37,7 +37,7 @@ only_winning_terminal_negative_outcome_releases_custody_test() ->
     after _ = file:del_dir_r(Dir) end.
 
 node_identity_template_provides_protected_methods_test() ->
-    {ok, Policy} = file:read_file(filename:join(code:priv_dir(quod), "ontologies/node_execution.pl")),
+    {ok, Policy} = file:read_file(filename:join(code:priv_dir(quod), "ontologies/node_instance.pl")),
     {ok, PolicyTerms} = erlog_io:read_string_terms(binary_to_list(Policy)),
     ?assert(lists:any(fun is_node_acl/1, PolicyTerms)),
     ?assert(lists:any(fun is_hosting_projection/1, PolicyTerms)),

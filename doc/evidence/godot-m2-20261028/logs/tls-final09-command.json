@@ -1,0 +1,22 @@
+{
+  "command": [
+    "python3",
+    "client/godot-tests/tls.py",
+    "--export",
+    "/home/yan/.cache/quod-m2-artifacts/quod-m2-client-final09/source/client/godot/dist/quod.x86_64",
+    "--evidence",
+    "doc/evidence/godot-m2-20261028/tls-final09",
+    "--private",
+    "/home/yan/.cache/quod-m2-artifacts/private/tls-final09"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-28T09:19:26Z",
+  "elapsed_seconds": 6.090145587921143,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m2-artifacts/private/logs/tls-final09-command.log",
+  "raw_sha256": "fe6530d6abe4c12badcb3d40ea11afa913e1ccd028e57acbf098bf3f20e34f90",
+  "sanitized_sha256": "fe6530d6abe4c12badcb3d40ea11afa913e1ccd028e57acbf098bf3f20e34f90",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

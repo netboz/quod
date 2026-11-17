@@ -25,7 +25,7 @@ result_names_are_canonical_binary_keys_test() ->
        {ok, Blob},
        quod_durable_term:encode_result(#{<<"z">> => 2, <<"a">> => 1})).
 
-stored_result_bytes_and_allowance_are_unchanged_test() ->
+stored_result_bytes_are_unchanged_without_duplicate_quota_test() ->
     %% Captured from the durable codec before sharing the named-binding layer.
     Before = <<131,104,3,97,6,104,2,97,4,108,0,0,0,2,104,2,97,1,109,0,0,0,1,97,
                104,2,97,2,97,1,106,104,3,97,6,104,2,97,4,108,0,0,0,2,104,2,97,1,
@@ -33,10 +33,9 @@ stored_result_bytes_and_allowance_are_unchanged_test() ->
     ?assertEqual({ok, Before}, quod_durable_term:encode_result(#{z => 2, a => 1})),
     ?assertEqual({ok, [{<<"a">>, 1}, {<<"z">>, 2}]},
                  quod_durable_term:decode_result(Before)),
-    Large = #{<<"X">> => binary:copy(<<"x">>, ?QUOD_MAX_DURABLE_RESULT_BYTES)},
-    ?assertEqual({error, {too_large, result}}, quod_durable_term:encode_result(Large)),
-    {ok, Blob} = quod_wire_term:encode_bindings(Large, ?QUOD_MAX_DURABLE_RESULT_BYTES * 2),
-    ?assertEqual({error, {too_large, result}}, quod_durable_term:decode_result(Blob)).
+    Large = #{<<"X">> => binary:copy(<<"x">>, 140 * 1024)},
+    {ok, Blob} = quod_durable_term:encode_result(Large),
+    ?assertEqual({ok, maps:to_list(Large)}, quod_durable_term:decode_result(Blob)).
 
 duplicate_result_names_are_rejected_test() ->
     {ok, Wire} = quod_wire_term:encode(
@@ -70,12 +69,7 @@ malformed_wire_and_nonidentity_roundtrip_are_total_test() ->
     ?assertEqual({error, bad_term},
                  quod_durable_term:decode_goal(Ambiguous)).
 
-size_limits_are_checked_before_decode_test() ->
-    ?assertEqual(
-       {error, {too_large, goal}},
-       quod_durable_term:decode_goal(
-         <<0:(?QUOD_MAX_TOPLEVEL_GOAL_BYTES + 1)/unit:8>>)),
-    ?assertEqual(
-       {error, {too_large, result}},
-       quod_durable_term:decode_result(
-         <<0:(?QUOD_MAX_DURABLE_RESULT_BYTES + 1)/unit:8>>)).
+malformed_large_blobs_still_fail_test() ->
+    Blob = binary:copy(<<0>>, 140 * 1024),
+    ?assertEqual({error, bad_term}, quod_durable_term:decode_goal(Blob)),
+    ?assertEqual({error, bad_term}, quod_durable_term:decode_result(Blob)).

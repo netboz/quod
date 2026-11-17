@@ -1,0 +1,39 @@
+{
+  "command": [
+    "docker",
+    "run",
+    "--rm",
+    "--init",
+    "--user",
+    "1000:1000",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source:/work:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone:/code:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/admission-baseline01:/checks",
+    "-w",
+    "/code",
+    "-e",
+    "ERL_FLAGS=+S 4:4 +SDio 2 +SDcpu 2",
+    "--entrypoint",
+    "/bin/sh",
+    "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+    "-c",
+    "exec erl -noshell -pa /work/_build/test/checkouts/*/ebin /work/_build/test/lib/*/ebin -eval \"$1\"",
+    "sh",
+    "true=code:add_patha(\"/checks\"),{ok,quod_link}=compile:file(\"/code/src/quod_link.erl\",[export_all,{outdir,\"/checks\"},{i,\"/code/include\"},report_errors,report_warnings]),{ok,quod_safe_term}=compile:file(\"/code/src/quod_safe_term.erl\",[export_all,{outdir,\"/checks\"},{i,\"/code/include\"},report_errors,report_warnings]),{ok,quod_wire_term}=compile:file(\"/code/src/quod_wire_term.erl\",[export_all,{outdir,\"/checks\"},{i,\"/code/include\"},report_errors,report_warnings]),{ok,quod_client_goal}=compile:file(\"/code/src/quod_client_goal.erl\",[export_all,{outdir,\"/checks\"},{i,\"/code/include\"},report_errors,report_warnings]),{ok,quod_client_goal_parser}=compile:file(\"/code/src/quod_client_goal_parser.erl\",[export_all,{outdir,\"/checks\"},{i,\"/code/include\"},report_errors,report_warnings]),{ok,quod_durable_term}=compile:file(\"/code/src/quod_durable_term.erl\",[export_all,{outdir,\"/checks\"},{i,\"/code/include\"},report_errors,report_warnings]),{ok,presentation_remaining_limits_tests}=compile:file(\"/code/doc/evidence/stage2-presentation-boundaries-20261103/presentation_remaining_limits_tests.erl\",[export_all,{outdir,\"/checks\"},{i,\"/code/include\"},report_errors,report_warnings]),case eunit:test(presentation_remaining_limits_tests,[verbose]) of ok->halt(0);_->halt(1) end."
+  ],
+  "true_exit": 1,
+  "stdout_eof": true,
+  "stderr_eof": true,
+  "source_inputs": {
+    "src/quod_link.erl": "cd78778a0558b2b4a664f8f189e6e37521bbf53a38cd030917a22b53ff2ff03b",
+    "src/quod_safe_term.erl": "6c453e00133f7b171fa7396d3e893a774b1f7b2d34591a89746fd3cf531a735a",
+    "src/quod_wire_term.erl": "9b08181a111ecdfad0c650c5570f1f1aba30f35e33aa202af3bb8e35279dc14e",
+    "src/quod_client_goal.erl": "8ee0cdeb9bc7f5835c1a248df863b44206527944eca8d04f5bbfde48ed1e3086",
+    "src/quod_client_goal_parser.erl": "4f6319487ee89dc00919c76015745fd6cd10429af5dab063d09d9b45f1d5a4d5",
+    "src/quod_durable_term.erl": "96984214589ec2116d2f0053091aa0c632c2a8e78b97f856c2d8361e134ac7e0",
+    "doc/evidence/stage2-presentation-boundaries-20261103/presentation_remaining_limits_tests.erl": "3c84b8d923f7bfcc24d5410a04887b5f5de0fe53b4d3ce703934f3058d1a9a48"
+  }
+}

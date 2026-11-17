@@ -1,0 +1,26 @@
+{
+  "command": [
+    "env",
+    "-u",
+    "LD_LIBRARY_PATH",
+    "-u",
+    "LD_PRELOAD",
+    "dotnet",
+    "run",
+    "--project",
+    "client/godot-tests/Quod.Client.Tests.csproj",
+    "--no-restore",
+    "--",
+    "/home/yan/src/quod_worktrees/pearl-stone"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-28T05:45:54Z",
+  "elapsed_seconds": 7.136397123336792,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m2-artifacts/private/logs/core-01.log",
+  "raw_sha256": "af99cf3c40876beb35d039ea75b8ab4d336541a2eb49169908d3779e4be6f735",
+  "sanitized_sha256": "af99cf3c40876beb35d039ea75b8ab4d336541a2eb49169908d3779e4be6f735",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

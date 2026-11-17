@@ -1,0 +1,10 @@
+quod.quod-cloud[0] f5f72d6f committee_size 8 is_validator 0 slot 60 syncing 0 
+quod.quod-cloud[1] d70ed473 committee_size 8 is_validator 0 slot 60 syncing 0 
+quod.quod-node[0] e2499677 committee_size 8 is_validator 1 slot 60 syncing 0 
+quod.quod-node[1] 35f4b418 committee_size 8 is_validator 1 slot 60 syncing 0 
+quod.quod-node[2] c725f09d committee_size 8 is_validator 1 slot 60 syncing 0 
+quod.quod-node[3] 26e07706 committee_size 8 is_validator 1 slot 60 syncing 0 
+quod.quod-node[4] b6c85e58 committee_size 8 is_validator 1 slot 60 syncing 0 
+quod.quod-node[5] 7d53b60b committee_size 8 is_validator 1 slot 60 syncing 0 
+quod.quod-node[6] f9ca2e07 committee_size 8 is_validator 1 slot 60 syncing 0 
+quod.quod-node[7] e5ecc9d1 committee_size 8 is_validator 1 slot 60 syncing 0 

@@ -1,0 +1,51 @@
+{
+  "revision": 3,
+  "applied": false,
+  "compiled_or_executed": false,
+  "files": [
+    {
+      "path": "test/quod_client_goal_endpoint_tests.erl",
+      "before_sha256": "7761ddbd944786a7f53a74031938ec42f16da40f9a154cbcc9f09e0f0e774d65",
+      "proposed_sha256": "c448f808e80055c3889cee8daced8c46b104fc3638fc1a3bf3f6a8b9646566fe",
+      "added": 13,
+      "removed": 9
+    },
+    {
+      "path": "test/quod_client_result_tests.erl",
+      "before_sha256": "faf935372486a762fa0e319c37993b9432bd3ed3c38108bea6fd570066e78228",
+      "proposed_sha256": "d415cb58d26f9d47d03514aad73dc48a57d5b78a37c3cb56d9a13f810348f654",
+      "added": 20,
+      "removed": 45
+    },
+    {
+      "path": "test/quod_client_goal_router_tests.erl",
+      "before_sha256": "b552a1ebcab9103cc3e3ac1a95da430dcf2096e8ed495663915cf6e9ff58450b",
+      "proposed_sha256": "a67013593046e67b404160ce56a2b61159edd07eb2bb60ea86d290ec2da748ba",
+      "added": 65,
+      "removed": 0
+    },
+    {
+      "path": "test/quod_terrain_wire_tests.erl",
+      "before_sha256": "220c2e4c34a5eb71bc894aed4024fce1323823d4422f0b5704c25ab4dbc9e7dc",
+      "proposed_sha256": "c2bf44ea87f3c2c9cf8b53567500f4abbecd777591bd783b0a11565fda654140",
+      "added": 8,
+      "removed": 23
+    },
+    {
+      "path": "test/quod_physics_tests.erl",
+      "before_sha256": "2d1edb8aef277e4a2d2b233ad73f6e310e504ea9355a833f81b7f93c4ab4d282",
+      "proposed_sha256": "c2b2ce308976f8df46f9e596cf6cd27f5d63b42273f00117600a8c72058f88e1",
+      "added": 16,
+      "removed": 22
+    },
+    {
+      "path": "client/test/terrain-delivery.test.js",
+      "before_sha256": "b5dfeb9ec58dcd09df69433813e266c6d30fb6840d661b3c41836b4ebbe14f49",
+      "proposed_sha256": "4c924c09745e134fd0eab6d5caeacef1ece085c644fee4f20389c7dd59f1d6bf",
+      "added": 9,
+      "removed": 13
+    }
+  ],
+  "added": 131,
+  "removed": 112
+}

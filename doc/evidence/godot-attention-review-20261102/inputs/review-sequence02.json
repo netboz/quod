@@ -1,0 +1,7 @@
+[
+  {"label":"attention-review-identity-final08","build":"attention-review-candidate08","phase":"attention-review-identity"},
+  {"label":"attention-review-current08","build":"attention-review-candidate08","phase":"attention-full"},
+  {"label":"attention-review-composition08","build":"attention-review-candidate08","phase":"attention-composition"},
+  {"label":"attention-review-outcome08","build":"attention-review-candidate08","phase":"attention-state"},
+  {"label":"attention-review-stale08","build":"attention-review-candidate08","phase":"attention-stale"}
+]

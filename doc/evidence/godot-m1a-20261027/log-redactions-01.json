@@ -1,0 +1,60 @@
+{
+  "private_originals": "/tmp/quod-m1a-private-logs-922c7c06-20261027-01",
+  "rule": "All numeric Erlang binaries of exactly 32 or 64 bytes, including public identifiers, are removed to exclude random disposable secret seeds from exported source/evidence.",
+  "files": [
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/focused-foundations-03.log",
+      "raw_sha256": "fa55cb76cf3ad70b257e26a05287c6596d17668ac7eefa727b917f4d392b5c31",
+      "redacted_sha256": "188bbdf5bd656cd90c09953cbe55dbc83d261d6443de5f09b36e60dbf9c38ffd",
+      "replacements": 9
+    },
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/focused-foundations-04.log",
+      "raw_sha256": "ddb81426d6d18151dec5fef65f6ced92f8559a4718409dfecc030b53942a65a2",
+      "redacted_sha256": "a4520fc8d93fde2ca47ab83cf31adfb43319fd2e999f28b19453139245e01110",
+      "replacements": 9
+    },
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/focused-foundations-05.log",
+      "raw_sha256": "713f30cde5629390d8b2bae714f147374e5e807d6a3c18c2a2ae2d8b3cbfa419",
+      "redacted_sha256": "180abdda6ba1ecfad8c00baaf690a534b9fa3717cacac54405c20c6bb8209310",
+      "replacements": 9
+    },
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/focused-foundations-08.log",
+      "raw_sha256": "53bcd8267f12ce134d1bbb5dc1da3c3bfacdefed5df6b1ed318e261708079c80",
+      "redacted_sha256": "1f6be333c2502d59de028af0790beaa78350f434e57e9e432690f15ec8ecf2be",
+      "replacements": 11
+    },
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/focused-foundations-11.log",
+      "raw_sha256": "f865371af4597b38e86664fcae847179c71bfdb6fb2a3bfbebf66b6c8e21999c",
+      "redacted_sha256": "8c4a977164eb993f2b94331230f143868695aec60e83d74d52f5fe7892e472f2",
+      "replacements": 64
+    },
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/focused-foundations-16.log",
+      "raw_sha256": "980e5e1416d88848c3ffbb4a48071c5b0f2d63ba8e785b927da46a596402b771",
+      "redacted_sha256": "1b90b8354c6876fa1d536a65d6f43a1ec3a887d594b71d76adc35cab49522356",
+      "replacements": 2
+    },
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/focused-foundations-17.log",
+      "raw_sha256": "75f7e7f8d04ff03a9a79528cdddedd894dabbe4c33c69ea4c1bb35a6025eaf5e",
+      "redacted_sha256": "574011fd74b9b224bb156b57f3e550939fc1948be36c4ce05d50225c88dfc3cb",
+      "replacements": 2
+    },
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/focused-foundations-19.log",
+      "raw_sha256": "aa42b0d5ddc80e32b5c394e8b4973480e0c4854f333d723265265db37353aac7",
+      "redacted_sha256": "8df142b28679741053109810cdc1df692fd34d5893f3f5a9b3d29b205263b288",
+      "replacements": 64
+    },
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/initial-occupants-02.log",
+      "raw_sha256": "a0cf338d28e805acb6add8b586f989c5f32865607a83a8d2b9a33591c804bfbd",
+      "redacted_sha256": "a2cd40c01d4ccb3d7b84b0820db6f89e56cd3851584080cde09deb16a8ccb414",
+      "replacements": 10
+    }
+  ]
+}

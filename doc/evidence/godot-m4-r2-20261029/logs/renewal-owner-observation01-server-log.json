@@ -1,0 +1,16 @@
+{
+  "command": [
+    "cat",
+    "/home/yan/.cache/quod-m4-r2-artifacts/private/quod-m4-live-renewal-owner-observation01-server/server-raw.log"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T11:53:20Z",
+  "elapsed_seconds": 0.002275228500366211,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m4-r2-artifacts/private/logs/renewal-owner-observation01-server-log.log",
+  "raw_sha256": "074dc14dcd49b9ca98e07d746297ab73a72f0ce33585d4da07ccd159bcd91c4a",
+  "sanitized_sha256": "074dc14dcd49b9ca98e07d746297ab73a72f0ce33585d4da07ccd159bcd91c4a",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

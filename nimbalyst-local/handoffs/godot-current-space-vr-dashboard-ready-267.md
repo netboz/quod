@@ -1,0 +1,17 @@
+# Quod after confirmed SteamVR dashboard — 267
+
+/planning-implement QUO-65
+
+SAME sole Astra writer `ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f`, coordinator `ed9cd520-b2a4-4607-a8f5-ff99d08f3e46`, pearl-stone. Read AGENTS and this scope; inherit266's unchanged preservation, current98-product/14-server, runtime-selection and original bounds. No model/session/review change or routine approval wait.
+
+NEW actual human evidence after the user-owned SteamVR restart: desktop1793555820999 answered **“Dashboard and controllers visible”** to the explicit question about wearing the headset and pressing the SteamVR system button. Receipt: `_build/godot-m4-r2-coordinator-20261029/vr-dashboard-after-restart-answer-266.json`. Latest actual chat: **“yes, works”**. Root has now told Yan to keep the headset on and close the SteamVR dashboard with its system button while Quod is opened. This is a NEW physical presentation state; earlier green-icon/grey-screen conditions are superseded, not relabelled as passes.
+
+Explicitly authorized: ONE fresh267 opportunity under the unfulfilled user VR-test request. Reuse already-built unchanged98-production/99-supplied readiness companion and corrected264 supervision/accepted15 regression. No rebuild, regression repeat, package/export/API/archive/history audit or code change. Fresh267 profile/fixture/labels, ordinary minimum preparation plus one Library Create only; never touch263 pending work or any old profile/journal. All263–266 client/fixture targets are closed/forbidden, including266 PTYs51479/44777. Preserve all failures literally. No automated Enter/Leave/Preview/Save or human-credit claim.
+
+Keep existing SteamVR only for this process, user-owned runtime/defaults untouched. No restart, dashboard/focus automation, forced acceptance or display/provider changes. Original admission30/preparation180/participant1800/normal-close60/outer2100/authentic earlier expiry unchanged; both wrappers tty:true. Signed Updating remains production-locked and observable without premature close/deadline reset. Actual user stop overrides everything.
+
+Report READY immediately ONLY after fresh rendered stereo frames, XR Focused/CanRender, valid head and both supported neutral tracked controllers, signed binding/world/operation admission and settled resources. Give exact NEW owned identities/PTYS and remaining lifetime. Keep the opportunity live and supervised after READY; root is sole human contact. No audit/seal/notifier or end-of-turn while usable. First task is inspect Library without entering, existing menu/Recenter only. Dashboard visibility is human evidence about SteamVR, not proof Quod is rendering.
+
+If this attempt fails despite the newly confirmed physical state, close only its owned client then fixture and report the exact native blocker. No further launch, global troubleshooting or speculative product change; current runtime/application handoff then needs diagnosis instead of another identical attempt. Keep actual exits/EOF and small current receipts. No broader ticket/deploy/cleanup/commit work.
+
+Root material integration: `_build/godot-m4-r2-coordinator-20261029/vr-visible-dashboard-integration-267-private/full-batch.json`, SHA b30fe06b30a1f8a1ffba8c7d826fd6318249e75bf89d19202457dd164bcf0233, ROOT1 actual yes-works/worker0 full bodies read once, writer actualIDLE/Astra/no question/error. List-only is not consumption. Direct radar still no matching item, not an acceptance/team claim; no new tracker item or blocked body retry.

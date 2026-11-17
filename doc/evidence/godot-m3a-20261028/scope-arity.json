@@ -1,0 +1,368 @@
+{
+  "calls": [
+    {
+      "path": "priv/ontologies/lobby_instance.pl",
+      "line": 113,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/lobby_instance.pl",
+      "line": 143,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/lobby_instance.pl",
+      "line": 147,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/lobby_instance.pl",
+      "line": 163,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/common_predicates.pl",
+      "line": 8,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "line": 34,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "line": 43,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "line": 51,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "line": 68,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "line": 95,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "line": 145,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "line": 167,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "line": 198,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "line": 211,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "line": 229,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "line": 238,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "line": 301,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "line": 308,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "line": 416,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "line": 418,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "line": 429,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "line": 466,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "line": 501,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "line": 506,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "line": 514,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "line": 534,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "line": 550,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "line": 574,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "line": 581,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/gui_instance.pl",
+      "line": 56,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/gui_instance.pl",
+      "line": 153,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/gui_instance.pl",
+      "line": 187,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/gui_instance.pl",
+      "line": 243,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/gui_instance.pl",
+      "line": 251,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/gui_instance.pl",
+      "line": 273,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/gui_instance.pl",
+      "line": 276,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/gui_instance.pl",
+      "line": 281,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/gui_instance.pl",
+      "line": 282,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/gui_instance.pl",
+      "line": 352,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/gui_instance.pl",
+      "line": 483,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/gui_instance.pl",
+      "line": 495,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/gui_instance.pl",
+      "line": 516,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/gui_instance.pl",
+      "line": 527,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/gui_instance.pl",
+      "line": 547,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/gui_instance.pl",
+      "line": 659,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/gui_instance.pl",
+      "line": 663,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/gui_instance.pl",
+      "line": 671,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/voxel_world_view.pl",
+      "line": 42,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "line": 63,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "line": 123,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "line": 132,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "line": 141,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "line": 146,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "line": 168,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "line": 207,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "line": 226,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "line": 229,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "line": 236,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "line": 244,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "line": 262,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "line": 282,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "line": 293,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "line": 306,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "line": 368,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "line": 376,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "line": 400,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "line": 408,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/lobby_worlds.pl",
+      "line": 15,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/lobby_worlds.pl",
+      "line": 114,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/lobby_worlds.pl",
+      "line": 136,
+      "arity": 3
+    },
+    {
+      "path": "priv/ontologies/lobby_worlds.pl",
+      "line": 150,
+      "arity": 3
+    }
+  ],
+  "source_hashes": {
+    "priv/ontologies/lobby_instance.pl": "57be0ddfc8d134da10e374bc493d8e4e6940c4f740ab3e4dc86861fe6a724a0a",
+    "priv/ontologies/common_predicates.pl": "b409ce793c82094ec707e340f17d31541440c5a23e55a83007f008c45388b3c2",
+    "priv/ontologies/quod_space.pl": "32aa9e8ca655a4690e81a95de2453f771b1e433a8adadbcc793483b2ca30965b",
+    "priv/ontologies/gui_instance.pl": "2d7c1fc0afc8f5d815605919520b2c46ea909f200653801f3d00fbd6173ccfe5",
+    "priv/ontologies/voxel_world_view.pl": "9b8a5505d68bf1399aced9b867acf88a39be2fefa3366a3a757a5e758c31cf8e",
+    "priv/ontologies/quod_physics.pl": "0d3ff40b24b4b02460f76329662a4a19f93ac64232145293bafc1966b1503d70",
+    "priv/ontologies/lobby_worlds.pl": "9b8388b039bee05bc8a8464dfc6a729c2c8dfd9447cb9cf913c87374a628f66b"
+  }
+}

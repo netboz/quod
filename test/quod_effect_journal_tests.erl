@@ -1021,7 +1021,7 @@ flip_hash(<<First, Rest/binary>>) ->
     <<(First bxor 1), Rest/binary>>.
 
 install_genesis_anchor(Ns, Anchor) ->
-    Name = binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
+    Name = binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
     Table = ets:new(Name, [named_table, public, set]),
     true = ets:insert(Table, {anchor, Anchor}),
     Table.
@@ -1095,7 +1095,7 @@ fixture(State) ->
 group_fixture(Pub, Seed, RootAnchor) ->
     Ns = <<"effect:group-test">>,
     Options = [{source_file, list_to_binary(filename:join([code:priv_dir(quod), "ontologies", File]))}
-               || File <- ["agent_instance.pl", "space.pl", "quod_physics.pl"]],
+               || File <- ["agent_instance.pl", "quod_physics.pl", "quod_hinged.pl"]],
     Action = {create_ontology, Ns, Options},
     Desired = {ontology_hosted, Ns},
     {ok, Structural} = quod_ontology:validate_action(Action),

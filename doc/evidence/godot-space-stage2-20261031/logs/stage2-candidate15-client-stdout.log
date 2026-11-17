@@ -1,0 +1,110 @@
+PASS enabled action create-key
+PASS enabled action connect
+PASS Stage2 fresh signed fixture network
+PASS enabled action register
+PASS enabled action prepare
+PASS enabled action setup
+PASS actual same selected space authors contents and operation recipes
+PASS native target is reachable in the actual shared viewport
+PASS one software native-Control gesture retires capture
+PASS same exact selected subject exposes its authored representation chooser
+PASS chooser offers only the actual exact-subject authored choices
+PASS the actual selected recipe read uses its admitted modelling owner
+PASS requested representation is actually authored
+PASS native target is reachable in the actual shared viewport
+PASS one software native-Control gesture retires capture
+PASS actual representation/catalogue popup opens within the shared surface
+PASS one software native-Control gesture retires capture
+PASS real popup item changes exactly once through the shared native GUI route
+PASS selected authored wireframe edge retains exact depicted identity through the existing scene picker
+PASS unchanged chosen exterior renewals retain the same scene resources
+PASS requested representation is actually authored
+PASS native target is reachable in the actual shared viewport
+PASS one software native-Control gesture retires capture
+PASS actual representation/catalogue popup opens within the shared surface
+PASS one software native-Control gesture retires capture
+PASS real popup item changes exactly once through the shared native GUI route
+PASS contents chooses the same exact subject without creating a containing assignment
+PASS requested representation is actually authored
+PASS native target is reachable in the actual shared viewport
+PASS one software native-Control gesture retires capture
+PASS actual representation/catalogue popup opens within the shared surface
+PASS one software native-Control gesture retires capture
+PASS real popup item changes exactly once through the shared native GUI route
+PASS representation changes preserve the existing operation draft and native controls
+PASS presentation alone produces no location edit, instruction or pending operation
+PASS requested representation is actually authored
+PASS native target is reachable in the actual shared viewport
+PASS one software native-Control gesture retires capture
+PASS actual representation/catalogue popup opens within the shared surface
+PASS one software native-Control gesture retires capture
+PASS real popup item changes exactly once through the shared native GUI route
+PASS actual owner-authorized source representation provides an editable native control
+PASS unchanged source authorization retains snapshot/control/draft with zero local writes
+PASS native target is reachable in the actual shared viewport
+PASS one software native-Control gesture retires capture
+PASS local dirty draft persists with its original exact predicate baseline
+PASS requested representation is actually authored
+PASS native target is reachable in the actual shared viewport
+PASS one software native-Control gesture retires capture
+PASS actual representation/catalogue popup opens within the shared surface
+PASS one software native-Control gesture retires capture
+PASS real popup item changes exactly once through the shared native GUI route
+PASS an actual held response continued after replacement cannot install an old preview or clear its draft
+PASS requested representation is actually authored
+PASS native target is reachable in the actual shared viewport
+PASS one software native-Control gesture retires capture
+PASS actual representation/catalogue popup opens within the shared surface
+PASS one software native-Control gesture retires capture
+PASS real popup item changes exactly once through the shared native GUI route
+PASS native target is reachable in the actual shared viewport
+PASS one software native-Control gesture retires capture
+PASS preview uses the existing proof owner and leaves source unchanged before Accept
+PASS locally expired Accept is provably unsent and leaves no pending work or commit
+PASS cancellation after durable journaling but before send removes only the provably unsent original
+PASS native target is reachable in the actual shared viewport
+PASS one software native-Control gesture retires capture
+PASS cancelled proof does not commit or discard the original local draft
+PASS native target is reachable in the actual shared viewport
+PASS one software native-Control gesture retires capture
+PASS native target is reachable in the actual shared viewport
+PASS one software native-Control gesture retires capture
+PASS explicit Accept commits the guarded edit through the actual same ontology owner
+PASS native target is reachable in the actual shared viewport
+PASS one software native-Control gesture retires capture
+PASS an independent current-owner edit creates a real stale-baseline race
+PASS native target is reachable in the actual shared viewport
+PASS one software native-Control gesture retires capture
+PASS stale baseline refuses replacement while preserving the local draft without replay
+PASS native target is reachable in the actual shared viewport
+PASS one software native-Control gesture retires capture
+PASS explicit discard/reload adopts the current committed source
+PASS a real update changes committed clean source
+PASS native target is reachable in the actual shared viewport
+PASS one software native-Control gesture retires capture
+PASS explicit reload replaces a clean baseline with current committed source
+PASS requested representation is actually authored
+PASS native target is reachable in the actual shared viewport
+PASS one software native-Control gesture retires capture
+PASS actual representation/catalogue popup opens within the shared surface
+PASS one software native-Control gesture retires capture
+PASS real popup item changes exactly once through the shared native GUI route
+PASS native target is reachable in the actual shared viewport
+PASS one software native-Control gesture retires capture
+PASS actual representation/catalogue popup opens within the shared surface
+PASS one software native-Control gesture retires capture
+PASS real popup item changes exactly once through the shared native GUI route
+PASS native target is reachable in the actual shared viewport
+PASS one software native-Control gesture retires capture
+PASS native target is reachable in the actual shared viewport
+PASS one software native-Control gesture retires capture
+PASS a real committed edit with unresolved local acknowledgement retains the exact signed outcome and submitted draft
+PASS reopened original work retains exact submitted draft identity
+PASS requested representation is actually authored
+PASS native target is reachable in the actual shared viewport
+PASS one software native-Control gesture retires capture
+PASS actual representation/catalogue popup opens within the shared surface
+PASS one software native-Control gesture retires capture
+PASS real popup item changes exactly once through the shared native GUI route
+PASS pending reopen explicitly withholds new edits and offers original outcome recovery
+{"passed": false, "children": {"server": 0, "client": 1}, "eof": {"server-stdout": true, "server-stderr": true, "client-stdout": true, "client-stderr": true}, "failure": null, "checks": 0}

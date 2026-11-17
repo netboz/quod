@@ -1,0 +1,8 @@
+===> Verifying dependencies...
+===> Fetching rebar3_hex v7.4.0
+===> Errors loading plugin rebar3_hex. Run rebar3 with DEBUG=1 set to see errors.
+===> Upgrading typerefl (from {git,"https://github.com/ieQu1/typerefl.git",
+                    {ref,"7b169a4b920c6d652e2ac165f6e669245cc9a3ac"}})
+===> Failed to fetch and copy dep: {git,"https://github.com/ieQu1/typerefl.git",
+                                  {ref,
+                                      "7b169a4b920c6d652e2ac165f6e669245cc9a3ac"}}

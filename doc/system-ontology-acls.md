@@ -9,7 +9,8 @@ per-predicate source whitelist.
 
 Root's `system_source_access/2` classifies an exact namespace and genesis anchor.
 Ordinary authenticated principals can read catalogued public system ontologies,
-including `quod:node` and `quod:modelling`. Root and signup state remain restricted
+including `quod:node`, `quod:gui`, `quod:controllers` and `quod:space`.
+Root and the receipt-holding `quod:user` foundation remain restricted
 to root administrators. A personal ontology continues to admit reads and writes
 through its own `can_invoke/4` ownership policy.
 
@@ -22,7 +23,10 @@ content is returned. Root itself is pinned to its bootstrap identity by node
 configuration.
 
 The source tool selects the system wrapper when root grants system access;
-otherwise the target's ordinary admission governs `prolog_introspection/2`.
+otherwise a foreign target's ordinary admission governs `prolog_introspection/2`.
+The GUI owner's self-inspection requires Root's source grant. A local ask reuses
+its already admitted scope, so it cannot supply a second target admission or
+serve as a raw-source fallback after that grant is denied or unavailable.
 These operations only enumerate or format stored source. Parsing or compiling
 an edit remains read-only. Its separately signed goal must pass the target's
 edit gate, compare its exact baseline, stage the ordinary transaction and pass
@@ -32,7 +36,7 @@ mutation, private API invocation or personal-ontology access.
 ## Current state and lenses
 
 The default `prolog_source(Target, Chunk)` uses the `ontology_source` lens in
-`quod:lens`. Its textual encoding returns all stored interpreted facts and rules
+`quod:gui`. Its textual encoding returns all stored interpreted facts and rules
 from one proof's existing owner snapshot. Shared Quod rules, policy, dollar-named
 helpers and the stored `isa/2` semantics are included. Compiled engine procedures
 and generated following clauses are not stored interpreted knowledge and are
@@ -86,8 +90,33 @@ Physical VR keyboard and comfort acceptance remains separate from desktop checks
 Each executing owner derives `instance_of(ontology, ontology_ref(Ns, Anchor))`
 from its existing proof-bound identity. The instance uses ordinary
 `entity_eidolons/2` selection. Catalogue entries and anchored marks carry that
-same term; a mark id remains an occurrence. Ontology membership is independent
-of space membership, spatial placement, ownership and physics policy.
+same term; a mark id remains an occurrence. Ontology reflection supplies space display membership; placement, ownership,
+entry and physics retain their separately governed operations and policy.
+
+A predicate is an ordinary `instance_of(predicate, predicate(Name/Arity))`
+derived from the existing authorized catalogue, including interpreted empty
+definitions. Its external identity is the ordinary
+`entity_ref(Namespace,GenesisAnchor,predicate(Name/Arity))`. The class owns its
+source and visual Eidolons. Ontology display membership derives these references
+through `space_member/2`; the shared space projection composes their occurrences.
+It stores no duplicate predicate registry or containing-space assignment.
+
+Source workspace descriptors carry `prolog_editor(Selection)` as controller data,
+where `Selection` is `all` or one predicate indicator. Any ordinary entity's
+recipe can supply this binding; clients do not dispatch on its domain class.
+The fixed selection remains bound across edits/reorders and cannot silently
+fall back to complete source after denial or absence. The existing guarded
+compiler preserves semantic clause order. Individually selectable clauses and
+identity across deletion/recreation remain outside this contract. Signed
+abolish currently lowers to retractions and can retain an empty definition;
+source text becoming empty alone does not remove a predicate instance.
+
+A class-local recipe may delegate source work to a different exact tool ontology.
+The signed representation authorizes the recipe and binds the target and subject;
+the descriptor names the exact tools namespace and genesis for subsequent signed
+reads and edit preparation. Recipe-owner equality is not an authority check.
+The target's source policy still governs those delegated reads and withdraws the
+workspace when revoked.
 
 The source recipe checks authorized target introspection before returning its
 workspace. Non-system presentation modes are advisory projections of existing
@@ -141,11 +170,11 @@ and compile the following replacements through the existing source compiler:
 - Root: replace `root_public_goal/1` and `system_source_access/2`; remove obsolete
   `system_prolog_predicates/2` and `system_prolog_source/3` relays. Preserve other
   catalogue, administrator and target-specific policy clauses.
-- `quod:prolog`: replace source dispatch/query declarations; install
+- `quod:gui`: replace source dispatch/query declarations; install
   `prolog_inspect/3` and both source lens delegates; remove superseded dispatch.
-- `quod:lens`: add the two source lenses, textual encoding, source rows and
+- `quod:gui`: add the two source lenses, textual encoding, source rows and
   chunk-size policy while preserving existing graphical lenses and order.
-- `quod:prolog:eidolons` and `quod:gui`: replace source-view selection and labels.
+- `quod:gui`: replace source-view selection and labels.
 - Catalogued system targets: remove `public_prolog_predicate/1` declarations.
   Retain their execution APIs and exact source-wrapper admission. Install that
   narrow gate only where the retained target lacks it, using its pre-existing

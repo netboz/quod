@@ -1,0 +1,470 @@
+===> Verifying dependencies...
+===> Fetching rebar3_hex v7.4.0
+===> Errors loading plugin rebar3_hex. Run rebar3 with DEBUG=1 set to see errors.
+===> Analyzing applications...
+===> Compiling accept
+===> Compiling ctx
+===> Compiling quic
+===> Compiling quantile_estimator
+    \x{250C}\x{2500} _build/default/lib/quantile_estimator/src/quantile.erl:
+    \x{2502}
+ 17 \x{2502}  quantile(0.0, [First|_]) ->
+    \x{2502}           \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    \x{250C}\x{2500} _build/default/lib/quantile_estimator/src/quantile.erl:
+    \x{2502}
+ 54 \x{2502}  			[ceil(Size * Quantile)]
+    \x{2502}  			 \x{2570}\x{2500}\x{2500} Warning: ambiguous call of overridden auto-imported BIF ceil/1 --
+use erlang:ceil/1 or "-compile({no_auto_import,[ceil/1]})." to resolve name clash
+
+
+    \x{250C}\x{2500} _build/default/lib/quantile_estimator/src/quantile_estimator.erl:
+    \x{2502}
+ 97 \x{2502}  				false -> #group{v = V, g = 1, delta = clamp(floor(Invariant(Ranki, N)) - 1), rank = RankLast +1}
+    \x{2502}  				                                            \x{2570}\x{2500}\x{2500} Warning: ambiguous call of overridden auto-imported BIF floor/1 --
+use erlang:floor/1 or "-compile({no_auto_import,[floor/1]})." to resolve name clash
+
+
+===> Compiling prometheus
+===> Compiling prometheus_httpd
+===> Compiling ssl_verify_fun
+===> Compiling tls_certificate_check
+===> Compiling opentelemetry_api
+===> Compiling opentelemetry
+===> Compiling gproc
+===> Compiling hpack
+===> Compiling chatterbox
+===> Compiling acceptor_pool
+===> Compiling grpcbox
+===> Compiling opentelemetry_exporter
+===> Compiling erlang_qq
+===> Compiling typerefl
+===> Compiling getopt
+===> Compiling hocon
+===> Compiling erlog
+     \x{250C}\x{2500} _checkouts/erlog/src/erlog_io.erl:
+     \x{2502}
+ 229 \x{2502}  write_term1({'$VAR',N}, _, #ops{numbervars=true}=Ops)
+     \x{2502}                                                   \x{2570}\x{2500}\x{2500} Warning: variable 'Ops' is unused
+
+
+    \x{250C}\x{2500} _checkouts/erlog/src/erlog_ets.erl:
+    \x{2502}
+ 23 \x{2502}  -compile(export_all).
+    \x{2502}   \x{2570}\x{2500}\x{2500} Warning: export_all flag enabled - all functions will be exported
+
+
+===> Compiling ranch
+===> Compiling cowlib
+===> Compiling cowboy
+===> Getting log of git repo failed in /work/_checkouts/typerefl. Falling back to version 0.0.0
+===> Getting log of git repo failed in /work/_checkouts/hocon. Falling back to version 0.0.0
+   Compiling autocfg v1.5.1
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.26
+   Compiling libm v0.2.16
+   Compiling bytemuck v1.25.2
+   Compiling rawpointer v0.2.1
+   Compiling byteorder v1.5.0
+   Compiling heapless v0.8.0
+   Compiling safe_arch v1.2.0
+   Compiling hash32 v0.3.1
+   Compiling typenum v1.20.1
+   Compiling thiserror v2.0.21
+   Compiling stable_deref_trait v1.2.1
+   Compiling num-traits v0.2.19
+   Compiling matrixmultiply v0.3.11
+   Compiling smallvec v1.16.2
+   Compiling foldhash v0.2.0
+   Compiling wide v1.7.1
+   Compiling log v0.4.34
+   Compiling regex-lite v0.1.9
+   Compiling ena v0.14.4
+   Compiling syn v2.0.119
+   Compiling syn v3.0.6
+   Compiling hashbrown v0.17.1
+   Compiling arrayvec v0.7.8
+   Compiling rustler v0.36.2
+   Compiling heck v0.5.0
+   Compiling cfg-if v1.0.5
+   Compiling either v1.18.0
+   Compiling downcast-rs v2.0.2
+   Compiling bitflags v2.13.2
+   Compiling approx v0.5.1
+   Compiling num-integer v0.1.47
+   Compiling num-complex v0.4.6
+   Compiling glam v0.33.12
+   Compiling num-rational v0.4.2
+   Compiling ordered-float v5.5.0
+   Compiling rstar v0.13.0
+   Compiling slab v0.4.12
+   Compiling inventory v0.3.24
+   Compiling libloading v0.8.9
+   Compiling static_assertions v1.1.0
+   Compiling robust v1.2.0
+   Compiling thiserror-impl v2.0.21
+   Compiling num-derive v0.5.1
+   Compiling nalgebra-macros v0.3.0
+   Compiling profiling-procmacros v1.0.18
+   Compiling rustler_codegen v0.36.2
+   Compiling profiling v1.0.18
+   Compiling simba v0.10.2
+   Compiling nalgebra v0.35.0
+   Compiling glamx v0.3.1
+   Compiling parry3d-f64 v0.31.1 (/work/native/quod_physics/vendor/parry3d-f64)
+   Compiling rapier3d-f64 v0.36.0
+   Compiling quod_physics v0.1.0 (/work/native/quod_physics)
+    Finished `release` profile [optimized] target(s) in 46.15s
+===> Analyzing applications...
+===> Compiling quod
+      \x{250C}\x{2500} src/quod_physics.erl:
+      \x{2502}
+ 1193 \x{2502}      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      \x{2502}                                                               \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} src/quod_physics.erl:
+      \x{2502}
+ 1193 \x{2502}      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      \x{2502}                                                                   \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} src/quod_physics.erl:
+      \x{2502}
+ 1193 \x{2502}      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      \x{2502}                                                                       \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+     \x{250C}\x{2500} src/quod_wire_term.erl:
+     \x{2502}
+ 423 \x{2502}  collect_goal_symbols({'$quod_symbol', Name}, Acc, Owner) when is_binary(Name) ->
+     \x{2502}                                                    \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+
+     \x{250C}\x{2500} src/quod_wire_term.erl:
+     \x{2502}
+ 425 \x{2502}  collect_goal_symbols(Tuple, _Acc, Owner)
+     \x{2502}                                    \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+
+     \x{250C}\x{2500} src/quod_wire_term.erl:
+     \x{2502}
+ 454 \x{2502}  collect_goal_symbols(_Goal, Acc, Owner) ->
+     \x{2502}                                   \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+
+     \x{250C}\x{2500} src/quod_wire_term.erl:
+     \x{2502}
+ 487 \x{2502}  collect_opaque_goal_positions(_Name, _Tuple, Acc, Owner) ->
+     \x{2502}                                                    \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+
+     \x{250C}\x{2500} src/quod_wire_term.erl:
+     \x{2502}
+ 496 \x{2502}  collect_clause_symbol(_Tuple, _Position, _Acc, Owner) ->
+     \x{2502}                                                 \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+
+     \x{250C}\x{2500} src/quod_wire_term.erl:
+     \x{2502}
+ 523 \x{2502}  collect_goal_positions(_Tuple, [], Acc, Owner) ->
+     \x{2502}                                          \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+
+     \x{250C}\x{2500} src/quod_wire_term.erl:
+     \x{2502}
+ 536 \x{2502}  replace_goal_symbols({'$quod_symbol', Name}, Owner) ->
+     \x{2502}                                               \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+
+     \x{250C}\x{2500} src/quod_wire_term.erl:
+     \x{2502}
+ 565 \x{2502}  replace_goal_symbols(Goal, Owner) ->
+     \x{2502}                             \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+
+     \x{250C}\x{2500} src/quod_wire_term.erl:
+     \x{2502}
+ 571 \x{2502}  replace_clause_symbol(Tuple, _Position, Owner) ->
+     \x{2502}                                          \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+
+
+    \x{250C}\x{2500} test/quod_physics_coordinates_tests.erl:
+    \x{2502}
+ 56 \x{2502}      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    \x{2502}                               \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    \x{250C}\x{2500} test/quod_physics_coordinates_tests.erl:
+    \x{2502}
+ 56 \x{2502}      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    \x{2502}                                   \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    \x{250C}\x{2500} test/quod_physics_coordinates_tests.erl:
+    \x{2502}
+ 56 \x{2502}      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    \x{2502}                                       \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+      \x{250C}\x{2500} test/quod_physics_tests.erl:
+      \x{2502}
+ 1524 \x{2502}              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+      \x{2502}                                                \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} test/quod_physics_tests.erl:
+      \x{2502}
+ 2152 \x{2502}          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      \x{2502}                                   \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} test/quod_physics_tests.erl:
+      \x{2502}
+ 2152 \x{2502}          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      \x{2502}                                         \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+======================== EUnit ========================
+module 'quod_proof_answer_tests'
+  quod_proof_answer_tests: default_answer_allocation_is_authored_test...[0.059 s] ok
+  quod_proof_answer_tests: producer_enforces_exact_canonical_quantity_test...[0.028 s] ok
+  quod_proof_answer_tests: receiver_uses_own_policy_and_atom_safe_measurement_test...[0.007 s] ok
+  quod_proof_answer_tests: answer_policy_is_pinned_and_concurrent_change_conflicts_test...[0.036 s] ok
+  quod_proof_answer_tests: invalid_ambiguous_and_missing_answer_policy_refuse_test...[0.031 s] ok
+  quod_proof_answer_tests: encoding_and_complete_envelope_safety_remain_test...[0.024 s] ok
+  quod_proof_answer_tests: cancellation_keeps_original_policy_and_discards_continuation_test...[0.008 s] ok
+  quod_proof_answer_tests: pinned_answer_admission_reuses_selection_without_history_or_io_test...[0.014 s] ok
+  [done in 0.231 s]
+module 'quod_material_admission_tests'
+  quod_material_admission_tests: policy_is_authored_and_ambiguous_values_fail_closed_test...[0.035 s] ok
+  quod_material_admission_tests: policy_cannot_write_during_selection_test...[0.008 s] ok
+  quod_material_admission_tests: source_symbol_refusal_precedes_allocation_and_storage_test...[0.011 s] ok
+  quod_material_admission_tests: staged_policy_cannot_authorize_its_own_write_test...[0.012 s] ok
+  quod_material_admission_tests: invalid_policy_updates_are_refused_before_sealing_test...[0.084 s] ok
+  quod_material_admission_tests: proof_budget_is_pinned_and_tracks_helper_changes_test...[0.022 s] ok
+  quod_material_admission_tests: policy_replacement_uses_final_state_and_preserves_zero_allowance_test...[0.011 s] ok
+  quod_material_admission_tests: policy_helper_change_is_checked_through_captured_dependencies_test...[0.010 s] ok
+  quod_material_admission_tests: sealed_plan_carries_policy_reads_and_reuses_exact_result_test...[0.010 s] ok
+  quod_material_admission_tests: canonical_byte_and_count_refusals_name_the_resource_test...[0.032 s] ok
+  quod_material_admission_tests: committed_policy_change_invalidates_the_sealed_plan_test...[0.016 s] ok
+  [done in 0.286 s]
+module 'quod_proof_session_tests'
+  quod_proof_session_tests: resumable_invocation_preserves_solution_order_test...[0.009 s] ok
+  quod_proof_session_tests: computed_answers_do_not_echo_ground_inputs_test...[0.011 s] ok
+  quod_proof_session_tests: computed_answer_preserves_unbound_aliases_and_real_output_limit_test...[0.013 s] ok
+  quod_proof_session_tests: independent_intent_belongs_to_an_invocation_not_the_shared_revision_test...[0.015 s] ok
+  quod_proof_session_tests: sealed_scope_records_independent_eligibility_not_selected_lane_test...[0.044 s] ok
+  quod_proof_session_tests: repeated_invocations_share_staged_writes_test...[0.008 s] ok
+  quod_proof_session_tests: failed_invocation_keeps_ordinary_prolog_writes_test...[0.007 s] ok
+  quod_proof_session_tests: failed_branch_write_is_visible_to_its_next_alternative_test...[0.008 s] ok
+  quod_proof_session_tests: stateless_erlog_error_keeps_the_current_revision_test...[0.009 s] ok
+  quod_proof_session_tests: stateful_erlog_error_preserves_its_revision_test...[0.007 s] ok
+  quod_proof_session_tests: transaction_error_adopts_rolled_back_revision_test...[0.008 s] ok
+  quod_proof_session_tests: older_continuation_rebases_to_newer_overlay_test...[0.008 s] ok
+  quod_proof_session_tests: publish_then_refresh_preserves_nested_revision_test...[0.007 s] ok
+  quod_proof_session_tests: run_first_keeps_existing_result_contract_test...[0.007 s] ok
+  quod_proof_session_tests: invocations_retain_distinct_lifetime_ids_test...[0.007 s] ok
+  quod_proof_session_tests: seal_latches_state_and_first_manifest_attestation_test...[0.008 s] ok
+  quod_proof_session_tests: not_material_seal_is_also_terminal_test...[0.008 s] ok
+  quod_proof_session_tests: pending_generation_rejects_open_and_discards_old_invocation_test...[0.030 s] ok
+  quod_proof_session_tests: gate_change_during_step_cannot_expose_solution_test...[0.007 s] ok
+  quod_proof_session_tests: authorization_subproof_retains_the_parent_guard_test...[0.007 s] ok
+  quod_proof_session_tests: committed_authorization_preserves_infrastructure_fences_test...[0.007 s] ok
+  [done in 0.299 s]
+module 'quod_scope_session_tests'
+  quod_scope_session_tests: scope_worker_retains_authenticated_request_expiry_test...[0.017 s] ok
+  quod_scope_session_tests: scope_auth_bytes_must_match_the_admitted_binding_test...[0.008 s] ok
+  quod_scope_session_tests: unsigned_scope_cannot_supply_authenticated_expiry_test...[0.007 s] ok
+  quod_scope_session_tests: scope_operation_metadata_requires_matching_signed_principal_test...[0.007 s] ok
+  quod_scope_session_tests: invocation_worker_retains_received_trace_context_test...[0.025 s] ok
+  quod_scope_session_tests: committed_submit_reply_is_bound_to_expected_transaction_test...ok
+  quod_scope_session_tests: divergent_submit_reply_terminates_with_expected_reference_test...ok
+=WARNING REPORT==== 31-Oct-2026::21:55:20.277779 ===
+quod_scope_session[quod:broken-scope]: start failed: error:function_clause [{quod_proof_session,
+                                                                             start,
+                                                                             [{not_an_erlog_state},
+                                                                              #{scope_id =>
+                                                                                 <<54,0,62,
+                                                                                   77,96,
+                                                                                   81,138,
+                                                                                   30,88,
+                                                                                   119,144,
+                                                                                   173,9,
+                                                                                   79,22,
+                                                                                   240>>,
+                                                                                principal =>
+                                                                                 {node,
+                                                                                  <<0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,1>>},
+                                                                                request_binding =>
+                                                                                 none,
+                                                                                read_set =>
+                                                                                 true,
+                                                                                deadline_ms =>
+                                                                                 -576460637482,
+                                                                                proof_context =>
+                                                                                 {scope,
+                                                                                  <<143,198,
+                                                                                    6,193,
+                                                                                    195,197,
+                                                                                    210,67,
+                                                                                    86,27,
+                                                                                    105,54,
+                                                                                    71,146,
+                                                                                    243,200,
+                                                                                    94,214,
+                                                                                    79,194,
+                                                                                    70,145,
+                                                                                    173,144,
+                                                                                    103,150,
+                                                                                    240,233,
+                                                                                    248,30,
+                                                                                    207,138>>,
+                                                                                  <0.18953.0>,
+                                                                                  #Ref<0.1805867877.983564289.182286>,
+                                                                                  <<54,0,62,
+                                                                                    77,96,
+                                                                                    81,138,
+                                                                                    30,88,
+                                                                                    119,144,
+                                                                                    173,9,
+                                                                                    79,22,
+                                                                                    240>>}}],
+                                                                             [{file,
+                                                                               "/work/src/quod_proof_session.erl"},
+                                                                              {line,
+                                                                               100}]},
+                                                                            {quod_scope_session,
+                                                                             start_session,
+                                                                             2,
+                                                                             [{file,
+                                                                               "/work/src/quod_scope_session.erl"},
+                                                                              {line,
+                                                                               1294}]},
+                                                                            {quod_scope_session,
+                                                                             init,
+                                                                             10,
+                                                                             [{file,
+                                                                               "/work/src/quod_scope_session.erl"},
+                                                                              {line,
+                                                                               1265}]},
+                                                                            {quod_trace,
+                                                                             with_context,
+                                                                             2,
+                                                                             [{file,
+                                                                               "/work/src/quod_trace.erl"},
+                                                                              {line,
+                                                                               59}]}]
+  quod_scope_session_tests: startup_failure_is_asynchronous_and_monitored_test...ok
+  quod_scope_session_tests: worker_refuses_invalid_or_zero_heap_policy_before_execution_test...[0.023 s] ok
+  quod_scope_session_tests: authored_heap_budget_still_kills_unbounded_allocation_test...=ERROR REPORT==== 31-Oct-2026::21:55:20.328024 ===
+     Process:            <0.19385.0> 
+     Context:            maximum heap size reached
+     Max Heap Size:      1048576
+     Total Heap Size:    1210515
+     Kill:               true
+     Error Logger:       true
+     Message Queue Len:  0
+     GC Info:            [{old_heap_block_size,10958},
+                          {heap_block_size,2199188},
+                          {mbuf_size,0},
+                          {recent_size,0},
+                          {stack_size,999630},
+                          {old_heap_size,591},
+                          {heap_size,0},
+                          {bin_vheap_size,0},
+                          {bin_vheap_block_size,46422},
+                          {bin_old_vheap_size,8},
+                          {bin_old_vheap_block_size,46422}]
+     Stacktrace:         [{erlog_int,make_var_list,2,
+                              [{file,
+                                   "/work/_checkouts/erlog/src/erlog_int.erl"},
+                               {line,1111}]},
+                          {erlog_int,make_var_list,2,
+                              [{file,
+                                   "/work/_checkouts/erlog/src/erlog_int.erl"},
+                               {line,1113}]},
+                          {erlog_lib_lists,make_list,4,
+                              [{file,
+                                   "/work/_checkouts/erlog/src/erlog_lib_lists.erl"},
+                               {line,127}]},
+                          {quod_proof_scope,guarded,1,
+                              [{file,"/work/src/quod_proof_scope.erl"},
+                               {line,102}]},
+                          {quod_trace,'-with_span/6-fun-0-',3,
+                              [{file,"/work/src/quod_trace.erl"},{line,81}]},
+                          {quod_trace,with_context,2,
+                              [{file,"/work/src/quod_trace.erl"},{line,59}]},
+                          {quod_proof_scope,next,1,
+                              [{file,"/work/src/quod_proof_scope.erl"},
+                               {line,55}]},
+                          {quod_transaction_scope,with_invocation,4,
+                              [{file,"/work/src/quod_transaction_scope.erl"},
+                               {line,88}]}]
+
+[0.021 s] ok
+  quod_scope_session_tests: worker_authored_heap_budget_and_public_local_errors_test...[0.010 s] ok
+  quod_scope_session_tests: worker_preserves_pending_guard_error_without_dirty_recheck_test...[0.007 s] ok
+  quod_scope_session_tests: local_invocation_facade_preserves_worker_protocol_test...ok
+  quod_scope_session_tests: local_materialize_restore_and_release_test...[0.008 s] ok
+  quod_scope_session_tests: local_scope_uses_shared_seal_and_attestation_lifecycle_test...[0.009 s] ok
+  quod_scope_session_tests:469: -read_certificate_facades_test_/0-fun-2-...[0.023 s] ok
+  quod_scope_session_tests:470: -read_certificate_facades_test_/0-fun-1-...[0.017 s] ok
+  quod_scope_session_tests:471: -read_certificate_facades_test_/0-fun-0-...[0.056 s] ok
+  quod_scope_session_tests: read_certificate_result_normalization_is_closed_test...ok
+  quod_scope_session_tests: observer_scope_refuses_read_certification_before_any_signature_test...[0.008 s] ok
+  quod_scope_session_tests: cohosted_materialize_uses_exact_worker_reply_test...ok
+  quod_scope_session_tests: cohosted_group_effect_batch_preserves_owner_and_starts_together_test...ok
+  quod_scope_session_tests: remote_invocation_facade_encodes_goal_and_uses_budget_test...[0.003 s] ok
+  quod_scope_session_tests: remote_materialize_restore_release_are_exact_test...ok
+  quod_scope_session_tests: remote_controls_validate_their_explicit_batch_ids_before_send_test...[0.021 s] ok
+  quod_scope_session_tests: failure_reason_is_transport_specific_test...ok
+  quod_scope_session_tests: remote_control_surfaces_exact_error_and_down_test...ok
+  quod_scope_session_tests: remote_control_fails_when_its_exact_router_generation_dies_test...ok
+  quod_scope_session_tests: remote_control_obeys_expired_budget_without_retry_test...[0.021 s] ok
+  quod_scope_session_tests: remote_seal_and_control_stop_at_the_running_budget_test...[0.082 s] ok
+  quod_scope_session_tests: remote_scope_seal_and_attestation_are_verified_end_to_end_test...[0.009 s] ok
+  quod_scope_session_tests: remote_scope_read_certificate_is_bound_to_the_exact_sealed_plan_test...[0.015 s] ok
+  quod_scope_session_tests: read_certificate_many_cleans_up_on_cohosted_worker_down_test...ok
+  quod_scope_session_tests: read_certificate_many_surfaces_remote_scope_error_test...ok
+  quod_scope_session_tests: worker_seals_its_session_on_request_test...[0.009 s] ok
+  quod_scope_session_tests: read_certificate_failed_setup_releases_its_root_and_environment_test...[0.055 s] ok
+  [done in 0.754 s]
+module 'quod_scope_wire_tests'
+  quod_scope_wire_tests: scope_open_trace_metadata_is_transient_and_fail_closed_test...[0.001 s] ok
+  quod_scope_wire_tests: all_command_shapes_roundtrip_deterministically_test...ok
+  quod_scope_wire_tests: independent_metadata_roundtrips_and_refuses_malformed_values_test...ok
+  quod_scope_wire_tests: savepoint_lineage_and_public_intent_are_independent_wire_fields_test...ok
+  quod_scope_wire_tests: scope_v5_authentication_digest_is_exact_and_bounded_test...ok
+  quod_scope_wire_tests: scope_v5_binding_rejects_principal_and_authentication_substitution_test...ok
+  quod_scope_wire_tests: all_events_carry_exact_state_and_roundtrip_test...ok
+  quod_scope_wire_tests: prepared_budget_error_is_bounded_and_survives_scope_wire_test...ok
+  quod_scope_wire_tests: scope_error_target_binding_does_not_constrain_invocation_errors_test...ok
+  quod_scope_wire_tests: answer_binding_protocol_error_round_trips_test...ok
+  quod_scope_wire_tests: seal_operations_round_trip_and_stay_bounded_test...ok
+  quod_scope_wire_tests: manifest_attestation_payloads_are_canonical_and_bounded_test...ok
+  quod_scope_wire_tests: read_certificate_scope_results_use_the_closed_error_catalog_test...ok
+  quod_scope_wire_tests: group_effect_binding_is_exact_and_bounded_test...ok
+  quod_scope_wire_tests: operation_effect_submission_crosses_scope_at_shared_bound_test...ok
+  quod_scope_wire_tests: scope_namespace_uses_directory_bound_test...ok
+  quod_scope_wire_tests: submit_operations_round_trip_and_stay_bounded_test...ok
+  quod_scope_wire_tests: retired_generic_public_errors_are_rejected_test...ok
+  quod_scope_wire_tests: goal_stays_opaque_until_explicit_payload_decode_test...ok
+  quod_scope_wire_tests: opaque_goal_symbol_survives_scope_codec_test...ok
+  quod_scope_wire_tests: payload_byte_bounds_are_exact_test...[0.012 s] ok
+  quod_scope_wire_tests: scope_envelope_byte_bound_is_exact_and_predecode_test...ok
+  quod_scope_wire_tests: outer_safe_etf_and_version_are_fail_closed_test...ok
+  quod_scope_wire_tests: unknown_outer_atom_is_not_created_test...ok
+  quod_scope_wire_tests: identity_probe_and_response_are_fixed_safe_frames_test...ok
+  quod_scope_wire_tests: ids_sequences_chain_generation_and_dirty_are_bounded_test...ok
+  quod_scope_wire_tests: dirty_is_mandatory_and_error_vocabulary_is_closed_test...ok
+  quod_scope_wire_tests: lineage_controller_shapes_and_limits_are_exact_test...[0.001 s] ok
+  quod_scope_wire_tests: superseded_transaction_wire_shapes_are_rejected_test...ok
+  [done in 0.101 s]
+=======================================================
+  All 105 tests passed.

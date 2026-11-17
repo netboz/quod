@@ -1,0 +1,6 @@
+{"command": ["dotnet", "--info"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 0.1469928430001346}
+{"command": ["python3", "client/godot-tools/run.py", "--bootstrap"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 5.071275483000136}
+{"command": ["dotnet", "restore", "Quod.csproj", "--locked-mode", "-p:Configuration=Debug", "-p:SelfContained=true", "--source", "/home/yan/src/quod_worktrees/pearl-stone/_build/godot-shutdown-reliability-20261103/artifacts/client-shutdown-observation02/dependency-feed"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 2.0062094419999994}
+{"command": ["dotnet", "restore", "Quod.csproj", "--locked-mode", "-p:Configuration=ExportRelease", "-p:SelfContained=true", "--source", "/home/yan/src/quod_worktrees/pearl-stone/_build/godot-shutdown-reliability-20261103/artifacts/client-shutdown-observation02/dependency-feed"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 1.1362273370000366}
+{"command": ["python3", "client/godot-tools/run.py", "--export"], "exit": 0, "diagnostic_failure": false, "elapsed_seconds": 14.05901701599987}
+{"passed": true, "inputs": 100, "exports": 196}

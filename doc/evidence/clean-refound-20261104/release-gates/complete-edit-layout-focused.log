@@ -1,0 +1,14 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_prolog_ontology_tests: complete_edit_groups_predicates_and_preserves_unchanged_contents_test...[0.357 s] ok
+quod_prolog_ontology_tests: complete_edit_accepts_unchanged_noncanonical_draft_test...[0.257 s] ok
+quod_prolog_ontology_tests: complete_edit_detects_changed_baseline_and_accept_time_phantoms_test...[0.289 s] ok
+quod_prolog_ontology_tests: complete_edit_rejects_a_matching_final_chunk_of_stale_source_test...[0.309 s] ok
+quod_prolog_ontology_tests: complete_edit_removes_predicates_and_renaming_variables_is_unchanged_test...[0.249 s] ok
+quod_prolog_ontology_tests: compiler_data_helpers_have_no_implicit_following_test...[0.018 s] ok
+=======================================================
+  All 6 tests passed.

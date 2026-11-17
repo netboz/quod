@@ -46,14 +46,6 @@ cleanup removes only abandoned files of this exact session-file family.
 -define(HISTORY_DOMAIN, quod_dtx_phase_history).
 -define(HISTORY_VERSION, 2). %% Atomic Vote/Resolve/Complete, immutable v4 references
 -define(MAX_GROUP_RECORDS, 3).
-%% A history stores at most one certified reference for each fixed phase.  A
-%% reference combines a body-bounded finality proof with an identity whose
-%% namespace is itself bounded by the signed control envelope.  The fixed
-%% allowance covers hashes, counters, map/list framing and the ETF header.
--define(MAX_HISTORY_BYTES,
-        (?MAX_GROUP_RECORDS *
-           (?QUOD_MAX_DTX_BODY_BYTES + ?QUOD_MAX_DTX_CONTROL_BYTES + 512)
-         + 4096)).
 
 -record(index, {
           table :: term(),
@@ -85,6 +77,7 @@ cleanup removes only abandoned files of this exact session-file family.
 -spec open(file:filename_all(), binary()) ->
           {ok, index()} | {error, index_error()}.
 open(LedgerDir, Ns) when is_binary(Ns), byte_size(Ns) > 0 ->
+    ok = quod_ledger_store:check_namespace_layout(LedgerDir, Ns),
     Dir = quod_ledger_store:ns_dir(LedgerDir, Ns),
     case filelib:ensure_path(Dir) of
         ok -> open_unique(Dir, ?OPEN_ATTEMPTS);
@@ -330,11 +323,10 @@ load_protocol_era(Table, Era) ->
 
 -doc "Stage the exact histories returned by the shared live-finality reducer.".
 -spec preview_histories(delta(), #{binary() => quod_atomic:group_history()}) ->
-    {ok, delta()} | {error, index_error()}.
+    {ok, delta()}.
 preview_histories(Delta, Histories) when is_map(Histories) ->
-    maps:fold(fun(Group, History, {ok, D}) -> stage_history(D, Group, undefined, History);
-                 (_Group, _History, {error, _} = Error) -> Error
-              end, {ok, Delta}, Histories).
+    {ok, maps:fold(fun(Group, History, D) -> stage_history(D, Group, undefined, History)
+                  end, Delta, Histories)}.
 
 -doc "Indexed post-slot committee lookup bounded by the captured height and era count.".
 -spec committee(index(), pos_integer()) -> {ok, tuple()} | not_found | {error, index_error()}.
@@ -399,6 +391,7 @@ cleanup(_LedgerDir, _Ns) ->
 -spec cleanup(file:filename_all(), binary(), [index()]) ->
           ok | {error, index_error()}.
 cleanup(LedgerDir, Ns, Retained) when is_binary(Ns), byte_size(Ns) > 0 ->
+    ok = quod_ledger_store:check_namespace_layout(LedgerDir, Ns),
     Dir = quod_ledger_store:ns_dir(LedgerDir, Ns),
     case retained_cleanup_paths(Dir, Retained) of
         {ok, Keep} ->
@@ -465,12 +458,9 @@ preview_batch(Index = #index{}, Delta = #delta{}, Controls, Projection)
                     case quod_atomic:reduce_batch(
                            Controls, Histories0, Projection) of
                         {ok, Histories1, Projection1, Items} ->
-                            case stage_batch_histories(
-                                   Delta, GroupIds, Histories0, Histories1) of
-                                {ok, Delta1} ->
-                                    {ok, Delta1, Projection1, Items};
-                                {error, _} = Error -> Error
-                            end;
+                            Delta1 = stage_batch_histories(
+                                       Delta, GroupIds, Histories0, Histories1),
+                            {ok, Delta1, Projection1, Items};
                         {error, _} = Error -> Error
                     end;
                 {error, _} = Error -> Error
@@ -502,15 +492,11 @@ load_batch_histories(Index, Delta, [GroupId | Rest], Histories0) ->
             end
     end.
 
-stage_batch_histories(Delta, [], _Histories0, _Histories1) -> {ok, Delta};
+stage_batch_histories(Delta, [], _Histories0, _Histories1) -> Delta;
 stage_batch_histories(Delta0, [GroupId | Rest], Histories0, Histories1) ->
-    case stage_history(
-           Delta0, GroupId, maps:get(GroupId, Histories0),
-           maps:get(GroupId, Histories1)) of
-        {ok, Delta1} ->
-            stage_batch_histories(Delta1, Rest, Histories0, Histories1);
-        {error, _} = Error -> Error
-    end.
+    Delta1 = stage_history(Delta0, GroupId, maps:get(GroupId, Histories0),
+                           maps:get(GroupId, Histories1)),
+    stage_batch_histories(Delta1, Rest, Histories0, Histories1).
 
 delta_history(_Index, #delta{rows = Rows}, GroupId)
   when is_map_key(GroupId, Rows) ->
@@ -520,7 +506,7 @@ delta_history(Index, _Delta, GroupId) ->
     history(Index, GroupId).
 
 stage_history(Delta, _GroupId, History, History) ->
-    {ok, Delta};
+    Delta;
 stage_history(#delta{rows = Rows, bytes = Bytes} = Delta,
               GroupId, _OldHistory, History) ->
     Blob = encode_history(History),
@@ -531,13 +517,8 @@ stage_history(#delta{rows = Rows, bytes = Bytes} = Delta,
             error -> 0
         end,
     NewBytes = Bytes - OldBytes + HistoryBytes,
-    case HistoryBytes =< ?MAX_HISTORY_BYTES of
-        true ->
-            {ok, Delta#delta{rows = Rows#{GroupId => {History, HistoryBytes}},
-                             bytes = NewBytes}};
-        false ->
-            {error, bad_phase_index_delta}
-    end.
+    Delta#delta{rows = Rows#{GroupId => {History, HistoryBytes}},
+                bytes = NewBytes}.
 
 -doc "Install one fully previewed window delta after its ledger sink succeeds.".
 -spec commit_delta(index(), delta()) -> ok | {error, index_error()}.
@@ -636,7 +617,7 @@ encode_delta_rows(
     Blob = encode_history(History),
     Bytes = byte_size(Blob),
     Total = Bytes0 + Bytes,
-    case Bytes =:= StoredBytes andalso Bytes =< ?MAX_HISTORY_BYTES of
+    case Bytes =:= StoredBytes of
         true ->
             Row = {{group, GroupId}, Blob},
             encode_delta_rows(
@@ -694,9 +675,8 @@ dets_lookup(Table, Key) ->
 encode_history(History) ->
     term_to_binary({?HISTORY_DOMAIN, ?HISTORY_VERSION, History}, [deterministic]).
 
-decode_history(Blob, GroupId) when is_binary(Blob),
-                          byte_size(Blob) =< ?MAX_HISTORY_BYTES ->
-    case quod_safe_term:decode_wrapped(Blob, ?MAX_HISTORY_BYTES) of
+decode_history(Blob, GroupId) when is_binary(Blob) ->
+    case quod_safe_term:decode_wrapped(Blob, unlimited) of
         {ok, {?HISTORY_DOMAIN, ?HISTORY_VERSION, #{group_id := GroupId} = History}} ->
             case quod_atomic:valid_group_history(History) of
                 true -> {ok, History};

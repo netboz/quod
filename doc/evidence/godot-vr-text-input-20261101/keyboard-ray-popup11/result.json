@@ -1,0 +1,70 @@
+{
+  "label": "keyboard-ray-popup11",
+  "qualification_phase": "keyboard-ray",
+  "passed": false,
+  "physical": false,
+  "native_runtime_started": false,
+  "hardware_queried": false,
+  "display_or_focus_action": false,
+  "manifest": "doc/evidence/godot-vr-text-input-20261101/inputs/client-keyboard-candidate11-manifest.json",
+  "manifest_sha256": "dbd1d90aa3b0ff77e7008a63ab949e13ef47e51b4cf916d93c8cb65ca987bf8a",
+  "sources": {
+    "doc/evidence/godot-vr-text-input-20261101/run.py": "737b08d4f2879dea99675bf5a6b1bb347caa559a993217210c75854f026a6f02",
+    "doc/evidence/godot-vr-text-input-20261101/hashes.py": "5ff4d575ee8888935af2a9ca44915d2deaeb8a49363150dd75b7656e65fdf6eb",
+    "doc/evidence/godot-m4-vive-physical-20261029/environment.py": "c3a54c8ce4d8360f8711e027d31f7a98f29cf3b9b4436c43a84984cf2c1f20f9"
+  },
+  "reader_errors": [],
+  "children": {
+    "client": {
+      "command": [
+        "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-keyboard-candidate11/source/client/godot/dist/quod.x86_64",
+        "--display-driver",
+        "wayland",
+        "--audio-driver",
+        "Dummy",
+        "--xr-mode",
+        "off",
+        "--rendering-method",
+        "gl_compatibility",
+        "--rendering-driver",
+        "opengl3",
+        "--",
+        "--qualification",
+        "--profile",
+        "/data/quod-m4-vr-ca84d4f8-20261029/private/keyboard-ray-popup11/identity"
+      ],
+      "true_exit": 1
+    }
+  },
+  "eof": {
+    "client-stdout": true,
+    "client-stderr": true
+  },
+  "build_export_digest_reused": true,
+  "injected_inputs": {
+    "M4_MODEL": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/priv/explorer/assets/models/bd201855c8114b9b0e9cdd465d6f08413d18604894c839fb78d54d890c2adc94.glb",
+      "sha256": "bd201855c8114b9b0e9cdd465d6f08413d18604894c839fb78d54d890c2adc94"
+    },
+    "M4_MAPPING": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/inputs/injected-mapping.term",
+      "sha256": "b893f49eda6be9b5e5001ef297f51d4b0d148cf424ab5ef6107e489de94b58da"
+    }
+  },
+  "streams": {
+    "client-stdout.raw": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/keyboard-ray-popup11/client-stdout.raw",
+      "sha256": "74688f0609ba9203822d441e7c89869150c20f46138caaa081b48ad9fd34b869",
+      "bytes": 4486,
+      "public_sha256": "2512d32b9d288ed710205f5032cb301a634d7d9ca60356b191cf0eb9fb26a4a7"
+    },
+    "client-stderr.raw": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/keyboard-ray-popup11/client-stderr.raw",
+      "sha256": "8d93166d37556380649d699ca612eca0b4c3995a691dc3af2ffd6177dfd726cc",
+      "bytes": 1998,
+      "public_sha256": "56b22a7fba1be3d3c4716a578c695c312c6934df439962246b31f726706e0010"
+    }
+  },
+  "diagnostics": [],
+  "elapsed_seconds": 3.635906301991781
+}

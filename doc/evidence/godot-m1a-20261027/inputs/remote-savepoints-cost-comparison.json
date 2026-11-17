@@ -1,0 +1,104 @@
+{
+  "runs": {
+    "01": {
+      "true_exit": 1,
+      "roles": {
+        "asker": {
+          "requests": {},
+          "wall_us": 29507003,
+          "runtime_ms": 18471,
+          "scope_expired": true,
+          "error_free": false
+        },
+        "target": {
+          "requests": {
+            "allocate": {
+              "count": 10507,
+              "total_us": 15614317,
+              "max_us": 6155
+            },
+            "finish": {
+              "count": 1,
+              "total_us": 2902,
+              "max_us": 2902
+            },
+            "activate": {
+              "count": 2,
+              "total_us": 3682,
+              "max_us": 2144
+            },
+            "restore": {
+              "count": 8405,
+              "total_us": 12548979,
+              "max_us": 5435
+            }
+          },
+          "wall_us": 29514797,
+          "runtime_ms": 19191,
+          "scope_expired": false,
+          "error_free": true
+        },
+        "third": {
+          "requests": {},
+          "wall_us": 29511333,
+          "runtime_ms": 2961,
+          "scope_expired": false,
+          "error_free": true
+        }
+      },
+      "scope_source_sha256": "f69c2db0090caba6de101b08601b4b75ba4570bdbe8a8ac0163b52a7ed2c5be5",
+      "trace_source_sha256": "cbbac8b2b39445fffe3c15270f1af7d151f3d5b6384244a712475e870c166d34"
+    },
+    "02": {
+      "true_exit": 0,
+      "roles": {
+        "asker": {
+          "requests": {},
+          "wall_us": 2911884,
+          "runtime_ms": 1684,
+          "scope_expired": false,
+          "error_free": true
+        },
+        "target": {
+          "requests": {
+            "allocate": {
+              "count": 5,
+              "total_us": 7787,
+              "max_us": 1861
+            },
+            "finish": {
+              "count": 2,
+              "total_us": 6533,
+              "max_us": 3505
+            },
+            "activate": {
+              "count": 2,
+              "total_us": 4780,
+              "max_us": 3353
+            },
+            "restore": {
+              "count": 2,
+              "total_us": 6307,
+              "max_us": 3179
+            }
+          },
+          "wall_us": 2929952,
+          "runtime_ms": 1512,
+          "scope_expired": false,
+          "error_free": true
+        },
+        "third": {
+          "requests": {},
+          "wall_us": 2927448,
+          "runtime_ms": 1170,
+          "scope_expired": false,
+          "error_free": true
+        }
+      },
+      "scope_source_sha256": "1b0816fb47777d419a32da1b38316e3cdc41cce10100ae1663d9d9588f03a5b1",
+      "trace_source_sha256": "cbbac8b2b39445fffe3c15270f1af7d151f3d5b6384244a712475e870c166d34"
+    }
+  },
+  "unchanged_case": "quod_ask_SUITE:remote_signed_transaction_savepoints, two 1200-step traversals, original request deadline and assertions",
+  "comparison_limit": "Before failed at scope expiry; after completed. One bounded traced run each, not a latency distribution or confidence interval. No codec rejection observed."
+}

@@ -50,8 +50,7 @@ export function normalizeAgentReference(agent) {
   const network = validNetwork(agent?.network)
   if (!namespace || utf8ByteLength(namespace) > SIGNED_GOAL_LIMITS.namespaceBytes ||
       !/^[A-Za-z0-9_-]{43}$/.test(anchor || '') ||
-      !instanceText ||
-      utf8ByteLength(instanceText) > SIGNED_GOAL_LIMITS.agentInstanceTextBytes) {
+      !instanceText) {
     throw new Error('invalid agent reference')
   }
   const id = `${network}\0${namespace}\0${anchor}\0${instanceText}`

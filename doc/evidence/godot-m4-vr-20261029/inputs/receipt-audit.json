@@ -1,0 +1,458 @@
+{
+  "all_stream_hashes_and_sizes_verified": true,
+  "wrappers": [
+    {
+      "label": "client-display-observer01",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 42.09854459762573,
+      "receipt_sha256": "6850428ccd1ab47688e60778df8d8afd921f9eb66d48b885c6b2a9f94e41521e",
+      "pre_execution_driver_inputs": true
+    },
+    {
+      "label": "client-display-observer02",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 31.66312599182129,
+      "receipt_sha256": "deb582183202abbcefff38e86f2788b52134362e8e42d7af5dc67ca48c3e858d",
+      "pre_execution_driver_inputs": true
+    },
+    {
+      "label": "client-private01",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 38.897419929504395,
+      "receipt_sha256": "37d922dfa3ac21dde5802209f2259b4a21f314f80a23894588adbf7898a7fd98",
+      "pre_execution_driver_inputs": true
+    },
+    {
+      "label": "display-hotplug-observation01",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 1123.6465427875519,
+      "receipt_sha256": "2644d18b2f5982ee29e2a7fc4f33238859db8dbae7e8f106c8253206fdafa9ff",
+      "pre_execution_driver_inputs": true
+    },
+    {
+      "label": "display-inventory-build01",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 0.41642093658447266,
+      "receipt_sha256": "39f9af008d74681e60e734c414e4dfdba0f19b78b20af7c56a88fc537bb8ae25",
+      "pre_execution_driver_inputs": false
+    },
+    {
+      "label": "display-inventory-build02",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 0.26584792137145996,
+      "receipt_sha256": "043ecf6f4d3f762e9c674348338088790f94f4b4224ddfa0a15fca7c1fb3ca49",
+      "pre_execution_driver_inputs": false
+    },
+    {
+      "label": "display-inventory01",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 0.018614768981933594,
+      "receipt_sha256": "344c5b44a07d16fb19475156313a41f5a430e0f69c7741ef56ac45c5e197df04",
+      "pre_execution_driver_inputs": false
+    },
+    {
+      "label": "display-rule01",
+      "child_exit": 1,
+      "timed_out": false,
+      "elapsed_seconds": 20.20103883743286,
+      "receipt_sha256": "815f4f0abfdeaa5b1ef9c50e2d461f2b1101bf8d21009f80e2f521c3fec188d4",
+      "pre_execution_driver_inputs": false
+    },
+    {
+      "label": "engine-baseline-build01",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 918.7486214637756,
+      "receipt_sha256": "d7bb857cf936cdbff3082a0438ada51bc8e9cb893e1a1fc9be5e70f93d396814",
+      "pre_execution_driver_inputs": false
+    },
+    {
+      "label": "engine-patch01",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 0.06444334983825684,
+      "receipt_sha256": "a2625d86e51759108834c6e513e2cfdeaae632d2002a3ac42937dc2eefde5a62",
+      "pre_execution_driver_inputs": true
+    },
+    {
+      "label": "engine-patched-build01",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 26.499566316604614,
+      "receipt_sha256": "a0908142050adc96c8a1723cd504ca5790e49b182241ed642c2adb762f1f9007",
+      "pre_execution_driver_inputs": true
+    },
+    {
+      "label": "engine-prepare01",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 5.17693829536438,
+      "receipt_sha256": "4f94b3c58409043e54f3733776a8ab8d4f939480eb76522ea344d36a47d45abb",
+      "pre_execution_driver_inputs": false
+    },
+    {
+      "label": "godot-source-download01",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 1.37691330909729,
+      "receipt_sha256": "d41a794fa9bc4b80811e8b444964bf2de4546a9319adfc5b44b3a7349056d7f7",
+      "pre_execution_driver_inputs": false
+    },
+    {
+      "label": "hyprland-lease-source01",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 0.5709137916564941,
+      "receipt_sha256": "00861d3bb08b62d2ac738961fa1860839a5b7b79ad7464382dbdea9464f04cb3",
+      "pre_execution_driver_inputs": false
+    },
+    {
+      "label": "hyprland-monitor-source01",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 0.46798181533813477,
+      "receipt_sha256": "33394de13fd787cf697eceeb4e81a0b6fa68b59979fdc8877ca6c4a354e4c3c6",
+      "pre_execution_driver_inputs": false
+    },
+    {
+      "label": "hyprland-rule-source01",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 0.37020444869995117,
+      "receipt_sha256": "cd3536fa18accb3dba81041973cd4f63f237f2c8e444d8dce0e0a8c03d2d6b32",
+      "pre_execution_driver_inputs": false
+    },
+    {
+      "label": "input-audit01",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 7.993626832962036,
+      "receipt_sha256": "95df1ea4148766a68a6283fac9bef84f2a8ef656344b0521d9b478c7fe7213c2",
+      "pre_execution_driver_inputs": true
+    },
+    {
+      "label": "inventory01",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 4.8817808628082275,
+      "receipt_sha256": "1e177521628d9ec670beb8f611f38af481793ca336d8296e0d66669c7719f87b",
+      "pre_execution_driver_inputs": false
+    },
+    {
+      "label": "native-api-summary01",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 0.36681246757507324,
+      "receipt_sha256": "931b3de2552d7c9318e83c16d1724a7b65f1c613a2c60a10df2aab6781e2356c",
+      "pre_execution_driver_inputs": true
+    },
+    {
+      "label": "native-api-summary02",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 6.726915121078491,
+      "receipt_sha256": "aeca57527f82bbaab837e1ac40a98aa7c80db5832a39fcda2c6b3b2623b094ac",
+      "pre_execution_driver_inputs": true
+    },
+    {
+      "label": "native-api-summary03",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 0.2202906608581543,
+      "receipt_sha256": "9eeea972750da1da1e12e734aa2186ca81f8e6358da68869e19fd2119cfe7bae",
+      "pre_execution_driver_inputs": true
+    },
+    {
+      "label": "native-fault-reentry01",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 14.671929836273193,
+      "receipt_sha256": "7d8c7247d682ef2c03309fe3eaa53c8aca3393c212e7960f392f1a4f29e65efb",
+      "pre_execution_driver_inputs": true
+    },
+    {
+      "label": "native-sim-baseline01",
+      "child_exit": 1,
+      "timed_out": false,
+      "elapsed_seconds": 11.208851099014282,
+      "receipt_sha256": "3ffbfce1dc73d607454afa8470b04c5e05930a078457680965b39a7ac3369630",
+      "pre_execution_driver_inputs": true
+    },
+    {
+      "label": "native-sim-patched01",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 9.70443058013916,
+      "receipt_sha256": "39d0275d2ebed1769df4c85970261331afb252847d44ac13ae4613b898bb35f3",
+      "pre_execution_driver_inputs": true
+    },
+    {
+      "label": "native-vive-direct01",
+      "child_exit": 1,
+      "timed_out": false,
+      "elapsed_seconds": 0.1148371696472168,
+      "receipt_sha256": "28cee9a13ad1c36c6cd2ebd804ec4e795f781b2a699309f7f19221f22d7d43f9",
+      "pre_execution_driver_inputs": true
+    },
+    {
+      "label": "native-vive-direct02",
+      "child_exit": 1,
+      "timed_out": false,
+      "elapsed_seconds": 14.122147798538208,
+      "receipt_sha256": "dcebe43d72b418b01854328dbf1c8d61c4b249af239fe30bdca8142b6b8646c5",
+      "pre_execution_driver_inputs": true
+    },
+    {
+      "label": "observer-parse01",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 1.370072364807129,
+      "receipt_sha256": "9f42de2352fd97b5e3989b0be0db065fd025870a11fcbcf16b1906f75ceaaa15",
+      "pre_execution_driver_inputs": true
+    },
+    {
+      "label": "observer-sim-preflight01",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 16.716967582702637,
+      "receipt_sha256": "5a53b6fb6f445866cf15821221b19d234cdf4c268749b8fc643a1686b48f7da8",
+      "pre_execution_driver_inputs": true
+    },
+    {
+      "label": "provenance-redaction01",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 0.06448030471801758,
+      "receipt_sha256": "25972e93cf67237c1b63789054d861955313a3b174cf1e78f30a4c6ff182395f",
+      "pre_execution_driver_inputs": true
+    },
+    {
+      "label": "receipt-audit01",
+      "child_exit": 1,
+      "timed_out": false,
+      "elapsed_seconds": 1.319951057434082,
+      "receipt_sha256": "44fff640af8666096304745309f9fc128c044fd575606333d71bf68432bf0f8d",
+      "pre_execution_driver_inputs": true
+    },
+    {
+      "label": "receipt-audit02",
+      "child_exit": 1,
+      "timed_out": false,
+      "elapsed_seconds": 1.4719088077545166,
+      "receipt_sha256": "d0d517f7a934866836ee12ce226d5a897677294c8d5d7f5f4831821be298ee8f",
+      "pre_execution_driver_inputs": true
+    },
+    {
+      "label": "retain-toolchain01",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 89.3552815914154,
+      "receipt_sha256": "64c5aeadfde4290ab79587ac37a0e21671953f7fb79d9947cb3e90504379f8a6",
+      "pre_execution_driver_inputs": true
+    },
+    {
+      "label": "scons-download01",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 0.21754932403564453,
+      "receipt_sha256": "d9cbaa31e7f7257e12e96a9ece0cfab94de648dfc6f9247343b56d3e4532bed3",
+      "pre_execution_driver_inputs": false
+    },
+    {
+      "label": "scons-metadata01",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 0.26547861099243164,
+      "receipt_sha256": "5bc45a58f05baa8635573357a059000ea461815a48abed85d6f76699f97441ca",
+      "pre_execution_driver_inputs": false
+    },
+    {
+      "label": "source-baseline01",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 25.388692378997803,
+      "receipt_sha256": "93d3cbc97c13251053d25b5b5ce2a7296da12ec718cb94cd164e76f8bb3f4a15",
+      "pre_execution_driver_inputs": true
+    },
+    {
+      "label": "vive-display-observation01",
+      "child_exit": 1,
+      "timed_out": false,
+      "elapsed_seconds": 32.60532236099243,
+      "receipt_sha256": "1b670d6c15552589549d9aad12de6ad9ce3e2868c2d98328485ae151fc84df1d",
+      "pre_execution_driver_inputs": true
+    },
+    {
+      "label": "vive-display-observation02",
+      "child_exit": 1,
+      "timed_out": false,
+      "elapsed_seconds": 32.37184381484985,
+      "receipt_sha256": "cf0340023d409acc71ebf258c0c19c3d93c336f446bceb8422c316b75149da75",
+      "pre_execution_driver_inputs": true
+    },
+    {
+      "label": "vive-display-observation03",
+      "child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 524.0497443675995,
+      "receipt_sha256": "4f0f2426e73dc22e5d00b1caabc091341832944c7b4075491ccdfd56bc061290",
+      "pre_execution_driver_inputs": true
+    }
+  ],
+  "builds": {
+    "client-display-observer01": {
+      "supplied_inputs": 93,
+      "unchanged_live_inputs": 91,
+      "outputs": 196,
+      "phases": [
+        {
+          "phase": "toolchain",
+          "true_child_exit": 0,
+          "wrapper_exit": 0
+        },
+        {
+          "phase": "bootstrap",
+          "true_child_exit": 0,
+          "wrapper_exit": 0
+        },
+        {
+          "phase": "restore-debug",
+          "true_child_exit": 0,
+          "wrapper_exit": 0
+        },
+        {
+          "phase": "restore-exportrelease",
+          "true_child_exit": 0,
+          "wrapper_exit": 0
+        },
+        {
+          "phase": "export",
+          "true_child_exit": 0,
+          "wrapper_exit": 0
+        }
+      ],
+      "diagnostic_overrides": {
+        "client/godot/project.godot": {
+          "before": "a973c631c16c1857676e8337257a2c1278c28c99666ee1b2aebf5a0aed718ec7",
+          "after": "fb42d0377d2d7076d975de81d7c5c0c755501fc649878d006d40d1144aab2ca0",
+          "purpose": "separate diagnostic normal-scene observer; production source/export unchanged"
+        }
+      },
+      "manifest_sha256": "14bdb90231d5912aa576fb90a273e3c4f8c2cbcf4fc75256079d5c5654130e6f",
+      "stage": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-display-observer01",
+      "engine_sha256": "02310d903099bada10c86cedc90bbc11ef0bec8254d6e607d1a53f6150ab0268",
+      "Quod_dll_sha256": "ce802b54a4cbdea31e9a74f85e57abfccbb18336e2c2127733799d14322c353b",
+      "pck_sha256": "ea2d9fc9ab6413fa0c1bc1ea93d4c1a06da6abb77baa2dff74b9f8e57edabfd4"
+    },
+    "client-display-observer02": {
+      "supplied_inputs": 93,
+      "unchanged_live_inputs": 91,
+      "outputs": 196,
+      "phases": [
+        {
+          "phase": "toolchain",
+          "true_child_exit": 0,
+          "wrapper_exit": 0
+        },
+        {
+          "phase": "bootstrap",
+          "true_child_exit": 0,
+          "wrapper_exit": 0
+        },
+        {
+          "phase": "restore-debug",
+          "true_child_exit": 0,
+          "wrapper_exit": 0
+        },
+        {
+          "phase": "restore-exportrelease",
+          "true_child_exit": 0,
+          "wrapper_exit": 0
+        },
+        {
+          "phase": "export",
+          "true_child_exit": 0,
+          "wrapper_exit": 0
+        }
+      ],
+      "diagnostic_overrides": {
+        "client/godot/project.godot": {
+          "before": "a973c631c16c1857676e8337257a2c1278c28c99666ee1b2aebf5a0aed718ec7",
+          "after": "fb42d0377d2d7076d975de81d7c5c0c755501fc649878d006d40d1144aab2ca0",
+          "purpose": "separate diagnostic normal-scene observer; production source/export unchanged"
+        }
+      },
+      "manifest_sha256": "fbe77b9c58409791491365e5b9bee1c7ce4793d87557fb4bbcda10eaffb79646",
+      "stage": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-display-observer02",
+      "engine_sha256": "02310d903099bada10c86cedc90bbc11ef0bec8254d6e607d1a53f6150ab0268",
+      "Quod_dll_sha256": "dc4fa3f4fb77a41b2355d860849278d8219fffa141123022c7dc24d4df674624",
+      "pck_sha256": "49e0490b45d845e60cdb462ead2b38105716b1c5dc929d083043b0b932587de9"
+    },
+    "client-private01": {
+      "supplied_inputs": 91,
+      "unchanged_live_inputs": 91,
+      "outputs": 196,
+      "phases": [
+        {
+          "phase": "toolchain",
+          "true_child_exit": 0,
+          "wrapper_exit": 0
+        },
+        {
+          "phase": "bootstrap",
+          "true_child_exit": 0,
+          "wrapper_exit": 0
+        },
+        {
+          "phase": "restore-debug",
+          "true_child_exit": 0,
+          "wrapper_exit": 0
+        },
+        {
+          "phase": "restore-exportrelease",
+          "true_child_exit": 0,
+          "wrapper_exit": 0
+        },
+        {
+          "phase": "export",
+          "true_child_exit": 0,
+          "wrapper_exit": 0
+        }
+      ],
+      "diagnostic_overrides": {},
+      "manifest_sha256": "a8972793cb77cf56c3fcc468cc16f81541be97d4bec73fe86745eb962ec9dd02",
+      "stage": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-private01",
+      "engine_sha256": "02310d903099bada10c86cedc90bbc11ef0bec8254d6e607d1a53f6150ab0268",
+      "Quod_dll_sha256": "9f47b150114de14d024bb6d38d34e17ba9ae71c813f3576893c66296345f0940",
+      "pck_sha256": "454517b1b10855c026ca779f66c45616c7e7d6dfbf791ebacc09e02280d2ea23"
+    }
+  },
+  "initial_tooling_missing_pre_execution_driver_copies": [
+    "display-inventory-build01",
+    "display-inventory-build02",
+    "display-inventory01",
+    "display-rule01",
+    "engine-baseline-build01",
+    "engine-prepare01",
+    "godot-source-download01",
+    "hyprland-lease-source01",
+    "hyprland-monitor-source01",
+    "hyprland-rule-source01",
+    "inventory01",
+    "scons-download01",
+    "scons-metadata01"
+  ],
+  "limitation": "Initial tooling/build preparation preceded driver-copy support; commands, logs, source archives, original source manifest and later exact driver copies retained. Do not claim those early source copies were captured before their runs. All native counterfactual/manual/fault-reentry campaigns have pre-execution driver copies.",
+  "production_tracked_patch_sha256": "c0f9395a9b8fe09abcd71aa13ec9917aae9241bf307a5fc4b0af07e0baa4f998",
+  "production_main_sha256": "e9c010f71a9c1369fd5b451fe1d7fa275948089b3a96e69fe6d8f21b543fec1e",
+  "new_production_test_spec_changes": 0,
+  "server_suites_rerun": 0,
+  "core_suites_rerun": 0
+}

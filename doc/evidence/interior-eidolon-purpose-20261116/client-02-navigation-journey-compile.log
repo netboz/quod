@@ -1,0 +1,23 @@
+/tmp/pearl-client-iv9xkfon/quod_lifecycle_single_path_tests.erl:1723:18: Warning: variable 'Dir' is unused
+% 1723| cleanup(#{dir := Dir, saved := Saved, manager := Manager,
+%     |                  ^
+
+test/quod_physics_tests.erl:1581:47: Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+% 1581|             #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+%     |                                               ^
+
+test/quod_physics_tests.erl:2211:34: Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+% 2211|         ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+%     |                                  ^
+
+test/quod_physics_tests.erl:2211:40: Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+% 2211|         ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+%     |                                        ^
+
+doc/evidence/interior-eidolon-purpose-20261116/godot_m3b_fixture.erl:9:30: Warning: variable 'Manager' is unused
+%    9|     #{dir := Dir, manager := Manager} = F,
+%     |                              ^
+

@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"structured\":{\"action\":\"updated\",\"id\":\"tsk_01M5PY8TEXKG858WBZJ1RHC6EW\",\"issueKeyStatus\":\"unassigned\",\"issueKeyMessage\":\"This item has no key until it is published.\",\"type\":\"task\",\"typeTags\":[\"task\"],\"title\":\"Stage 2 — Same-agent entry and space Eidolons\",\"changes\":{\"status\":{\"from\":\"to-do\",\"to\":\"in-progress\"},\"progress\":{\"from\":50,\"to\":50}}},\"summary\":\"Updated tracker item tsk_01M5PY8TEXKG858WBZJ1RHC6EW:\\n- **Status**: in-progress\\n- **Issue key**: This item has no key until it is published.\"}"
+    }
+  ],
+  "isError": false
+}

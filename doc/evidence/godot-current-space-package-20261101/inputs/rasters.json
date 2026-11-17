@@ -1,0 +1,43 @@
+{
+  "software_only": true,
+  "host_input": false,
+  "human_acceptance": false,
+  "rasters": {
+    "first-home.png": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/current-space-journey01/sandbox/work/first-home.png",
+      "sha256": "73fe168660a779bf7644bb0a2783ac42b10797a1afea931a8b9aa792086105e2",
+      "bytes": 32314,
+      "mode": 384,
+      "viewed": true
+    },
+    "reopened-draft.png": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/current-space-journey01/sandbox/work/reopened-draft.png",
+      "sha256": "4a8c076b9220e6bca436df4bde8897ebb0f9263ab5bf454a51819fa74da1de18",
+      "bytes": 91176,
+      "mode": 384,
+      "viewed": true
+    },
+    "retained-draft.png": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/current-space-journey01/sandbox/work/retained-draft.png",
+      "sha256": "1f395f21b91cdd792087a86683e7552aa80c6dfe1a5ce34ebcb2a4d03cd3d20b",
+      "bytes": 94394,
+      "mode": 384,
+      "viewed": true
+    },
+    "named-contents.png": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/current-space-journey01/sandbox/work/named-contents.png",
+      "sha256": "4046368b2999c62344552b257792a0a7f27ae39943266864eb855c57d5bc082f",
+      "bytes": 42444,
+      "mode": 384,
+      "viewed": true
+    },
+    "reopened-home.png": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/current-space-journey01/sandbox/work/reopened-home.png",
+      "sha256": "c3430fbe2bb8b00d295892bf3c85c812faa1cfbcbe9ac6d37131b700cfb0346d",
+      "bytes": 32795,
+      "mode": 384,
+      "viewed": true
+    }
+  },
+  "scope": "Initial and reopened current interior, named contents, and source-context recall. The recall rasters show the top of the inspector, not an enclosed editor; earlier actual native scroll/focus checks qualify editor reachability."
+}

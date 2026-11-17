@@ -95,7 +95,7 @@ with_served_entry(Fun) ->
 serve(Snapshot, From, To) ->
     case quod_ledger_store:open_ro_snapshot(Snapshot) of
         {ok, Reader} ->
-            try quod_catchup:transfer_page(Reader, quod_catchup:transfer_open(Reader, From, To))
+            try quod_catchup:transfer_page(Reader, quod_catchup:transfer_open(Reader, From, To), unlimited)
             after quod_ledger_store:close(Reader) end;
         {error, _} = Error -> Error
     end.

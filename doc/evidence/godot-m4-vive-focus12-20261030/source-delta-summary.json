@@ -1,0 +1,16 @@
+{
+  "product_test_spec_or_compiled_inputs_changed": 0,
+  "inherited_diagnostic_publishers": {
+    "doc/evidence/godot-m4-vive-retest-20261030/physical09.py": {
+      "added": 3,
+      "removed": 2
+    },
+    "doc/evidence/godot-m4-vive-physical-20261029/manual_run.py": {
+      "added": 4,
+      "removed": 3
+    }
+  },
+  "new_shared_identifier_owner_lines": 7,
+  "relocations": [],
+  "new_metadata_fixture_and_evidence_scope": "All exact new paths/content/modes captured in the additive source manifest/archive."
+}

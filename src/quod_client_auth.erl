@@ -1,6 +1,6 @@
 -module(quod_client_auth).
 -moduledoc """
-Bounded, node-local proof-of-key challenges and sessions for the browser client.
+Node-local proof-of-key challenges and sessions for the browser client.
 
 This service proves that a browser controls an Ed25519 key and issues an
 opaque, short-lived session bound to that key. It neither creates an ontology
@@ -22,7 +22,7 @@ Two properties are worth stating because they shaped the code:
 Every local validity and window comparison uses the monotonic clock. Only the
 expiry a browser signs is wall-clock, because both ends must read it the same.
 
-The cumulative client-vocabulary ceiling is tied to the VM lifetime, just as
+An explicitly configured cumulative client-vocabulary ceiling is tied to the VM lifetime, just as
 the atom table is.  A baseline atom count is retained in `persistent_term`
 across auth-owner restarts; the owner then conservatively counts all atom-table
 growth since that baseline.  Restarting this process therefore cannot reset the
@@ -42,9 +42,7 @@ ceiling, while restarting the VM naturally resets both atoms and the baseline.
 -endif.
 
 -define(TTL_MS, 60000).
--define(MAX_CHALLENGES, 256).
 -define(SESSION_TTL_MS, 900000).
--define(MAX_SESSIONS, 256).
 -define(PRUNE_INTERVAL_MS, 30000).
 -include("quod_client_goal_limits.hrl").
 
@@ -53,16 +51,16 @@ ceiling, while restarting the VM naturally resets both atoms and the baseline.
             challenges = #{} :: #{binary() => map()},
             sessions = #{} :: #{binary() => map()},
             ttl_ms :: pos_integer(),
-            max_challenges :: pos_integer(),
+            max_challenges :: pos_integer() | unlimited,
             session_ttl_ms :: pos_integer(),
-            max_sessions :: pos_integer(),
+            max_sessions :: pos_integer() | unlimited,
             challenge_rate :: none | quod_rate:limiter(),
             goal_signing_key_rate :: none | quod_rate:limiter(),
             goal_peer_rate :: none | quod_rate:limiter(),
             symbol_signing_key_rate :: none | quod_rate:limiter(),
             symbol_peer_rate :: none | quod_rate:limiter(),
             atom_baseline :: non_neg_integer(),
-            max_materialized_atoms :: non_neg_integer()}).
+            max_materialized_atoms :: non_neg_integer() | unlimited}).
 
 -define(ATOM_BASELINE_KEY, {?MODULE, atom_baseline}).
 -define(CHALLENGE_DOMAIN, <<"quod.agent.challenge.v1", 0>>).
@@ -89,10 +87,9 @@ start_link(Options) when is_map(Options) ->
 -doc """
 Issue one short-lived challenge for `PublicKey`.
 
-`Peer` is retained for an operator-enabled rate policy. By default there is no
-per-peer request quota; the bounded challenge table is the normal protection.
-An internet-facing deployment should explicitly configure `challenge_limit`
-under `client_rate_limits`; a trusted network may rely on the table cap.
+`Peer` is retained for an operator-enabled rate policy. Challenge/session
+populations default to unlimited; explicit finite table and rate allowances
+remain enforced by this owner.
 """.
 -spec issue_challenge(binary(), binary(), term()) -> {ok, map()} | {error, term()}.
 issue_challenge(PublicKey, ClientNonce, Peer) ->
@@ -157,9 +154,9 @@ init(Options) ->
     S = #s{network_id = maps:get(network_id, Options, undefined),
             node_key = maps:get(node_key, Options, undefined),
             ttl_ms = maps:get(ttl_ms, Options, ?TTL_MS),
-            max_challenges = maps:get(max_challenges, Options, ?MAX_CHALLENGES),
+            max_challenges = maps:get(max_challenges, Options, unlimited),
             session_ttl_ms = maps:get(session_ttl_ms, Options, ?SESSION_TTL_MS),
-            max_sessions = maps:get(max_sessions, Options, ?MAX_SESSIONS),
+            max_sessions = maps:get(max_sessions, Options, unlimited),
             challenge_rate = optional_rate(
                                rate_limit(challenge_limit, Options, RateLimits)),
             goal_signing_key_rate = optional_rate(
@@ -175,13 +172,12 @@ init(Options) ->
             atom_baseline = atom_baseline(Options),
             max_materialized_atoms =
                 maps:get(max_materialized_atoms, Options,
-                         ?QUOD_CLIENT_MAX_CUMULATIVE_NEW_ATOMS)},
+                         unlimited)},
     quod_reg:publish({client_auth, node}, {client_auth_ready, self()}),
     {ok, S}.
 
-%% Rate policy is operator-controlled and opt-in. Normal client traffic is
-%% limited only by the existing bounded queues and workers. Tests pass an
-%% explicit per-owner option so they do not depend on application state.
+%% Rate policy is operator-controlled and opt-in. Tests pass an explicit
+%% per-owner option so they do not depend on application state.
 configured_rate_limits() ->
     case application:get_env(quod, client_rate_limits, #{}) of
         Limits when is_map(Limits) -> Limits;
@@ -277,7 +273,7 @@ issue_charged(PublicKey, ClientNonce, NetworkId, NodeKey,
     {{ok, Reply}, S#s{challenges = Challenges#{ChallengeId => Challenge}}}.
 
 challenges_full(#s{challenges = Challenges, max_challenges = Max}) ->
-    map_size(Challenges) >= Max.
+    Max =/= unlimited andalso map_size(Challenges) >= Max.
 
 %% Capacity is tested BEFORE the take: a challenge is single-use, so consuming
 %% one only to refuse the session would cost the client a full round trip for
@@ -360,7 +356,7 @@ public_session(SessionId, #{public_key := PublicKey, expires_ms := ExpiresMs}) -
       public_key => PublicKey}.
 
 sessions_full(#s{sessions = Sessions, max_sessions = Max}) ->
-    map_size(Sessions) >= Max.
+    Max =/= unlimited andalso map_size(Sessions) >= Max.
 
 %% ======================================================================
 %% plumbing
@@ -412,25 +408,26 @@ admit_forwarded_goal_request(_PublicKey, _ForwarderKey, S) ->
     {{error, invalid_signing_key}, S}.
 
 materialize_verified_request(
-  <<_:256>> = PublicKey, Peer, AgentRef, Goal, S0) ->
+  <<_:256>> = PublicKey, Peer,
+  {agent_instance_ref, Ns, _, _} = AgentRef, Goal, S0) ->
     case {quod_wire_term:symbol_names(AgentRef),
-          quod_wire_term:goal_symbol_names(Goal)} of
+          quod_wire_term:goal_symbol_names(Goal, Ns)} of
         {{ok, AgentNames}, {ok, GoalNames}} ->
             Names = ordsets:union(AgentNames, GoalNames),
             NewNames = [Name || Name <- Names, not existing_atom(Name)],
             materialize_new_symbols(
               PublicKey, Peer, length(NewNames),
-              fun() -> materialize_request_terms(AgentRef, Goal) end, S0);
+              fun() -> materialize_request_terms(AgentRef, Goal, Ns) end, S0);
         _ ->
             {{error, invalid_goal}, S0}
     end;
 materialize_verified_request(_PublicKey, _Peer, _AgentRef, _Goal, S) ->
     {{error, invalid_signing_key}, S}.
 
-materialize_request_terms(AgentRef, Goal) ->
+materialize_request_terms(AgentRef, Goal, Ns) ->
     case quod_wire_term:materialize_symbols(AgentRef) of
         {ok, MaterializedAgentRef} ->
-            case quod_wire_term:materialize_goal_symbols(Goal) of
+            case quod_wire_term:materialize_goal_symbols(Goal, Ns) of
                 {ok, MaterializedGoal} ->
                     {ok, {MaterializedAgentRef, MaterializedGoal}};
                 {error, _} = Error -> Error
@@ -445,7 +442,7 @@ materialize_new_symbols(PublicKey, Peer, Count, Materialize,
                            max_materialized_atoms = Max} = S0)
   when Count > 0, is_function(Materialize, 0) ->
     Used = max(0, erlang:system_info(atom_count) - Baseline),
-    case Used + Count =< Max of
+    case Max =:= unlimited orelse Used + Count =< Max of
         false ->
             {{error, client_symbol_budget_exhausted}, S0};
         true ->
@@ -456,8 +453,8 @@ materialize_new_symbols(PublicKey, Peer, Count, Materialize,
                     {Error, S1};
                 {ok, S1} ->
                     %% The owner serializes client vocabulary allocation.  The
-                    %% existing materializer still enforces per-request and VM
-                    %% headroom limits shared with every other wire boundary.
+                    %% shared materializer checks actual VM atom capacity. Explicit
+                    %% finite owner allowances and rates remain enforced above.
                     materialized_reply(Materialize(), S1)
             end
     end.
@@ -538,10 +535,8 @@ network_and_node(#s{network_id = Network0, node_key = Node0}) ->
             {error, client_auth_unavailable}
     end.
 
-%% A periodic sweep, not a per-request one: at full caps, rebuilding both tables
-%% on every lookup would put a few hundred entries of copying in front of each
-%% request. Lookups still check the one entry they touch, so nothing expired is
-%% ever honoured between sweeps.
+%% Sweeps retire expired rows without rebuilding both tables on each request.
+%% Lookups check the touched entry, so expired rows are never honoured.
 prune_expired(Now, S = #s{challenges = Challenges, sessions = Sessions}) ->
     S#s{challenges = drop_expired(Now, Challenges),
         sessions = drop_expired(Now, Sessions)}.

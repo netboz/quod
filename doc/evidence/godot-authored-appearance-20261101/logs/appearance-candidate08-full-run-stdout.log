@@ -1,0 +1,68 @@
+PASS enabled action create-key
+PASS enabled action connect
+PASS enabled action register
+PASS enabled action prepare
+PASS enabled action setup
+PASS ordinary authorized source transaction authors an independent non-space instrument form and appearance
+PASS exact anchored subject reaches its authored operation through existing signed discovery and form owners
+PASS actual native signed instrument raster retained
+PASS authored appearance reaches the native primary action instead of the adapter default
+PASS explicit fixture source change commits once
+PASS native target enclosed in every clipping ancestor: control0
+PASS real native editing reaches the same dirty local draft
+PASS adjacent native keyboard remains opaque and holds no appearance text copy
+PASS explicit fixture source change commits once
+PASS appearance-only commit retains native controls draft and style resource identity
+PASS appearance-only colour renewal retains dirty text caret and selection
+PASS existing authorization withdrawal revokes input and keyboard; appearance never restores focus
+PASS appearance-only renewal preserves semantic revision submit target permission and original outcome
+PASS actual changed colour applies only to its authored independent occurrence
+PASS named history rebuild write sync measurement starts
+PASS unchanged signed renewals reuse themes controls and projections with zero named history rebuild write sync work
+PASS authored permille affects only the panel background
+PASS local Opaque preference overrides authored transparency without rebuilding
+PASS explicit fixture source change commits once
+PASS appearance geometry change cancels an existing native capture without submitting
+PASS authored appearance target remains reachable at (True, 1200, 26)
+PASS authored appearance target remains reachable at (True, 1200, 26)
+PASS local text size has precedence over authored appearance at (True, 1200, 26)
+PASS native target enclosed in every clipping ancestor: control0
+PASS native field focus retains exact local draft at (True, 1200, 26)
+PASS active field stays visible with the existing adjacent keyboard at (True, 1200, 26)
+PASS ordinary desktop panels remain opaque
+PASS actual appearance raster retained: instrument-1200-26
+PASS authored appearance target remains reachable at (True, 1200, 48)
+PASS authored appearance target remains reachable at (True, 1200, 48)
+PASS local text size has precedence over authored appearance at (True, 1200, 48)
+PASS native target enclosed in every clipping ancestor: control0
+PASS native field focus retains exact local draft at (True, 1200, 48)
+PASS active field stays visible with the existing adjacent keyboard at (True, 1200, 48)
+PASS ordinary desktop panels remain opaque
+PASS actual appearance raster retained: instrument-1200-48
+PASS authored appearance target remains reachable at (False, 560, 26)
+PASS authored appearance target remains reachable at (False, 560, 26)
+PASS local text size has precedence over authored appearance at (False, 560, 26)
+PASS native target enclosed in every clipping ancestor: control0
+PASS native field focus retains exact local draft at (False, 560, 26)
+PASS ordinary desktop panels remain opaque
+PASS actual appearance raster retained: instrument-560-26
+PASS semantic component identity excludes only authored appearance
+PASS native parser refuses malformed unsupported or ambiguous appearance
+PASS the signed anchored vocabulary refuses the same invalid appearance
+PASS native parser refuses malformed unsupported or ambiguous appearance
+PASS the signed anchored vocabulary refuses the same invalid appearance
+PASS native parser refuses malformed unsupported or ambiguous appearance
+PASS the signed anchored vocabulary refuses the same invalid appearance
+PASS native parser refuses malformed unsupported or ambiguous appearance
+PASS the signed anchored vocabulary refuses the same invalid appearance
+PASS native parser refuses malformed unsupported or ambiguous appearance
+PASS the signed anchored vocabulary refuses the same invalid appearance
+PASS native parser refuses malformed unsupported or ambiguous appearance
+PASS the signed anchored vocabulary refuses the same invalid appearance
+PASS wrong anchored appearance vocabulary cannot supply a native descriptor
+PASS explicit fixture source change commits once
+PASS ambiguous authored appearance withdraws the affected form instead of silently using defaults
+PASS independent authored occurrence is currently accepted after the shared ontology change
+PASS enabled action disconnect
+PASS appearance consumers retire through ordinary disconnect
+{"passed": true, "failure": null, "children": {"server": 0, "client-appearance-full": 0}, "native_inputs": 0}

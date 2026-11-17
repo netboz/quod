@@ -1,0 +1,17 @@
+{
+  "command": [
+    "python3",
+    "client/godot-tools/run.py",
+    "--export"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T03:55:16Z",
+  "elapsed_seconds": 15.52426552772522,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/tmp/quod-m4-ca84d4f8/private/logs/export-development05.log",
+  "raw_sha256": "f36e6bad37c9b541bd07ffc2389de63a00b67a1d8f5955831f9c33457807f222",
+  "sanitized_sha256": "f36e6bad37c9b541bd07ffc2389de63a00b67a1d8f5955831f9c33457807f222",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

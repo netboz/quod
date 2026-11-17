@@ -1,0 +1,17 @@
+[
+  {
+    "phase": "m2-fresh",
+    "command": [
+      "hyprctl",
+      "dispatch",
+      "focuswindow",
+      "pid:738554"
+    ],
+    "child_exit": 7,
+    "stdout": "error: [string \"return hl.dispatch(focuswindow pid:738554)\"]:1: ')' expected near 'pid'\n\n \u2192 Note: dispatch in lua is a shorthand for hl.dispatch(...), your syntax might need to be updated.\n",
+    "stderr": "",
+    "owned_pid": 738554,
+    "before_pid": 187550,
+    "after_pid": 187550
+  }
+]

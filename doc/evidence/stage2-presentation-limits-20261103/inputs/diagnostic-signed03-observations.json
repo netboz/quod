@@ -1,0 +1,8 @@
+{
+  "count": 285,
+  "marks": 570,
+  "label": "predicate_with_a_complete_long_descriptive_name / 2",
+  "fullLabel": true,
+  "fullScene": false,
+  "sceneResult": "Quod.Client.ApiError: proof_unavailable"
+}

@@ -1,0 +1,16 @@
+======================== EUnit ========================
+workbench_checks: saved_fact_rule_spelling_test...*failed*
+in function lists:last/1 (lists.erl, line 466)
+  called as last([])
+in call from workbench_checks:draft/3 (/input/workbench_checks.erl, line 60)
+in call from workbench_checks:'-saved_fact_rule_spelling_test/0-fun-5-'/1 (/input/workbench_checks.erl, line 52)
+in call from workbench_checks:with_owner/1 (/input/workbench_checks.erl, line 86)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+**error:function_clause
+  output:<<"">>
+
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 0.

@@ -1,0 +1,11 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-m1b-20261028/freeze-client.py",
+    "final-01"
+  ],
+  "child_exit": 1,
+  "phase": "dependency-reader-before-build",
+  "reason": "The evidence reader compared signed ZIP SHA512 to NuGet canonical contentHash. NuGet PackageArchiveReader distinguishes them. Retain final01; correction delegates canonical hash computation to a cold locked restore and independently checks both hashes.",
+  "stage": "/tmp/quod-m1b-client-final-01"
+}

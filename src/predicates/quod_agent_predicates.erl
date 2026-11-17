@@ -10,13 +10,16 @@ does not obtain identity from a live node observation.
 Key preparation is an explicitly authorized read-only service over that same
 scope. It retains stable encrypted custody without assigning or activating an
 agent. The destination is explicit and its preparation policy is pure Prolog.
+The optional receipt binds its result to this executor for a later assignment;
+verification uses supplied immutable bytes and that proof's bound signer only.
 """.
 
 -include_lib("erlog/src/erlog_int.hrl").
 
 -export([quod_predicate_module/0, load/1,
          sign_agent_request/3, reconcile_agent_hosts/3, reconcile_agent_observers/3,
-         local_node_agent/3, installed_agent_reaction/3, prepare_agent_key_custody/3]).
+         local_node_agent/3, installed_agent_reaction/3, prepare_agent_key_custody/3,
+         prepared_agent_key_custody/3]).
 
 quod_predicate_module() -> true.
 
@@ -26,7 +29,11 @@ load(Est) ->
                                              ?MODULE, local_node_agent),
     WithCustody = quod_predicates:register(WithLocalNode, {prepare_agent_key_custody, 5}, query,
                                            ?MODULE, prepare_agent_key_custody),
-    WithSigning = quod_predicates:register(WithCustody, {sign_agent_request, 2}, query,
+    WithReceipt = quod_predicates:register(WithCustody, {prepare_agent_key_custody, 6}, query,
+                                           ?MODULE, prepare_agent_key_custody),
+    WithVerification = quod_predicates:register(WithReceipt, {prepared_agent_key_custody, 6},
+                                           query, proof_bound, ?MODULE, prepared_agent_key_custody),
+    WithSigning = quod_predicates:register(WithVerification, {sign_agent_request, 2}, query,
                                            ?MODULE, sign_agent_request),
     WithHandler = quod_predicates:register(WithSigning, {installed_agent_reaction, 5}, query,
                                             ?MODULE, installed_agent_reaction),
@@ -94,13 +101,39 @@ reconcile_agent_observers({reconcile_agent_observers, Scope}, Next, St) ->
 
 -doc "Prepare stable custody for an exact prior assignment, including none/0.".
 prepare_agent_key_custody({prepare_agent_key_custody, A0, H0, E0, N0, K0}, Next,
+                          St) ->
+    custody_read_context(St),
+    Finish = fun(PublicKey) -> erlog_int:unify_prove_body(K0, PublicKey, Next, St) end,
+    prepare_custody(A0, H0, E0, N0, K0, Finish, St);
+prepare_agent_key_custody({prepare_agent_key_custody, A0, H0, E0, N0, K0, Receipt}, Next,
                           St = #est{bs = Bs}) ->
+    custody_read_context(St),
+    case erlog_int:dderef(Receipt,Bs) of
+        {_} -> ok;
+        Value -> erlog_int:domain_error(custody_receipt_output,Value,St)
+    end,
+    case quod_proof_session:signer_from_state(St) of
+        #{pubkey := <<_:256>>} = Signer ->
+            Finish = fun(PublicKey) ->
+                [Agent, Host, Epoch, Node] = erlog_int:dderef([A0,H0,E0,N0], Bs),
+                {ok,Bytes} = custody_bytes(Agent, Host, Epoch, Node, PublicKey),
+                Signature = quod_identity:sign(Bytes, Signer),
+                erlog_int:unify_prove_body([K0,Receipt], [PublicKey,Signature], Next, St)
+            end,
+            prepare_custody(A0, H0, E0, N0, K0, Finish, St);
+        none -> quod_predicates:fail_reason(custody_executor_unavailable, St)
+    end.
+
+custody_read_context(St) ->
     Context = quod_predicates:context(St),
     case quod_predicates:ctx_kind(Context) of
         proof -> ok;
         Kind -> erlog_int:erlog_error(
             {context_violation, prepare_agent_key_custody, query, Kind}, St)
-    end,
+    end.
+
+prepare_custody(A0, H0, E0, N0, K0, Finish,
+                          St = #est{bs = Bs}) ->
     case quod_proof_session:read_only_state(St) of
         true -> ok;
         false -> erlog_int:erlog_error(
@@ -117,7 +150,7 @@ prepare_agent_key_custody({prepare_agent_key_custody, A0, H0, E0, N0, K0}, Next,
             case quod_runtime_predicates:scope_identity(St) of
                 {ok, {Ns, Anchor}} ->
                     case local_destination(Node) of
-                        true -> authorize_custody(Agent, Instance, Host, Epoch, Node, Key, Next, St);
+                        true -> authorize_custody(Agent, Instance, Host, Epoch, Node, Finish, St);
                         false -> quod_predicates:fail_reason(custody_destination_unavailable, St)
                     end;
                 _ -> erlog_int:erlog_error(
@@ -129,7 +162,7 @@ prepare_agent_key_custody({prepare_agent_key_custody, A0, H0, E0, N0, K0}, Next,
 local_destination(Node) ->
     quod_node_actor:reference() =:= {ok, Node}.
 
-authorize_custody(Agent, Instance, Host, Epoch, Node, Key, Next, St = #est{vn = Vn}) ->
+authorize_custody(Agent, Instance, Host, Epoch, Node, Finish, St = #est{vn = Vn}) ->
     Blob = case quod_wire_term:encode_canonical(Agent) of
         {ok, Encoded} ->
             case quod_agent_ref:decode(Encoded) of
@@ -140,8 +173,8 @@ authorize_custody(Agent, Instance, Host, Epoch, Node, Key, Next, St = #est{vn = 
     end,
     {succeed, PrincipalState} = erlog_int:prove_goal({current_principal, {Vn}}, St),
     Caller = erlog_int:dderef({Vn}, PrincipalState#est.bs),
-    Policy = {agent_key_preparation, Caller, Instance, Host, Epoch, Node},
-    case quod_ask:committed_authorization_result(Policy, St) of
+    Policy = {can_prepare_agent_key, Caller, Instance, Host, Epoch, Node},
+    case quod_ask:local_authorization_result(Policy, St) of
         allowed ->
             Deadline = case quod_scope_session:remaining_ms() of
                 {ok, Remaining} -> quod_time:mono_ms() + Remaining;
@@ -152,13 +185,44 @@ authorize_custody(Agent, Instance, Host, Epoch, Node, Key, Next, St = #est{vn = 
                     %% The installed destination may have withdrawn while the
                     %% vault was busy. Its staged key remains inert and reusable.
                     case local_destination(Node) of
-                        true -> erlog_int:unify_prove_body(Key, PublicKey, Next, St);
+                        true -> Finish(PublicKey);
                         false -> quod_predicates:fail_reason(custody_destination_unavailable, St)
                     end;
                 {error, Reason} -> quod_predicates:fail_reason({agent_custody_unavailable, Reason}, St)
             end;
         denied -> erlog_int:fail(St);
         invalid -> erlog_int:erlog_error(invalid_custody_policy, St)
+    end.
+
+%% Verification uses only supplied immutable bytes and the executor already
+%% bound to this proof. It never observes, prepares or repairs live custody.
+%% Domain policy still decides whether this exact prior assignment is allowed.
+prepared_agent_key_custody({prepared_agent_key_custody, A0,H0,E0,N0,K0,R0}, Next,
+                           St = #est{bs = Bs}) ->
+    [Agent,Host,Epoch,Node,Key,Receipt] = erlog_int:dderef([A0,H0,E0,N0,K0,R0], Bs),
+    case quod_wire_term:is_ground([Agent,Host,Epoch,Node,Key,Receipt]) of
+        false -> erlog_int:instantiation_error(St);
+        true ->
+            case {Agent, Key, Receipt, quod_runtime_predicates:scope_identity(St),
+                  quod_proof_session:signer_from_state(St)} of
+                {{agent_instance_ref,Ns,Anchor,_}, <<_:256>>, <<_:512>>,
+                 {ok,{Ns,Anchor}}, #{pubkey := Executor}} ->
+                    case custody_bytes(Agent,Host,Epoch,Node,Key) of
+                        {ok,Bytes} ->
+                            case quod_identity:verify(Receipt,Bytes,Executor) of
+                                true -> erlog_int:prove_body(Next, St);
+                                false -> quod_predicates:fail_reason(invalid_custody_receipt, St)
+                            end;
+                        error -> quod_predicates:fail_reason(invalid_custody_receipt, St)
+                    end;
+                _ -> quod_predicates:fail_reason(invalid_custody_receipt, St)
+            end
+    end.
+
+custody_bytes(Agent,Host,Epoch,Node,Key) ->
+    case quod_wire_term:encode_canonical([Agent,Host,Epoch,Node,Key]) of
+        {ok,Bytes} -> {ok,<<"quod.prepared-agent-custody.v1",0,Bytes/binary>>};
+        {error,_} -> error
     end.
 
 -doc "Authorize one canonical request in a committed read-only session before releasing its signature.".
@@ -195,7 +259,7 @@ sign_typed(Typed, Signature, Next, St) ->
     end.
 
 authorize_sign(Request, Typed, NodeRef,
-               Signature, Next, #est{vn = Vn} = St) ->
+               Signature, Next, St) ->
     %% All arguments except the engine-authenticated caller are ground. The
     %% existing interpreter evaluates the ordinary ontology policy against this
     %% immutable read-only session; no staged grant can authorize this release.
@@ -205,8 +269,19 @@ authorize_sign(Request, Typed, NodeRef,
         error -> quod_proof_context:remaining_ms()
     end,
     Deadline = Now + Remaining,
-    Policy = {',', {current_principal, {Vn}},
-              {can_sign_agent_request, {Vn}, NodeRef, Typed}},
+    {agent_instance_ref, _, _, Instance} = element(3, Typed),
+    %% Reuse class traversal and named-check dispatch. Several inherited
+    %% classes can share an owner; ask its rule only once. The native call
+    %% remains bound to the exact storing identity checked above.
+    Checks = {',', {member, {'Class'}, {'Classes'}},
+              {'$quod_class_predicate', {'Class'}, can_sign_agent_request, {'Check'}}},
+    Policy = lists:foldr(fun(Goal, Rest) -> {',', Goal, Rest} end,
+        {operation_check, {'Check'}, {'Principal'}, NodeRef, Typed},
+        [{current_principal, {'Principal'}},
+         {entity_classes, Instance, {'Classes'}},
+         {findall, {'Check'}, Checks, {'RawChecks'}},
+         {sort, {'RawChecks'}, {'Checks'}},
+         {member, {'Check'}, {'Checks'}}]),
     case quod_ask:authorization_result(Policy, St) of
         allowed ->
             case quod_agent_vault:sign(Request, Deadline) of

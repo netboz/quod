@@ -1,0 +1,16 @@
+{
+  "command": [
+    "dotnet",
+    "restore",
+    "doc/evidence/godot-m0-20261027/probe/M0.csproj",
+    "--packages",
+    "/tmp/quod-godot-m0-nuget",
+    "--locked-mode"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-27T15:09:01Z",
+  "elapsed_seconds": 3.1303751468658447,
+  "child_exit": 1,
+  "timed_out": false,
+  "error_diagnostics": 0
+}

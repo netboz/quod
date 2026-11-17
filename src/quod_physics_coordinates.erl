@@ -36,6 +36,17 @@ choose(Values,Current,Grid,Limit) ->
                                _ -> throw(outside_window) end
     end.
 
+local({frame_mm,Base,{A,B,C}},Origin,Limit) when is_integer(Limit),Limit > 0 ->
+    case point(Base) andalso point(Origin) of
+        true ->
+            {X,Y,Z}=subtract(Base,Origin),
+            Position={X+A,Y+B,Z+C},
+            case lists:all(fun(N) -> is_number(N) andalso abs(N) =< Limit end,tuple_to_list(Position)) of
+                true -> {PX,PY,PZ}=Position,{ok,{PX/1000,PY/1000,PZ/1000}};
+                false -> {error,coordinate_allowance}
+            end;
+        false -> {error,invalid_coordinate_frame}
+    end;
 local(P,Origin,Limit) when is_integer(Limit),Limit > 0 ->
     case point(P) andalso point(Origin) of
         true ->
@@ -100,8 +111,13 @@ body_points(Bodies,Saved,Previous,Frame,Current) ->
                 {{Row,_},{ok,Local}} -> canonical(Local,Current);
                 _ -> maps:get(Id,Saved,P)
             end,
-            [add(Point,{-1,-1,-1}),add(Point,{1,1,1})]
+            point_bounds(Point)
     end,Bodies).
+
+point_bounds({frame_mm,Base,{X,Y,Z}}) ->
+    [add(Base,{floor(X)-1,floor(Y)-1,floor(Z)-1}),
+     add(Base,{ceil(X)+1,ceil(Y)+1,ceil(Z)+1})];
+point_bounds(Point) -> [add(Point,{-1,-1,-1}),add(Point,{1,1,1})].
 
 
 regions(Shapes) ->

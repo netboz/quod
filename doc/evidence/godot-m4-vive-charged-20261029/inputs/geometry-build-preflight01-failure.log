@@ -1,0 +1,4 @@
+{"M:Godot.XRServer.IsCameraLockedToOrigin": false, "M:Godot.Viewport.GetCamera3D": true, "M:Godot.MeshInstance3D.GetAabb": false}
+Traceback (most recent call last):
+  File "<stdin>", line 14, in <module>
+AssertionError

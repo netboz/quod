@@ -1,0 +1,8 @@
+{
+  "question_cell": "378",
+  "respondedBy": "desktop",
+  "respondedAt": 1793723782653,
+  "edited": false,
+  "explicit_authority_literal": "I explicitly authorize applying and testing the three frozen consolidated02 patches: remaining-owners.patch, namespace-admission-CONDITIONAL.patch, and erlog-diagnostics.patch. This includes removing the identified hardcoded resource-admission quotas (history, material, pending queues, committee/routes, atoms, effects, diagnostics, authentication and proof/scope workers), with potentially increased resource consumption. Preserve explicit finite policies, authorization, custody, signatures and actual encoding constraints. I also explicitly authorize the namespace storage-format code change: existing old-layout stores will be refused until a separately authorized preservation/cutover; do not migrate, delete, deploy or open my stores. After validation, allow the reviewed Erlog-only commit/publication to netboz/erlog and exact dependency pin, using the required commit proposal. Keep Quod uncommitted. No deadline changes or uncertain-operation replay.",
+  "preceding_rejection_preserved": "consolidated02-dispatch-rejection01.json"
+}

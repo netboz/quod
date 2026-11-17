@@ -1,0 +1,524 @@
+{
+  "purpose": "274 conformance review; no acceptance or immutable freeze",
+  "head": "293cf6115c0a6b18315eccdbb42cbca396f443d3",
+  "branch": "worktree/pearl-stone",
+  "index_empty": true,
+  "production_candidate": {
+    "added_lines": 84,
+    "removed_lines": 32,
+    "net_lines": 52,
+    "files": {
+      "client/godot/ScenePanel.cs": {
+        "before": {
+          "sha256": "c828b2fc972bef98ba059cd17c502f04d56b714440ab54c7eb386bbf05160cf7",
+          "stat_key": [
+            66305,
+            23514195,
+            21018,
+            1793546502668068780,
+            1793546502668068780
+          ],
+          "mode": 33188,
+          "copy": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-gui-alignment-20261101/inputs/before/client/godot/ScenePanel.cs"
+        },
+        "preserved_copy": {
+          "sha256": "c828b2fc972bef98ba059cd17c502f04d56b714440ab54c7eb386bbf05160cf7",
+          "stat_key": [
+            66305,
+            28445899,
+            21018,
+            1793546502668068780,
+            1793562516713293530
+          ],
+          "mode": 33188
+        },
+        "candidate": {
+          "sha256": "06010557074dbc43c88e56c892e4233550b4e87b30346fa92e34cde36c654db7",
+          "stat_key": [
+            66305,
+            23514195,
+            21593,
+            1793562790399309243,
+            1793562790399309243
+          ],
+          "mode": 33188
+        },
+        "added_lines": 9,
+        "removed_lines": 2,
+        "candidate_runtime_qualified": false
+      },
+      "client/godot/Core/Scene.cs": {
+        "before": {
+          "sha256": "f95971b172b696ab5166c7daccaf60720072950fd42449f371825171b471a220",
+          "stat_key": [
+            66305,
+            23514194,
+            5573,
+            1793468235121615653,
+            1793468235121615653
+          ],
+          "mode": 33188,
+          "copy": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-gui-alignment-20261101/inputs/before/client/godot/Core/Scene.cs"
+        },
+        "preserved_copy": {
+          "sha256": "f95971b172b696ab5166c7daccaf60720072950fd42449f371825171b471a220",
+          "stat_key": [
+            66305,
+            28445901,
+            5573,
+            1793468235121615653,
+            1793562516713594180
+          ],
+          "mode": 33188
+        },
+        "candidate": {
+          "sha256": "51854d7c4229f1854286e0c05a8bc421803b0ba1e607c75c726d7a44cfc3f008",
+          "stat_key": [
+            66305,
+            23514194,
+            5815,
+            1793562790341307759,
+            1793562790341307759
+          ],
+          "mode": 33188
+        },
+        "added_lines": 4,
+        "removed_lines": 2,
+        "candidate_runtime_qualified": false
+      },
+      "client/godot/Main.cs": {
+        "before": {
+          "sha256": "f29a35a0d8e7e6afcd0fa88ef3866a7ee15e1901a2884159de2d5997e85e30f4",
+          "stat_key": [
+            66305,
+            23512511,
+            44451,
+            1793547456468356276,
+            1793547456468356276
+          ],
+          "mode": 33188,
+          "copy": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-gui-alignment-20261101/inputs/before/client/godot/Main.cs"
+        },
+        "preserved_copy": {
+          "sha256": "f29a35a0d8e7e6afcd0fa88ef3866a7ee15e1901a2884159de2d5997e85e30f4",
+          "stat_key": [
+            66305,
+            28445902,
+            44451,
+            1793547456468356276,
+            1793562516713788665
+          ],
+          "mode": 33188
+        },
+        "candidate": {
+          "sha256": "73ec929849d0bde10093ccb942f4ec35d9ef0950508e46bd1b05f43d73e87782",
+          "stat_key": [
+            66305,
+            23512511,
+            45215,
+            1793562790468311007,
+            1793562790468311007
+          ],
+          "mode": 33188
+        },
+        "added_lines": 18,
+        "removed_lines": 10,
+        "candidate_runtime_qualified": false
+      },
+      "client/godot/QuestionHub.cs": {
+        "before": {
+          "sha256": "029f0aaf6d5ac26b1d4c26f0a98399b2fef8ee6ac172d7f626d56910ead4c2bb",
+          "stat_key": [
+            66305,
+            23512512,
+            11405,
+            1793535332239347797,
+            1793535332239347797
+          ],
+          "mode": 33188,
+          "copy": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-gui-alignment-20261101/inputs/before/client/godot/QuestionHub.cs"
+        },
+        "preserved_copy": {
+          "sha256": "029f0aaf6d5ac26b1d4c26f0a98399b2fef8ee6ac172d7f626d56910ead4c2bb",
+          "stat_key": [
+            66305,
+            28445903,
+            11405,
+            1793535332239347797,
+            1793562516714044096
+          ],
+          "mode": 33188
+        },
+        "candidate": {
+          "sha256": "5e42e4aa6903561eac39eb1705d937615d2f1c3f5de606abe84cdc78263904f4",
+          "stat_key": [
+            66305,
+            23512512,
+            14841,
+            1793562790517312261,
+            1793562790517312261
+          ],
+          "mode": 33188
+        },
+        "added_lines": 51,
+        "removed_lines": 17,
+        "candidate_runtime_qualified": false
+      },
+      "client/godot/FormPanel.cs": {
+        "before": {
+          "sha256": "8d19a51d76b9d01a8aa719702431368d5cf91e8b4b6b69e7341067498ea596f5",
+          "stat_key": [
+            66305,
+            23512508,
+            18707,
+            1793537712755754726,
+            1793537712755754726
+          ],
+          "mode": 33188,
+          "copy": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-gui-alignment-20261101/inputs/before/client/godot/FormPanel.cs"
+        },
+        "preserved_copy": {
+          "sha256": "8d19a51d76b9d01a8aa719702431368d5cf91e8b4b6b69e7341067498ea596f5",
+          "stat_key": [
+            66305,
+            28445904,
+            18707,
+            1793537712755754726,
+            1793562516714231905
+          ],
+          "mode": 33188
+        },
+        "candidate": {
+          "sha256": "ba49eb34f6e34a7dcc4df98161af950981bdfbf95095749bfae45f41ac2854ce",
+          "stat_key": [
+            66305,
+            23512508,
+            18774,
+            1793562761776576596,
+            1793562761776576596
+          ],
+          "mode": 33188
+        },
+        "added_lines": 2,
+        "removed_lines": 1,
+        "candidate_runtime_qualified": false
+      }
+    }
+  },
+  "builds": {
+    "alignment-baseline01": {
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-gui-alignment-20261101/inputs/client-alignment-baseline01-manifest.json",
+      "manifest_identity": {
+        "sha256": "b2d812bf81ca62108f85275c8e929f2e6122642564151b3f19cc54f595385d18",
+        "stat_key": [
+          66305,
+          28445889,
+          27074,
+          1793562578026079783,
+          1793562578026079783
+        ],
+        "mode": 33152
+      },
+      "passed": false,
+      "live_inputs": 98,
+      "supplied_inputs": 99,
+      "declared_exports": 0,
+      "trace_free": false,
+      "distributable": false,
+      "wrapper_child_exit": 1,
+      "timed_out": false,
+      "runtime_launched": false
+    },
+    "alignment-baseline02": {
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-gui-alignment-20261101/inputs/client-alignment-baseline02-manifest.json",
+      "manifest_identity": {
+        "sha256": "c3ff03c681c33a8333c0e977e9ccfa9468d8051510cf4a88986c5eae1e1dbe05",
+        "stat_key": [
+          66305,
+          28446162,
+          61635,
+          1793562628713623277,
+          1793562628713623277
+        ],
+        "mode": 33152
+      },
+      "passed": true,
+      "live_inputs": 98,
+      "supplied_inputs": 99,
+      "declared_exports": 196,
+      "trace_free": false,
+      "distributable": false,
+      "wrapper_child_exit": 0,
+      "timed_out": false,
+      "runtime_launched": true
+    },
+    "alignment-baseline03": {
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-gui-alignment-20261101/inputs/client-alignment-baseline03-manifest.json",
+      "manifest_identity": {
+        "sha256": "c6f96998eb55e903cda60cdf8a894bc8840b78f1e28ca52282e566a312081708",
+        "stat_key": [
+          66305,
+          28446256,
+          61635,
+          1793562705024452417,
+          1793562705024452417
+        ],
+        "mode": 33152
+      },
+      "passed": true,
+      "live_inputs": 98,
+      "supplied_inputs": 99,
+      "declared_exports": 196,
+      "trace_free": false,
+      "distributable": false,
+      "wrapper_child_exit": 0,
+      "timed_out": false,
+      "runtime_launched": true
+    },
+    "alignment-candidate04": {
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-gui-alignment-20261101/inputs/client-alignment-candidate04-manifest.json",
+      "manifest_identity": {
+        "sha256": "61433187faa9a96ec1d1459b4078735d733aeabd005fdd90980b4fe6506561b6",
+        "stat_key": [
+          66305,
+          28446877,
+          61645,
+          1793562838512699352,
+          1793562838512699352
+        ],
+        "mode": 33152
+      },
+      "passed": true,
+      "live_inputs": 98,
+      "supplied_inputs": 99,
+      "declared_exports": 196,
+      "trace_free": false,
+      "distributable": false,
+      "wrapper_child_exit": 0,
+      "timed_out": false,
+      "runtime_launched": false
+    },
+    "alignment-candidate05": {
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-gui-alignment-20261101/inputs/client-alignment-candidate05-manifest.json",
+      "manifest_identity": {
+        "sha256": "1bfcfbb42723c49f882fcd163bef14f854d9867b91a579927883da7359a3d5e5",
+        "stat_key": [
+          66305,
+          28447295,
+          61645,
+          1793562952809135205,
+          1793562952809135205
+        ],
+        "mode": 33152
+      },
+      "passed": true,
+      "live_inputs": 98,
+      "supplied_inputs": 99,
+      "declared_exports": 196,
+      "trace_free": false,
+      "distributable": false,
+      "wrapper_child_exit": 0,
+      "timed_out": false,
+      "runtime_launched": false
+    }
+  },
+  "cases": {
+    "alignment-material-baseline02": {
+      "result": "/data/quod-m4-vr-ca84d4f8-20261029/private/alignment-material-baseline02/result.raw.json",
+      "result_identity": {
+        "sha256": "507cc742f5050c0068e460cb7a7e4b8533abab26e32cfad4178f4759d5d22e18",
+        "stat_key": [
+          2050,
+          27525417,
+          6087,
+          1793562660472090515,
+          1793562660472090515
+        ],
+        "mode": 33152
+      },
+      "passed": false,
+      "failure": "AssertionError: ",
+      "children": {
+        "server": 0,
+        "client-alignment-material": 1
+      },
+      "wrapper_child_exit": 1,
+      "outer_timed_out": false,
+      "elapsed_seconds": 21.129228830337524,
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-alignment-material-stdout": true,
+        "client-alignment-material-stderr": true
+      },
+      "reader_errors": [],
+      "unretired_failure": false
+    },
+    "alignment-attention-baseline02": {
+      "result": "/data/quod-m4-vr-ca84d4f8-20261029/private/alignment-attention-baseline02/result.raw.json",
+      "result_identity": {
+        "sha256": "17bc58663853ea32194c34c08c657c9056e3c9429f152483a80757b9fef0789d",
+        "stat_key": [
+          2050,
+          27525739,
+          6194,
+          1793562690872825428,
+          1793562690872825428
+        ],
+        "mode": 33152
+      },
+      "passed": false,
+      "failure": "AssertionError: ",
+      "children": {
+        "server": 0,
+        "client-alignment-attention": 1
+      },
+      "wrapper_child_exit": 1,
+      "outer_timed_out": false,
+      "elapsed_seconds": 21.25740671157837,
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-alignment-attention-stdout": true,
+        "client-alignment-attention-stderr": true
+      },
+      "reader_errors": [],
+      "unretired_failure": false
+    },
+    "alignment-material-baseline03": {
+      "result": "/data/quod-m4-vr-ca84d4f8-20261029/private/alignment-material-baseline03/result.raw.json",
+      "result_identity": {
+        "sha256": "0c6366a91df5e544aef312d7498dbab0e0acb787ee64d18a30f4b95c3feb4dce",
+        "stat_key": [
+          2050,
+          27658001,
+          6196,
+          1793562917384479271,
+          1793562917384479271
+        ],
+        "mode": 33152
+      },
+      "passed": false,
+      "failure": "Empty: ",
+      "children": {
+        "server": 0,
+        "client-alignment-material": -15
+      },
+      "wrapper_child_exit": 1,
+      "outer_timed_out": false,
+      "elapsed_seconds": 199.17783975601196,
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-alignment-material-stdout": true,
+        "client-alignment-material-stderr": true
+      },
+      "reader_errors": [],
+      "unretired_failure": true
+    }
+  },
+  "observations": {
+    "material.json": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/alignment-material-baseline03/sandbox/work/material.json",
+      "identity": {
+        "sha256": "17e1d0698503f6e2a0eb33072655202b5ec420913420f56c98a712f51db42a33",
+        "stat_key": [
+          2050,
+          27656549,
+          65,
+          1793562741510057163,
+          1793562741510057163
+        ],
+        "mode": 33152
+      },
+      "value": {
+        "samples": [
+          "6a90d9ff",
+          "6a90d9ff",
+          "6a90d9ff"
+        ],
+        "faceDifference": 0
+      }
+    },
+    "attention-arrival.json": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/alignment-attention-baseline02/sandbox/work/attention-arrival.json",
+      "identity": {
+        "sha256": "03693fa345e3e5da54b21c375a7d71c335f1df3296c62e51191adac72b542ab3",
+        "stat_key": [
+          2050,
+          27525764,
+          3837,
+          1793562690465746239,
+          1793562690465746239
+        ],
+        "mode": 33152
+      },
+      "value": {
+        "questions": 2,
+        "visibleForms": 2,
+        "focus": null,
+        "state": {
+          "state": "account-ready",
+          "busy": false,
+          "public_key": "A7fpRk_LnHjUVPYlGbkIy5WUiG4jJvuYZH9rq4dfbxM",
+          "network": "K2UvKqK-31q6uI0hEVAtpNo8WkdKmUXhiFNZpIe_qOw",
+          "human": {
+            "Namespace": "human:ma6G6IkhNCaEehIqOji4uquyye7oL7jDAwn34vhiOi0",
+            "Anchor": "I42ROWJWL2_g3k9NkP9dp_dUaSGbfraroXR85tZYFEY",
+            "InstanceText": "me."
+          },
+          "setup": "account(agent_instance_ref(<<\"human:ma6G6IkhNCaEehIqOji4uquyye7oL7jDAwn34vhiOi0\">>,<<\"#\\x8d\\\\x91\\9bV/o\\xe0\\\\xde\\OM\\x90\\\\xff\\]\\xa7\\\\xf7\\Ti!\\x9b\\~\\xb6\\\\xab\\\\xa1\\t|\\xe6\\\\xd6\\X\\x14\\F\">>,me),agent_instance_ref(<<\"human:ma6G6IkhNCaEehIqOji4uquyye7oL7jDAwn34vhiOi0\">>,<<\"#\\x8d\\\\x91\\9bV/o\\xe0\\\\xde\\OM\\x90\\\\xff\\]\\xa7\\\\xf7\\Ti!\\x9b\\~\\xb6\\\\xab\\\\xa1\\t|\\xe6\\\\xd6\\X\\x14\\F\">>,personal),entity_ref(<<\"human:ma6G6IkhNCaEehIqOji4uquyye7oL7jDAwn34vhiOi0\">>,<<\"#\\x8d\\\\x91\\9bV/o\\xe0\\\\xde\\OM\\x90\\\\xff\\]\\xa7\\\\xf7\\Ti!\\x9b\\~\\xb6\\\\xab\\\\xa1\\t|\\xe6\\\\xd6\\X\\x14\\F\">>,<<\"01M6CANE73YSBX1WS9RBCZ1S47\">>),ontology_ref(<<\"human:ma6G6IkhNCaEehIqOji4uquyye7oL7jDAwn34vhiOi0\">>,<<\"#\\x8d\\\\x91\\9bV/o\\xe0\\\\xde\\OM\\x90\\\\xff\\]\\xa7\\\\xf7\\Ti!\\x9b\\~\\xb6\\\\xab\\\\xa1\\t|\\xe6\\\\xd6\\X\\x14\\F\">>),<<\"5\\x9a\\@4\\xfc\\V\\xb0\\\\xe6\\\\r\\xa4\\&%\\x87\\]\\x13\\\\xbc\\\\x7f\\\\xf8\\\\x15\\\\xc6\\\\x8e\\\\xa8\\\\xf6\\\\xe0\\\\x0b\\\\x15\\\\xe2\\\\xea\\\\x04\\\\xad\\\\xa5\\'\">>,pins(<<\"\\xbe\\\\x15\\\\xdd\\\\x1f\\tV\\xeb\\\\xcb\\2?\\xa5\\\\x05\\\\x15\\\\xe2\\`\\xe3\\\\xb3\\`\\r\\xd6\\\\x0c\\\\xa0\\\\xda\\\\x01\\\\xf6\\\\xb7\\\\xc7\\\\xda\\\\xc0\\\\xb5\\(\\xb8\\\">>,<<\"\\x93\\\\xe9\\\\xda\\\\xf7\\\\xaf\\\\x10\\\\x95\\P\\xe2\\L\\xc1\\Li[s\\x80\\\\xce\\{\\xfe\\>\\xd7\\\\x88\\n\\xe3\\\\x07\\H\\xd8\\@Ss\\xaf\\\\xc3\\\">>,<<\"\\xb3\\t\\xd6\\\\xc9\\\\xe4\\\\x07\\h\\xf8\\\\xf8\\\\x02\\\\xe5\\\\x88\\\\xf6\\\\\"\\xd0\\z\\xf9\\\\x9f\\\\xba\\\\x92\\\\x18\\\\xb1\\WD\\x9d\\^\\x94\\s\\xed\\\\x90\\v~\">>,<<\"R7\\xf4\\\\xd6\\\\x8f\\]CE)\\xc3\\\\xc1\\Z\\x8d\\\\x04\\K\\xd9\\\\x1b\\\\xc1\\\\x1c\\\\xb7\\\\x8f\\X\\x07\\\\xb6\\sw\\x10\\\\xba\\Dnor\">>,<<\"\\x12\\SGo\\xcf\\\\xbe\\\\x13\\[\\xb9\\-,2f\\xb6\\\\xa4\\\\xd6\\.Y\\x84\\\\x9e\\\\x96\\\\x9c\\^\\xd9\\o\\xd0\\-\\xba\\k\\x9a\\\\xbf\\\\xf2\\\">>))",
+          "pending": 0,
+          "world_accepted": true,
+          "live_sockets": 6,
+          "ignored_projections": 0,
+          "question_receiver_ready": true,
+          "current_location": "placed(entity_ref(<<\"human:ma6G6IkhNCaEehIqOji4uquyye7oL7jDAwn34vhiOi0\">>,<<\"#\\x8d\\\\x91\\9bV/o\\xe0\\\\xde\\OM\\x90\\\\xff\\]\\xa7\\\\xf7\\Ti!\\x9b\\~\\xb6\\\\xab\\\\xa1\\t|\\xe6\\\\xd6\\X\\x14\\F\">>,<<\"01M6CANE73YSBX1WS9RBCZ1S47\">>),transform(0,0,0,0,0,0))",
+          "assignment_revision": "1",
+          "physical_selection": "nonphysical",
+          "physical_tick": null,
+          "scene_count": 0,
+          "operation_available": null,
+          "operation_status": null,
+          "status": "",
+          "controller_status": {
+            "available": true,
+            "revision": "0",
+            "digest": "EWOaAaDhlG1m-sE4f_1thzMcbIf5ANlDI7k0M0eAYk4",
+            "choices": {},
+            "sources": []
+          },
+          "controller_metrics": {
+            "Running": false,
+            "Subscriptions": 0,
+            "sources": 0,
+            "appearances": 0,
+            "MenuRedraws": 0,
+            "LateCallbacks": 0,
+            "captures": 0,
+            "DriveRequests": 0,
+            "StopRequests": 0,
+            "SnapRequests": 0,
+            "TeleportRequests": 0,
+            "resources": {
+              "Acquisitions": 0,
+              "Releases": 0,
+              "Decodes": 0,
+              "InstancesCreated": 0,
+              "InstancesReleased": 0,
+              "NodesBuilt": 0,
+              "TexturesDecoded": 0,
+              "LiveTemplates": 0,
+              "LiveLeases": 0
+            }
+          }
+        }
+      }
+    }
+  },
+  "new_production_runtime_qualification": false,
+  "new_trace_free_product": false,
+  "new_package": false,
+  "freeze_performed": false,
+  "production_work_after_274": "No further production edits or runtime launches; the already-owned candidate05 build completed."
+}

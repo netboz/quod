@@ -1,0 +1,28 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-m4-r2-20261029/campaign.py",
+    "renewal-owner-observation02",
+    "--client",
+    "renewal-diagnostic02",
+    "--export",
+    "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-renewal-diagnostic02/source/client/godot/dist/quod.x86_64",
+    "--stage",
+    "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+    "--profile",
+    "prod",
+    "--journey",
+    "gui",
+    "--controllers"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T11:57:50Z",
+  "elapsed_seconds": 43.71047067642212,
+  "child_exit": 1,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m4-r2-artifacts/private/logs/renewal-owner-observation02.log",
+  "raw_sha256": "cb483ebbc43ac69f40b1eeee6c0a88b3dd69688cc4fc3a36f8bdf8968d1ff66e",
+  "sanitized_sha256": "cb483ebbc43ac69f40b1eeee6c0a88b3dd69688cc4fc3a36f8bdf8968d1ff66e",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

@@ -1,7 +1,6 @@
 -module(quod_safe_term_tests).
 
 -include_lib("eunit/include/eunit.hrl").
--include("quod_term_limits.hrl").
 
 untrusted_etf_guards_test() ->
     Encoded = term_to_binary({ok, <<1, 2, 3>>}, [deterministic]),
@@ -137,17 +136,12 @@ wrapped_decode_rejects_maps_nested_in_map_keys_test() ->
     TupleKey = term_to_binary(#{{#{a => 1}} => nested}, [deterministic]),
     ?assertEqual({error, bad_term}, decode_wrapped(TupleKey)).
 
-wrapped_decode_depth_bound_test() ->
-    Accepted = nested_tuple(?QUOD_MAX_TERM_DEPTH),
-    AcceptedBlob = term_to_binary(Accepted, [deterministic]),
-    ?assertEqual({ok, Accepted},
-                 quod_safe_term:decode_wrapped(AcceptedBlob,
-                                               byte_size(AcceptedBlob))),
-    Refused = nested_tuple(?QUOD_MAX_TERM_DEPTH + 1),
-    RefusedBlob = term_to_binary(Refused, [deterministic]),
-    ?assertEqual({error, bad_term},
-                 quod_safe_term:decode_wrapped(RefusedBlob,
-                                               byte_size(RefusedBlob))).
+wrapped_decode_preserves_nested_values_test() ->
+    Value = nested_tuple(96),
+    Blob = term_to_binary(Value, [deterministic]),
+    ?assertEqual({ok, Value}, quod_safe_term:decode_wrapped(Blob, unlimited)),
+    ?assertEqual({error, too_large},
+                 quod_safe_term:decode_wrapped(Blob, byte_size(Blob) - 1)).
 
 wrapped_decode_loaded_and_unloaded_vms_compare_identically_test_() ->
     %% Two peer boots (15 s each), three RPCs (5 s each), and two
@@ -167,11 +161,11 @@ wrapped_decode_loaded_and_unloaded_vms_compare_identically() ->
                   ++ integer_to_list(erlang:unique_integer([positive]))),
     {ok, UnloadedPeer, _} = peer:start_link(
                               #{name => PeerName1, connection => standard_io,
-                                args => ["-pa" | Path]}),
+                                args => ["-setcookie", atom_to_list(erlang:get_cookie()), "-pa" | Path]}),
     try
         {ok, LoadedPeer, _} = peer:start_link(
                                 #{name => PeerName2, connection => standard_io,
-                                  args => ["-pa" | Path]}),
+                                  args => ["-setcookie", atom_to_list(erlang:get_cookie()), "-pa" | Path]}),
         try
             {ok, Wrapped} = peer:call(
                               UnloadedPeer, quod_safe_term, decode_wrapped,

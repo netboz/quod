@@ -1,0 +1,108 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1505 │                  #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+      │                                                    ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1553 │              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+      │                                                ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 2181 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 2181 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                         ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+[0;31mF[0m
+Failures:
+
+  1) quod_physics_tests:-class_owner_rules_drive_physics_selection_test_/0-fun-6-/0
+[0;31m     Failure/Error: {error,
+                        {physics_not_installed,any,#{},
+                            #{source_attach_queued => 0,events_seen => 3,
+                              source_views_building => 0,
+                              rejected_subscriptions => 0,
+                              agent_work_blocked => 0,agent_work_idle => 0,
+                              agent_pending_bytes => 0,
+                              agent_observation_bytes => 0,reconciles => 1,
+                              dropped_events => 0,physics_worlds => 0,
+                              source_attempts => 0,
+                              agent_observation_capacity => ready,
+                              runner_active => true,subscriptions_active => 0,
+                              height => 4,source_views_unreachable => 0,
+                              source_targets_active => 0,
+                              reaction_candidates => 0,
+                              source_views_active => 0,mode => live,
+                              observed_agent_instances => 0,
+                              hosted_agent_instances => 0,
+                              reaction_failures => 0,
+                              agent_observation_refusals_total => 0,
+                              resource_failures => #{},reaction_matches => 0,
+                              agent_capacity_refusals_total => 0,
+                              agent_capacity_status => ready,queue_len => 1,
+                              collapses => 0,resource_dependencies => 1,
+                              reactions_executed => 0,e_frontier => 4,
+                              reactions_active => 6,reconcile_failures => 0,
+                              source_interests_active => 0,
+                              source_views_ready => 0,hosted_agents => 0,
+                              p_height => 4}},
+                        [{quod_physics_tests,installed,4,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"},
+                              {line,3361}]},
+                         {quod_physics_tests,
+                             '-class_owner_rules_drive_physics_selection_test_/0-fun-5-',
+                             1,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"},
+                              {line,1492}]},
+                         {quod_physics_tests,'-with_world/3-fun-0-',3,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"},
+                              {line,3290}]},
+                         {quod_agent_hosting_tests,with_host,4,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"},
+                              {line,1654}]},
+                         {quod_physics_tests,with_world,3,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"},
+                              {line,3293}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]}]}
+[0m[0;36m     Output: reader wait <0.695.0> {current_stacktrace,
+                          [{gen_server,loop,5,
+                               [{file,"gen_server.erl"},{line,2311}]},
+                           {proc_lib,init_p_do_apply,3,
+                               [{file,"proc_lib.erl"},{line,333}]}]}
+reader wait <0.676.0> {current_stacktrace,
+                          [{gen_server,loop_hibernate,4,
+                               [{file,"gen_server.erl"},{line,2338}]},
+                           {proc_lib,init_p_do_apply,3,
+                               [{file,"proc_lib.erl"},{line,333}]}]}
+reader wait <0.247839.0> undefined
+Failed hosted-agent fixture retained at /tmp/quod_hosted_A408C5359FD51D3C
+[0m
+
+Finished in 15.610 seconds
+[0;31m1 tests, 1 failures
+[0m===> Error running tests

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Quod — login screen</title>
+<style>
+  :root { --teal:#0B3954; --teal-2:#0E4766; --gray:#848FA5; --rose:#C14953; --green:#698F3F; --yellow:#F9C80E; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: Inter, "Segoe UI", system-ui, sans-serif; background:#061f2f; color:#fff; padding:28px; }
+  h1.page { font-weight:600; font-size:18px; color:var(--gray); margin:0 0 18px; }
+  .row { display:flex; gap:28px; flex-wrap:wrap; }
+  .frame { width:560px; height:400px; border-radius:10px; overflow:hidden; position:relative;
+           background: radial-gradient(120% 90% at 50% 25%, var(--teal-2) 0%, var(--teal) 55%, #072536 100%);
+           box-shadow: 0 10px 30px rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; }
+  .caption { color:var(--gray); font-size:13px; margin:8px 2px 0; }
+  .card { width:340px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12);
+          border-radius:16px; padding:26px 28px 20px; text-align:center; backdrop-filter: blur(6px); }
+  .logo { width:84px; height:84px; margin:0 auto 10px; display:block; }
+  .title { font-size:22px; font-weight:600; margin:0 0 4px; letter-spacing:.2px; }
+  .sub { font-size:13px; color:#c9d1de; margin:0 0 18px; }
+  label { display:block; text-align:left; font-size:12px; color:#c9d1de; margin:0 0 6px; }
+  input { width:100%; padding:10px 12px; border-radius:9px; border:1px solid rgba(255,255,255,.22);
+          background:rgba(0,0,0,.22); color:#fff; font-size:14px; outline:none; }
+  input:focus { border-color: var(--yellow); }
+  .primary { width:100%; margin-top:14px; padding:11px; border-radius:9px; border:0; font-size:15px; font-weight:600;
+             background:var(--yellow); color:var(--teal); cursor:pointer; }
+  .links { display:flex; justify-content:space-between; margin-top:12px; font-size:12px; }
+  .links a { color:#c9d1de; text-decoration:none; }
+  .status { margin-top:12px; font-size:12px; color:#c9d1de; min-height:16px; }
+  .status.err { color:#ffb3b9; }
+  .spinner { width:18px; height:18px; border-radius:50%; border:2px solid rgba(255,255,255,.25); border-top-color:var(--yellow);
+             display:inline-block; vertical-align:-4px; margin-right:8px; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .splash { flex-direction:column; }
+  .splash .logo { width:150px; height:150px; margin-bottom:14px; }
+  .splash .word { font-size:30px; font-weight:600; letter-spacing:6px; }
+  .key { font-family: ui-monospace, monospace; font-size:11px; color:var(--gray); }
+</style>
+</head>
+<body>
+<h1 class="page">Quod desktop client — proposed splash and login (Godot, works on desktop and in VR)</h1>
+<div class="row">
+
+  <div>
+    <div class="frame splash">
+      <img class="logo" src="../../assets/dodecahedron/app-icon/quod-dodecahedron-icon-512.png" alt="">
+      <div class="word">QUOD</div>
+    </div>
+    <p class="caption">1 · Splash while the app starts (Godot boot splash).</p>
+  </div>
+
+  <div>
+    <div class="frame">
+      <div class="card">
+        <img class="logo" src="../../assets/dodecahedron/app-icon/quod-dodecahedron-icon-512.png" alt="">
+        <p class="title">Welcome to Quod</p>
+        <p class="sub">Your key stays on this device.</p>
+        <label>Node address</label>
+        <input value="quod-0.service.consul">
+        <button class="primary">Create my key</button>
+        <div class="links"><a href="#">Import a backup</a><a href="#">Details</a></div>
+        <div class="status"></div>
+      </div>
+    </div>
+    <p class="caption">2 · First run: one field, one button.</p>
+  </div>
+
+  <div>
+    <div class="frame">
+      <div class="card">
+        <img class="logo" src="../../assets/dodecahedron/app-icon/quod-dodecahedron-icon-512.png" alt="">
+        <p class="title">Welcome back</p>
+        <p class="sub">quod-0.service.consul</p>
+        <div class="status"><span class="spinner"></span>Signing in…</div>
+        <div class="links" style="justify-content:center;margin-top:18px"><a href="#">Change node · Details</a></div>
+      </div>
+    </div>
+    <p class="caption">3 · Returning: signs in by itself, nothing to type.</p>
+  </div>
+
+  <div>
+    <div class="frame">
+      <div class="card">
+        <img class="logo" src="../../assets/dodecahedron/app-icon/quod-dodecahedron-icon-512.png" alt="">
+        <p class="title">Create your account</p>
+        <p class="sub">This key has no account on this network yet.</p>
+        <button class="primary">Create my account</button>
+        <div class="links"><a href="#">Sign out</a><a href="#">Details</a></div>
+        <div class="status"></div>
+      </div>
+    </div>
+    <p class="caption">4 · Next steps (account, starting space) use the same card, one button each.</p>
+  </div>
+
+  <div>
+    <div class="frame">
+      <div class="card">
+        <img class="logo" src="../../assets/dodecahedron/app-icon/quod-dodecahedron-icon-512.png" alt="">
+        <p class="title">Can't sign in</p>
+        <p class="sub">quod-0.service.consul</p>
+        <div class="status err">This node's key is not the one remembered for this address.</div>
+        <button class="primary">Try again</button>
+        <div class="links"><a href="#">Forget this node's key</a><a href="#">Details</a></div>
+      </div>
+    </div>
+    <p class="caption">5 · Errors stay in the card, with the one useful action.</p>
+  </div>
+
+</div>
+</body>
+</html>

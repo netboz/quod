@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-workspace-placement-20261031/build.py", line 61, in <module>
+    run('export',['python3','client/godot-tools/run.py','--export'],godot=True)
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-workspace-placement-20261031/build.py", line 41, in run
+    if result.returncode:raise RuntimeError('Build phase failed: '+name)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: Build phase failed: export

@@ -116,7 +116,8 @@ guarded(Fun) ->
     end.
 
 drive({succeed, St}, Goal, Scope) ->
-    {solution, erlog_int:dderef(Goal, St#est.bs),
+    {Answer, _} = answer(Goal, erlog_int:dderef(Goal, St#est.bs), St#est.vn),
+    {solution, Answer,
      Scope#scope{state = St, phase = more}};
 drive({fail, St}, _Goal, Scope) ->
     {complete, St#est.fail_reasons, Scope#scope{state = St}};
@@ -126,6 +127,36 @@ drive({scope_error, Reason}, _Goal, Scope) ->
     {error, Reason, Scope, keep_current};
 drive(_Other, _Goal, Scope) ->
     {error, {protocol_error, proof_engine}, Scope, keep_current}.
+
+%% A computed answer supplies new bindings, not another copy of ground inputs.
+%% Keep callable structure and every resolved variable occurrence. Each known
+%% argument becomes a distinct fresh variable: the caller's retained invocation
+%% supplies its value during ordinary answer unification. Fresh IDs start above
+%% the interpreter's variables, so holes cannot alias outputs or each other.
+%% The exact original goal remains in the invocation transcript and ACL check.
+answer({_}, Value, Vn) -> {Value, Vn};
+answer(Goal, Value, Vn) when is_tuple(Goal) ->
+    [Functor | Args] = tuple_to_list(Goal),
+    [_ | Values] = tuple_to_list(Value),
+    {Projected, Next} = answer_arguments(Args, Values, Vn),
+    {list_to_tuple([Functor | Projected]), Next};
+answer([Head | Tail], [Value | Rest], Vn) ->
+    {Projected, Next} = answer_argument(Head, Value, Vn),
+    {ProjectedTail, Final} = answer_argument(Tail, Rest, Next),
+    {[Projected | ProjectedTail], Final};
+answer(Goal, _Value, Vn) -> {Goal, Vn}.
+
+answer_arguments([], [], Vn) -> {[], Vn};
+answer_arguments([Goal | Goals], [Value | Values], Vn) ->
+    {Projected, Next} = answer_argument(Goal, Value, Vn),
+    {Rest, Final} = answer_arguments(Goals, Values, Next),
+    {[Projected | Rest], Final}.
+
+answer_argument(Goal, Value, Vn) ->
+    case quod_wire_term:is_ground(Goal) of
+        true -> {{Vn}, Vn + 1};
+        false -> answer(Goal, Value, Vn)
+    end.
 
 %% No solution, exhaustion report, or interpreter error crosses the scope
 %% boundary without one final generation check. This catches a Vote or

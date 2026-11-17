@@ -1,0 +1,13 @@
+{
+  "command": [
+    "python3",
+    "-c",
+    "from pathlib import Path\nimport json,hashlib,time\nroot=Path('/home/yan/src/quod_worktrees/pearl-stone');e=root/'doc/evidence/godot-m0-20261027'\nv=json.loads((e/'inputs/r1-gates-06-source-manifest.json').read_text());stage=Path(v['stage'])/'source'\nassert stage==Path('/tmp/quod-m0-r1-gates-06/source')\nassert json.loads((e/'logs/r1-gates-06-eunit.json').read_text())['child_exit']==0\nassert not (e/'logs/r1-gates-06-xref.log').exists()\nname='_build/default/lib/.rebar3/rebar_compiler_erl/source_project_apps.dag';q=stage/name;raw=q.read_bytes();digest=hashlib.sha256(raw).hexdigest();assert digest==v['dependencies'][name]\nsaved=e/'inputs/r1-gates-06-copied-project-graph.dag';assert not saved.exists();saved.write_bytes(raw)\nfor n,h in v['dependencies'].items():\n if n==name:continue\n p=stage/n\n if isinstance(h,dict):assert p.is_symlink() and str(p.readlink())==h['symlink'],n\n else:assert hashlib.sha256(p.read_bytes()).hexdigest()==h,n\nassert (stage/'_build/test/lib/.rebar3/rebar_compiler_erl/source_project_apps.dag').is_file()\nq.unlink()\nrecord={'verified':True,'utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'campaign':'r1-gates-06','recorded_dependency_entries':len(v['dependencies']),'dependency_source_entries':len(v['dependencies'])-1,'copied_generated_metadata':{'path':name,'sha256':digest,'bytes':len(raw),'retained_input':'inputs/r1-gates-06-copied-project-graph.dag','removed_before_default_profile_compile':True},'compiled_inputs_copied':False,'runtime_sources_changed':False,'reason':'A hidden root .rebar3 directory was copied beside real locked dependency directories. Its default-project compiler index is derived build metadata, not dependency source or executable code. Retained exact input bytes and removed the index before default-profile xref compilation. Test-profile compilation has its independently generated project index; native/test application outputs were rebuilt.'}\n(e/'inputs/r1-gates-06-copy-hygiene.json').write_text(json.dumps(record,indent=2)+'\\n');print(json.dumps(record))\n"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-27T20:14:00Z",
+  "elapsed_seconds": 0.1144561767578125,
+  "child_exit": 0,
+  "timed_out": false,
+  "error_diagnostics": 0
+}

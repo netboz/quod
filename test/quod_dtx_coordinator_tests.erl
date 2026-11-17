@@ -1645,7 +1645,7 @@ with_dormant_wave_fixture(Fun) ->
     {TargetNs, Anchor} = maps:get(target, F),
     Saved = application:get_env(quod, node_pubkey),
     application:set_env(quod, node_pubkey, maps:get(pubkey, maps:get(target_identity, F))),
-    Table = ets:new(binary_to_atom(<<"quod_simplex_genesis_", TargetNs/binary>>, utf8),
+    Table = ets:new(binary_to_atom(quod_simplex:genesis_table_name(TargetNs), utf8),
                     [named_table, public, set]),
     ets:insert(Table, {anchor, Anchor}),
     Stub = start_operation_stub(dormant, {quod_simplex, TargetNs}),
@@ -1703,7 +1703,7 @@ with_operation_fixture(N, Fun) -> with_operation_fixture(N, applied, Fun).
 with_operation_fixture(N, Result, Fun) ->
     quod_operation_fixture:with(N, [], Result, fun(F0 = #{source_ns := Ns, targets := Targets}) ->
         Tables = [begin
-            Table = ets:new(binary_to_atom(<<"quod_simplex_genesis_", TargetNs/binary>>, utf8),
+            Table = ets:new(binary_to_atom(quod_simplex:genesis_table_name(TargetNs), utf8),
                             [named_table, protected, set]),
             true = ets:insert(Table, {anchor, Anchor}), Table
         end || {TargetNs, Anchor} <- Targets],

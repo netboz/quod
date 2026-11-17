@@ -1,0 +1,43 @@
+{
+  "scene/main/viewport.cpp": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/engine-clean02/godot-4.7.2-stable/scene/main/viewport.cpp",
+    "stat_key": [
+      2050,
+      1206034,
+      200690,
+      1786929518000000000,
+      1793294496950882978
+    ],
+    "sha256": "db949779da96c93cbbdd3d97976efe00211fe900ca2e1283d67ce44671c4a652",
+    "excerpts": [
+      {
+        "first_line": 1664,
+        "last_line": 1703,
+        "text": "\t// If no custom tooltip is given, use a default implementation.\n\tif (!base_tooltip) {\n\t\tgui.tooltip_label = memnew(Label);\n\t\tgui.tooltip_label->set_theme_type_variation(SNAME(\"TooltipLabel\"));\n\t\tgui.tooltip_label->set_text(gui.tooltip_text);\n\t\tgui.tooltip_label->set_auto_translate_mode(tooltip_owner->get_tooltip_auto_translate_mode_at(tooltip_owner->get_global_transform_with_canvas().affine_inverse().xform(gui.last_mouse_pos)));\n\t\tbase_tooltip = gui.tooltip_label;\n\t\tpanel->connect(SceneStringName(mouse_entered), callable_mp(this, &Viewport::_gui_cancel_tooltip));\n\t}\n\n\tbase_tooltip->set_anchors_and_offsets_preset(Control::PRESET_FULL_RECT);\n\n\tpanel->set_flag(Window::FLAG_NO_FOCUS, true);\n\tpanel->set_flag(Window::FLAG_POPUP, false);\n\tpanel->set_flag(Window::FLAG_MOUSE_PASSTHROUGH, true);\n\tpanel->set_wrap_controls(true);\n\tpanel->set_default_canvas_item_texture_filter(get_default_canvas_item_texture_filter());\n\tpanel->set_default_canvas_item_texture_repeat(get_default_canvas_item_texture_repeat());\n\tpanel->add_child(base_tooltip);\n\tpanel->gui_parent = this;\n\n\tgui.tooltip_popup = panel;\n\n\ttooltip_owner->add_child(gui.tooltip_popup);\n\n\tWindow *window = Object::cast_to<Window>(gui.tooltip_popup->get_embedder());\n\tif (!window) { // Not embedded.\n\t\twindow = gui.tooltip_popup->get_parent_visible_window();\n\t}\n\tSize2 scale = get_popup_base_transform().get_scale();\n\treal_t popup_scale = MIN(scale.x, scale.y);\n\tPoint2 tooltip_offset = GLOBAL_GET_CACHED(Point2, \"display/mouse_cursor/tooltip_position_offset\");\n\ttooltip_offset *= popup_scale;\n\tRect2 r(gui.tooltip_pos + tooltip_offset, gui.tooltip_popup->get_contents_minimum_size());\n\tRect2i vr;\n\tif (gui.tooltip_popup->is_embedded()) {\n\t\tvr = gui.tooltip_popup->get_embedder()->get_visible_rect();\n\t} else {\n\t\tvr = window->get_usable_parent_rect();\n\t}\n"
+      }
+    ]
+  },
+  "scene/gui/text_edit.cpp": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/engine-clean02/godot-4.7.2-stable/scene/gui/text_edit.cpp",
+    "stat_key": [
+      2050,
+      1205982,
+      323195,
+      1786929518000000000,
+      1793294496939174588
+    ],
+    "sha256": "ae20fe2f72bac6cda8d3c54d8053c3c32f26d88614f04b5da12f0a66ed2407fb",
+    "excerpts": [
+      {
+        "first_line": 1207,
+        "last_line": 1213,
+        "text": "\t\t\t\t\t// Else, it stays zero.\n\t\t\t\t\tline_background_color.a = 1.0 * (line_background_color != Color(0, 0, 0, 0));\n\n\t\t\t\t\tColor current_color = editable ? theme_cache.font_color : theme_cache.font_readonly_color;\n\n\t\t\t\t\tconst Vector<String> wrap_rows = get_line_wrapped_text(minimap_line);\n\t\t\t\t\tint line_wrap_amount = get_line_wrap_count(minimap_line);\n"
+      },
+      {
+        "first_line": 7710,
+        "last_line": 7717,
+        "text": "\tBIND_THEME_ITEM_CUSTOM(Theme::DATA_TYPE_ICON, TextEdit, space_icon, \"space\");\n\n\tBIND_THEME_ITEM(Theme::DATA_TYPE_FONT, TextEdit, font);\n\tBIND_THEME_ITEM(Theme::DATA_TYPE_FONT_SIZE, TextEdit, font_size);\n\tBIND_THEME_ITEM(Theme::DATA_TYPE_COLOR, TextEdit, font_color);\n\tBIND_THEME_ITEM(Theme::DATA_TYPE_COLOR, TextEdit, font_readonly_color);\n\tBIND_THEME_ITEM(Theme::DATA_TYPE_COLOR, TextEdit, font_placeholder_color);\n\n"
+      }
+    ]
+  }
+}

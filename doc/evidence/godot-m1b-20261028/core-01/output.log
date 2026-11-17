@@ -1,0 +1,158 @@
+PASS browser backup public identity
+PASS browser exact UTF8 uint64 wire
+PASS browser Ed25519 signature
+PASS browser exact UTF8 uint64 wire
+PASS browser Ed25519 signature
+PASS challenge signature
+PASS wrong backup passphrase
+PASS GCM tamper
+PASS new encrypted backup restores original identity
+PASS functional data term canonical bytes
+PASS functional data term canonical bytes
+PASS functional data term canonical bytes
+PASS functional data term canonical bytes
+PASS functional data term canonical bytes
+PASS functional data term canonical bytes
+PASS malformed functional term
+PASS malformed functional term
+PASS malformed functional term
+PASS malformed functional term
+PASS malformed functional term
+PASS malformed functional term
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS all 100 real production fixtures including Reset
+PASS unchanged read exact original key
+PASS unchanged read exact original key
+PASS unchanged read exact original key
+PASS unchanged update does not replace active file
+PASS second writer lease
+System.FormatException: Expected integer.
+   at Quod.Client.Term.get_Integer() in /home/yan/src/quod_worktrees/pearl-stone/client/godot/Core/Term.cs:line 23
+   at System.Text.Json.Serialization.Metadata.JsonPropertyInfo`1.GetMemberAndWriteJson(Object obj, WriteStack& state, Utf8JsonWriter writer)
+   at System.Text.Json.Serialization.Converters.ObjectDefaultConverter`1.OnTryWrite(Utf8JsonWriter writer, T value, JsonSerializerOptions options, WriteStack& state)
+   at System.Text.Json.Serialization.JsonConverter`1.TryWrite(Utf8JsonWriter writer, T& value, JsonSerializerOptions options, WriteStack& state)
+   at System.Text.Json.Serialization.Converters.ArrayConverter`2.OnWriteResume(Utf8JsonWriter writer, TElement[] array, JsonSerializerOptions options, WriteStack& state)
+   at System.Text.Json.Serialization.JsonCollectionConverter`2.OnTryWrite(Utf8JsonWriter writer, TCollection value, JsonSerializerOptions options, WriteStack& state)
+   at System.Text.Json.Serialization.JsonConverter`1.TryWrite(Utf8JsonWriter writer, T& value, JsonSerializerOptions options, WriteStack& state)
+   at System.Text.Json.Serialization.Metadata.JsonPropertyInfo`1.GetMemberAndWriteJson(Object obj, WriteStack& state, Utf8JsonWriter writer)
+   at System.Text.Json.Serialization.Converters.ObjectDefaultConverter`1.OnTryWrite(Utf8JsonWriter writer, T value, JsonSerializerOptions options, WriteStack& state)
+   at System.Text.Json.Serialization.JsonConverter`1.TryWrite(Utf8JsonWriter writer, T& value, JsonSerializerOptions options, WriteStack& state)
+   at System.Text.Json.Serialization.Metadata.JsonPropertyInfo`1.GetMemberAndWriteJson(Object obj, WriteStack& state, Utf8JsonWriter writer)
+   at System.Text.Json.Serialization.Converters.ObjectDefaultConverter`1.OnTryWrite(Utf8JsonWriter writer, T value, JsonSerializerOptions options, WriteStack& state)
+   at System.Text.Json.Serialization.JsonConverter`1.TryWrite(Utf8JsonWriter writer, T& value, JsonSerializerOptions options, WriteStack& state)
+   at System.Text.Json.Serialization.Metadata.JsonPropertyInfo`1.GetMemberAndWriteJson(Object obj, WriteStack& state, Utf8JsonWriter writer)
+   at System.Text.Json.Serialization.Converters.ObjectDefaultConverter`1.OnTryWrite(Utf8JsonWriter writer, T value, JsonSerializerOptions options, WriteStack& state)
+   at System.Text.Json.Serialization.JsonConverter`1.TryWrite(Utf8JsonWriter writer, T& value, JsonSerializerOptions options, WriteStack& state)
+   at System.Text.Json.Serialization.Converters.DictionaryOfTKeyTValueConverter`3.OnWriteResume(Utf8JsonWriter writer, TCollection value, JsonSerializerOptions options, WriteStack& state)
+   at System.Text.Json.Serialization.JsonDictionaryConverter`3.OnTryWrite(Utf8JsonWriter writer, TDictionary dictionary, JsonSerializerOptions options, WriteStack& state)
+   at System.Text.Json.Serialization.JsonConverter`1.TryWrite(Utf8JsonWriter writer, T& value, JsonSerializerOptions options, WriteStack& state)
+   at System.Text.Json.Serialization.Metadata.JsonPropertyInfo`1.GetMemberAndWriteJson(Object obj, WriteStack& state, Utf8JsonWriter writer)
+   at System.Text.Json.Serialization.Converters.ObjectDefaultConverter`1.OnTryWrite(Utf8JsonWriter writer, T value, JsonSerializerOptions options, WriteStack& state)
+   at System.Text.Json.Serialization.JsonConverter`1.TryWrite(Utf8JsonWriter writer, T& value, JsonSerializerOptions options, WriteStack& state)
+   at System.Text.Json.Serialization.JsonConverter`1.WriteCore(Utf8JsonWriter writer, T& value, JsonSerializerOptions options, WriteStack& state)
+   at System.Text.Json.Serialization.Metadata.JsonTypeInfo`1.Serialize(Utf8JsonWriter writer, T& rootValue, Object rootValueBoxed)
+   at System.Text.Json.JsonSerializer.WriteBytes[TValue](TValue& value, JsonTypeInfo`1 jsonTypeInfo)
+   at System.Text.Json.JsonSerializer.SerializeToUtf8Bytes[TValue](TValue value, JsonSerializerOptions options)
+   at Quod.Client.LocalStore.Save(LocalState next) in /home/yan/src/quod_worktrees/pearl-stone/client/godot/Core/LocalStore.cs:line 92
+   at Quod.Client.LocalStore.Update(Action`1 change) in /home/yan/src/quod_worktrees/pearl-stone/client/godot/Core/LocalStore.cs:line 88
+   at Tests.Store(Identity key) in /home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/Program.cs:line 69
+   at Tests.Main(String[] args) in /home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/Program.cs:line 53

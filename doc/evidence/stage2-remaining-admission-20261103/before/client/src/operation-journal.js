@@ -1,0 +1,125 @@
+import { SIGNED_GOAL_LIMITS, utf8ByteLength } from './protocol-limits.js'
+import { b64url } from './key-provider.js'
+
+const DATABASE = 'quod.signed-operations.v2'
+const STORE = 'operations'
+const DATABASE_VERSION = 1
+
+let browserJournal
+
+// The browser retains unresolved request bytes and any returned group selector. The ledger remains the
+// authority for their outcome; IndexedDB merely prevents a reload from turning
+// uncertainty into a newly signed operation.
+export function signedOperationJournal() {
+  if (browserJournal) return browserJournal
+  if (!globalThis.indexedDB) {
+    throw new Error('durable browser storage is unavailable; signed writes are disabled')
+  }
+  browserJournal = indexedDbJournal()
+  return browserJournal
+}
+
+export function memoryOperationJournal() {
+  const rows = new Map()
+  return {
+    async put(row) {
+      validateRow(row)
+      rows.set(row.id, structuredClone(row))
+    },
+    async delete(id) { rows.delete(id) },
+    async replace(id, row) {
+      validateRow(row)
+      if (!rows.has(id)) throw new Error('operation already advanced')
+      rows.set(row.id, structuredClone(row))
+      if (row.id !== id) rows.delete(id)
+    },
+    async list() { return [...rows.values()].map(row => structuredClone(row)) },
+  }
+}
+
+function indexedDbJournal() {
+  const database = openDatabase()
+  return {
+    async put(row) {
+      validateRow(row)
+      await request(database, 'readwrite', store => store.put(row))
+    },
+    async delete(id) {
+      await request(database, 'readwrite', store => store.delete(id))
+    },
+    async replace(id, row) {
+      validateRow(row)
+      await request(database, 'readwrite', store => {
+        const previous = store.get(id)
+        previous.onsuccess = () => {
+          if (!previous.result) { store.transaction.abort(); return }
+          store.put(row)
+          if (row.id !== id) store.delete(id)
+        }
+        return previous
+      })
+    },
+    async list() {
+      const rows = await request(database, 'readonly', store => store.getAll())
+      return rows.filter(validRow)
+    },
+  }
+}
+
+function openDatabase() {
+  return new Promise((resolve, reject) => {
+    const open = indexedDB.open(DATABASE, DATABASE_VERSION)
+    open.onupgradeneeded = () => {
+      if (!open.result.objectStoreNames.contains(STORE)) {
+        open.result.createObjectStore(STORE, { keyPath: 'id' })
+      }
+    }
+    open.onsuccess = () => resolve(open.result)
+    open.onerror = () => reject(open.error || new Error('could not open operation journal'))
+    open.onblocked = () => reject(new Error('operation journal upgrade is blocked'))
+  })
+}
+
+async function request(databasePromise, mode, operation) {
+  const database = await databasePromise
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(STORE, mode)
+    const result = operation(transaction.objectStore(STORE))
+    transaction.oncomplete = () => resolve(result.result)
+    transaction.onerror = () => reject(
+      transaction.error || new Error('operation journal transaction failed'),
+    )
+    transaction.onabort = transaction.onerror
+  })
+}
+
+function validateRow(row) {
+  if (!validRow(row)) throw new Error('invalid operation journal row')
+}
+
+function validRow(row) {
+  return row?.version === 2 && typeof row.id === 'string' && row.id.length === 43 &&
+    typeof row.signing_key === 'string' && row.signing_key.length === 43 &&
+    typeof row.network === 'string' && row.network.length === 43 &&
+    validAgent(row.agent) &&
+    typeof row.request === 'string' &&
+    typeof row.signature === 'string' && row.signature.length === 86 &&
+    Number.isSafeInteger(row.created_at_ms) && row.created_at_ms > 0 &&
+    (row.instruction === undefined ||
+      (typeof row.instruction === 'string' && /^[A-Za-z0-9_-]{43}$/.test(row.instruction))) &&
+    (row.outcome_ref === undefined || validGroupReference(row.outcome_ref, row.agent))
+}
+
+function validGroupReference(ref, agent) {
+  const fields = ['anchor', 'coordinator', 'coordinator_admission', 'group_id']
+  return ref && Object.keys(ref).length === 5 && ref.ns === agent.namespace &&
+    fields.every(key => typeof ref[key] === 'string' && /^[0-9a-f]{64}$/.test(ref[key])) &&
+    b64url(Uint8Array.from(ref.anchor.match(/../g), hex => Number.parseInt(hex, 16))) === agent.anchor
+}
+
+function validAgent(agent) {
+  return agent && typeof agent.namespace === 'string' && agent.namespace.length > 0 &&
+    utf8ByteLength(agent.namespace) <= SIGNED_GOAL_LIMITS.namespaceBytes &&
+    typeof agent.anchor === 'string' && agent.anchor.length === 43 &&
+    typeof agent.instance_text === 'string' && agent.instance_text.length > 0
+}

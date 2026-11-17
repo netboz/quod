@@ -1,0 +1,11 @@
+{
+  "command": [
+    "/home/yan/.nvm/versions/node/v26.0.0/bin/node",
+    "--test",
+    "--test-isolation=none",
+    "client/test/accounts.test.js"
+  ],
+  "child_started": false,
+  "child_exit": null,
+  "failure": "FileNotFoundError: explicit Node binary path absent; no test ran. Corrected next separately labeled invocation uses existing PATH node, as in original passing receipt."
+}

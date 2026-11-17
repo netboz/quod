@@ -1,0 +1,45 @@
+{
+  "passed": false,
+  "children": {
+    "server": {
+      "command": [
+        "python3",
+        "-B",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/stage2-presentation-limits-20261103/serve.py",
+        "diagnostic-signed02",
+        "--stage",
+        "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source",
+        "--profile",
+        "test",
+        "--qualified",
+        "--clean-manifest",
+        "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source-manifest.json",
+        "--presentation-source",
+        "--affected-wire",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/space-name-owner03.json",
+        "--cursor-diagnostic"
+      ],
+      "true_exit": 1
+    }
+  },
+  "reader_errors": [],
+  "hardware": false,
+  "build_label": "baseline01",
+  "failure": "RuntimeError: fixture ended before readiness",
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true
+  },
+  "streams": {
+    "server-stdout.raw": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/diagnostic-signed02/server-stdout.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "server-stderr.raw": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/diagnostic-signed02/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

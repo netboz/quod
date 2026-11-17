@@ -1,0 +1,36 @@
+{
+  "passed": true,
+  "network": "K5U1NJEEwVcBuc03WHZCYfCry0dKxdA-LuIj_2QUhT8",
+  "human": {
+    "Namespace": "human:P0c1KhxbO9xbhyY47ZjWFwjweIZHa6qt9R3Y2O1j-YI",
+    "Anchor": "zV7VogCYPA2iI0wFf9sHlLSzpbkEjiD4XLjgcUZAPf4",
+    "InstanceText": "me."
+  },
+  "results": [
+    {
+      "id": "hBtix35qozZ-jmsZb1qB5XGFxbBN1CU1i-I4Q80gHeI",
+      "result": "[result(revision,1)]",
+      "status": "committed"
+    },
+    {
+      "id": "Pxjt3XYZy3P3KX-SbRz8ulI0DXihWWQTFqcVMTnv8MM",
+      "result": "[result(revision,2)]",
+      "status": "committed"
+    }
+  ],
+  "retained_unclaimed_associations": 4,
+  "originating_journal_used": false,
+  "writes_submitted": 0,
+  "routes": [
+    "/api/auth/challenge",
+    "/api/auth/complete",
+    "/api/goals/read",
+    "/api/agents/instructions/outcomes",
+    "/api/agents/instructions/outcomes",
+    "/api/agents/instructions/outcomes",
+    "/api/agents/instructions/outcomes",
+    "/api/agents/instructions/outcomes",
+    "/api/agents/instructions/outcomes"
+  ],
+  "note": "Unclaimed associations from deliberate negative cases remain uncertain under the existing runtime contract; absence never becomes rejection or resubmission."
+}

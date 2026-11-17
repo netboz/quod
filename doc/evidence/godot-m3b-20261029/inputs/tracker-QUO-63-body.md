@@ -1,0 +1,79 @@
+# M2 — Create and recover an empty space through Godot
+
+**Type**: task
+**Issue Key**: QUO-63
+**Status**: done
+**Priority**: high
+**Tags**: godot, ontology, architecture, milestone
+**Linked Commit**: 69196a36caeeb06e6ee07982f1ab1988d7c16b43
+**Sync Status**: pending
+**Source**: inline
+**progress**: 100
+**share**: {"status":"team","body":"team"}
+**dependsOn**: [{"itemId":"tsk_01M5YNM08XX0HQEGRA6WN5J9S4"}]
+**blocks**: [{"itemId":"tsk_01M5YNM08XYDABJXFR89HJV6YK","issueKey":"QUO-64","title":"M3 — Enter and reopen the same space with the same agent in Godot","trackerType":"task","relationshipTypeKey":"blocks","direction":"out"},{"direction":"out","relationshipTypeKey":"blocks","itemId":"tsk_01M5YNM08XVHPEWS88F3VKT2FC","issueKey":"QUO-66","title":"M5 — Package Godot, retire superseded paths and replace the network","trackerType":"task"}]
+**ID**: tsk_01M5YNM08XQG5GVZGTJNYFKHKQ
+**Updated**: 2026-10-28T11:10:03.291Z
+
+---
+
+Plan: [QUO-60](nimbalyst://QUO-60). Milestone: M2. Dependencies: [QUO-62](nimbalyst://QUO-62).
+
+
+**Outcome and scope**
+
+Consolidate the existing space class, constructor and form under the space owner and expose them through the new generic GUI adapter. Preserve Stage 1: explicit existing storage, generated anchored identity, mutable nonunique name, default 100 × 100 × 100 metre extent or explicit finite/infinite extent, optional placement, no implicit terrain/walls/physics. Submit through the distinct personal agent and display the committed result.
+
+**Acceptance**
+
+- [ ] The normal Godot UI creates default and explicit-extent spaces in selected storage, including explicit/near-agent/unplaced cases under existing rules.
+- [ ] Denied or conflicting construction/placement leaves no partial object, part or containing-space assignment; committed authorization remains authoritative.
+- [ ] Lost replies recover the original signed operation result and same identity after reconnect/restart, including authorized cross-device lookup; no uncertain creation is resubmitted.
+- [ ] Loading/recovery does not rerun constructors, allocate replacement identities or replay historical reactions.
+
+**Existing work:** [QUO-46](nimbalyst://QUO-46), [QUO-43](nimbalyst://QUO-43) and [QUO-45](nimbalyst://QUO-45) already delivered Stage 1. This ticket owns integration and regression on the new foundation/client, not reimplementation of constructors or result recovery.
+
+**Review refinements — additional acceptance**
+
+- [ ] From onboarding S0, the fresh GUI offers governed existing-storage choices and near-agent placement for additional spaces without requiring the old lobby foundation. Owner U, storage and containing space remain distinct.
+- [ ] Retain existing foreign-storage and cross-owner atomic regression obligations; a same-ledger demo does not replace them.
+
+- [ ] Create S1 near A inside S0 and show its default exterior Eidolon through the shared Godot scene path without auto-entry. The operation is usable in any current ordinary space, with selected storage independent of placement; full nested create/enter journey is verified in M3.
+
+- [ ] Exterior dispatch follows the selected Prolog Eidolon recipe through the shared scene path. Qualify the default cube and selectable real-size finite wireframe, including asymmetric, rotated, odd/rational extents and picking. Resolve exact dimensions in Prolog until the render boundary; the 100-metre default spans -50 to +50 metres per axis. Infinite extent reports wireframe unavailable without inventing finite bounds or silently substituting a cube. No implicit collision, terrain or physics is added.
+
+**M2/M3 acceptance boundary — reconciled 2026-10-28**
+
+M2 owns additional-space creation through the normal generic GUI: explicitly selected existing storage, owner U distinct from storage/location, Stage 1 default/finite/infinite extents, near-agent/explicit/unplaced placement, foreign-storage and cross-owner atomic behavior, rollback and original-result recovery. It renders the selected default/finite-wireframe exterior through the shared scene vocabulary. M1a's construction-only S0 grants do not authorize later placement or entry: author and qualify only the committed Prolog grants needed for M2 placement, through the existing owners. Same-agent entry/leave and later entry policy remain M3.
+
+The recursive obligation remains required and uncredited under [QUO-64](nimbalyst://QUO-64): when S0 contains S1 containing S2 and S1/S2 select contents exteriors, all exposed contents compose recursively into S0 without entry, with exact source identities, independent occurrence paths, composed transforms, access/revocation, dependency ordering, cycle handling and one authoritative continuous physical behavior. Mesh-only or visually flattened scenes with incompatible independent physics do not satisfy it. M3a owns the existing Stage 2 projection/physical-frame subset and M3b owns the Godot live-view/journey proof; broader ontology editing/D6 and other unfinished D5 remain open. Completing M2 never credits this M3 obligation.
+
+The concrete M2 prompt is issued only after full-M1 verification, including confirmation with the serial launch owner that M1b processed its pending uncertainty/completed-outcome/deadline and generic-form/question lifecycle findings, is idle, and has no correction running. The next actual launcher must select `openai-codex:gpt-6.1-sol`, effort `xhigh`; prompt text cannot switch it. Root worker `922c7c06-1acb-4c2b-9141-fccf4ab4c947` retains serial launch ownership. This wording preparation grants no progress, launch, commit, deployment or further review.
+
+**Execution**
+
+[Coordinator](nimbalyst://session/ed9cd520-b2a4-4607-a8f5-ff99d08f3e46) supplies the next applicable checkpoint with current prerequisite evidence. The initial branch base below is provenance, not an instruction to reset later work.
+
+### M2 launch prompt
+
+```text
+/planning-implement QUO-63
+
+Checkpoint: M2. Select GPT-6.1 Sol (openai-codex:gpt-6.1-sol), reasoning xhigh, in the session launcher; this text cannot switch models.
+Work only in /home/yan/src/quod_worktrees/pearl-stone, branch worktree/pearl-stone. Initial branch base: f6c29fe925e666dd68ee7fa68c0e03f5d03391a2. Verify current HEAD/status and the coordinator's latest prerequisite handoff before edits; never reset to the initial base or edit the dirty main checkout.
+
+Read AGENTS.md, relevant specs and doc/multiwrite-architecture.md in this worktree. Call work_radar for QUO-63 and affected linked items. Read full QUO-60 and QUO-63 through tracker_get and link this session to the existing ticket. These shared items are authoritative: adapt planning-implement bookkeeping to tracker updates; do not create frontmatter plans, synthetic fm:plan items or duplicate tickets. Follow QUO-60's checked review refinements and execution workflow.
+
+Dependencies: QUO-62 with verified evidence on this tree.
+Scope: Integrate completed Stage1 constructor and GUI operation into the new client/foundation. Reuse QUO-46, QUO-43 and QUO-45; do not redesign or reopen completed constructors.
+This checkpoint: Integrate completed Stage 1 into the clean client/foundation; do not reimplement its constructor machinery or narrow selected storage/atomic semantics.
+Required outcome evidence: Default/explicit/infinite extent, explicit existing storage and placement, committed permissions, rollback after injected failure, lost-reply recovery of same request/identity, no constructor/reaction replay.
+Onboarding/nesting requirement: Starting with A inside onboarding space S0, the normal GUI creates S1 in explicitly selected existing storage and places it near A in S0. Render S1 through its default exterior Eidolon in S0 using the shared scene path, without entering it automatically. Retain unplaced/explicit-placement, foreign-storage, rollback and original-result regressions. Reuse this same creation path inside S1 once M3 entry is available; no special root-only creation route. Recursive contents-exterior expansion and continuous authoritative physical behavior are required M3 delivery under QUO-64, not M2 completion criteria. M2 preserves the selected-recipe contract and explicit unavailable/unsupported results; it must not silently replace a selected contents exterior with a mesh. Default/finite-wireframe proof does not establish recursive contents or physics. M3 verifies the full S0/S1/S2 contract, with broader ontology editing/D6 still deferred.
+Read and satisfy the full existing ticket checklist and review refinements, not just this brief.
+
+Use existing Prolog authority, actions, atomic writes, recovery and runtime owners; preserve U/A separation, exact signing/values, caller deadlines and original-result recovery. No old Quod Rust core reuse, implicit storage change, second domain engine or uncertain-write resubmission. Carry out only this checkpoint; no parallel implementation writer, automatic next milestone, unrequested Claude review or unauthorized commit.
+
+Update existing acceptance/status as work lands. Preserve full logs and true exits for focused behavioral checks and applicable README/.forgejo/workflows/gates.yml release gates. Retain failures and unrun hardware cases. Freeze reproducible scoped source evidence, including untracked sources, before handoff; hashes alone are insufficient. Leave partial work unchecked and implemented/uncommitted work in-review.
+
+Return the source/evidence manifest, actual model/effort, branch/HEAD, changed scope, tests, failures and remaining acceptance to coordinator session ed9cd520-b2a4-4607-a8f5-ff99d08f3e46. Use send_prompt messageKind=report once if reporting to that session. Do not close broader contributing tickets. Invoke AGENTS.md's stop notifier before ending.
+```

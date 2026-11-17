@@ -1,0 +1,23 @@
+[
+  {
+    "phase": "fresh",
+    "command": [
+      "/tmp/quod-m1b-export-02/quod.x86_64",
+      "--headless",
+      "res://tests/export-checks.tscn",
+      "--",
+      "--profile",
+      "/tmp/quod-m1b-journey-01-private/identity",
+      "--node",
+      "https://127.0.0.1:35299",
+      "--ca",
+      "/tmp/quod-m1b-journey-01-private/proxy-ca.pem"
+    ],
+    "child_exit": 1,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": false,
+    "elapsed_seconds": 0.8335086709994357,
+    "godot_error_diagnostics": true,
+    "passed": false
+  }
+]

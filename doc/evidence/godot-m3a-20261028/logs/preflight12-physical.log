@@ -1,0 +1,170 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.17s
+===> Analyzing applications...
+===> Compiling quod
+      \x{250C}\x{2500} test/quod_physics_tests.erl:
+      \x{2502}
+ 1170 \x{2502}              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+      \x{2502}                                                \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} test/quod_physics_tests.erl:
+      \x{2502}
+ 1795 \x{2502}          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      \x{2502}                                   \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} test/quod_physics_tests.erl:
+      \x{2502}
+ 1795 \x{2502}          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      \x{2502}                                         \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+[0;31mF[0m
+Failures:
+
+  1) quod_physics_tests:-m3a_shared_component_test_/0-fun-24-/0
+[0;31m     Failure/Error: {error,
+                     {latest_structure_not_installed,2,
+                      #{{world_ref,<<"m3a-shared">>,
+                         <<REDACTED_32_BYTE_BINARY>>,
+                         room} =>
+                         #{monitor => #Ref<0.2132636077.1296564226.16153>,
+                           pid => <0.909.0>,status => installed,
+                           stopping => false,
+                           spec =>
+                            #{key =>
+                               <<REDACTED_32_BYTE_BINARY>>,
+                              voxel_resources => #{},terrain_demand => none,
+                              world =>
+                               {world_ref,<<"m3a-shared">>,
+                                <<REDACTED_32_BYTE_BINARY>>,
+                                room},
+                              epoch => 1,activities => #{},
+                              custody =>
+                               {request,
+                                <<REDACTED_32_BYTE_BINARY>>,
+                                0,
+                                <<113,117,111,100,46,97,103,101,110,116,46,103,
+                                  111,97,108,46,118,49,0,0,0,0,0,0,0,0,0,0,0,0,
+                                  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,42,
+                                  42,111,178,189,165,160,70,179,150,248,73,8,
+                                  77,9,29,217,230,6,173,73,44,124,46,233,119,
+                                  26,15,217,100,160,99,135,102,191,250,253,97,
+                                  32,33,12,24,78,240,223,127,167,111,188,156,
+                                  125,170,91,50,194,15,167,88,232,62,215,206,
+                                  47,239,192,0,10,109,51,97,45,115,104,97,114,
+                                  101,100,25,22,138,93,119,147,64,140,20,131,
+                                  170,191,143,8,185,189,114,65,110,140,22,141,
+                                  19,110,52,51,59,108,253,86,226,35,0,0,0,28,
+                                  39,92,120,54,49,92,92,120,54,51,92,92,120,55,
+                                  52,92,92,120,54,70,92,92,120,55,50,92,39,46,
+                                  1,3,0,0,1,161,130,106,9,221,0,0,0,148,112,
+                                  104,121,115,105,99,115,95,97,99,116,105,118,
+                                  97,116,101,40,114,111,111,109,44,32,48,44,32,
+                                  60,60,34,92,120,65,92,92,120,65,70,92,92,120,
+                                  49,69,92,82,92,120,65,49,92,92,120,70,54,92,
+                                  42,92,120,66,66,92,92,120,49,69,92,92,120,65,
+                                  50,92,92,120,67,52,92,98,97,92,120,67,65,92,
+                                  68,92,120,68,66,92,92,120,67,66,92,92,120,69,
+                                  69,92,92,120,70,52,92,92,120,66,55,92,92,120,
+                                  68,68,92,120,120,50,77,92,120,57,92,92,120,
+                                  69,69,92,92,120,56,54,92,124,115,92,120,66,
+                                  49,92,92,120,57,54,92,34,62,62,41,46>>,
+                                <<REDACTED_64_BYTE_BINARY>>},
+                              run_token =>
+                               <<REDACTED_32_BYTE_BINARY>>,
+                              structure => 1,
+                              navigation_guard =>
+                               {#Ref<0.2132636077.1296695298.16139>,3},
+                              authority =>
+                               {agent_instance_ref,<<"m3a-shared">>,
+                                <<REDACTED_32_BYTE_BINARY>>,
+                                actor},
+                              limits => {64,64,256,1.0e3,256,4096,4096},
+                              dt => 0.016667,gravity => -9.81,
+                              bodies =>
+                               [{1,1,fixed,
+                                 {world_mm,{0,-500,0},{0.0,0.0,0.0}},
+                                 {solid,{box,10.0,0.5,10.0}},
+                                 1.0},
+                                {2,1,controlled,
+                                 {world_mm,{0,3000,0},{0.0,0.0,0.0}},
+                                 {solid,{box,0.5,0.5,0.5}},
+                                 1.0}],
+                              budget => 10000,generation => 1,
+                              agent_controls => [],hinges => [],
+                              restores => [],agent_bindings => []},
+                           local_invalidated => true,
+                           navigation_invalidated => true,source_waits => #{},
+                           token =>
+                            <<REDACTED_32_BYTE_BINARY>>,
+                           selection => none,capacity_wait => false,
+                           needs_reconciliation => false}},
+                      #{source_views_ready => 1,source_attempts => 1,
+                        resource_dependencies => 6,
+                        hosted_agent_instances => 1,
+                        rejected_subscriptions => 0,e_frontier => 19,
+                        source_attach_queued => 0,source_views_building => 0,
+                        runner_active => false,observed_agent_instances => 0,
+                        source_views_unreachable => 0,
+                        source_interests_active => 0,
+                        agent_capacity_status => ready,
+                        reaction_candidates => 16,physics_worlds => 1,
+                        reaction_failures => 0,source_views_active => 1,
+                        collapses => 0,reconciles => 1,events_seen => 16,
+                        reactions_active => 6,dropped_events => 0,
+                        agent_observation_bytes => 0,
+                        agent_capacity_refusals_total => 0,
+                        reactions_executed => 0,p_height => 19,queue_len => 0,
+                        agent_work_blocked => 0,source_targets_active => 0,
+                        reconcile_failures => 0,hosted_agents => 1,
+                        subscriptions_active => 1,agent_pending_bytes => 0,
+                        mode => live,height => 19,agent_work_idle => 1,
+                        resource_failures =>
+                         #{physics_worlds =>
+                            {error,
+                             {resource_selection_failed,
+                              {erlog,
+                               {context_violation,
+                                {current_ontology_identity,2},
+                                query,policy_verdict}}}}},
+                        agent_observation_refusals_total => 0,
+                        agent_observation_capacity => ready,
+                        reaction_matches => 0},
+                      #{tick => 1,
+                        incarnation =>
+                         <<REDACTED_32_BYTE_BINARY>>,
+                        phase => active,installs => 1,steps => 1,
+                        navigation_ready => false,inputs => #{},queries => 0,
+                        observations => #{},terrain_chunks => []}},
+                     [{quod_physics_tests,await_structure,4,
+                       [{file,"/work/test/quod_physics_tests.erl"},
+                        {line,3299}]},
+                      {quod_physics_tests,
+                       '-m3a_shared_component_test_/0-fun-23-',1,
+                       [{file,"/work/test/quod_physics_tests.erl"},{line,15}]},
+                      {quod_physics_tests,'-with_live_source/2-fun-3-',3,
+                       [{file,"/work/test/quod_physics_tests.erl"},
+                        {line,929}]},
+                      {quod_physics_tests,'-with_world/3-fun-0-',3,
+                       [{file,"/work/test/quod_physics_tests.erl"},
+                        {line,2907}]},
+                      {quod_agent_hosting_tests,with_host,4,
+                       [{file,"/work/test/quod_agent_hosting_tests.erl"},
+                        {line,1654}]},
+                      {quod_physics_tests,with_world,3,
+                       [{file,"/work/test/quod_physics_tests.erl"},
+                        {line,2910}]},
+                      {eunit_test,run_testfun,1,
+                       [{file,"eunit_test.erl"},{line,83}]},
+                      {eunit_proc,run_test,1,
+                       [{file,"eunit_proc.erl"},{line,554}]}]}
+[0m[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_6341DC8E97BA6867
+[0m
+
+Finished in 13.057 seconds
+[0;31m1 tests, 1 failures
+[0m===> Error running tests

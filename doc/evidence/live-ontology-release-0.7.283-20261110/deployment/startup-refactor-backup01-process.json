@@ -1,0 +1,16 @@
+{
+  "command": [
+    "python3",
+    "client/godot-tests/local.py",
+    "--export",
+    "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+    "--phase",
+    "crypto",
+    "--evidence",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/live-ontology-release-0.7.283-20261110/deployment/startup-refactor-backup01-journey",
+    "--private",
+    "/tmp/quod-startup-refactor-backup01"
+  ],
+  "exit": 0,
+  "log": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/live-ontology-release-0.7.283-20261110/deployment/startup-refactor-backup01.log"
+}

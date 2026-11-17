@@ -1,0 +1,3 @@
+PASS ordinary native pointer focuses the actual editable spatial field
+PASS actual focused spatial field raster retained
+{"passed": false, "children": {"client": 1}, "eof": {"client-stdout": true, "client-stderr": true}, "failure": null, "checks": 1}

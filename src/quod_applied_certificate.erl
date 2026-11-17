@@ -10,7 +10,6 @@ current views and inclusion without an outcome are never verdict authority.
 The owning Simplex must establish local durable publication before signing.
 """.
 
--include("quod_proof_limits.hrl").
 -include("quod_ledger.hrl").
 
 -export([sign_applied_vote/8, verify_applied_certificate/3,
@@ -62,20 +61,17 @@ sign_applied_vote(_NetworkIdentity, _Target, _CommitteeId, _GroupId,
                   _ResolveRef, _Generation, _Verdict, _Identity) ->
     error.
 
--doc "Return the exact statement carried by a bounded applied certificate.".
+-doc "Return the exact statement carried by an applied certificate.".
 -spec applied_certificate_binding(applied_certificate()) -> {ok, map()} | error.
 applied_certificate_binding(
   {quod_dtx_applied_certificate, ?APPLIED_CERTIFICATE_VERSION,
    <<_:256>> = NetworkIdentity, Target, <<_:256>> = CommitteeId,
-   <<_:256>> = GroupId, ResolveRef, Generation, Verdict, Signatures}
-  = Certificate) ->
+   <<_:256>> = GroupId, ResolveRef, Generation, Verdict, Signatures}) ->
     case applied_statement(
            NetworkIdentity, Target, CommitteeId, GroupId, ResolveRef,
            Generation, Verdict) of
         {ok, Statement} ->
-            case quod_quorum:canonical_signatures(Signatures) andalso
-                 erlang:external_size(Certificate) =<
-                     ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES of
+            case quod_quorum:canonical_signatures(Signatures) of
                 true ->
                     {ok, #{network_identity => NetworkIdentity,
                            target => Target, committee_id => CommitteeId,
@@ -240,14 +236,13 @@ operation_certificate(Statement, Signatures) ->
         error -> error
     end.
 
--doc "Decode the bounded statement and signature rows; shape alone grants no authority.".
+-doc "Decode the statement and signature rows; shape alone grants no authority.".
 -spec operation_certificate_binding(term()) -> {ok, map()} | error.
 operation_certificate_binding(
-  {quod_operation_applied_certificate, ?OPERATION_CERTIFICATE_VERSION, Statement, Signatures} = Certificate) ->
+  {quod_operation_applied_certificate, ?OPERATION_CERTIFICATE_VERSION, Statement, Signatures}) ->
     case operation_statement_binding(Statement) of
         {ok, Binding} ->
-            case quod_quorum:canonical_signatures(Signatures) andalso
-                 erlang:external_size(Certificate) =< ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES of
+            case quod_quorum:canonical_signatures(Signatures) of
                 true -> {ok, Binding#{statement => Statement, signatures => Signatures}};
                 false -> error
             end;

@@ -1,0 +1,8 @@
+{
+  "action": "Final tracker-body qualification update and proposed API-directed correction",
+  "executed": false,
+  "rejected_by": "automatic approval review",
+  "exact_reason": "Although updating tracker fields is authorized, this repeats collaborative body publication and another directed correction after the transcript records the permitted correction already failed, conflicting with the instruction not to retry uncertain writes.",
+  "disposition": "Cancelled the further publication attempt. No retry, indirect execution or workaround. Existing truthful local progress remains QUO-62 in-review44%, QUO-6017%/M1 unchecked. Qualification details are retained locally and in the explicitly authorized coordinator report. Shared collaborative publication remains unavailable.",
+  "tracker_mutation_performed": false
+}

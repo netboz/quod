@@ -16,6 +16,7 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
+-export([gui_terms/0, scene_mark_id/2, scene_mark_id/3]).
 -export([eventually/2, stop_all/1, stop_ns/1, match_ok/1, ordinary_write_ok/1,
          peer_prove/3, peer_protocol_position/2, await_applied/3, await_operation_complete/3,
          datadir/2, generate_key_gt/1]).
@@ -40,12 +41,24 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
 -export([material_limits/1, assert_material_admissible/1]).
 -export([session_prove/4, action_overlay/2, action_overlay/3, action_kb/3]).
 -export([proof_gate_row/3, https_request/4, https_request/5]).
+-export([write_evidence_json/3]).
 -export([node_identity_options/3]).
+
+%% Optional public fixture receipts accompany the actual campaign input. Each
+%% label is exclusive so a later attempt cannot overwrite an earlier receipt.
+write_evidence_json(Variable,Name,Data) ->
+    case os:getenv(Variable) of
+        false -> ok;
+        Prefix ->
+            Path=Prefix++"-"++Name++".json",
+            ok=filelib:ensure_dir(Path),
+            file:write_file(Path,iolist_to_binary(json:encode(Data)),[exclusive])
+    end.
 
 %% Manually founded legacy identities exercise retained-state migration and
 %% binding. Production enrollment derives its recipe only in quod:node.
 node_identity_options(Namespace, Instance, Key) ->
-    {ok, Source} = file:read_file(filename:join(code:priv_dir(quod), "ontologies/node_execution.pl")),
+    {ok, Source} = file:read_file(filename:join(code:priv_dir(quod), "ontologies/node_instance.pl")),
     [{terms, [{node_ontology, Namespace}, {instance_of, node, Instance},
               {agent_key, Instance, Key, active}]},
      {source, Source}, {external_predicate_modules, [quod_ontology_predicates]}].
@@ -1237,3 +1250,18 @@ peer_protocol_position(Peer, Ns) ->
     Owner = peer:call(Peer, quod_reg, where, [{quod_simplex, Ns}]),
     {running, State} = peer:call(Peer, sys, get_state, [Owner]),
     quod_simplex:test_protocol_position(State).
+
+%% The complete public GUI owner, in its actual founding source order.
+gui_terms() ->
+    lists:append([quod_prolog:read_terms(filename:join([code:priv_dir(quod),"ontologies",F]))
+        || F <- ["quod_gui.pl", "gui_measure.pl", "gui_scene.pl", "gui_tools.pl"]]).
+
+%% Flat legacy scene fixtures locate the one occurrence by exact subject.
+%% Recursive fixtures separately qualify independent complete anchored paths.
+scene_mark_id(Marks, {entity_ref, Ns, Anchor, Entity}) ->
+    [Id] = [Id || {mark, Id, <<"group">>, _, _, _, _, {depicts, N, A, E}} <- Marks,
+                  {N, A, E} =:= {Ns, Anchor, Entity}],
+    Id.
+scene_mark_id(Marks, Subject, Part) ->
+    Id = scene_mark_id(Marks, Subject),
+    <<Id/binary, "/", Part/binary>>.

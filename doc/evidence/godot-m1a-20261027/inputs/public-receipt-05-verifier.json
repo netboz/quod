@@ -1,0 +1,6 @@
+{
+  "sha256": "763ae6fb2825ccadac17909f187f231b0a8f0e36c24bd6e86376be900b22e39a",
+  "input": "gates-03-founding.json",
+  "compiled_source": "/tmp/quod-m1a-gates-03/source",
+  "mode": "read-only production parser3/canonical codec/Ed25519 verification; no vault or account writes"
+}

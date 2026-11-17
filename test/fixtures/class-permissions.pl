@@ -22,4 +22,3 @@ edit_document(Instance, Value) :-
 %% Offered-operation binding is an authored caller here; S1.8 owns GUI metadata.
 offered_edit(Instance, Value) :- edit_document(Instance, Value).
 constructor_order(report, [secured, reviewed]).
-constructor(report, _, _) :- assertz(constructor_ran).

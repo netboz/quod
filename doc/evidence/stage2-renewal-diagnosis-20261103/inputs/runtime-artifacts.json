@@ -1,0 +1,18 @@
+{
+  "runtime02": {
+    "source/_build/default/lib/erlog/ebin/erlog_int.beam": "03ca2919857c6fde0f937c6cfee6e730ed6372864fc9614d8fb89c1239795098",
+    "lib/quod/ebin/quod_committed_projection.beam": "f81520997bbc6ce650e887229b48152a3bfaababcc78edab256996f417b41777"
+  },
+  "runtime-candidate01": {
+    "source/_build/default/lib/erlog/ebin/erlog_int.beam": "d16a579afc972965a4696788af32ab4698b5b3d35469693cbad0e8ecb33e0463",
+    "lib/quod/ebin/quod_committed_projection.beam": "ff6a065f4328a353128b8bbac5909fe7c9e54ff0a439802b815b8d365898f308"
+  },
+  "configured-current01": {
+    "source/_build/default/lib/erlog/ebin/erlog_int.beam": "4e590c67ee218030319a9965b6070894f551782ec5715bb4d94c425972517c7c",
+    "lib/quod/ebin/quod_committed_projection.beam": "f81520997bbc6ce650e887229b48152a3bfaababcc78edab256996f417b41777"
+  },
+  "configured-candidate01": {
+    "source/_build/default/lib/erlog/ebin/erlog_int.beam": "9366df0efae3fc5fec542572bb334d14147b1b1ec8ffa5f2056a25639798d906",
+    "lib/quod/ebin/quod_committed_projection.beam": "ff6a065f4328a353128b8bbac5909fe7c9e54ff0a439802b815b8d365898f308"
+  }
+}

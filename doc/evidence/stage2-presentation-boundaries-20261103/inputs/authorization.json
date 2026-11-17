@@ -1,0 +1,44 @@
+{
+  "quotes": [
+    "I don't want any hardcoded limit is that clear ?",
+    "I want this to be fixed now, I don't count how many times you told me shit like this and now this is the nth time we are meeting this problem. And I don't want shtty patches"
+  ],
+  "authority": "User explicitly authorizes the identified nested invocation and result/view/terrain shared-owner correction after disclosure. Optional heap accounting excluded.",
+  "prior_rejections_preserved": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/stage2-presentation-limits-20261103/inputs/approval-rejections.json",
+  "prior_freeze": "stage2-presentation-limits04",
+  "source_before": {
+    "include/quod_proof_limits.hrl": "e3d2641261eccfaf5491d5e48351d17f718c996a2612352ea7a9248d24f83cfd",
+    "src/quod_scope_session.erl": "d743d77e2d9cc5eb17b725b6cdc54a4de99e0f01f086abc7805e789ee34b77d9",
+    "src/quod_proof_session.erl": "ee606a6fb1ef4c8e4fb5f59464c637a6ed42509034e67ba5c5a702a54d5c56a8",
+    "src/quod_scope_wire.erl": "1a1273770b1a713616e06704e9969ca0f14cd7d294147720c6ddd00ae298e472",
+    "src/quod_dtx.erl": "eec22a3b55674ee83c8a6367ac52101e3a559747c405516ed548bf8aa46da436",
+    "src/predicates/quod_ask.erl": "e8eff6a298a631db396c7b84024e9edd57f25f32dd22f571440424bf9cac8b06",
+    "src/quod_wire_term.erl": "693a2613a8e79c79094810c7777df846fd2b393d076809fb43faf5b989f2f5ff",
+    "src/quod_client_result.erl": "7196780a64d1d28efaee6e249094b38ed3628f75f3f1fc796d8c93b9bd94d74e",
+    "src/quod_client_view.erl": "1126cf38dc14600a2fc3736c5fb20715af233e5450febe7839857984242ed5ec",
+    "src/quod_client_goal_endpoint.erl": "4e8ceb6ff917d265ec27643da7963c92ee64abb1b0ea2ce61f5b1f9bf4360e2a",
+    "include/quod_client_goal_limits.hrl": "77b41a6cdb682a35433c01814eee99501edb8f38b93acff5e5cdaf119589f7b4",
+    "src/quod_client_goal_router.erl": "96362eb7980b1a79e308d5ed9baea29613239a70af2d120f11e667630235def4",
+    "src/quod_terrain_wire.erl": "43f6d82f6565d888552e0a1bacac1c72a4ec31e16f39bdd0c8b7a0fbcb8c83d9",
+    "src/quod_physics.erl": "39792fb4a50c149e20550ce6070d18df4e8568b5b1e5c9e379b8190e3aa8659b",
+    "client/src/simulation.js": "acf145eb7e5541cb780ef54bbcb3282621c1383f017cac2919a36249c68a5bb0",
+    "test/quod_scope_wire_tests.erl": "c72ee60cd82efe9e3e9f8d580236e04d228140c75e79ebced79960f8582b31ef",
+    "test/quod_dtx_tests.erl": "5f0204c736dfe8895d0252739106c7a0e24d594eaea95f246402469e6e6fb771",
+    "test/quod_proof_answer_tests.erl": "03ee153e01021093b7058407e62608cab5ca779fe14ad67ac01400fcff1dbc30",
+    "test/quod_scope_session_tests.erl": "020600800d1ff724cac916e734e16ac0727f614a1c5d6029d3f7eb876156fdfd",
+    "test/quod_client_goal_endpoint_tests.erl": "7761ddbd944786a7f53a74031938ec42f16da40f9a154cbcc9f09e0f0e774d65",
+    "test/quod_client_result_tests.erl": "faf935372486a762fa0e319c37993b9432bd3ed3c38108bea6fd570066e78228",
+    "test/quod_client_goal_router_tests.erl": "b552a1ebcab9103cc3e3ac1a95da430dcf2096e8ed495663915cf6e9ff58450b",
+    "test/quod_terrain_wire_tests.erl": "220c2e4c34a5eb71bc894aed4024fce1323823d4422f0b5704c25ab4dbc9e7dc",
+    "test/quod_physics_tests.erl": "2d1edb8aef277e4a2d2b233ad73f6e310e504ea9355a833f81b7f93c4ab4d282",
+    "client/test/terrain-delivery.test.js": "b5dfeb9ec58dcd09df69433813e266c6d30fb6840d661b3c41836b4ebbe14f49",
+    "doc/physics-native.md": "461580a6d602f0fb2e8d9c7947a457b5f3235ce3f98b99da73448f8dcc915409"
+  },
+  "labels": [
+    "nested-goal-owner",
+    "presentation-reply-owner",
+    "nested-goal-tests",
+    "presentation-reply-tests",
+    "presentation-docs"
+  ]
+}

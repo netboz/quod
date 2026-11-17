@@ -1,0 +1,16 @@
+The push refers to repository [192.168.1.11:5000/quod]
+9fad981d28c6: Preparing
+fa6d9b4cc9ec: Preparing
+5d030cd4330a: Preparing
+e06a603b8a1d: Preparing
+512b8f9d6333: Preparing
+dd57f90311a2: Preparing
+dd57f90311a2: Waiting
+e06a603b8a1d: Layer already exists
+512b8f9d6333: Layer already exists
+dd57f90311a2: Layer already exists
+fa6d9b4cc9ec: Pushed
+9fad981d28c6: Pushed
+5d030cd4330a: Pushed
+0.7.281: digest: sha256:779168a468a7de465e80ceb799c3b2cc1293e0fdf0729a98f1920247a82fe38e size: 1574
+push=0

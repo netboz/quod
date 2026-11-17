@@ -1,0 +1,6 @@
+PASS same native consumer retains its explicitly received original result and target
+PASS replacement network cannot inherit the prior native result or returned-subject action
+PASS replacement key cannot inherit the prior native result or returned-subject action
+PASS replacement human cannot inherit the prior native result or returned-subject action
+ONBOARDING_PASS
+{"passed": true, "children": {"client": 0}, "eof": {"client-stdout": true, "client-stderr": true}, "failure": null, "checks": 4}

@@ -30,6 +30,7 @@ out_of_order_terminal_reply_is_rejected_test() ->
 pending_remote_open_reserves_shared_capacity_test() ->
     %% A return-link handshake has not spawned its worker yet, but it already
     %% owns the last capacity slot.  A co-hosted open must not pass this gate.
+    ?assert(quod_prolog:test_scope_capacity_available(unlimited, 65, 65)),
     ?assert(quod_prolog:test_scope_capacity_available(2, 1, 0)),
     ?assertNot(quod_prolog:test_scope_capacity_available(2, 1, 1)),
     ?assertNot(quod_prolog:test_scope_capacity_available(2, 0, 2)).
@@ -249,7 +250,7 @@ sealed_target_accepts_only_attestation_terminal_submit_and_close_test() ->
              quod_prolog:test_scope_command_route(sealed, Operation))
       end,
       [scope_seal,
-       {invoke_open, <<1:128>>, {tx_selection, none, [], ordinary}, [], <<>>},
+       {invoke_open, <<1:128>>, {tx_selection, none, [], ordinary, read_write}, [], <<>>},
        {invoke_next, <<1:128>>, 1},
        {invoke_cancel, <<1:128>>},
        {materialize, <<1:128>>, <<2:128>>, <<3:128>>, [<<4:128>>]},
@@ -263,7 +264,7 @@ sealed_target_accepts_only_attestation_terminal_submit_and_close_test() ->
        error,
        quod_prolog:test_scope_command_route(active, certify_reads)).
 
-read_certificate_reply_and_capacity_use_the_existing_scope_seams_test() ->
+read_certificate_reply_uses_the_existing_scope_seam_test() ->
     Ns = <<"quod:certificate-target">>,
     Certificate = read_certificate(Ns),
     {event, {reads_certified, Blob}} =
@@ -282,15 +283,7 @@ read_certificate_reply_and_capacity_use_the_existing_scope_seams_test() ->
          {error, unlisted_internal_reason}, Ns)),
     ?assertEqual(
        {error, {protocol_error, proof_engine}},
-       quod_prolog:test_read_certificate_scope_reply(malformed, Ns)),
-    ?assertEqual(
-       ok,
-       quod_prolog:test_certify_reads_pending_reason(
-         ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE - 1, Ns)),
-    ?assertEqual(
-       {error, {proof_limit_exceeded, Ns}},
-       quod_prolog:test_certify_reads_pending_reason(
-         ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE, Ns)).
+       quod_prolog:test_read_certificate_scope_reply(malformed, Ns)).
 
 idle_expiry_reuses_exact_last_command_correlation_test() ->
     OpenRequest = <<1:128>>,

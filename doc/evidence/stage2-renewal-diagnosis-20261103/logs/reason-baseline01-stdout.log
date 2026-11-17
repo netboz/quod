@@ -1,0 +1,38 @@
+======================== EUnit ========================
+module 'reason_admission_tests'
+  reason_admission_tests: native_admission_validates_each_reason_once_test...*failed*
+in function reason_admission_tests:native_admission_validates_each_reason_once_test/0 (/checks/reason_admission_tests.erl, line 9)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{assertEqual,[{module,reason_admission_tests},
+              {line,9},
+              {expression,"Calls"},
+              {expected,128},
+              {value,8384}]}
+  output:<<"">>
+
+  reason_admission_tests: projection_admission_encodes_only_at_delivery_test...*failed*
+in function reason_admission_tests:projection_admission_encodes_only_at_delivery_test/0 (/checks/reason_admission_tests.erl, line 14)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{assertEqual,[{module,reason_admission_tests},
+              {line,14},
+              {expression,"Calls"},
+              {expected,0},
+              {value,128}]}
+  output:<<"">>
+
+  reason_admission_tests: native_and_wire_reason_shape_equivalence_test...ok
+  [done in 0.044 s]
+=======================================================
+  Failed: 2.  Skipped: 0.  Passed: 1.

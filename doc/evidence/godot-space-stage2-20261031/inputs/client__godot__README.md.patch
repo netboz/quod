@@ -1,0 +1,58 @@
+--- client/godot/README.md before
+
++++ client/godot/README.md
+
+@@ -35,6 +35,27 @@
+
+ original-outcome reads follow uncertainty or restart; reconnect never dispatches
+ saved work. Source inspection subscribes to its existing Prolog authorization
+ before reading a cursor snapshot, and withdraws content on invalidation or denial.
++An exact selected subject exposes its ontology-authored representation choices.
++Exterior, permitted contents, offered actions and source tools retain that same
++namespace, genesis anchor and entity. Representation choice never enters a space
++or grants permission. Operation forms keep their existing draft and controls
++when another representation is opened. Contents reuse the shared recursive
++projection and scene resources; unavailable dependencies withdraw that consumer.
++World and selected physical views return delivery credit only after the same
++scene adapter accepts their projection/frame. A depicted ontology keeps the
++catalogue's flat identity only when its namespace and history match the mark.
++
++**Inspect storage source** opens the selected catalogue/storage ontology even
++when it offers no class operation. Ontology identity is independent of spatial
++membership. Source workspaces use the existing native editor and predicate
++catalogue; policy/interface/route lenses use the same complete UTF8 cursor reader.
++System source remains read only. An authorized edit keeps its original committed
++baseline and local draft. **Preview changes** stages the existing guarded proof;
++**Save changes** accepts that original cursor once. **Cancel preview** does not
++commit. Stale baselines are refused without replacing the dirty draft. Pending
++edits recover their original signed outcome without replay, and cannot discard
++a newer local draft. A read-only view displays committed source while retaining
++any separately saved local draft. Replacement/disposal fences late replies.
+ Deferred questions retain their existing preparation/HUD/answer lifecycle.
+ 
+ **Create / operations** selects an existing storage identity, its local class
+@@ -91,6 +112,9 @@
+
+ defaults, not physical readability or comfort qualification. Larger/smaller
+ text reflows the actual controls; tinted/opaque changes only the background.
+ Move/Place, Recenter, Hide and nearer/farther are local presentation actions.
++Changing distance scales the panel proportionally (1m high at 2m), retaining its
++central angular extent and text/target scale. Text size remains independently
++adjustable. This is idealized presentation geometry, not a lens/comfort claim.
+ Initial placement and explicit repositioning use the current tracked head's
+ height and horizontal forward direction, with an upright panel. A vertical-only
+ direction waits for a measurable heading. The existing XR frame owner places
+@@ -102,7 +126,11 @@
+
+ the panel cancels captures before neutral rearm.
+ Operation selectors constrain their displayed width to the current surface;
+ long exact identities remain the same selected values without widening every
+-field and Submit control beyond the workspace.
++field and Submit control beyond the workspace. Source workspace fields scroll
++inside their existing native form, with primary actions in a wrapping row outside
++that field scroll. Labels identify editor/catalogue/result fields; validation
++messages consume space when present. Native form targets have a 44px minimum
++height and choice items retain spacing at small text sizes.
+ Choice menus open on a completed press/release, so that opening release cannot
+ select a newly opened item under the ray. Storage captions name the actual
+ namespace (or the exact current account); their tooltip retains the full anchor.

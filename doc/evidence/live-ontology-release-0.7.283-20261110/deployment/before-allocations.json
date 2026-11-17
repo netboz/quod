@@ -1,0 +1,65 @@
+{
+  "latest": "successful",
+  "allocs": [
+    {
+      "id": "bd67e530-3a62-7dd1-4ad6-5a4d7bad8598",
+      "name": "quod.quod-node[7]",
+      "node": "corin",
+      "status": "running"
+    },
+    {
+      "id": "7470b024-576c-eaa0-558b-aa831daaee5b",
+      "name": "quod.quod-node[6]",
+      "node": "conrad",
+      "status": "running"
+    },
+    {
+      "id": "ced54ae0-ad29-ec00-8551-dd26cacd9eff",
+      "name": "quod.quod-node[5]",
+      "node": "caton",
+      "status": "running"
+    },
+    {
+      "id": "54cb469a-c7b5-1b34-4a40-0f5bc56374d9",
+      "name": "quod.quod-node[4]",
+      "node": "corin",
+      "status": "running"
+    },
+    {
+      "id": "b2cf186b-2efe-10c8-78c2-2d07410da5f5",
+      "name": "quod.quod-node[3]",
+      "node": "conrad",
+      "status": "running"
+    },
+    {
+      "id": "532990ea-1346-eb9e-b621-39e12bf3dd5a",
+      "name": "quod.quod-node[2]",
+      "node": "caton",
+      "status": "running"
+    },
+    {
+      "id": "48790a89-2210-d5da-d0ed-5e5ae777179e",
+      "name": "quod.quod-cloud[1]",
+      "node": "quod-cloud-1",
+      "status": "running"
+    },
+    {
+      "id": "d879d6f6-6a76-0e57-4888-c3dff639a250",
+      "name": "quod.quod-node[1]",
+      "node": "corin",
+      "status": "running"
+    },
+    {
+      "id": "64278cbe-1aed-77f3-42b1-d4309dbf43bb",
+      "name": "quod.quod-cloud[0]",
+      "node": "quod-cloud-1",
+      "status": "running"
+    },
+    {
+      "id": "afb30fdf-1555-9d8c-bd51-2d19dadcc561",
+      "name": "quod.quod-node[0]",
+      "node": "conrad",
+      "status": "running"
+    }
+  ]
+}

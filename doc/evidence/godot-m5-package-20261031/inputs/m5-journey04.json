@@ -1,0 +1,45 @@
+{
+  "passed": false,
+  "reader_errors": [],
+  "no_headset_or_runtime": true,
+  "companion_not_distributed": true,
+  "manifest_sha256": "da5b783fbc505d4029f43b3d840762309e161f8624ed91cdb47d328f5f0fbca9",
+  "failure": "AssertionError: ",
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-initial-stdout": true,
+    "client-initial-stderr": true
+  },
+  "streams": {
+    "server-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/m5-journey04/server-stdout.raw",
+      "sha256": "f2a8f35fbb382809dffae7ad6c58e47538dddfdb759c7d1573f13f31fcfb8b41",
+      "bytes": 129
+    },
+    "client-initial-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/m5-journey04/client-initial-stdout.raw",
+      "sha256": "9a62f5fb9e900f4adc246796b9236ffea7fb42f1edc42c66ee5e2f442ede5906",
+      "bytes": 140718
+    },
+    "server-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/m5-journey04/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "client-initial-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/m5-journey04/client-initial-stderr.raw",
+      "sha256": "6ecb74689813c0061b27eaac7c927d96bd65d180958e761e5137399e3051e3ba",
+      "bytes": 4348
+    }
+  },
+  "native_input_count": 14,
+  "children": {
+    "server": {
+      "true_exit": 0
+    },
+    "client-initial": {
+      "true_exit": 1
+    }
+  }
+}

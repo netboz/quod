@@ -6,8 +6,8 @@ context_test_() ->
     [?_test(with_context(fun reuses_exact_identity/1)),
      ?_test(with_context(fun rejects_anchor_conflict/1)),
      ?_test(with_context(fun retains_exact_read_heights/1)),
-     ?_test(with_context(fun bounds_distinct_scopes/1)),
-     ?_test(with_context(fun bounds_invocation_proxies/1)),
+     ?_test(with_context(fun distinct_scopes_keep_exact_owners/1)),
+     ?_test(with_context(fun invocation_proxies_keep_actor_binding/1)),
      ?_test(with_context(fun binds_proxies_to_registered_owner/1)),
      ?_test(with_context(fun local_typed_death_wins_finalization/1)),
      ?_test(with_context(fun live_local_scope_is_closed_at_finalization/1)),
@@ -49,19 +49,25 @@ reuses_exact_identity(#{proof_id := ProofId, handle := Handle}) ->
 
 retains_exact_read_heights(_Ctx) ->
     A = {<<"a">>, <<11:256>>}, B = {<<"b">>, <<12:256>>},
-    {ok, _, b} = quod_proof_context:get_or_open_scope(B,
-        fun(_) -> {ok,self(),b,42} end),
-    {ok, _, a} = quod_proof_context:get_or_open_scope(A,
-        fun(_) -> {ok,self(),a,17} end),
-    {ok, _, b} = quod_proof_context:get_or_open_scope(B,
-        fun(_) -> error(must_reuse_pinned_height) end),
-    Dependencies = [{<<"a">>,<<11:256>>,17},{<<"b">>,<<12:256>>,42}],
-    ?assertEqual(Dependencies,quod_proof_context:read_dependencies()),
-    ?assertEqual({error,{protocol_error,proof_engine}},
-        quod_proof_context:get_or_open_scope({<<"missing">>,<<13:256>>},
-            fun(_) -> {ok,self(),missing,-1} end)),
-    ?assertEqual(ok,quod_proof_context:finalize(abort)),
-    ?assertEqual(Dependencies,quod_proof_context:read_dependencies()).
+    SA = quod_proof_session:start(quod_ct:committed_kb([]), #{read_set => true}),
+    SB = quod_proof_session:start(quod_ct:committed_kb([]), #{read_set => true}),
+    try
+        {ok, _, HandleB} = quod_proof_context:get_or_open_scope(B,
+            fun(Id) -> {ok,self(),{local_scope,Id,<<"b">>,<<12:256>>,42,SB},42} end),
+        {ok, _, _} = quod_proof_context:get_or_open_scope(A,
+            fun(Id) -> {ok,self(),{local_scope,Id,<<"a">>,<<11:256>>,17,SA},17} end),
+        {ok, _, HandleB} = quod_proof_context:get_or_open_scope(B,
+            fun(_) -> error(must_reuse_pinned_height) end),
+        Dependencies = {ok,[{<<"a">>,<<11:256>>,17,[]},{<<"b">>,<<12:256>>,42,[]}]},
+        ?assertEqual(Dependencies,quod_proof_context:read_dependencies(read_write)),
+        ?assertEqual(Dependencies,quod_proof_context:read_dependencies(committed_read)),
+        ?assertEqual({error,{protocol_error,proof_engine}},
+            quod_proof_context:get_or_open_scope({<<"missing">>,<<13:256>>},
+                fun(_) -> {ok,self(),missing,-1} end)),
+        ?assertEqual(ok,quod_proof_context:finalize(abort)),
+        ?assertEqual(Dependencies,quod_proof_context:read_dependencies(read_write)),
+        ?assertEqual(Dependencies,quod_proof_context:read_dependencies(committed_read))
+    after quod_proof_session:stop(SA), quod_proof_session:stop(SB) end.
 
 rejects_anchor_conflict(_Ctx) ->
     ScopePid = spawn(fun wait/0),
@@ -78,7 +84,7 @@ rejects_anchor_conflict(_Ctx) ->
         ScopePid ! stop
     end.
 
-bounds_distinct_scopes(_Ctx) ->
+distinct_scopes_keep_exact_owners(_Ctx) ->
     Pids = [spawn(fun wait/0) || _ <- lists:seq(1, 9)],
     try
         lists:foreach(
@@ -89,18 +95,12 @@ bounds_distinct_scopes(_Ctx) ->
                               {Ns, Anchor},
                               fun(_Id) -> {ok, Pid, Index, 7} end)
           end,
-          lists:zip(lists:seq(1, 8), lists:sublist(Pids, 8))),
-        Ninth = lists:nth(9, Pids),
-        ?assertEqual(
-           {error, {scope_limit_exceeded, ?QUOD_MAX_SCOPES_PER_PROOF}},
-           quod_proof_context:get_or_open_scope(
-             {<<"9">>, <<9:256>>},
-             fun(_Id) -> {ok, Ninth, 9, 7} end))
+          lists:zip(lists:seq(1, 9), Pids))
     after
         lists:foreach(fun(Pid) -> Pid ! stop end, Pids)
     end.
 
-bounds_invocation_proxies(_Ctx) ->
+invocation_proxies_keep_actor_binding(_Ctx) ->
     Actor = register_actor(self(), <<"proxy-owner">>, <<99:256>>),
     lists:foreach(
       fun(_) ->
@@ -108,10 +108,7 @@ bounds_invocation_proxies(_Ctx) ->
                        quod_proof_context:new_proxy(
                          Actor, <<"proxy-target">>, stream))
       end,
-      lists:seq(1, ?QUOD_MAX_PROXIES_PER_PROOF)),
-    ?assertEqual(
-       {error, {proof_limit_exceeded, <<"proxy-target">>}},
-       quod_proof_context:new_proxy(Actor, <<"proxy-target">>, overflow)),
+      lists:seq(1, 513)),
     quod_proof_context:unregister_invocation(Actor).
 
 binds_proxies_to_registered_owner(_Ctx) ->

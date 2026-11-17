@@ -1,0 +1,21 @@
+{
+  "scope": "Initial pre-build candidate snapshot; final current hashes and actual Git line counts are in source-delta.json.",
+  "files": {
+    "Main.cs": {
+      "before_sha256": "4313f84b16c5e066bf97653191222368a88b9528208ff374518ed9c0e081841f",
+      "initial_candidate_sha256": "513134b0bdbed3303e213042233157ac8093bce2f71ccf66f7f93c8814a90c8a"
+    },
+    "OpenXRInput.cs": {
+      "before_sha256": "ea6b2d22209103beed5946f57a98dbe93d1e8bc000bcb0f3c3718090f724ae1b",
+      "initial_candidate_sha256": "2c84faa43fe8cce499a7caad02ee39a17211a9ff84adec716639dd3e4e7af05e"
+    },
+    "SpatialGui.cs": {
+      "before_sha256": "44aa7d5c871da5d705991e16f5e32f56ee43b5f75cb870f560e440aa49d2962c",
+      "initial_candidate_sha256": "9db96a45fe2c53ba72cae13507bcb96dc872c04e3218336b8b70a29ca2cfaad4"
+    },
+    "README.md": {
+      "before_sha256": "e11e3b83463627286819e5921586bc80c15d7ebb210c2a820dd3400d832f622d",
+      "initial_candidate_sha256": "e11e3b83463627286819e5921586bc80c15d7ebb210c2a820dd3400d832f622d"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-m4-r2-20261029/build-runtime.py",
+    "build",
+    "--label",
+    "compatible02"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T10:04:23Z",
+  "elapsed_seconds": 92.19767308235168,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m4-r2-artifacts/private/logs/runtime-build02.log",
+  "raw_sha256": "21ec43ab148c47af832412026720a5c781f705fdf04535dc6222bd51e6a513b4",
+  "sanitized_sha256": "21ec43ab148c47af832412026720a5c781f705fdf04535dc6222bd51e6a513b4",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

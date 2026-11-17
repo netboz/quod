@@ -13,7 +13,7 @@ import { paintMarks, clearMarks, paintSkies, compareOpaqueMarks } from '../src/s
 import { UniversalCamera } from '@babylonjs/core/Cameras/universalCamera.js'
 
 const root = 'mark(<<"console">>,<<"group">>,[],transform(1000,0,0,0,90,0),no_surface,unlabelled,depicts_nothing)'
-const child = 'mark(<<"screen">>,<<"plane">>,[f(<<"width">>,1000),f(<<"height">>,600)],relative(<<"console">>,transform(0,0,-100,0,0,0)),surface(<<"#F9C80E">>,0,900,700,[]),unlabelled,depicts_nothing)'
+const child = 'mark(<<"screen">>,<<"plane">>,[f(<<"width">>,1000),f(<<"height">>,600)],relative(<<"console">>,transform(0,0,-100,0,0,0)),surface(<<"#F9C80E">>,0,900,700,1000,[]),unlabelled,depicts_nothing)'
 
 function withScene(run) {
   const engine = new NullEngine()
@@ -45,7 +45,7 @@ test('hierarchy composes transforms and unchanged snapshots retain engine resour
 
 test('the Babylon adapter builds capsule and torus geometry from neutral dimensions', () => {
   withScene(scene => {
-    const surface = 'surface(<<"#F9C80E">>,0,900,0,[])'
+    const surface = 'surface(<<"#F9C80E">>,0,900,0,1000,[])'
     const marks = readMarks(
       `[mark(<<"support">>,<<"capsule">>,[f(<<"diameter">>,460),f(<<"height">>,850)],` +
       `transform(0,425,0,0,0,0),${surface},unlabelled,depicts_nothing),` +
@@ -66,7 +66,7 @@ test('the Babylon adapter builds capsule and torus geometry from neutral dimensi
 test('the Babylon adapter draws an unlit inward sky which cannot intercept selection', () => {
   withScene(scene => {
     const sky = 'mark(<<"sky">>,<<"sky_sphere">>,[f(<<"diameter">>,80000)],' +
-      'transform(0,0,0,0,35,0),surface(<<"#FFFFFF">>,0,1000,1000,[]),' +
+      'transform(0,0,0,0,35,0),surface(<<"#FFFFFF">>,0,1000,1000,1000,[]),' +
       'unlabelled,depicts_nothing)'
     const painted = paintMarks(scene, readMarks(`[${sky},${root},${child}]`))
     const dome = painted.get('sky').node
@@ -84,7 +84,7 @@ test('the Babylon adapter draws an unlit inward sky which cannot intercept selec
 test('a parented panorama follows translated and rebased viewing positions without changing rotation', () => {
   withScene(scene => {
     const sky = 'mark(<<"sky">>,<<"sky_sphere">>,[f(<<"diameter">>,80000)],' +
-      'relative(<<"console">>,transform(0,0,0,0,35,0)),surface(<<"#FFFFFF">>,0,1000,1000,[]),' +
+      'relative(<<"console">>,transform(0,0,0,0,35,0)),surface(<<"#FFFFFF">>,0,1000,1000,1000,[]),' +
       'unlabelled,depicts_nothing)'
     const painted = paintMarks(scene, readMarks(`[${root},${sky}]`))
     const camera = new UniversalCamera('viewer', new Vector3(70, 25, -100), scene)
@@ -106,7 +106,7 @@ test('a sky panorama applies brightness once through its unlit surface', async (
   const resources = { acquire() { return { ready: Promise.resolve(texture), release() {} } } }
   const sky = readMarks(
     '[mark(<<"sky">>,<<"sky_sphere">>,[f(<<"diameter">>,80000)],' +
-    'transform(0,0,0,0,35,0),surface(<<"#FFFFFF">>,0,1000,250,' +
+    'transform(0,0,0,0,35,0),surface(<<"#FFFFFF">>,0,1000,250,1000,' +
     '[texture(<<"base_colour">>,asset(<<"' + 'a'.repeat(64) +
     '">>,<<"image/jpeg">>),repeat(1000,1000))]),unlabelled,depicts_nothing)]')
   let painted = new Map()
@@ -125,7 +125,7 @@ test('a sky panorama applies brightness once through its unlit surface', async (
 test('a changed panorama surface still renders before foreground geometry', () => {
   withScene(scene => {
     const sky = 'mark(<<"sky">>,<<"sky_sphere">>,[f(<<"diameter">>,80000)],' +
-      'transform(0,0,0,0,0,0),surface(<<"#FFFFFF">>,0,1000,1000,[]),unlabelled,depicts_nothing)'
+      'transform(0,0,0,0,0,0),surface(<<"#FFFFFF">>,0,1000,1000,1000,[]),unlabelled,depicts_nothing)'
     let painted = paintMarks(scene, readMarks(`[${sky},${root},${child}]`))
     const foreground = painted.get('screen').node
     painted = paintMarks(scene, readMarks(`[${sky.replace('#FFFFFF', '#BCC9D8')},${root},${child}]`), painted)
@@ -163,7 +163,7 @@ test('malformed hierarchy and material never reach the renderer', () => {
     `[${child}]`, `[${child},${root}]`, `[${root},${root}]`,
     `[${root},${child.replace('900,700', '1001,700')}]`,
     `[${root},${child.replace('900,700', '-1,700')}]`,
-    `[${root.replace('no_surface', 'surface(<<"#FFFFFF">>, 0, 900, 0, [])')}]`,
+    `[${root.replace('no_surface', 'surface(<<"#FFFFFF">>, 0, 900, 0, 1000, [])')}]`,
   ]) assert.throws(() => readMarks(text))
 })
 

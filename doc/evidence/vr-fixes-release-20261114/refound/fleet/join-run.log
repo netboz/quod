@@ -1,0 +1,163 @@
+
+
+==> View this job in the Web UI: http://192.168.1.10:4646/ui/jobs/quod@default
+
+==> 2026-11-14T16:07:15+01:00: Monitoring evaluation "88ae05c7"
+    2026-11-14T16:07:15+01:00: Evaluation triggered by job "quod"
+    2026-11-14T16:07:16+01:00: Evaluation within deployment: "0b792499"
+    2026-11-14T16:07:16+01:00: Allocation "bf4ee24a" created: node "e37f93bb", group "quod-cloud"
+    2026-11-14T16:07:16+01:00: Allocation "3991eecd" created: node "3e390ebd", group "quod-node"
+    2026-11-14T16:07:16+01:00: Allocation "f33c9d5d" created: node "75b1a578", group "quod-node"
+    2026-11-14T16:07:16+01:00: Allocation "12d7a4ff" created: node "75b1a578", group "quod-node"
+    2026-11-14T16:07:16+01:00: Allocation "4e78eeb2" created: node "e37f93bb", group "quod-cloud"
+    2026-11-14T16:07:16+01:00: Allocation "5f7807e2" created: node "75b1a578", group "quod-node"
+    2026-11-14T16:07:16+01:00: Allocation "5fa6ad67" created: node "c8f9edef", group "quod-node"
+    2026-11-14T16:07:16+01:00: Allocation "6fbcccc4" created: node "c8f9edef", group "quod-node"
+    2026-11-14T16:07:16+01:00: Allocation "7ffda2a1" created: node "3e390ebd", group "quod-node"
+    2026-11-14T16:07:16+01:00: Evaluation status changed: "pending" -> "complete"
+==> 2026-11-14T16:07:16+01:00: Evaluation "88ae05c7" finished with status "complete"
+==> 2026-11-14T16:07:16+01:00: Monitoring deployment "0b792499"
+    
+2026-11-14T16:07:16+01:00
+ID          = 0b792499
+Job ID      = quod
+Job Version = 269
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-cloud  2        2       0        0          2026-11-14T16:27:15+01:00
+quod-node   8        7       0        0          2026-11-14T16:27:15+01:00
+    
+2026-11-14T16:07:34+01:00
+ID          = 0b792499
+Job ID      = quod
+Job Version = 269
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-cloud  2        2       0        0          2026-11-14T16:27:15+01:00
+quod-node   8        7       1        0          2026-11-14T16:27:34+01:00
+    
+2026-11-14T16:07:34+01:00
+ID          = 0b792499
+Job ID      = quod
+Job Version = 269
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-cloud  2        2       0        0          2026-11-14T16:27:15+01:00
+quod-node   8        7       3        0          2026-11-14T16:27:34+01:00
+    
+2026-11-14T16:07:35+01:00
+ID          = 0b792499
+Job ID      = quod
+Job Version = 269
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-cloud  2        2       0        0          2026-11-14T16:27:15+01:00
+quod-node   8        7       4        0          2026-11-14T16:27:35+01:00
+    
+2026-11-14T16:07:36+01:00
+ID          = 0b792499
+Job ID      = quod
+Job Version = 269
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-cloud  2        2       0        0          2026-11-14T16:27:15+01:00
+quod-node   8        7       5        0          2026-11-14T16:27:35+01:00
+    
+2026-11-14T16:07:36+01:00
+ID          = 0b792499
+Job ID      = quod
+Job Version = 269
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-cloud  2        2       0        0          2026-11-14T16:27:15+01:00
+quod-node   8        7       6        0          2026-11-14T16:27:35+01:00
+    
+2026-11-14T16:07:37+01:00
+ID          = 0b792499
+Job ID      = quod
+Job Version = 269
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-cloud  2        2       0        0          2026-11-14T16:27:15+01:00
+quod-node   8        7       7        0          2026-11-14T16:27:36+01:00
+    
+2026-11-14T16:07:37+01:00
+ID          = 0b792499
+Job ID      = quod
+Job Version = 269
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-cloud  2        2       0        0          2026-11-14T16:27:15+01:00
+quod-node   8        8       7        0          2026-11-14T16:27:36+01:00
+    
+2026-11-14T16:07:39+01:00
+ID          = 0b792499
+Job ID      = quod
+Job Version = 269
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-cloud  2        2       1        0          2026-11-14T15:27:39Z
+quod-node   8        8       7        0          2026-11-14T16:27:36+01:00
+    
+2026-11-14T16:07:41+01:00
+ID          = 0b792499
+Job ID      = quod
+Job Version = 269
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-cloud  2        2       2        0          2026-11-14T15:27:41Z
+quod-node   8        8       7        0          2026-11-14T16:27:36+01:00
+    
+2026-11-14T16:07:58+01:00
+ID          = 0b792499
+Job ID      = quod
+Job Version = 269
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-cloud  2        2       2        0          2026-11-14T15:27:41Z
+quod-node   8        8       8        0          2026-11-14T16:27:57+01:00
+    
+2026-11-14T16:07:59+01:00
+ID          = 0b792499
+Job ID      = quod
+Job Version = 269
+Status      = successful
+Description = Deployment completed successfully
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-cloud  2        2       2        0          2026-11-14T15:27:41Z
+quod-node   8        8       8        0          2026-11-14T16:27:57+01:00

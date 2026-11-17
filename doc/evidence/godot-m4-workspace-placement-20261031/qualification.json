@@ -1,0 +1,372 @@
+{
+  "scope": "Case21 closed human placement failure; bounded upright correction and offline one-action diagnostic preparation only.",
+  "selected": "placement-final01",
+  "manifest": {
+    "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-workspace-placement-20261031/inputs/client-placement-final01-manifest.json",
+    "manifest_sha256": "285ef21b6699a89444ae8a583a20a6cd836f59b30ccfdfac1c59955fd7a81f8c",
+    "passed": true,
+    "inputs": 93,
+    "commands": [
+      {
+        "phase": "toolchain",
+        "true_exit": 0,
+        "receipt_sha256": "43aeefc7be2bd247e1f3850a16f8975a72fe3b0f4db24145ecd335528279b293"
+      },
+      {
+        "phase": "bootstrap",
+        "true_exit": 0,
+        "receipt_sha256": "2450f371793667064a216d536c30fd3a4c9fa775c4b6941dd1517d086aa8ae5d"
+      },
+      {
+        "phase": "restore-debug",
+        "true_exit": 0,
+        "receipt_sha256": "97430e7006a8be740e9271b086efee8088e031626a787b9ca874fa420e647bb9"
+      },
+      {
+        "phase": "restore-exportrelease",
+        "true_exit": 0,
+        "receipt_sha256": "7b08ce32b6f20ab5826a907a907bc6cb7b983eb6b13734240129f522df69e2a8"
+      },
+      {
+        "phase": "export",
+        "true_exit": 0,
+        "receipt_sha256": "5b9a727310d4cb7f79a1b0c19880248b00d68d70994795faf877607acef0fc01"
+      }
+    ],
+    "exports": 196,
+    "export_bytes": 193324232,
+    "digest_cache": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-placement-final01/computed-hashes.json",
+      "sha256": "bbafb8430f950d76393f943b3c4006bb61150e7f51f4d24cd5b898cc48f83627",
+      "hits": 292,
+      "new_files": 299,
+      "new_bytes": 283646824
+    },
+    "export_bytes_rehashed": 0
+  },
+  "selected_gates": {
+    "placement-final01-headless01": {
+      "client_exit": 0,
+      "wrapper_exit": 0,
+      "checks": 36,
+      "seam_reports": 6,
+      "eof": {
+        "stdout": true,
+        "stderr": true
+      },
+      "reader_errors": [],
+      "capture": null
+    },
+    "placement-final01-render01": {
+      "client_exit": 0,
+      "wrapper_exit": 0,
+      "checks": 47,
+      "seam_reports": 6,
+      "eof": {
+        "stdout": true,
+        "stderr": true
+      },
+      "reader_errors": [],
+      "capture": null
+    },
+    "placement-final01-controller01": {
+      "client_exit": 0,
+      "wrapper_exit": 0,
+      "checks": 67,
+      "seam_reports": 0,
+      "eof": {
+        "stdout": true,
+        "stderr": true
+      },
+      "reader_errors": [],
+      "capture": null
+    }
+  },
+  "builds": {
+    "placement-baseline01": {
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-workspace-placement-20261031/inputs/client-placement-baseline01-manifest.json",
+      "manifest_sha256": "fa81a69b657351915069e0b67e305fbedf8f9981ae9f6845048335e50673e753",
+      "passed": false,
+      "inputs": 93,
+      "commands": [
+        {
+          "phase": "toolchain",
+          "true_exit": 0,
+          "receipt_sha256": "17d6e6a66729c5822d580aa7c779c82448638fa39b8b79f9d8f88f121e8650e2"
+        },
+        {
+          "phase": "bootstrap",
+          "true_exit": 0,
+          "receipt_sha256": "3c707d7dda8658bdc3f0887ffe9dada1e796a1a9b1f08627696d86ca089ceaad"
+        },
+        {
+          "phase": "restore-debug",
+          "true_exit": 0,
+          "receipt_sha256": "07a9c976a2ff80746075850b99a7e4869ac1d40debf91bec0c185fd257675e5d"
+        },
+        {
+          "phase": "restore-exportrelease",
+          "true_exit": 0,
+          "receipt_sha256": "8f3adcc8138fd5c62fc88527bacd7c7f716f65ec97c8a2008696c3cf87f72351"
+        },
+        {
+          "phase": "export",
+          "true_exit": 1,
+          "receipt_sha256": "958b4ee39580c9cf6e72adf0b86a816f79d00f67ea2889cd5a9de2544389e198"
+        }
+      ],
+      "failure": "Retained test-only CS1503 constructor error; no completed export credited."
+    },
+    "placement-baseline02": {
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-workspace-placement-20261031/inputs/client-placement-baseline02-manifest.json",
+      "manifest_sha256": "e68e1628eb6316340010e85f9cf8b193fcc4e43ae8e102df4df37ab78d59b87b",
+      "passed": true,
+      "inputs": 93,
+      "commands": [
+        {
+          "phase": "toolchain",
+          "true_exit": 0,
+          "receipt_sha256": "82ce3504ab0ffe208d1a4ea6fc24c07695e59130054bf7255393cbb32a3397fe"
+        },
+        {
+          "phase": "bootstrap",
+          "true_exit": 0,
+          "receipt_sha256": "a1179c88f395acf9b23ee6fd03a7cf98771d613b96c08b984c6253c7e6e57988"
+        },
+        {
+          "phase": "restore-debug",
+          "true_exit": 0,
+          "receipt_sha256": "5ea41f9724aff9cb3d6043402d180f91fcb1cddfbd336d1d780fae5035b94bf4"
+        },
+        {
+          "phase": "restore-exportrelease",
+          "true_exit": 0,
+          "receipt_sha256": "6c855c1ff8b798c269030f0ff62b2a71b9be48516bc8cdbfb6915eff84a7a747"
+        },
+        {
+          "phase": "export",
+          "true_exit": 0,
+          "receipt_sha256": "4565b3eb6f62e033127eb851398bcd13081e63075afb9de4e85eb7031917fbba"
+        }
+      ],
+      "exports": 196,
+      "export_bytes": 193323612,
+      "digest_cache": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-placement-baseline02/computed-hashes.json",
+        "sha256": "b5d91ed2d4c4357e2109ebfaf489019542d6188fbcebe794697c75b8726dcd8f",
+        "hits": 294,
+        "new_files": 297,
+        "new_bytes": 283609329
+      },
+      "export_bytes_rehashed": 0
+    },
+    "placement-final01": {
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-workspace-placement-20261031/inputs/client-placement-final01-manifest.json",
+      "manifest_sha256": "285ef21b6699a89444ae8a583a20a6cd836f59b30ccfdfac1c59955fd7a81f8c",
+      "passed": true,
+      "inputs": 93,
+      "commands": [
+        {
+          "phase": "toolchain",
+          "true_exit": 0,
+          "receipt_sha256": "43aeefc7be2bd247e1f3850a16f8975a72fe3b0f4db24145ecd335528279b293"
+        },
+        {
+          "phase": "bootstrap",
+          "true_exit": 0,
+          "receipt_sha256": "2450f371793667064a216d536c30fd3a4c9fa775c4b6941dd1517d086aa8ae5d"
+        },
+        {
+          "phase": "restore-debug",
+          "true_exit": 0,
+          "receipt_sha256": "97430e7006a8be740e9271b086efee8088e031626a787b9ca874fa420e647bb9"
+        },
+        {
+          "phase": "restore-exportrelease",
+          "true_exit": 0,
+          "receipt_sha256": "7b08ce32b6f20ab5826a907a907bc6cb7b983eb6b13734240129f522df69e2a8"
+        },
+        {
+          "phase": "export",
+          "true_exit": 0,
+          "receipt_sha256": "5b9a727310d4cb7f79a1b0c19880248b00d68d70994795faf877607acef0fc01"
+        }
+      ],
+      "exports": 196,
+      "export_bytes": 193324232,
+      "digest_cache": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-placement-final01/computed-hashes.json",
+        "sha256": "bbafb8430f950d76393f943b3c4006bb61150e7f51f4d24cd5b898cc48f83627",
+        "hits": 292,
+        "new_files": 299,
+        "new_bytes": 283646824
+      },
+      "export_bytes_rehashed": 0
+    },
+    "workspace-cue01": {
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-workspace-cue-20261031/inputs/client-workspace-cue01-manifest.json",
+      "manifest_sha256": "4e6bcf7daf995305e004eb8a9164cb862f7aa84dd257404f37c089aa672ff884",
+      "passed": true,
+      "inputs": 95,
+      "commands": [
+        {
+          "phase": "toolchain",
+          "true_exit": 0,
+          "receipt_sha256": "129c23ac2810cb470cd72c234cd6da64cefe3b069a68bbfe034749596faf98c1"
+        },
+        {
+          "phase": "bootstrap",
+          "true_exit": 0,
+          "receipt_sha256": "9777add16f0c427b2656c9c788b8d3a2ad4ddbfffba0a05d33a188f4fb2d46f2"
+        },
+        {
+          "phase": "restore-debug",
+          "true_exit": 0,
+          "receipt_sha256": "5e30f9f2c4a4ce76755e995d2ebd276b959f0fd020561c279aa4c860cfe8bc0c"
+        },
+        {
+          "phase": "restore-exportrelease",
+          "true_exit": 0,
+          "receipt_sha256": "44e9418d1a72eb55bc1d9cbbc4cd9546235d6df98778979a8f6eb7a81393892d"
+        },
+        {
+          "phase": "export",
+          "true_exit": 0,
+          "receipt_sha256": "3113fc9c864223a056fe8029947ecff8b9f8c1fcf9dae3cc744dbb0e6bcceffe"
+        }
+      ],
+      "exports": 196,
+      "export_bytes": 193411692,
+      "digest_cache": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-workspace-cue01/computed-hashes.json",
+        "sha256": "20c5d1c01a1355b05859958b696dbe1775759dc353f1c39e1669587a290a4d5f",
+        "hits": 205,
+        "new_files": 300,
+        "new_bytes": 283721926
+      },
+      "export_bytes_rehashed": 0
+    },
+    "space-action-cue01": {
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-space-action-cue-20261031/inputs/client-space-action-cue01-manifest.json",
+      "manifest_sha256": "85676eb0a1ab8b260af35c2b3a96467ac6ac607dbddc3082f2ea85f1b88c3ddb",
+      "passed": true,
+      "inputs": 95,
+      "commands": [
+        {
+          "phase": "toolchain",
+          "true_exit": 0,
+          "receipt_sha256": "7a3df9af9de3058f051d2fef90b10f9f10ee794811de2a2ab64be08dd4277d5e"
+        },
+        {
+          "phase": "bootstrap",
+          "true_exit": 0,
+          "receipt_sha256": "9d46de59d80a48f88582ab88c177d39911e625cd9730aa81550de77eae77263d"
+        },
+        {
+          "phase": "restore-debug",
+          "true_exit": 0,
+          "receipt_sha256": "d97798c7ce8a4a3e1d222829d089954014c86717e5e07362ea65374eb3717143"
+        },
+        {
+          "phase": "restore-exportrelease",
+          "true_exit": 0,
+          "receipt_sha256": "b3069e188ee20e26c78dbbf3f940c684e7579946a4f719c7f2a2a22459a3c9de"
+        },
+        {
+          "phase": "export",
+          "true_exit": 0,
+          "receipt_sha256": "ae76712d8102a8e0f3cd133595507bab6c1c89156d403a51af0097020df1c589"
+        }
+      ],
+      "exports": 196,
+      "export_bytes": 193413964,
+      "digest_cache": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-space-action-cue01/computed-hashes.json",
+        "sha256": "bd4bf5ddac0e31c5524bed6a59a403d351b0c8dfa67c46cba4b936e632496e7a",
+        "hits": 205,
+        "new_files": 300,
+        "new_bytes": 283726264
+      },
+      "export_bytes_rehashed": 0
+    }
+  },
+  "DLL": "3200ad81a9cb2217a0eb856d2bfa6220a8366a8ddcde2a579970d485d8c66c63",
+  "PCK": "a0beeafd525649f0d082324eec6c992d8f62820d8cf75c71a961c0c5f9e4afdd",
+  "engine": "02310d903099bada10c86cedc90bbc11ef0bec8254d6e607d1a53f6150ab0268",
+  "diagnostic": {
+    "name": "space-action-cue01",
+    "manifest": {
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-space-action-cue-20261031/inputs/client-space-action-cue01-manifest.json",
+      "manifest_sha256": "85676eb0a1ab8b260af35c2b3a96467ac6ac607dbddc3082f2ea85f1b88c3ddb",
+      "passed": true,
+      "inputs": 95,
+      "commands": [
+        {
+          "phase": "toolchain",
+          "true_exit": 0,
+          "receipt_sha256": "7a3df9af9de3058f051d2fef90b10f9f10ee794811de2a2ab64be08dd4277d5e"
+        },
+        {
+          "phase": "bootstrap",
+          "true_exit": 0,
+          "receipt_sha256": "9d46de59d80a48f88582ab88c177d39911e625cd9730aa81550de77eae77263d"
+        },
+        {
+          "phase": "restore-debug",
+          "true_exit": 0,
+          "receipt_sha256": "d97798c7ce8a4a3e1d222829d089954014c86717e5e07362ea65374eb3717143"
+        },
+        {
+          "phase": "restore-exportrelease",
+          "true_exit": 0,
+          "receipt_sha256": "b3069e188ee20e26c78dbbf3f940c684e7579946a4f719c7f2a2a22459a3c9de"
+        },
+        {
+          "phase": "export",
+          "true_exit": 0,
+          "receipt_sha256": "ae76712d8102a8e0f3cd133595507bab6c1c89156d403a51af0097020df1c589"
+        }
+      ],
+      "exports": 196,
+      "export_bytes": 193413964,
+      "digest_cache": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-space-action-cue01/computed-hashes.json",
+        "sha256": "bd4bf5ddac0e31c5524bed6a59a403d351b0c8dfa67c46cba4b936e632496e7a",
+        "hits": 205,
+        "new_files": 300,
+        "new_bytes": 283726264
+      },
+      "export_bytes_rehashed": 0
+    },
+    "DLL": "1f142be0031ca5efcf866dcc27196fd8f09e1178fc810e0a7ca1cefa0599375c",
+    "PCK": "9c07c7743acf067302232c696f9a2bab1f177e5a9f4b0659feeb638ea3141734",
+    "distributable": false,
+    "functional_or_native_execution": "UNRUN"
+  },
+  "case21": {
+    "qualification_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-mapped21-20261031/qualification.json",
+    "sha256": "cec261433d8d66dad950978f8ac67166d3de84eca84911b0ff4b2799d4ed962e",
+    "controller_visibility": "positive",
+    "GUI_appearance": "improved",
+    "placement": "FAILED",
+    "LEFT_action": "UNRUN/not accessibly instructed",
+    "exact_human_interval": null
+  },
+  "baseline02": "Actual client/wrapper1 at tilted-head obligation, explicit EOF. Secondary FormPanel callback failure during assertion unwind retained; test callback now detaches on TreeExiting.",
+  "failed_baseline01": "Actual compiler/outer1 from test-only invalid Basis constructor; separately corrected source label02, no product failure credit.",
+  "root129_cache": {
+    "path": "/home/yan/src/quod_worktrees/pearl-stone/_build/godot-m4-r2-coordinator-20261029/placement-final-hashes-129-corrected.json",
+    "sha256": "d01575300079692c2e07ec2b6d491f7dfd52cb4007cee6c7b605695341e4dad1"
+  },
+  "new_export_bytes_rehashed": 0,
+  "API_bytes_read": 0,
+  "reused": "Accepted unchanged core189/server1432 and unaffected scene/presentation obligations; no suite/native/history recount.",
+  "limits": [
+    "Later numeric geometry is not the unknown human look interval.",
+    "First valid head timing versus wearing and initial heading remain unproven; no wear detection, head-follow or calibration reset was added.",
+    "Upright placement uses the actual tracked head reference, not an anatomical/IPD estimate.",
+    "Cue text/layout bindings are offline evidence, not physical readability/reachability/LEFT-gesture acceptance."
+  ],
+  "new_case22_authorized_or_launched": false,
+  "fullM4_commit_M5": false
+}

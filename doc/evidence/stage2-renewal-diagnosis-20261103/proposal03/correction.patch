@@ -1,0 +1,247 @@
+--- a/_build/default/lib/erlog/src/erlog_int.erl
++++ b/_build/default/lib/erlog/src/erlog_int.erl
+@@ -251,13 +251,20 @@
+ %%
+ %% The stack is proof-local state, deliberately not snapshotted by choicepoints:
+ %% a backtracking alternative must be able to inspect the reasons that led to it.
+-%% Admission always checks the complete candidate stack. Reserve one entry and
+-%% the policy's exact encoded room for the truncation marker until it is present,
+-%% so an omitted reason can always be represented without violating the same
+-%% contract used at an ontology/wire boundary.
++%% Native admission validates each new reason; retained reasons stay valid.
++%% Explicit callback policies check the complete stack, reserving room for the
++%% truncation marker under the same contract used at an ontology/wire boundary.
+ 
+ add_failure_reason(fail_reasons_truncated, St) ->
+     mark_failure_reasons_truncated(St);
++%% The retained native stack contains only admitted reasons. Checking the new
++%% reason preserves that invariant without revisiting its immutable suffix.
++add_failure_reason(Reason,
++                   #est{fail_reasons=Reasons,fail_reason_policy=native}=St) ->
++    case valid_failure_reason(Reason) of
++        true -> St#est{fail_reasons=[Reason|Reasons]};
++        false -> mark_failure_reasons_truncated(St)
++    end;
+ add_failure_reason(Reason,
+ 		   #est{fail_reasons=Reasons,
+ 			fail_reasons_truncated=true,
+@@ -567,9 +574,6 @@
+ %% already-dereferenced call by reference and freeze it only if the boundary is
+ %% reached; successful calls therefore do not deep-copy their arguments.
+ %%
+-%% Boundary creation has a proof-wide cap. This bounds the extra choicepoint
+-%% retention even for long deterministic recursion; reaching the cap marks the
+-%% diagnostic as truncated and lets execution continue without another frame.
+ %% The two diagnostic built-ins do not describe application-level failures and
+ %% therefore do not frame themselves.
+ predicate_failure_boundary({fail_with_reason,_Reason}, St) ->
+--- a/src/quod_committed_projection.erl
++++ b/src/quod_committed_projection.erl
+@@ -54,10 +54,8 @@
+ new_est() ->
+     {ok, Erl} = erlog:new(quod_erlog_db_mvcc, null),
+     Est0 = element(3, Erl),
+-    EstReasonBounded = erlog_int:set_failure_reason_policy(
+-                         {quod_wire_term, valid_failure_reason_stack}, Est0),
+     {succeed, Est1} = erlog_int:prove_goal(
+-                        {set_prolog_flag, unknown, fail}, EstReasonBounded),
++                        {set_prolog_flag, unknown, fail}, Est0),
+     Est2 = quod_predicates:load(Est1),
+     Est3 = quod_ask:load(Est2),
+     Est4 = quod_transaction_predicates:load(Est3),
+--- a/src/quod_erlog_db_local_prove.erl
++++ b/src/quod_erlog_db_local_prove.erl
+@@ -443,6 +443,10 @@
+ 
+ -doc "Return transaction tokens retained by the invocation's live choice points.".
+ -spec live_transaction_tokens(tuple()) -> [distributed_token()].
++%% Checkpoints exist only inside the inherited or local savepoint mode.
++%% Exiting a savepoint discards its choicepoints before restoring depth zero.
++live_transaction_tokens(#est{checkpoint_depth = 0}) ->
++    [];
+ live_transaction_tokens(#est{cps = Choicepoints}) ->
+     lists:usort(live_transaction_tokens(Choicepoints, []));
+ live_transaction_tokens(_St) ->
+--- a/test/quod_ask_tests.erl
++++ b/test/quod_ask_tests.erl
+@@ -1529,7 +1529,8 @@
+ 
+ start_ns(Ns, File, Dir) ->
+     {Ns, Cfg} = quod_app:build_ns_config(#{namespace => Ns, mode => create,
+-                    genesis_file => File, data_dir => list_to_binary(Dir), seeds => []}),
++                    genesis_file => File, data_dir => list_to_binary(Dir), seeds => [],
++                    max_scope_workers => 64}),
+     {ok, Pid} = quod_ns:start_link(Ns, Cfg),
+     unlink(Pid),
+     Ns.
+@@ -1567,28 +1568,24 @@
+ 
+ scope_id(N) -> <<N:128>>.
+ 
+-%% A remote completion carries the target's failure stack, bounded by the
+-%% target under the wire contract and decoded here with every foreign atom
+-%% wrapped as an opaque symbol. Such a stack can exceed Erlog's native
+-%% external-size cap while staying inside the canonical cap it was built
+-%% against; the completion check must judge it by the wire contract.
+-checked_completion_accepts_wire_bounded_symbol_stacks_test() ->
+-    Stack = wire_bounded_symbol_stack(),
++%% Foreign symbol wrappers retain exact reasons at both native admission and
++%% wire delivery. The historical external-size threshold is fixture data only.
++checked_completion_accepts_large_symbol_stacks_test() ->
++    Stack = large_symbol_stack(),
+     ?assert(quod_wire_term:valid_failure_reason_stack(Stack)),
+     ?assert(erlang:external_size(Stack) > 32768),
+-    ?assertEqual(error, erlog_int:merge_failure_reasons(Stack, #est{})),
++    ?assertMatch({ok, #est{fail_reasons = Stack}},
++                 erlog_int:merge_failure_reasons(Stack, #est{})),
+     ?assertEqual({complete, Stack}, quod_ask:checked_completion(Stack)),
+-    %% Anything the wire contract refuses is still refused.
++    Large = [{{'$quod_symbol', <<"large">>},
++              binary:copy(<<"x">>, 5000)} | Stack],
++    ?assertEqual({complete, Large}, quod_ask:checked_completion(Large)),
+     ?assertEqual(error, quod_ask:checked_completion([{f, {'X'}}])),
+-    ?assertEqual(error, quod_ask:checked_completion(
+-                          [{{'$quod_symbol', <<"oversized">>},
+-                            binary:copy(<<"x">>, 5000)} | Stack])),
++    ?assertEqual(error, quod_ask:checked_completion([self()])),
++    ?assertEqual(error, quod_ask:checked_completion([valid | improper])),
+     ?assertEqual(error, quod_ask:checked_completion(not_a_stack)).
+ 
+-%% The largest stack of wrapped-symbol goals the wire contract accepts: each
+-%% reason is one frozen predicate call whose functor and arguments are
+-%% symbols the asking node never allocated as atoms.
+-wire_bounded_symbol_stack() ->
++large_symbol_stack() ->
+     Reason = fun(I) ->
+                      Name = iolist_to_binary(io_lib:format("pool_frame_~4..0B", [I])),
+                      {{'$quod_symbol', Name},
+@@ -1596,11 +1593,4 @@
+                       {'$quod_symbol', <<"personal">>}, I,
+                       [{'$quod_symbol', <<"element">>} || _ <- lists:seq(1, 6)]}
+              end,
+-    grow_stack([Reason(I) || I <- lists:seq(1, 255)], []).
+-
+-grow_stack([], Acc) -> lists:reverse(Acc);
+-grow_stack([R | Rest], Acc) ->
+-    case quod_wire_term:valid_failure_reason_stack(lists:reverse([R | Acc])) of
+-        true -> grow_stack(Rest, [R | Acc]);
+-        false -> lists:reverse(Acc)
+-    end.
++    [Reason(I) || I <- lists:seq(1, 255)].
+--- /dev/null
++++ b/test/selection_cost_tests.erl
+@@ -0,0 +1,71 @@
++-module(selection_cost_tests).
++-include_lib("eunit/include/eunit.hrl").
++-include_lib("erlog/src/erlog_int.hrl").
++-export([observe_0/3]).
++
++ordinary_choicepoints_require_no_checkpoint_scan_test() ->
++    with_state(fun(St) ->
++        Many=lists:foldl(fun(_,Acc)->
++            erlog_int:push_choicepoint(#cp{type=compiled},Acc)
++        end,St,lists:seq(1,256)),
++        MFA={quod_erlog_db_local_prove,live_transaction_tokens,2},
++        Trace=trace:session_create(selection_cost,self(),[]),
++        try
++            trace:function(Trace,MFA,true,[local,call_count]),
++            ?assertEqual([],quod_erlog_db_local_prove:live_transaction_tokens(Many)),
++            {call_count,Count}=trace:info(Trace,MFA,call_count),
++            ?assertEqual(0,Count)
++        after trace:session_destroy(Trace) end
++    end).
++
++nested_checkpoint_mode_keeps_real_pending_tokens_test() ->
++    with_state(fun(St) ->
++        {ok,_}=quod_transaction_scope:with_invocation(
++          {<<1:128>>,<<2:128>>},quod_transaction_scope:empty_selection(),undefined,fun()->
++            Frame=quod_transaction_scope:enter(St),
++            Enabled=erlog_int:enter_choicepoint_checkpoints(
++                erlog_int:enter_choicepoint_checkpoints(St)),
++            Pushed=erlog_int:push_choicepoint(#cp{type=compiled},Enabled),
++            ?assertEqual([{pending,Frame}],quod_erlog_db_local_prove:live_transaction_tokens(Pushed)),
++            Parent=erlog_int:leave_choicepoint_checkpoints(Pushed),
++            ?assertEqual([{pending,Frame}],quod_erlog_db_local_prove:live_transaction_tokens(Parent)),
++            ok=quod_transaction_scope:finish(Frame),ok
++          end)
++    end).
++
++finished_and_failed_savepoints_retire_their_checkpoint_choicepoints_test() ->
++    with_state(fun(St)->
++        {ok,_}=quod_transaction_scope:with_invocation(
++          {<<3:128>>,<<4:128>>},quod_transaction_scope:empty_selection(),undefined,fun()->
++            Step={',',{member,{'Choice'},[a,b]},observe_checkpoint},
++            Goals=[{transaction,Step},
++                   {';', {transaction,{',',{once,Step},fail}},true}],
++            lists:foreach(fun(Goal)->
++                erase(selection_cost_observed),
++                {succeed,Final}=erlog_int:prove_goal(Goal,St),
++                {Depth,Tokens}=get(selection_cost_observed),
++                ?assert(Depth>0),?assertMatch([{pending,_}],Tokens),
++                ?assertEqual(0,Final#est.checkpoint_depth),
++                ?assertEqual([],quod_erlog_db_local_prove:live_transaction_tokens(Final))
++            end,Goals),ok
++          end)
++    end).
++
++observe_0(observe_checkpoint,Next,St) ->
++    put(selection_cost_observed,{St#est.checkpoint_depth,
++        quod_erlog_db_local_prove:live_transaction_tokens(St)}),
++    erlog_int:prove_body(Next,St).
++
++with_state(Fun) ->
++    C0=quod_committed_projection:new_est(),
++    D=erlog_int:add_compiled_proc({observe_checkpoint,0},?MODULE,observe_0,C0#est.db),
++    C=quod_ct:commit_kb(C0#est{db=D}),
++    Wrapped=quod_erlog_db_local_prove:wrap_state(C,#{read_set=>true}),
++    St=quod_predicates:set_context(Wrapped,
++        quod_predicates:proof_context(<<"test:selection-cost">>,1,undefined)),
++    try Fun(St)
++    after
++        erase(selection_cost_observed),
++        quod_erlog_db_local_prove:cleanup_read_set(St),
++        #est{db=#db{ref=Ref}}=C,quod_erlog_db_mvcc:delete(Ref)
++    end.
+--- /dev/null
++++ b/test/reason_admission_tests.erl
+@@ -0,0 +1,40 @@
++-module(reason_admission_tests).
++-include_lib("eunit/include/eunit.hrl").
++-include("erlog_int.hrl").
++
++native_admission_validates_each_reason_once_test() ->
++    {ok,St}=erlog_int:new(erlog_db_dict,null),
++    {Final,Calls}=measured_add(St,{erlog_int,valid_failure_reason,1},128),
++    ?assertEqual([{diagnostic,I}||I<-lists:seq(128,1,-1)],Final#est.fail_reasons),
++    ?assertEqual(128,Calls).
++
++projection_admission_encodes_only_at_delivery_test() ->
++    St=quod_committed_projection:new_est(),
++    {Final,Calls}=measured_add(St,{quod_wire_term,encode_failure_reasons,1},128),
++    ?assertEqual(0,Calls),
++    Reasons=Final#est.fail_reasons,
++    ?assertEqual([{diagnostic,I}||I<-lists:seq(128,1,-1)],Reasons),
++    {ok,Blob}=quod_wire_term:encode_failure_reasons(Reasons),
++    ?assertEqual({ok,Reasons},quod_wire_term:decode_failure_reasons(Blob)).
++
++native_and_wire_reason_shape_equivalence_test() ->
++    Leaves=[ok,[],0,-3,1 bsl 256,1.25,<<>>,<<255>>,{'$quod_symbol',<<255>>},
++            {'Variable'},{'_'},self(),make_ref(),fun()->ok end,#{a=>b},
++            {},{42,a},{a},{a,b},{{'$quod_symbol',<<"opaque">>},b}],
++    Terms=Leaves++[{reason,T}||T<-Leaves]++[[T,ok]||T<-Leaves]++
++          [[ok|T]||T<-Leaves]++[{reason,{nested,[T]}}||T<-Leaves],
++    lists:foreach(fun(T)->
++        ?assertEqual(erlog_int:valid_failure_reason(T),
++                     quod_wire_term:valid_failure_reason_stack([T]))
++    end,Terms).
++
++measured_add(St,MFA,N) ->
++    {M,_,_}=MFA,{module,M}=code:ensure_loaded(M),
++    Trace=trace:session_create(reason_admission,self(),[]),
++    try
++        trace:function(Trace,MFA,true,[local,call_count]),
++        Final=lists:foldl(fun(I,Acc)->erlog_int:add_failure_reason({diagnostic,I},Acc) end,
++                          St,lists:seq(1,N)),
++        {call_count,Calls}=trace:info(Trace,MFA,call_count),
++        {Final,Calls}
++    after trace:session_destroy(Trace) end.

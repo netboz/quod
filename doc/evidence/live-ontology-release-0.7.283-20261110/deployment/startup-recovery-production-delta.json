@@ -1,0 +1,41 @@
+{
+  "baseline": "before-task snapshot for Godot; HEAD for untouched server module",
+  "files": [
+    {
+      "file": "client/godot/Main.cs",
+      "added": 52,
+      "deleted": 23,
+      "net": 29,
+      "measurement_exit": 1
+    },
+    {
+      "file": "client/godot/OpenXRInput.cs",
+      "added": 16,
+      "deleted": 3,
+      "net": 13,
+      "measurement_exit": 1
+    },
+    {
+      "file": "client/godot/SpatialKeyboard.cs",
+      "added": 7,
+      "deleted": 4,
+      "net": 3,
+      "measurement_exit": 1
+    },
+    {
+      "file": "client/godot/project.godot",
+      "added": 0,
+      "deleted": 1,
+      "net": -1,
+      "measurement_exit": 1
+    },
+    {
+      "file": "src/quod_client_view.erl",
+      "added": 56,
+      "deleted": 9,
+      "net": 47,
+      "measurement_exit": 0
+    }
+  ],
+  "net": 91
+}

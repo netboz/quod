@@ -475,7 +475,7 @@ proof_bytes_loop(Store, Cursor, Acc) ->
 setup() ->
     Dir = filename:join("/tmp", "quod_store_test_" ++
                         binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(12)))),
-    {Dir, <<"onia:peers">>}.   %% an Ns containing ':' to exercise base64url
+    {Dir, <<"onia:peers">>}.   %% exact namespace contains punctuation
 
 cleanup({Dir, _Ns}) ->
     _ = file:del_dir_r(Dir),
@@ -584,7 +584,7 @@ t_opaque_payload_roundtrip({Dir, Ns}) ->
         {ok, S0} = quod_ledger_store:open(Ns, Dir),
         {ok, S1} = quod_ledger_store:append(S0, {none, [Entry]}),
         {ok, ExpectedEnvelope} = quod_ledger:encode_entry(Entry),
-        LogPath = filename:join([Dir, base64url(Ns), "log.0001"]),
+        LogPath = filename:join(quod_ledger_store:ns_dir(Dir, Ns), "log.0001"),
         ?assertEqual({ok, raw_group(0, 1, [ExpectedEnvelope])}, file:read_file(LogPath)),
         {ok, Stored} = quod_ledger_store:read_at(S1, 1),
         ?assertEqual(Data, entry_data(Stored)),
@@ -674,7 +674,7 @@ t_read_snapshot_accepts_append_but_refuses_truncation({Dir, Ns}) ->
         ?assertEqual(not_found, quod_ledger_store:read_at(View, 2)),
         ok = quod_ledger_store:close(View),
         ok = quod_ledger_store:close(S2),
-        LogPath = filename:join([Dir, base64url(Ns), "log.0001"]),
+        LogPath = filename:join(quod_ledger_store:ns_dir(Dir, Ns), "log.0001"),
         {ok, Fd} = file:open(LogPath, [write, raw, binary]),
         ok = file:truncate(Fd),
         ok = file:close(Fd),
@@ -800,7 +800,7 @@ t_open_ro_non_truncating({Dir, Ns}) ->
         {ok, S0} = quod_ledger_store:open(Ns, Dir),
         {ok, S1} = quod_ledger_store:append(S0, {none, [ent(1), ent(2)]}),
         ok = quod_ledger_store:close(S1),
-        LogPath   = filename:join([Dir, base64url(Ns), "log.0001"]),
+        LogPath   = filename:join(quod_ledger_store:ns_dir(Dir, Ns), "log.0001"),
         ValidSize = filelib:file_size(LogPath),
         {ok, Fd}  = file:open(LogPath, [read, write, raw, binary]),
         {ok, _}   = file:position(Fd, eof),
@@ -824,7 +824,7 @@ t_torn_tail_recovery({Dir, Ns}) ->
         {ok, S1} = quod_ledger_store:append(S0, {none, [ent(1), ent(2), ent(3)]}),
         ok = quod_ledger_store:close(S1),
         %% simulate a crash mid-append: a partial/garbage tail on the log file
-        LogPath = filename:join([Dir, base64url(Ns), "log.0001"]),
+        LogPath = filename:join(quod_ledger_store:ns_dir(Dir, Ns), "log.0001"),
         {ok, Fd} = file:open(LogPath, [read, write, raw, binary]),
         {ok, _} = file:position(Fd, eof),
         ok = file:write(Fd, <<"torn">>),   %% < a full header → trimmed on reopen
@@ -843,7 +843,7 @@ t_torn_tail_bad_crc_trims({Dir, Ns}) ->
         {ok, Prefix} = quod_ledger_store:append(S0, {none, [ent(1), ent(2)]}),
         {ok, S1} = quod_ledger_store:append(Prefix, {none, [ent(3)]}),
         ok = quod_ledger_store:close(S1),
-        LogPath = filename:join([Dir, base64url(Ns), "log.0001"]),
+        LogPath = filename:join(quod_ledger_store:ns_dir(Dir, Ns), "log.0001"),
         {ok, Fd} = file:open(LogPath, [read, write, raw, binary]),
         {ok, Size} = file:position(Fd, eof),
         {ok, <<B>>} = file:pread(Fd, Size - 1, 1),     %% tear the final group's completion footer
@@ -863,7 +863,7 @@ t_interior_corruption_fail_stops({Dir, Ns}) ->
         {ok, S0} = quod_ledger_store:open(Ns, Dir),
         {ok, S1} = quod_ledger_store:append(S0, {none, [ent(1), ent(2), ent(3)]}),
         ok = quod_ledger_store:close(S1),
-        LogPath = filename:join([Dir, base64url(Ns), "log.0001"]),
+        LogPath = filename:join(quod_ledger_store:ns_dir(Dir, Ns), "log.0001"),
         {ok, Fd} = file:open(LogPath, [read, write, raw, binary]),
         {ok, <<B>>} = file:pread(Fd, 14, 1),           %% a byte inside frame 1's payload (hdr=12)
         ok = file:pwrite(Fd, 14, <<(B bxor 16#FF)>>),  %% frames 2 & 3 still follow intact
@@ -962,7 +962,7 @@ t_trim_across_checkpoints({Dir, Ns}) ->
         {ok, S0} = quod_ledger_store:open(Ns, Dir),
         {ok, S1} = quod_ledger_store:append(S0, {none, [ent(I) || I <- lists:seq(1, 300)]}),   %% cps at 1, 257
         ok = quod_ledger_store:close(S1),
-        LogPath = filename:join([Dir, base64url(Ns), "log.0001"]),
+        LogPath = filename:join(quod_ledger_store:ns_dir(Dir, Ns), "log.0001"),
         {ok, Fd} = file:open(LogPath, [read, write, raw, binary]),
         {ok, _} = file:position(Fd, eof),
         ok = file:write(Fd, <<"torn-mid-append">>),
@@ -1016,7 +1016,7 @@ t_huge_len_tail_trimmed({Dir, Ns}) ->
         {ok, S0} = quod_ledger_store:open(Ns, Dir),
         {ok, S1} = quod_ledger_store:append(S0, {none, [ent(1), ent(2)]}),
         ok = quod_ledger_store:close(S1),
-        LogPath = filename:join([Dir, base64url(Ns), "log.0001"]),
+        LogPath = filename:join(quod_ledger_store:ns_dir(Dir, Ns), "log.0001"),
         {ok, Fd} = file:open(LogPath, [read, write, raw, binary]),
         {ok, _} = file:position(Fd, eof),
         ok = file:write(Fd, <<?MAGIC:32, 16#7FFFFFFF:32, 0:32, "junk">>),   %% Len = 2 GiB
@@ -1147,14 +1147,9 @@ bad_crc_raw_frame(Entry) ->
     <<?MAGIC:32, (byte_size(P)):32, CRC:32, P/binary>>.
 
 prepare_log_path(Dir, Ns) ->
-    LogDir = filename:join(Dir, base64url(Ns)),
+    LogDir = quod_ledger_store:ns_dir(Dir, Ns),
     ok = filelib:ensure_path(LogDir),
     filename:join(LogDir, "log.0001").
-
-%% mirror of quod_ledger_store:base64url/1 for path construction in the torn-tail test
-base64url(Bin) ->
-    B = base64:encode(Bin),
-    [case C of $+ -> $-; $/ -> $_; _ -> C end || <<C>> <= B, C =/= $=].
 
 %% The ledger's home is `ledger_dir` when set (fast local disk), else `data_dir` (the
 %% durable volume), else the user-cache default — the split that keeps the replicated,

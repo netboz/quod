@@ -1,0 +1,14 @@
+[
+  {
+    "name": "Godot_v4.7.2-stable_mono_linux_x86_64.zip",
+    "sha256": "129f82db7bafd54ae14bb5bb284041c73860e8c7a009a3a026ca5e946cbff247",
+    "size": 107698034,
+    "url": "https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_mono_linux_x86_64.zip"
+  },
+  {
+    "name": "Godot_v4.7.2-stable_mono_export_templates.tpz",
+    "sha256": "92f8681e349ef1f90891b792da95e3b2b0bd1ed610b78018c58feb2d87e15a9d",
+    "size": 1202598411,
+    "url": "https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_mono_export_templates.tpz"
+  }
+]

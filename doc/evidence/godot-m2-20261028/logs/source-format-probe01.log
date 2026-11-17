@@ -1,0 +1,258 @@
+======================== EUnit ========================
+module 'quod_lobby_tests'
+  quod_lobby_tests: -cohosted_certified_progress_test_/0-fun-3-...*failed*
+in function quod_lobby_tests:start/5 (/probe/quod_lobby_tests.erl, line 1424)
+in call from quod_lobby_tests:'-cohosted_certified_progress_test_/0-fun-3-'/0 (/probe/quod_lobby_tests.erl, line 11)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{badmatch,{error,{gproc,{"no such file or directory","gproc.app"}}}}
+  output:<<"">>
+
+  quod_lobby_tests: -authored_space_composition_preserves_world_test_/0-fun-8-...*failed*
+in function quod_lobby_tests:start/5 (/probe/quod_lobby_tests.erl, line 1424)
+in call from quod_lobby_tests:'-authored_space_composition_preserves_world_test_/0-fun-8-'/0 (/probe/quod_lobby_tests.erl, line 41)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{badmatch,{error,{gproc,{"no such file or directory","gproc.app"}}}}
+  output:<<"">>
+
+  quod_lobby_tests: -inactive_physics_source_authoring_preserves_world_test_/0-fun-20-...*failed*
+in function quod_lobby_tests:start/5 (/probe/quod_lobby_tests.erl, line 1424)
+in call from quod_lobby_tests:'-inactive_physics_source_authoring_preserves_world_test_/0-fun-20-'/0 (/probe/quod_lobby_tests.erl, line 112)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{badmatch,{error,{gproc,{"no such file or directory","gproc.app"}}}}
+  output:<<"">>
+
+  quod_lobby_tests: -incomplete_hosting_selector_is_not_inactive_test_/0-fun-2-...*failed*
+in function quod_lobby_tests:start/5 (/probe/quod_lobby_tests.erl, line 1424)
+in call from quod_lobby_tests:'-incomplete_hosting_selector_is_not_inactive_test_/0-fun-2-'/0 (/probe/quod_lobby_tests.erl, line 250)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{badmatch,{error,{gproc,{"no such file or directory","gproc.app"}}}}
+  output:<<"">>
+
+  quod_lobby_tests: physics_reactions_ignore_domain_notices_test...*failed*
+in function filename:join/2 (filename.erl, line 638)
+  called as join({error,bad_name},"ontologies/quod_physics.pl")
+in call from quod_lobby_tests:'-physics_reactions_ignore_domain_notices_test/0-lc$^0/1-0-'/1 (/probe/quod_lobby_tests.erl, line 267)
+in call from quod_lobby_tests:physics_reactions_ignore_domain_notices_test/0 (/probe/quod_lobby_tests.erl, line 268)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+**error:function_clause
+  output:<<"">>
+
+  quod_lobby_tests: -lobby_projection_recovery_test_/0-fun-19-...*failed*
+in function quod_lobby_tests:start/5 (/probe/quod_lobby_tests.erl, line 1424)
+in call from quod_lobby_tests:'-lobby_projection_recovery_test_/0-fun-19-'/0 (/probe/quod_lobby_tests.erl, line 282)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{badmatch,{error,{gproc,{"no such file or directory","gproc.app"}}}}
+  output:<<"">>
+
+  quod_lobby_tests: -first_scene_waits_for_new_lobby_route/1-fun-5-...*failed*
+in function quod_lobby_tests:start/5 (/probe/quod_lobby_tests.erl, line 1424)
+in call from quod_lobby_tests:'-first_scene_waits_for_new_lobby_route/1-fun-5-'/1 (/probe/quod_lobby_tests.erl, line 436)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{badmatch,{error,{gproc,{"no such file or directory","gproc.app"}}}}
+  output:<<"">>
+
+  quod_lobby_tests: -first_scene_waits_for_new_lobby_route/1-fun-5-...*failed*
+in function quod_lobby_tests:start/5 (/probe/quod_lobby_tests.erl, line 1424)
+in call from quod_lobby_tests:'-first_scene_waits_for_new_lobby_route/1-fun-5-'/1 (/probe/quod_lobby_tests.erl, line 436)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{badmatch,{error,{gproc,{"no such file or directory","gproc.app"}}}}
+  output:<<"">>
+
+  quod_lobby_tests: -local_subclass_inherits_eidolons_controls_and_workspace_test_/0-fun-16-...*failed*
+in function quod_lobby_tests:start/5 (/probe/quod_lobby_tests.erl, line 1424)
+in call from quod_lobby_tests:'-local_subclass_inherits_eidolons_controls_and_workspace_test_/0-fun-16-'/0 (/probe/quod_lobby_tests.erl, line 378)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{badmatch,{error,{gproc,{"no such file or directory","gproc.app"}}}}
+  output:<<"">>
+
+  quod_lobby_tests: -modelling_and_material_libraries_test_/0-fun-38-...*failed*
+in function quod_lobby_tests:start/5 (/probe/quod_lobby_tests.erl, line 1424)
+in call from quod_lobby_tests:'-modelling_and_material_libraries_test_/0-fun-38-'/0 (/probe/quod_lobby_tests.erl, line 499)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{badmatch,{error,{gproc,{"no such file or directory","gproc.app"}}}}
+  output:<<"">>
+
+  quod_lobby_tests: -signed_prolog_eidolon_edits_use_target_policy_test_/0-fun-16-...*failed*
+in function quod_lobby_tests:start/5 (/probe/quod_lobby_tests.erl, line 1424)
+in call from quod_lobby_tests:'-signed_prolog_eidolon_edits_use_target_policy_test_/0-fun-16-'/0 (/probe/quod_lobby_tests.erl, line 627)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{badmatch,{error,{gproc,{"no such file or directory","gproc.app"}}}}
+  output:<<"">>
+
+  quod_lobby_tests: -complete_source_cursor_retains_current_snapshot_test_/0-fun-13-...*failed*
+in function quod_lobby_tests:start/5 (/probe/quod_lobby_tests.erl, line 1424)
+in call from quod_lobby_tests:'-complete_source_cursor_retains_current_snapshot_test_/0-fun-13-'/0 (/probe/quod_lobby_tests.erl, line 695)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{badmatch,{error,{gproc,{"no such file or directory","gproc.app"}}}}
+  output:<<"">>
+
+  quod_lobby_tests: -ontology_instances_share_selection_and_authorized_inspection_test_/0-fun-29-...*failed*
+in function quod_lobby_tests:start/5 (/probe/quod_lobby_tests.erl, line 1424)
+in call from quod_lobby_tests:'-ontology_instances_share_selection_and_authorized_inspection_test_/0-fun-29-'/0 (/probe/quod_lobby_tests.erl, line 763)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{badmatch,{error,{gproc,{"no such file or directory","gproc.app"}}}}
+  output:<<"">>
+
+  quod_lobby_tests: -presentation_modes_and_ground_lens_targets_use_authorized_owner_reads_test_/0-fun-8-...*failed*
+in function quod_lobby_tests:start/5 (/probe/quod_lobby_tests.erl, line 1424)
+in call from quod_lobby_tests:'-presentation_modes_and_ground_lens_targets_use_authorized_owner_reads_test_/0-fun-8-'/0 (/probe/quod_lobby_tests.erl, line 843)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{badmatch,{error,{gproc,{"no such file or directory","gproc.app"}}}}
+  output:<<"">>
+
+  quod_lobby_tests: -public_system_ontology_source_is_readable_but_not_mutable_test_/0-fun-29-...*failed*
+in function quod_lobby_tests:start/5 (/probe/quod_lobby_tests.erl, line 1424)
+in call from quod_lobby_tests:'-public_system_ontology_source_is_readable_but_not_mutable_test_/0-fun-29-'/0 (/probe/quod_lobby_tests.erl, line 932)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{badmatch,{error,{gproc,{"no such file or directory","gproc.app"}}}}
+  output:<<"">>
+
+  quod_lobby_tests: -system_ontology_editing_uses_universal_scope_identity_test_/0-fun-10-...*failed*
+in function quod_lobby_tests:start/5 (/probe/quod_lobby_tests.erl, line 1424)
+in call from quod_lobby_tests:'-system_ontology_editing_uses_universal_scope_identity_test_/0-fun-10-'/0 (/probe/quod_lobby_tests.erl, line 1050)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{badmatch,{error,{gproc,{"no such file or directory","gproc.app"}}}}
+  output:<<"">>
+
+  quod_lobby_tests: -local_inspection_cannot_fall_back_after_root_source_denial_test_/0-fun-5-...*failed*
+in function quod_lobby_tests:start/5 (/probe/quod_lobby_tests.erl, line 1424)
+in call from quod_lobby_tests:'-local_inspection_cannot_fall_back_after_root_source_denial_test_/0-fun-5-'/0 (/probe/quod_lobby_tests.erl, line 1105)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{badmatch,{error,{gproc,{"no such file or directory","gproc.app"}}}}
+  output:<<"">>
+
+  quod_lobby_tests: -non_system_read_only_source_uses_the_same_recipe_test_/0-fun-6-...*failed*
+in function quod_lobby_tests:start/5 (/probe/quod_lobby_tests.erl, line 1424)
+in call from quod_lobby_tests:'-non_system_read_only_source_uses_the_same_recipe_test_/0-fun-6-'/0 (/probe/quod_lobby_tests.erl, line 1183)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{badmatch,{error,{gproc,{"no such file or directory","gproc.app"}}}}
+  output:<<"">>
+
+  quod_lobby_tests: -scoped_routes_reuse_the_directory_and_preserve_private_admission_test_/0-fun-18-...*failed*
+in function quod_lobby_tests:start/5 (/probe/quod_lobby_tests.erl, line 1424)
+in call from quod_lobby_tests:'-scoped_routes_reuse_the_directory_and_preserve_private_admission_test_/0-fun-18-'/0 (/probe/quod_lobby_tests.erl, line 1224)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{badmatch,{error,{gproc,{"no such file or directory","gproc.app"}}}}
+  output:<<"">>
+
+  quod_lobby_tests: -shared_class_edits_and_subclass_selection_use_live_definitions_test_/0-fun-14-...*failed*
+in function quod_lobby_tests:start/5 (/probe/quod_lobby_tests.erl, line 1424)
+in call from quod_lobby_tests:'-shared_class_edits_and_subclass_selection_use_live_definitions_test_/0-fun-14-'/0 (/probe/quod_lobby_tests.erl, line 1287)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{badmatch,{error,{gproc,{"no such file or directory","gproc.app"}}}}
+  output:<<"">>
+
+  quod_lobby_tests: -large_signed_source_edit_does_not_return_inspection_scratch_test_/0-fun-5-...*failed*
+in function quod_lobby_tests:start/5 (/probe/quod_lobby_tests.erl, line 1424)
+in call from quod_lobby_tests:'-large_signed_source_edit_does_not_return_inspection_scratch_test_/0-fun-5-'/0 (/probe/quod_lobby_tests.erl, line 1354)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{badmatch,{error,{gproc,{"no such file or directory","gproc.app"}}}}
+  output:<<"">>
+
+  [done in 0.073 s]
+=======================================================
+  Failed: 21.  Skipped: 0.  Passed: 0.

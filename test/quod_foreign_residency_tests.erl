@@ -1,6 +1,7 @@
 -module(quod_foreign_residency_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("retired_remaining_sizes.hrl").
 -include_lib("opentelemetry/include/otel_span.hrl").
 -include("quod_proof_limits.hrl").
 
@@ -17,7 +18,7 @@ checkpoint_once_per_verified_range(Height) ->
     Dir = quod_foreign_log_tests:temp_dir("range-checkpoint"),
     Owner = quod_foreign_log_tests:start_owner(
         Dir, quod_foreign_log_tests:chain_fetch(Ns, Chain)),
-    MFA = {quod_foreign_log, write_checkpoint, 5},
+    MFA = {quod_foreign_log, write_checkpoint, 7},
     SyncMFA = {quod_foreign_log, persistence_stage, 2},
     Session = trace:session_create(?MODULE, self(), []),
     try
@@ -28,8 +29,7 @@ checkpoint_once_per_verified_range(Height) ->
         ?assertMatch({ok, #{slot := Height}}, quod_foreign_log_tests:prime_projection(
             [{Peer, [{"127.0.0.1", 19000}]}], Identity, Height, 3000)),
         Delivery = trace:delivered(Session, all),
-        Ranges = (Height + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES - 1)
-                 div ?QUOD_MAX_FOREIGN_PAGE_ENTRIES,
+        Ranges = 1,
         ?assertEqual({Ranges, Ranges}, checkpoint_calls(Delivery, {0, 0})),
         assert_retained_entries(Owner, Identity, Chain)
     after
@@ -90,7 +90,7 @@ startup_complete_suffix(Checkpoint) ->
 
 checkpoint_calls(Delivery, {Count, Syncs}) ->
     receive
-        {trace, _, call, {quod_foreign_log, write_checkpoint, 5}} ->
+        {trace, _, call, {quod_foreign_log, write_checkpoint, 7}} ->
             checkpoint_calls(Delivery, {Count + 1, Syncs});
         {trace, _, call, {quod_foreign_log, persistence_stage, 2}} ->
             checkpoint_calls(Delivery, {Count, Syncs + 1});

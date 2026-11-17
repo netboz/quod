@@ -1,0 +1,128 @@
+[
+  {
+    "phase": "m3-fresh",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--xr-mode",
+      "off",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/pearl-client-0hfey7az/client/identity",
+      "--node",
+      "https://127.0.0.1:40407"
+    ],
+    "child_exit": -9,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "elapsed_seconds": 4.646203876000072,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "m3-created",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--xr-mode",
+      "off",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/pearl-client-0hfey7az/client/identity",
+      "--node",
+      "https://127.0.0.1:40407"
+    ],
+    "child_exit": -9,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "elapsed_seconds": 3.4752716660004808,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "m3-entered",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--xr-mode",
+      "off",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/pearl-client-0hfey7az/client/identity",
+      "--node",
+      "https://127.0.0.1:40407"
+    ],
+    "child_exit": -9,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "elapsed_seconds": 11.221806797000681,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "m3-left",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--xr-mode",
+      "off",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/pearl-client-0hfey7az/client/identity",
+      "--node",
+      "https://127.0.0.1:40407"
+    ],
+    "child_exit": 0,
+    "expected_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "elapsed_seconds": 7.045661927000765,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "m3-final",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--xr-mode",
+      "off",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/pearl-client-0hfey7az/client/identity",
+      "--node",
+      "https://127.0.0.1:40407"
+    ],
+    "child_exit": 0,
+    "expected_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "elapsed_seconds": 4.551885778000724,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "m3-negative-recovered",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--xr-mode",
+      "off",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/pearl-client-0hfey7az/client/identity",
+      "--node",
+      "https://127.0.0.1:40407"
+    ],
+    "child_exit": 0,
+    "expected_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "elapsed_seconds": 3.991362136999669,
+    "godot_error_diagnostics": false,
+    "passed": true
+  }
+]

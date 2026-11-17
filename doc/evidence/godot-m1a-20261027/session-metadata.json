@@ -1,0 +1,10 @@
+{
+  "session_uuid": "922c7c06-1acb-4c2b-9141-fccf4ab4c947",
+  "provider": "openai-codex",
+  "model": "openai-codex:gpt-6.1-sol",
+  "requested_reasoning_effort": "high",
+  "effective_reasoning_effort": null,
+  "effective_effort_limit": "Not exposed by the installed session summary",
+  "source": "get_session_summary({})",
+  "recorded_utc": "2026-10-27 23:30:28 UTC"
+}

@@ -43,8 +43,6 @@ conveniences around that preparation and execution code.
 -export_type([structural_descriptor/0, prepared_descriptor/0]).
 
 -define(ROOT_NS, <<"quod:root">>).
--define(MAX_NAMESPACE_BYTES, 128).
--define(MAX_ERROR_TERM_BYTES, 4096).
 
 -type creation() ::
         {ok, created | resumed, binary(), binary()} |
@@ -59,6 +57,7 @@ conveniences around that preparation and execution code.
 -ifdef(TEST).
 -type input_option() ::
         {source_file, file:filename()} |
+        {source_file, file:filename(), <<_:256>>} |
         {source, unicode:chardata()} |
         {terms, [term()]}.
 -endif.
@@ -113,13 +112,27 @@ validate_action(Action) ->
         false -> {error, invalid_action}
     end.
 
+validate_typed_action({create_ontology, Name, Options} = Action) ->
+    case quod_wire_term:is_ground(Name) andalso creation_options_bound(Options) of
+        true -> validate_fixed_action(Action);
+        false -> {error, invalid_arguments}
+    end;
 validate_typed_action(Action) ->
     case quod_wire_term:is_ground(Action) of
-        true -> validate_ground_action(Action);
+        true -> validate_fixed_action(Action);
         false -> {error, invalid_arguments}
     end.
 
-validate_ground_action({create_ontology, Name, Options}) ->
+%% The terms list is decided source, like parsed source text. Variables inside
+%% its clauses are data; the list and all other request fields must be fixed.
+%% Compilation and reserved-head validation still run after policy admission.
+creation_options_bound([{terms, Terms} | Rest]) ->
+    proper_list(Terms) andalso creation_options_bound(Rest);
+creation_options_bound([Option | Rest]) ->
+    quod_wire_term:is_ground(Option) andalso creation_options_bound(Rest);
+creation_options_bound(Tail) -> quod_wire_term:is_ground(Tail).
+
+validate_fixed_action({create_ontology, Name, Options}) ->
     case canonical_name(Name) of
         {error, _} = Error ->
             Error;
@@ -134,7 +147,7 @@ validate_ground_action({create_ontology, Name, Options}) ->
                     Error
             end
     end;
-validate_ground_action(
+validate_fixed_action(
   {join_ontology, Name, GenesisHash, Seeds}) ->
     case canonical_name(Name) of
         {error, _} = Error ->
@@ -359,6 +372,11 @@ normalize_option_shapes([{source_file, Path0} | Rest], AccRev) ->
         error ->
             {error, invalid_options}
     end;
+normalize_option_shapes([{source_file, Path0, <<_:256>> = Hash} | Rest], AccRev) ->
+    case source_path(Path0) of
+        {ok, Path} -> normalize_option_shapes(Rest, [{source_file, Path, Hash} | AccRev]);
+        error -> {error, invalid_options}
+    end;
 normalize_option_shapes(
   [{external_predicate_modules, Modules} | Rest], AccRev) ->
     case quod_predicates:valid_module_names(Modules) of
@@ -404,7 +422,9 @@ load_option({terms, Terms}, _Index) ->
 load_option({source, Chars}, Index) when is_list(Chars) ->
     read_source(Chars, Index);
 load_option({source_file, Path}, Index) when is_binary(Path) ->
-    read_source_file(Path, Index);
+    read_source_file(Path, none, Index);
+load_option({source_file, Path, <<_:256>> = Hash}, Index) when is_binary(Path) ->
+    read_source_file(Path, Hash, Index);
 load_option(_Unknown, _Index) ->
     {error, invalid_options}.
 
@@ -443,29 +463,34 @@ read_source(Chars, Index) ->
             {error, {source_error, Index, 0, {ErrorClass, ErrorReason}}}
     end.
 
-read_source_file(Path, Index) ->
-    Result =
-        try erlog_io:read_file(Path)
-        catch CatchClass:CatchReason -> {caught, CatchClass, CatchReason}
-        end,
-    case Result of
-        {ok, Terms} ->
-            case proper_list(Terms) of
-                true -> {ok, Terms};
-                false -> source_file_error(Index, Path, invalid_terms)
+%% Hash and parse one read. A filename cannot substitute different bytes after
+%% policy selected an immutable recipe, and preparation never reopens the file.
+read_source_file(Path, Expected, Index) ->
+    case read_source_bytes(Path) of
+        {ok, Bytes} ->
+            Actual = crypto:hash(sha256, Bytes),
+            case Expected =:= none orelse Expected =:= Actual of
+                false -> {error, {source_file_hash_mismatch, Index, Expected, Actual}};
+                true -> read_source(binary_to_list(Bytes), Index)
             end;
-        {error, {Line, Module, Detail}} when is_integer(Line) ->
-            {error, {source_error, Index, Line, {Module, Detail}}};
-        {error, ErrorReason} ->
-            source_file_error(Index, Path, ErrorReason);
-        {error, einval, ErrorReason} ->
-            source_file_error(Index, Path, {error, einval, ErrorReason});
-        {exit, einval, ErrorReason} ->
-            source_file_error(Index, Path, {exit, einval, ErrorReason});
-        {caught, ErrorClass, ErrorReason} ->
-            source_file_error(Index, Path, {ErrorClass, ErrorReason});
-        Other ->
-            source_file_error(Index, Path, {unexpected, Other})
+        {error, Reason} -> source_file_error(Index, Path, Reason)
+    end.
+
+%% Preserve erlog's consult-path lookup, including its byte-oriented input.
+read_source_bytes(Path) ->
+    Paths = application:get_env(erlog, consult_path, ["."]),
+    case file:path_open(Paths, Path, [read, binary]) of
+        {ok, File, _Resolved} ->
+            try read_source_bytes(File, [])
+            after file:close(File) end;
+        {error, _} = Error -> Error
+    end.
+
+read_source_bytes(File, Chunks) ->
+    case file:read(File, 65536) of
+        {ok, Chunk} -> read_source_bytes(File, [Chunk | Chunks]);
+        eof -> {ok, iolist_to_binary(lists:reverse(Chunks))};
+        {error, _} = Error -> Error
     end.
 
 source_file_error(Index, Path, Reason) ->
@@ -751,8 +776,6 @@ canonical_name(Name) ->
 
 validate_name(<<>>) ->
     {error, invalid_name};
-validate_name(Ns) when byte_size(Ns) > ?MAX_NAMESPACE_BYTES ->
-    {error, invalid_name};
 validate_name(Ns) ->
     try unicode:characters_to_binary(Ns, utf8, utf8) of
         Ns -> {ok, Ns};
@@ -885,8 +908,7 @@ invalid_initial_term(Term) ->
     end.
 
 safe_error_term(Term) ->
-    try erlang:external_size(Term) =< ?MAX_ERROR_TERM_BYTES
-            andalso portable_term(Term)
+    try portable_term(Term)
     catch _:_ -> false
     end.
 

@@ -1,0 +1,4 @@
+ERROR [p_dev_get_usb_dev] USB device with same address but different vendor and product found!
+	vendor:  046d 046d
+	product: c52b 4082
+ INFO [steamvr_lh_create_devices] Found SteamVR install: /home/yan/.local/share/Steam/steamapps/common/SteamVR

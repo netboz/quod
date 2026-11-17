@@ -756,6 +756,14 @@ tx_json_full_test() ->
     %% the whole thing must be JSON-encodable
     ?assert(is_binary(quod_explorer_http:encode(J))).
 
+definition_removal_tx_json_test() ->
+    T = (tx(10))#transaction{diff = [{abolish, {likes, 2}}]},
+    J = quod_explorer_http:tx_json_full(<<"ont:root">>, T, entry(5, [T])),
+    ?assertEqual(1, maps:get(fact_ops, J)),
+    ?assertEqual(true, maps:get(root_facts_changed, J)),
+    ?assertEqual([#{op => abolish, predicate => <<"likes / 2">>}], maps:get(diff, J)),
+    ?assert(is_binary(quod_explorer_http:encode(J))).
+
 event_tx_json_is_visible_without_claiming_a_fact_change_test() ->
     T = (tx(10))#transaction{diff = [{event, {alarm, disk}}]},
     J = quod_explorer_http:tx_json_full(

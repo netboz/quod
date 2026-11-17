@@ -1,0 +1,17 @@
+{
+  "qualification_only_inputs": {
+    "/usr/bin/ydotool": {
+      "sha256": "ac9613667d350ff9c8a1c4b00cf97217eb35cd45014d6f32b4c2607137a0cfb2",
+      "bytes": 23336
+    }
+  },
+  "command": [
+    "pacman",
+    "-Q",
+    "ydotool"
+  ],
+  "child_exit": 0,
+  "stdout": "ydotool 1.0.4-2\n",
+  "stderr": "",
+  "role": "Actual native mouse left-click delivery via the already installed user daemon. Only the owned client window coordinates; no daemon restart or user configuration change."
+}

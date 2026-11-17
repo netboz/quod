@@ -1,0 +1,5 @@
+Error! Failed to eval: {ok,quod_lens_tests}=compile:file("/input/quod_lens_tests.erl",[{outdir,"/input"}]),case eunit:test(fun quod_lens_tests:the_class_view_is_derived_test/0,[verbose]) of ok->halt(0);error->halt(1) end.
+
+Runtime terminating during boot ({{badmatch,error},[{erl_eval,expr,6,[{file,"erl_eval.erl"},{line,672}]},{erl_eval,exprs,6,[{file,"erl_eval.erl"},{line,276}]},{init,start_it,1,[]},{init,start_em,1,[]},{init,do_boot,3,[]}]})
+
+Crash dump is being written to: erl_crash.dump...

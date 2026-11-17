@@ -1,0 +1,518 @@
+--- stage2-product01/client/godot/Main.cs
++++ current/client/godot/Main.cs
+@@ -28,7 +28,22 @@
+     RenderModels models=null!;
+     SpatialGui gui=null!;
+     Control workspaceContent=null!;
++    Control shellHeader=null!;
++    readonly HBoxContainer viewRegion=new() {Name="subject-and-world",SizeFlagsHorizontal=SizeFlags.ExpandFill};
++    readonly VBoxContainer visualHost=new() {Name="subject-visual-host",SizeFlagsHorizontal=SizeFlags.ExpandFill,SizeFlagsVertical=SizeFlags.ExpandFill,Visible=false};
++    readonly VBoxContainer subjectHost=new() {Name="subject-form-host",SizeFlagsHorizontal=SizeFlags.ExpandFill,SizeFlagsVertical=SizeFlags.ExpandFill,Visible=false};
+     readonly VBoxContainer connectionShell=new();
++    readonly VBoxContainer connectionDetails=new() { Visible=false };
++    readonly VBoxContainer toolsPanel=new() { Visible=false };
++    readonly HFlowContainer accountSetup=new();
++    readonly HFlowContainer accountActions=new();
++    readonly VBoxContainer place=new() {Name="current-place"};
++    readonly Label placeTitle=new() {Name="current-place-title",ThemeTypeVariation="Heading",AutowrapMode=TextServer.AutowrapMode.WordSmart};
++    readonly Label contentsStatus=new() {Name="contents-status",AutowrapMode=TextServer.AutowrapMode.WordSmart};
++    ScrollContainer workspaceScroll=null!;
++    bool home=true;
++    readonly Label connectionTitle=new() {Name="connection-title",ThemeTypeVariation="Heading",AutowrapMode=TextServer.AutowrapMode.WordSmart};
++    readonly Label connectionHelp=new() {Name="connection-help",AutowrapMode=TextServer.AutowrapMode.WordSmart};
+     readonly HFlowContainer workspaceControls=new();
+     readonly HFlowContainer workspaceAppearance=new();
+     bool showConnection;
+@@ -47,11 +62,13 @@
+     bool busy, worldAccepted;
+     string state = "offline";
+     readonly Label status = new() { Name = "status", AutowrapMode = TextServer.AutowrapMode.WordSmart };
++    readonly PanelContainer statusPanel=new();
+     readonly Label identityLabel = new() { Name = "identity", AutowrapMode = TextServer.AutowrapMode.WordSmart };
+     readonly Label location = new() { Name = "location", AutowrapMode = TextServer.AutowrapMode.WordSmart };
+     readonly Label controllers = new() { Name = "controllers", AutowrapMode = TextServer.AutowrapMode.WordSmart };
+     readonly LineEdit endpoint = new() { Name = "endpoint", PlaceholderText = "https://node:14570", Text = "https://localhost:14570", SizeFlagsHorizontal = SizeFlags.ExpandFill };
+     readonly LineEdit ca = new() { Name = "ca", PlaceholderText = "Optional trusted CA PEM path", SizeFlagsHorizontal = SizeFlags.ExpandFill };
++    readonly VBoxContainer attentionHost=new() {Name="attention-host",SizeFlagsHorizontal=SizeFlags.ExpandFill};
+     readonly VBoxContainer body = new() { Name = "body", SizeFlagsHorizontal = SizeFlags.ExpandFill };
+     OperationsPanel? operations;
+     EidolonPanel? representations;
+@@ -65,15 +82,35 @@
+         gui=new() { Name="shared-gui" };AddChild(gui);
+         var margin = new MarginContainer { OffsetLeft = 28, OffsetTop = 22, AnchorRight = 1, AnchorBottom = 1, OffsetRight = -28, OffsetBottom = -22 };
+         gui.SetContent(margin);workspaceContent=margin;
+-        var scroll = new ScrollContainer { FollowFocus = true }; margin.AddChild(scroll);
++        var shell=new VBoxContainer();margin.AddChild(shell);
++        var header=new HFlowContainer();shellHeader=header;shell.AddChild(header);header.AddChild(new Label { Text="Quod",ThemeTypeVariation="Heading" });
++        Add(header,"workspace-connection","Account",()=>{showConnection=!showConnection;UpdateWorkspace();return Task.CompletedTask;});
++        Add(header,"client-tools","Tools",()=>{toolsPanel.Visible=!toolsPanel.Visible;return Task.CompletedTask;});
++        shell.AddChild(place);place.AddChild(placeTitle);place.AddChild(accountActions);shell.AddChild(attentionHost);
++        var scroll = workspaceScroll = new ScrollContainer { Name="workspace-scroll",FollowFocus = true,HorizontalScrollMode=ScrollContainer.ScrollMode.Disabled,SizeFlagsVertical=SizeFlags.ExpandFill }; shell.AddChild(scroll);
+         var root = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill }; scroll.AddChild(root);
+-        root.AddChild(new Label { Text = "Quod", ThemeTypeVariation = "HeaderLarge" });root.AddChild(connectionShell);connectionShell.AddChild(identityLabel);
++        root.AddChild(statusPanel);statusPanel.AddChild(status);
++        root.AddChild(connectionShell);connectionShell.AddChild(connectionTitle);connectionShell.AddChild(connectionHelp);
++        connectionShell.AddChild(accountSetup);
+         var keys = Row(connectionShell); Add(keys, "create-key", "Create my key", CreateKey); Add(keys, "import-backup", "Import encrypted backup", () => { BackupDialog(false); return Task.CompletedTask; });
+-        Add(keys, "export-backup", "Export encrypted backup", () => { BackupDialog(true); return Task.CompletedTask; });
+-        var address = Row(connectionShell); address.AddChild(endpoint); address.AddChild(ca);
+-        Add(address, "connect", "Connect", Connect); Add(address, "disconnect", "Disconnect", () => { Disconnect(); return Task.CompletedTask; });
+-        root.AddChild(status); root.AddChild(location); root.AddChild(controllers);
+-        scene = new() { Name = "space-scene" }; root.AddChild(scene);
++        Add(keys, "connect", "Connect", Connect); Add(keys, "disconnect", "Disconnect", () => { Disconnect(); return Task.CompletedTask; });
++        Add(keys,"connection-details","Server, identity & backup details",()=>{connectionDetails.Visible=!connectionDetails.Visible;return Task.CompletedTask;});
++        connectionShell.AddChild(connectionDetails);connectionDetails.AddChild(identityLabel);
++        connectionDetails.AddChild(new Label { Text="Active keys use private local files, not a backup passphrase. Encrypted backups have a separate passphrase.",AutowrapMode=TextServer.AutowrapMode.WordSmart });
++        connectionDetails.AddChild(new Label { Text="Server endpoint" });connectionDetails.AddChild(endpoint);
++        connectionDetails.AddChild(new Label { Text="Trusted CA file (optional)" });connectionDetails.AddChild(ca);
++        Add(connectionDetails, "export-backup", "Export encrypted backup", () => { BackupDialog(true); return Task.CompletedTask; });
++        connectionDetails.AddChild(location);connectionDetails.AddChild(controllers);
++        Add(accountSetup, "register", "Create my account", Register);
++        Add(accountSetup, "prepare", "Review starting space storage", Prepare);
++        Add(accountSetup, "setup", "Create my agent and starting space", Setup);
++        Add(accountSetup, "resolve", "Check original outcomes", Resolve);
++        root.AddChild(toolsPanel);
++        Add(toolsPanel, "inspect", "Source / inspection", OpenTools);
++        Add(toolsPanel,"local-controllers","Connected controllers",()=>{OpenControllers();return Task.CompletedTask;});
++        Add(toolsPanel,"start-xr","Start OpenXR",()=>{xr.Start();return Task.CompletedTask;});
++        Add(toolsPanel,"stop-xr","Stop OpenXR",()=>{xr.StopSession();return Task.CompletedTask;});
++        scene = new() { Name = "space-scene" };
+         models=new(async (asset,cancellation)=> {
+             var consumer=session??throw new InvalidOperationException("Connect before requesting controller resources.");
+             using var deadline=CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+@@ -87,46 +124,42 @@
+         gui.NativeCaptureChanged+=()=>{if(gui.NativePressed){xr.Router.Cancel();scene.ReleaseInput();}xr.ContextChanged();};
+         GetWindow().VisibilityChanged+=()=>xr.Visibility(GetWindow().Visible);
+         scene.Drive += (direction,_) => controls?.Drive(direction.X,direction.Y,direction.Z);
+-        scene.Selected += exact => {
++        scene.Selected += selected => {
+             if (accounts?.Human == null || session == null) return;
+-            OverlayChanging();
+-            EnsureRepresentations().Open(session,accounts,store!,exact);
++            if(operations?.IsWorking==true)return;
++            EnsureRepresentations().OpenOccurrence(session,accounts,store!,selected);ShowInspector();
+         };
+-        root.AddChild(workspaceControls);workspaceControls.Hide();
++        toolsPanel.AddChild(workspaceControls);workspaceControls.Hide();
+         root.AddChild(workspaceAppearance);workspaceAppearance.Hide();
+         void Presentation(string name,string text,Action change)=>Add(workspaceControls,name,text,()=>{change();return Task.CompletedTask;});
+         void Appearance(string name,string text,Action change)=>Add(workspaceAppearance,name,text,()=>{change();return Task.CompletedTask;});
+-        Presentation("workspace-show","Recenter workspace",xr.ShowWorkspace);
+-        Presentation("workspace-move","Move panel",xr.MoveWorkspace);
++        Presentation("workspace-show","Recenter workspace",()=>{representations?.PlacePersonal();xr.ShowWorkspace();});
++        Presentation("workspace-move","Move panel",()=>{representations?.PlacePersonal();xr.MoveWorkspace();});
+         Presentation("workspace-hide","Hide workspace",xr.HideWorkspace);
+-        Presentation("workspace-settings","Workspace settings",()=>workspaceAppearance.Visible=!workspaceAppearance.Visible);
++        Add(header,"workspace-settings","Appearance",()=>{workspaceAppearance.Visible=!workspaceAppearance.Visible;return Task.CompletedTask;});
+         Appearance("workspace-text-larger","Larger text",()=>gui.TextSize(4));
+         Appearance("workspace-text-smaller","Smaller text",()=>gui.TextSize(-4));
+         Appearance("workspace-nearer","Nearer · same visual scale",()=>xr.WorkspaceDistance(-.2f));
+         Appearance("workspace-farther","Farther · same visual scale",()=>xr.WorkspaceDistance(.2f));
+         Appearance("workspace-opaque","Opaque / tinted",gui.ToggleOpacity);
+-        Appearance("workspace-connection","Connection / identity",()=>{showConnection=!showConnection;UpdateWorkspace();});
+-        var actions = new HFlowContainer();root.AddChild(actions);
+-        Add(actions, "register", "Register fresh human", Register);
+-        Add(actions, "prepare", "Describe account setup storage", Prepare);
+-        Add(actions, "setup", "Complete account setup", Setup);
+-        Add(actions, "resolve", "Check original outcomes", Resolve);
+-        Add(actions, "open-gui", "Account operations", OpenGui);
+-        Add(actions, "create-operations", "Create / operations", OpenStorage);
+-        Add(actions, "location-operations", "Current space operations", OpenLocation);
+-        Add(actions, "inspect", "Source / inspection", OpenTools);
+-        Add(actions,"local-controllers","Connected controllers",()=>{OpenControllers();return Task.CompletedTask;});
+-        Add(actions,"start-xr","Start OpenXR",()=>{xr.Start();return Task.CompletedTask;});
+-        Add(actions,"stop-xr","Stop OpenXR",()=>{xr.StopSession();return Task.CompletedTask;});
+-        root.AddChild(body);
++        Add(toolsPanel, "open-gui", "Account controls", OpenGui);
++        Add(accountActions,"space-home","Current space",()=>{ShowHome();return Task.CompletedTask;});
++        Add(accountActions,"resume-inspector","Inspector",()=>{ShowInspector();return Task.CompletedTask;});
++        Add(accountActions, "create-operations", "Create…", OpenStorage);
++        Add(accountActions, "location-operations", "Space views & actions", OpenLocation);
++        root.AddChild(contentsStatus);root.AddChild(viewRegion);viewRegion.AddChild(scene);viewRegion.AddChild(visualHost);viewRegion.AddChild(subjectHost);subjectHost.AddChild(gui.FormMirror);root.AddChild(body);
++        gui.Resized+=UpdateWorkspace;
++        gui.Appearance.Changed+=UpdateWorkspace;
++        workspaceScroll.Resized+=UpdateWorkspace;
++        viewRegion.ItemRectChanged+=FitHomeViewport;
+         endpoint.TextChanged += _ => SettingsChanged(); ca.TextChanged += _ => SettingsChanged();
+         try {
+             string profile = Argument("--profile") ?? ProjectSettings.GlobalizePath("user://identity");
+             store = new LocalStore(profile);
+             if (store.Snapshot is LocalState saved) {
+                 key = Identity.FromPayload(saved.Payload); endpoint.Text = saved.Endpoint; ca.Text = saved.CaFile;
+-                status.Text = "Saved active identity restored from private local storage. Connect explicitly.";
+-            } else status.Text = "Create or import a key offline, then connect. Active keys use private files; encrypted backups have a separate passphrase.";
++                status.Text = "Your saved key is ready. Connect explicitly.";
++            } else status.Text = "Not signed in.";
+             if (Argument("--node") is string node) endpoint.Text = node;
+             if (Argument("--ca") is string caPath) ca.Text = caPath;
+         } catch (Exception error) { state = "storage-error"; status.Text = error.Message; }
+@@ -140,13 +173,14 @@
+         var args = OS.GetCmdlineUserArgs(); int index = Array.IndexOf(args, name);
+         return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
+     }
+-    static HBoxContainer Row(Godot.Container parent) { var row = new HBoxContainer(); parent.AddChild(row); return row; }
++    static HFlowContainer Row(Godot.Container parent) { var row = new HFlowContainer(); parent.AddChild(row); return row; }
+     internal (string,Func<bool>,Action)[] WorkspaceMenuEntries()=>new[]{"workspace-show","workspace-move","workspace-hide","workspace-text-larger","workspace-nearer","open-gui","create-operations","location-operations","inspect","local-controllers","stop-xr"}.Select(name=> {
+         var button=buttons[name];return(button.Text,(Func<bool>)(()=>!button.Disabled),(Action)(()=>button.EmitSignal(BaseButton.SignalName.Pressed)));
+-    }).ToArray();
++    }).Concat(questions is { } hub ? new[]{(hub.Caption,(Func<bool>)(()=>ReferenceEquals(questions,hub)&&session is {IsExpired:false}),
++        (Action)(()=>{if(ReferenceEquals(questions,hub)&&session is {IsExpired:false}){OverlayChanging();hub.Show();}}))} : []).ToArray();
+     void Add(Godot.Container row, string name, string text, Func<Task> operation)
+     {
+-        var button = new Button { Name = name, Text = text }; buttons.Add(name, button); row.AddChild(button);
++        var button = SpatialGui.ActionButton(text,name); buttons.Add(name, button); row.AddChild(button);
+         button.Pressed += () => {
+             if (name == "disconnect") { Disconnect(); return; }
+             activeAction = Run(operation);
+@@ -166,7 +200,7 @@
+     {
+         if (key != null || store == null) throw new InvalidOperationException("Local identity storage is unavailable or already occupied.");
+         using var created = Identity.Create(); store.Create(created.Payload(), true); key = Identity.FromPayload(store.Snapshot!.Payload);
+-        status.Text = "Identity saved durably. The active key is protected by private filesystem permissions. Export an encrypted backup separately."; return Task.CompletedTask;
++        status.Text = "Key saved on this device. Connect when you are ready."; return Task.CompletedTask;
+     }
+     async Task Connect()
+     {
+@@ -177,6 +211,12 @@
+         store.Update(s => { s.Endpoint = endpoint.Text; s.CaFile = ca.Text; });
+         var connecting = new SignedSession(key, store, new Transport(endpoint.Text, ca.Text));
+         session = connecting; status.Text = "Authenticating the exact saved key…"; Notify();
++        connecting.Expired+=()=>{
++            if(!ReferenceEquals(session,connecting)||disposed||closing)return;
++            Disconnect();state="sign-in-expired";
++            status.Text="Sign-in expired. Sign in again with the same key. Drafts and original work are retained.";
++            UpdateButtons();Notify();
++        };
+         try {
+             await connecting.Authenticate(Cancellation);
+             if (disposed || expected != incarnation) return;
+@@ -185,7 +225,7 @@
+             accounts = discovered;
+         } catch { if (ReferenceEquals(session, connecting)) CloseSession(); throw; }
+         state = accounts.Human == null ? "signed-in-no-account" : accounts.Setup == null ? "setup-pending" : "account-ready";
+-        status.Text = accounts.Uncertain ? "Original work is unresolved. Check its original outcome." : "Authenticated. Network: " + connecting.Network;
++        status.Text = accounts.Uncertain ? "Original work is unresolved. Check its original outcome." : "Signed in with your saved key. Your account's next action is shown below.";
+         if (accounts.Setup != null) await PresentAccount();
+     }
+     async Task Register()
+@@ -193,13 +233,13 @@
+         RequireSession(); long expected = incarnation; await accounts!.Register(Cancellation);
+         if (disposed || expected != incarnation) return;
+         state = accounts.Human == null ? "signup-uncertain" : "setup-pending";
+-        status.Text = accounts.Human == null ? "Signup outcome is unknown; check the original operation." : "The human account exists. Describe its policy-selected initial storage before completing setup.";
++        status.Text = accounts.Human == null ? "Signup outcome is unknown; check the original operation." : "Your account is created. Review its starting space storage before completing setup.";
+     }
+     async Task Prepare()
+     {
+         RequireSession(); long expected = incarnation; await accounts!.Prepare(Cancellation);
+         if (disposed || expected != incarnation) return;
+-        status.Text = accounts.StorageDescription.Length == 0 ? "Original account setup is complete." : accounts.StorageDescription;
++        status.Text = accounts.StorageDescription.Length == 0 ? "Original account setup is complete." : "Storage reviewed. Your agent and starting space are not created yet.";
+         if (accounts.Setup != null) await PresentAccount();
+     }
+     async Task Setup()
+@@ -242,7 +282,7 @@
+             if (!same || !wasAvailable || (next.Space != null && worldView == null)) OpenWorld(consumer,human,next.Space);
+             UpdateButtons(); Notify();
+         };
+-        route.Withdrawn += reason => { navigationAvailable=false; SuspendWorld(); location.Text = "Location unavailable: " + reason; UpdateButtons(); Notify(); };
++        route.Withdrawn += reason => { navigationAvailable=false; SuspendWorld(route.Updating); location.Text = "Location unavailable: " + reason; UpdateButtons(); Notify(); };
+         _ = route.Start();
+         var preferences = new SignedView(consumer, human, human, "controller_preferences", SignedSession.ViewGoal(human,
+             Term.Call("controller_preferences_view", Term.Parse(human.InstanceText.TrimEnd('.')), Term.Variable("View")))); views.Add(preferences);
+@@ -252,8 +292,11 @@
+         };
+         preferences.Withdrawn += reason => { xr.Install(null);controllers.Text = "Controller mapping unavailable: " + reason; Notify(); };
+         _ = preferences.Start();
+-        questions?.Dispose(); questions = new(consumer, accounts, store!, body, Notify); questions.Start();
+-        await OpenGui();
++        questions?.Dispose(); questions = new(consumer, accounts, store!, attentionHost, Notify); questions.Start();
++        bool returnHome=home;
++        if(representations?.Resume(consumer,accounts,store!)!=true)home=true;
++        else home=returnHome;
++        UpdateWorkspace();await Task.CompletedTask;
+     }
+     void RetireWorld()
+     {
+@@ -266,7 +309,11 @@
+     {
+         if (space == null) { SuspendWorld(); status.Text="Unplaced. Open an explicitly selected existing space's offered operations to enter it."; return; }
+         if (worldView?.Completion?.IsCompleted==true) RetireWorld();
+-        if (worldView != null) { ScheduleWorldChange(false); return; }
++        if (worldView != null) {
++            bool same=worldView.Target==space;
++            if(!same)scene.Withdraw();
++            ScheduleWorldChange(false,same);return;
++        }
+         long expected = worldIncarnation;
+         async Task<(Actor Target,string Goal)?> WorldGoal(CancellationToken cancellation) {
+             var read = await consumer.Read(human,"account_navigation(Navigation).",cancellation);
+@@ -286,7 +333,7 @@
+                 if (!navigationAvailable || navigation?.Space != view.Target) { WithdrawWorld("Committed location changed."); return; }
+                 var next = scene.ApplyProjection(message,view.Target,human,ack=>_ = view.Send(ack)); projection=next; worldAccepted=true;
+                 controls?.Present(next);
+-                status.Text="Current committed space. Click a subject for its offered operations; focus the scene for WASD/QE and right-drag viewing.";
++                status.Text="";
+             } catch (Exception error) { WithdrawWorld(error.Message); }
+             UpdateButtons(); Notify();
+         };
+@@ -295,70 +342,117 @@
+             try { if (scene.ApplyFrame(message,ack=>_ = view.Send(ack))) { controls?.Present(projection); Notify(); } }
+             catch (Exception error) { WithdrawWorld(error.Message); Notify(); }
+         };
+-        view.Withdrawn += reason => { if (expected == worldIncarnation) { WithdrawWorld(reason); Notify(); } };
++        view.Withdrawn += reason => { if (expected == worldIncarnation) { WithdrawWorld(reason,view.Updating); Notify(); } };
+         _ = view.Start();
+     }
+-    void SuspendWorld() { WithdrawWorld("Location is being verified."); if (worldView != null) ScheduleWorldChange(true); }
+-    void ScheduleWorldChange(bool suspend)
+-    { var next=ChangeWorld(suspend); worldChanges=worldChanges.IsCompleted ? next : Task.WhenAll(worldChanges,next); }
+-    async Task ChangeWorld(bool suspend)
+-    {
+-        try { if (worldView is SignedView view) { if (suspend) await view.Suspend(); else await view.Reopen(); } }
++    void SuspendWorld(bool refreshing=false) { WithdrawWorld("Location is being verified.",refreshing); if (worldView != null) ScheduleWorldChange(true,refreshing); }
++    void ScheduleWorldChange(bool suspend,bool refreshing)
++    { var next=ChangeWorld(suspend,refreshing); worldChanges=worldChanges.IsCompleted ? next : Task.WhenAll(worldChanges,next); }
++    async Task ChangeWorld(bool suspend,bool refreshing)
++    {
++        try { if (worldView is SignedView view) { if (suspend) await view.Suspend(refreshing); else await view.Reopen(refreshing); } }
+         catch (OperationCanceledException) { }
+         catch (Exception error) { if (!disposed && !closing) { WithdrawWorld(error.Message); Notify(); } }
+     }
+-    void WithdrawWorld(string reason)
+-    { projection=null; controls?.Withdraw();xr.InvalidateWorld(); scene.Withdraw(); worldAccepted=false; status.Text="Space unavailable: " + reason; UpdateButtons(); }
+-    bool GuiOpen=>representations?.IsVisibleInTree()==true || backupDialog!=null || (localControllers?.IsVisibleInTree()??false) || body.GetChildren().Any(n=>n is QuestionPanel c && c.IsVisibleInTree());
++    void WithdrawWorld(string reason,bool refreshing=false)
++    { projection=null; controls?.Withdraw();xr.InvalidateWorld();if(refreshing)scene.Suspend();else scene.Withdraw();worldAccepted=false; status.Text="Space unavailable: " + reason; UpdateButtons(); }
++    bool GuiOpen=>representations?.IsVisibleInTree()==true || backupDialog!=null || (localControllers?.IsVisibleInTree()??false) || questions?.Expanded==true;
+     void UpdateWorkspace()
+     {
+         workspaceContent.Visible=!gui.Spatial || xr.WorkspaceVisible;
+-        connectionShell.Visible=!gui.Spatial || showConnection;workspaceControls.Visible=gui.Spatial;
++        statusPanel.Visible=status.Text.Length>0;
++        connectionShell.Visible=showConnection || accounts?.Setup==null || accounts.Uncertain || session?.IsExpired==true;workspaceControls.Visible=gui.Spatial;
+         location.Visible=controllers.Visible=connectionShell.Visible;
+-        foreach(string name in new[]{"register","prepare","setup","resolve","start-xr"})buttons[name].Visible=connectionShell.Visible;
+-        if(!gui.Spatial)workspaceAppearance.Hide();
+-        foreach(var (name,button) in buttons.Where(p=>p.Key.StartsWith("workspace-")))button.Disabled=busy || !gui.Spatial;
++        accountSetup.Visible=accounts!=null;
++        bool ready=accounts?.Setup!=null&&session is {IsExpired:false};
++        bool attention=questions?.Expanded==true;
++        attentionHost.Visible=ready;attentionHost.SizeFlagsVertical=attention ? SizeFlags.ExpandFill : SizeFlags.Fill;workspaceScroll.Visible=!attention;
++        bool form=!attention&&!home&&ready&&representations!=null;
++        bool subjectOnly=gui.Spatial&&form;
++        bool preview=form&&representations!.Preview.Visible;
++        bool previewNear=subjectOnly&&representations!.NearOccurrence&&ReferenceEquals(representations.Occurrence?.Owner,representations.Preview);
++        shellHeader.Visible=!form&&!attention;place.Visible=ready&&!subjectOnly&&!attention;accountActions.Visible=!form;
++        connectionShell.Visible&=!subjectOnly;body.Visible=!subjectOnly;
++        if(subjectOnly){toolsPanel.Hide();workspaceAppearance.Hide();statusPanel.Hide();}
++        placeTitle.Text=navigationAvailable ? navigation?.Space==null ? "Not placed in a space" :
++            projection?.Name is {Length:>0} placeName ? "Current space · "+placeName : "Current space" : "Verifying current place…";
++        placeTitle.TooltipText=navigationAvailable ? navigation?.Location.ToString()??"" : "";
++        contentsStatus.Visible=ready&&home;
++        contentsStatus.Text=!navigationAvailable ? "Current place is unavailable while it is being verified."
++            : navigation?.Space==null ? "You are not in a space. Open a known subject's offered Enter action to choose a destination."
++            : !worldAccepted ? "Contents unavailable. "+status.Text
++            : scene.Count==0 ? "No visible contents in this space." : "Select a visible subject. Viewing it does not enter it.";
++        bool beside=form&&!gui.Spatial&&gui.WorkspaceSize.X>=Math.Max(1000,36*gui.Appearance.DefaultFontSize);
++        if(!scene.Viewport.UseXR)scene.Visible=worldAccepted&&(home||beside&&!preview);
++        subjectHost.Visible=form&&!previewNear;subjectHost.CustomMinimumSize=new(beside ? gui.WorkspaceSize.X*.55f : 0,0);
++        viewRegion.CustomMinimumSize=new(0,form ? Math.Max(1,workspaceScroll.Size.Y) : 0);
++        if(!home)scene.CustomMinimumSize=new(0,beside ? Math.Max(360,workspaceScroll.Size.Y) : 360);
++        FitHomeViewport();
++        visualHost.Visible=preview&&(beside||previewNear||representations!.Selected?.Operation!=true);
++        if(representations!=null){representations.Visible=form&&workspaceContent.Visible;representations.Preview.CustomMinimumSize=new(0,Math.Max(360,workspaceScroll.Size.Y));}
++        xr.PresentForm(form&&!previewNear&&(!preview||representations!.Selected?.Operation==true));
++        xr.BindOccurrence(form&&representations!.NearOccurrence ? representations.Occurrence : null);
++        buttons["resume-inspector"].Visible=ready&&home&&representations?.Current!=null;
++        buttons["create-operations"].Visible=buttons["location-operations"].Visible=home;
++        buttons["space-home"].ThemeTypeVariation=home ? "PrimaryAction" : "";
++        buttons["resume-inspector"].ThemeTypeVariation=home ? "" : "PrimaryAction";
++        foreach(var (name,button) in buttons.Where(p=>p.Key.StartsWith("workspace-")))button.Disabled=busy ||
++            (!gui.Spatial && name is not ("workspace-settings" or "workspace-connection" or "workspace-text-larger" or "workspace-text-smaller" or "workspace-opaque"));
+         buttons["workspace-hide"].Disabled|=backupDialog!=null;
+         buttons["workspace-move"].Text=xr.MovingWorkspace ? "Place panel" : "Move panel";
+     }
++    void FitHomeViewport()
++    {
++        // Expanded chrome scrolls with the contents without collapsing the
++        // installed interior to an unusable strip below those controls.
++        if(home&&workspaceScroll.Visible)scene.CustomMinimumSize=new(0,Math.Clamp(workspaceScroll.Size.Y-viewRegion.Position.Y,Math.Min(180,workspaceScroll.Size.Y),360));
++    }
+     void OverlayChanging() { gui.Cancel();xr.Router.Cancel();scene.ReleaseInput();if(gui.Spatial&&!xr.WorkspaceVisible)xr.ShowWorkspace(); }
++    void ShowHome(){questions?.Close();OverlayChanging();home=true;workspaceScroll.ScrollVertical=0;UpdateWorkspace();}
++    void ShowInspector(){questions?.Close();OverlayChanging();home=false;workspaceScroll.ScrollVertical=0;UpdateWorkspace();}
++    void SelectSubject(Term exact)
++    {if(accounts?.Human==null||session==null||operations?.IsWorking==true)return;var panel=EnsureRepresentations();panel.Open(session,accounts,store!,exact);panel.PlacePersonal();ShowInspector();}
+     public override void _Process(double delta) { xr.ContextChanged();scene.NavigationBlocked=GuiOpen || xr.Running;controls?.Tick(delta); }
+     Task OpenGui()
+     {
+         OverlayChanging();
+         RequireSession(); if (accounts!.Human == null) throw new InvalidOperationException("No human account reference.");
+-        EnsureRepresentations().Open(session!,accounts,store!,accounts.Human.Entity);return Task.CompletedTask;
++        SelectSubject(accounts.Human.Entity);return Task.CompletedTask;
+     }
+     Task OpenStorage()
+     {
+         OverlayChanging();
+         RequireSession();
+         if (accounts!.Setup == null) throw new InvalidOperationException("Complete account setup first.");
+-        EnsureRepresentations().OpenStorage(session!,accounts,store!,navigationAvailable ? navigation?.Space : null);return Task.CompletedTask;
++        EnsureRepresentations().OpenStorage(session!,accounts,store!,navigationAvailable ? navigation?.Space : null);ShowInspector();return Task.CompletedTask;
+     }
+     Task OpenLocation()
+     {
+         OverlayChanging();
+         RequireSession(); var space = navigationAvailable ? navigation?.Space : null;
+         if (space==null) throw new InvalidOperationException("Current location is unavailable or unplaced.");
+-        EnsureRepresentations().Open(session!,accounts!,store!,space.Entity);return Task.CompletedTask;
++        SelectSubject(space.Entity);return Task.CompletedTask;
+     }
+     Task OpenTools()
+     {
+         OverlayChanging();
+         RequireSession(); if (accounts!.Human == null) throw new InvalidOperationException("No account.");
+-        EnsureRepresentations().Open(session!,accounts,store!,accounts.Human.Ontology);return Task.CompletedTask;
++        SelectSubject(accounts.Human.Ontology);return Task.CompletedTask;
+     }
+     EidolonPanel EnsureRepresentations()
+     {
+         if(representations!=null)return representations;
+-        representations=new() { Name="representations" };body.AddChild(representations);
+-        operations=representations.Operations;representations.Changed+=Notify;return representations;
++        representations=new() { Name="representations",CurrentLocation=()=>navigationAvailable ? navigation?.Space : null,
++            SubjectLabel=exact=>navigationAvailable&&navigation?.Space?.Entity.ToString()==exact.ToString() ? projection?.Name : scene.SubjectLabel(exact) };
++        visualHost.AddChild(representations.Preview);gui.SetForm(representations);
++        gui.PreviewFormHit=point=>representations?.NearOccurrence==true&&gui.Spatial&&ReferenceEquals(representations.Occurrence?.Owner,representations.Preview) ? representations.Preview.FormHit(point) : null;
++        operations=representations.Operations;representations.Changed+=Notify;representations.HiddenByUser+=ShowHome;return representations;
+     }
+     void SettingsChanged()
+     { if (session != null) Disconnect(); }
+-    void CloseSession()
+-    {
++    void CloseSession(bool retainDrafts=true)
++    {
++        bool returnHome=home;
+         incarnation++;
+         xr?.Install(null);xr?.StopSession();gui?.Cancel();
+         RetireWorld(); navigation=null; navigationAvailable=false;
+@@ -368,10 +462,13 @@
+         completions.Add(worldChanges);
+         if(controls!=null) { controls.Dispose(); completions.Add(controls.Completion); controls=null; }
+         if (questions != null) completions.Add(questions.Completion);
+-        if (representations != null) { representations.DisposeView();completions.Add(representations.Completion); }
++        if (representations != null) {
++            if(retainDrafts)representations.Disconnect();else representations.DisposeView();
++            completions.Add(representations.Completion);
++        }
+         questions?.Dispose(); questions = null;
+         foreach (var view in views) view.Dispose(); views.Clear();
+-        operations = null;representations=null;
++        if(!retainDrafts){if(representations!=null){visualHost.RemoveChild(representations.Preview);representations.Preview.QueueFree();gui.RemoveForm(representations);representations.QueueFree();}operations=null;representations=null;}
+         foreach (var node in body.GetChildren()) {
+             body.RemoveChild(node); node.QueueFree();
+         }
+@@ -383,15 +480,16 @@
+         ViewsDisposed = ViewsDisposed.IsCompleted ? Finish() : Task.WhenAll(ViewsDisposed, Finish());
+         accounts = null; worldAccepted = false; location.Text = controllers.Text = "";localControllers=null;localControllerStatus=null;sourceChoices.Clear();sourceSchema="";
+         scene?.Withdraw();
++        home=returnHome;
+     }
+     public void Disconnect()
+     {
+-        action?.Cancel(); CloseSession(); state = "offline"; status.Text = "Disconnected. Saved identity and original signed work remain local."; UpdateButtons(); Notify();
++        action?.Cancel(); CloseSession(); state = "offline"; status.Text = "Disconnected. Unsent forms remain in this window. Saved identity, source drafts and original signed work remain local."; UpdateButtons(); Notify();
+     }
+     public override void _UnhandledKeyInput(InputEvent @event)
+     {
+         if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape }) {
+-            if (representations?.Visible == true) representations.Cancel(); else action?.Cancel();
++            if (representations?.Visible == true) { representations.Cancel();ShowHome(); } else action?.Cancel();
+             GetViewport().SetInputAsHandled(); Notify();
+         }
+     }
+@@ -402,14 +500,15 @@
+     }
+     void UpdateButtons()
+     {
+-        identityLabel.Text = key == null ? "No unlocked identity" : "Public identity: " + key.PublicText;
++        identityLabel.Text = key == null ? "No unlocked identity" : "Public identity: " + key.PublicText+(session==null ? "" : "\nNetwork: "+session.Network)+
++            (accounts?.StorageDescription is {Length:>0} storage ? "\n"+storage : "");
+         if (buttons.Count == 0) return;
+         foreach (var button in buttons.Values) button.Disabled = busy;
+         buttons["disconnect"].Disabled = session == null && !busy;
+         buttons["create-key"].Disabled |= key != null || store == null;
+         buttons["import-backup"].Disabled |= key != null || store == null;
+         buttons["export-backup"].Disabled |= key == null;
+-        buttons["connect"].Disabled |= key == null || session != null;
++        buttons["connect"].Disabled |= key == null || session is {IsExpired:false};
+         buttons["register"].Disabled |= accounts == null || !accounts.CanRegister;
+         buttons["prepare"].Disabled |= accounts?.Human == null || accounts.Uncertain;
+         buttons["setup"].Disabled |= accounts?.Prepared == null || accounts.Uncertain;
+@@ -421,10 +520,39 @@
+         buttons["local-controllers"].Disabled|=accounts?.Human==null;
+         buttons["start-xr"].Disabled|=accounts?.Human==null || xr.Running;
+         buttons["stop-xr"].Disabled|=!xr.Running;
++        UpdateOnboarding();
+         UpdateWorkspace();
+         xr.RefreshMenu();
+     }
+-    void Notify() { xr?.ContextChanged();if (!disposed && IsInsideTree()) EmitSignal(SignalName.Changed); }
++    void UpdateOnboarding()
++    {
++        bool signed=session is {IsExpired:false} && accounts!=null, ready=signed&&accounts!.Setup!=null;
++        bool uncertain=signed&&accounts!.Uncertain;
++        string? next=store==null ? null : key==null ? "create-key" : !signed ? "connect" : uncertain ? "resolve" :
++            accounts!.CanRegister ? "register" : accounts.Human!=null&&accounts.Setup==null ? (accounts.Prepared==null ? "prepare" : "setup") : null;
++        connectionTitle.Text=key==null ? "Welcome to Quod" : !signed ? "Sign in with your saved key" : uncertain ? "Check your original work" :
++            accounts!.CanRegister ? "Create your account" : accounts.Human==null ? "Account unavailable" : !ready ? "Set up your starting space" : "Account ready";
++        connectionHelp.Text=store==null ? "Local identity storage is unavailable. Your files have not been replaced." : key==null ?
++            "New here? Create a key on this device. Already have a key? Import your encrypted backup instead." : !signed ?
++            "Connect to recover this key's existing account. Server and trust settings are in the details below." : uncertain ?
++            "An earlier action has no confirmed outcome. Check that original action; do not submit it again." : accounts!.CanRegister ?
++            "This new key has no account on this network. Creating an account is a separate, explicit action." : accounts.Human==null ?
++            "No account reference was recovered for this imported key. Registration cannot replace an unavailable original account." : !ready ?
++            accounts.Prepared==null ? "Review the policy-selected storage first. This read creates neither your agent nor your starting space." :
++            "Create your personal agent and empty starting space together in your account storage." :
++            "Your existing account is available. Account and space actions use the offered forms below.";
++        buttons["connect"].Text=state=="sign-in-expired" || session?.IsExpired==true ? "Sign in again" : "Connect";
++        foreach(string name in new[]{"create-key","import-backup","connect","disconnect","register","prepare","setup","resolve"}) {
++            var button=buttons[name];button.ThemeTypeVariation=name==next ? "PrimaryAction" : "";
++            button.Visible=name switch {"create-key" or "import-backup"=>key==null,"connect"=>key!=null&&!signed,
++                "disconnect"=>session!=null||busy,"resolve"=>uncertain, _=>name==next};
++        }
++        accountActions.Visible=ready;
++        buttons["workspace-connection"].Visible=ready;
++        buttons["client-tools"].Visible=ready;
++        SpatialGui.SetEditable(endpoint,!busy);SpatialGui.SetEditable(ca,!busy);
++    }
++    void Notify() { if(!disposed){UpdateOnboarding();UpdateWorkspace();representations?.RefreshContext();}xr?.ContextChanged();if (!disposed && IsInsideTree()) EmitSignal(SignalName.Changed); }
+     public string Inspect() => JsonSerializer.Serialize(new { state, busy, public_key = key?.PublicText,
+         network = session?.Network, human = accounts?.Human, setup = accounts?.Setup?.ToString(),
+         pending = store?.Snapshot?.Pending.Count, world_accepted = worldAccepted, live_sockets = SignedView.LiveSockets, ignored_projections = SignedView.IgnoredProjections, question_receiver_ready = questions?.Ready,
+@@ -480,7 +608,7 @@
+     { if (released) return; released = true; key?.Dispose(); store?.Dispose(); }
+     internal async Task CloseApplication(int exitCode=0)
+     {
+-        if (closing) return; closing = true; action?.Cancel(); backupCancellation?.Cancel(); backupDialog?.QueueFree(); CloseSession();
++        if (closing) return; closing = true; action?.Cancel(); backupCancellation?.Cancel(); backupDialog?.QueueFree(); CloseSession(false);
+         await Task.WhenAll(ViewsDisposed, activeAction, backupWork,xr.Completion);
+         models.Dispose();await models.Completion;
+         bool xrStopped=await xr.Shutdown(SignedSession.Now+5000);
+@@ -488,14 +616,14 @@
+     }
+     public override void _ExitTree()
+     {
+-        disposed = true; action?.Cancel(); backupCancellation?.Cancel(); CloseSession();
++        disposed = true; action?.Cancel(); backupCancellation?.Cancel(); CloseSession(false);
+         // On an external engine quit, keep the writer lease until cancelled
+         // work finishes or the process closes it. Never release it under I/O.
+         if (ViewsDisposed.IsCompleted && activeAction.IsCompleted && backupWork.IsCompleted) ReleaseIdentity();
+     }
+     void OpenControllers()
+     {
+-        OverlayChanging();
++        ShowHome();
+         if(localControllers!=null){localControllers.Show();UpdateControllerStatus();return;}
+         localControllers=new() { Name="local-controllers-panel" };body.AddChild(localControllers);
+         localControllerStatus=new() { AutowrapMode=TextServer.AutowrapMode.WordSmart };localControllers.AddChild(localControllerStatus);

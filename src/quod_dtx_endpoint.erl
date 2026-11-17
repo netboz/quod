@@ -5,7 +5,9 @@ Pure v13 wire boundary for durable operation and read-attestation traffic.
 The endpoint owns only deterministic framing, bounded atom-safe decoding,
 fixed request/response admission, and exact correlation checks. Its view-bound
 outcome requests carry a committee id and minimum certified slot; replies carry
-the responder's anchored identity and applied floor. Snapshot absence and
+the responder's anchored identity and applied floor. Selected domain values
+retain unknown symbols as opaque data, independently of the receiver's atom table.
+Snapshot absence and
 gateway retirement never authorize an outcome. Applied requests bind one exact Resolve,
 generation, and verdict; each validator response carries its signed vote for
 the caller to combine into the portable certificate owned by
@@ -62,10 +64,6 @@ outside the semantic request, evidence, signatures and correlation checks.
 -define(VERSION, 13). %% Vote/Resolve/Complete and compact recovery presentation
 -define(CHANNEL_TAG, quod_dtx).
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
-
--if(?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES >= ?QUOD_TRANSPORT_MAX_FRAME_BYTES).
--error("DTX endpoint envelope must stay below the transport frame bound").
--endif.
 
 -type request_id() :: <<_:?QUOD_DTX_ENDPOINT_REQUEST_ID_BITS>>.
 -type identity() :: {binary(), <<_:256>>}.
@@ -165,13 +163,23 @@ encode_traced_direction(Namespace, Inner, Hints, TraceCarrier, Direction) ->
                 {ok, WireHints} ->
                     InnerBinary =
                         term_to_binary({Inner, WireHints}, [deterministic]),
-                    Envelope = term_to_binary(
-                                 {?DOMAIN, ?VERSION, Namespace, InnerBinary, TraceCarrier},
-                                 [deterministic]),
-                    case byte_size(Envelope) =<
-                         ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES of
-                        true -> {ok, Envelope};
-                        false -> too_large(dtx_endpoint)
+                    %% Bindings alone do not include the enclosing protocol
+                    %% depth. Admit the complete inner bytes by the same rule
+                    %% as the receiver before emitting an undecodable frame.
+                    case quod_safe_term:validate_canonical(
+                           InnerBinary, ?QUOD_LINK_PAYLOAD_CAPACITY) of
+                        ok ->
+                            Envelope = term_to_binary(
+                                         {?DOMAIN, ?VERSION, Namespace,
+                                          InnerBinary, TraceCarrier},
+                                         [deterministic]),
+                            case byte_size(Envelope) =<
+                                 ?QUOD_LINK_PAYLOAD_CAPACITY of
+                                true -> {ok, Envelope};
+                                false -> too_large(dtx_endpoint)
+                            end;
+                        {error, too_large} -> too_large(dtx_endpoint);
+                        {error, _} -> protocol_error(bad_etf)
                     end;
                 error ->
                     protocol_error(bad_hints)
@@ -210,9 +218,9 @@ decode_expected(Namespace, Envelope, Direction) ->
 
 decode_direction(Expected, Envelope, Direction)
   when is_binary(Envelope),
-       byte_size(Envelope) =< ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES ->
+       byte_size(Envelope) =< ?QUOD_LINK_PAYLOAD_CAPACITY ->
     case quod_safe_term:decode(
-           Envelope, ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES) of
+           Envelope, ?QUOD_LINK_PAYLOAD_CAPACITY) of
         {ok, {?DOMAIN, ?VERSION, Namespace, InnerBinary, Carrier} = Outer} ->
             case term_to_binary(Outer, [deterministic]) =:= Envelope of
                 true ->
@@ -250,18 +258,16 @@ decode_inner(Expected, Namespace, InnerBinary, Direction) ->
         {_, false, _} -> protocol_error(bad_namespace);
         {_, _, false} -> protocol_error(bad_shape);
         {true, true, true} ->
-            case quod_safe_term:decode(
-                   InnerBinary, ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES) of
-                {ok, {Inner, RawHints} = Wrapped} ->
-                    case term_to_binary(Wrapped, [deterministic]) =:= InnerBinary of
-                        false -> protocol_error(non_canonical);
-                        true ->
-                            case validate_bound_direction(Namespace, Inner, Direction) of
-                                ok ->
-                                    {ok, Namespace, Inner,
-                                     decode_validation_sidecar(RawHints)};
-                                {error, _} = Error -> Error
-                            end
+            %% This shared decoder verifies the original canonical bytes while
+            %% retaining unknown domain symbols without allocating atoms.
+            case quod_safe_term:decode_wrapped(
+                   InnerBinary, ?QUOD_LINK_PAYLOAD_CAPACITY) of
+                {ok, {Inner, RawHints}} ->
+                    case validate_bound_direction(Namespace, Inner, Direction) of
+                        ok ->
+                            {ok, Namespace, Inner,
+                             decode_validation_sidecar(RawHints)};
+                        {error, _} = Error -> Error
                     end;
                 {ok, _Other} -> protocol_error(bad_shape);
                 {error, _} -> protocol_error(bad_etf)
@@ -378,7 +384,7 @@ valid_entry_hint_view(Ref, Entry, Slot) when is_integer(Slot) ->
         case quod_dtx:certified_ref_binding(Ref) of
             {ok, _Identity, Slot, _Digest} ->
                 case quod_ledger:hint_bytes(Entry) of
-                    {ok, Bytes} -> byte_size(Bytes) =< ?QUOD_MAX_FOREIGN_PAGE_BYTES;
+                    {ok, _Bytes} -> true;
                     {error, _} -> false
                 end;
             _ ->
@@ -463,8 +469,7 @@ validate_request_fields(RequestId, FieldsValid) ->
 validate_record_blob(RecordBlob) ->
     case is_binary(RecordBlob) andalso byte_size(RecordBlob) > 0 of
         false -> protocol_error(bad_record);
-        true when byte_size(RecordBlob) =< ?QUOD_MAX_DTX_BODY_BYTES -> ok;
-        true -> too_large(record)
+        true -> ok
     end.
 
 %% The endpoint owns only the fixed request shape and outer envelope bound.
@@ -472,8 +477,7 @@ validate_record_blob(RecordBlob) ->
 %% authenticated peer/readiness checks; this framing layer never parses or
 %% verifies the signed submission a second time.
 valid_payload(Blob) when is_binary(Blob) ->
-    byte_size(Blob) > 0 andalso
-        byte_size(Blob) < ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES;
+    byte_size(Blob) > 0;
 valid_payload(_Blob) ->
     false.
 
@@ -639,8 +643,7 @@ valid_participant_slots(Slots) ->
 
 valid_participant_slots([], _Previous, Count) -> Count >= 2;
 valid_participant_slots([{Identity, Slot, Generation} | Rest], Previous, Count)
-  when Count < ?QUOD_MAX_DTX_PARTICIPANTS,
-       (Previous =:= none orelse Previous < Identity),
+  when (Previous =:= none orelse Previous < Identity),
        is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64,
        is_integer(Generation), Generation >= 0,
        Generation =< ?MAX_UINT64 ->

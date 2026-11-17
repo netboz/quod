@@ -1,0 +1,59 @@
+{
+  "scope": "Independent disposition of the single user-requested Claude Fable review; no implementation edits or test/build/XR executions in this review turn.",
+  "reviewer_session": "38ad96c0-cced-4840-a6b5-4208c0396cda",
+  "verdict": "No introduced correctness defect found in the launcher reporting change. The original narrow offline conclusion stands with the qualifications below.",
+  "source_anchor": {
+    "original_tmp_snapshot_available": false,
+    "replacement_review_packet": "nimbalyst-local/review-packets/vr-reliability-claude01/manifest.json",
+    "manifest_sha256": "9c738b4fdb4cb9683eff6d5cecfbdad31fc9724f54aa045b24124657df404bf8",
+    "source_files": 102,
+    "original_saved_hashes_verified": 88,
+    "note": "Fresh source/evidence snapshot; does not recreate the vanished original archive or qualify a new binary. Original handoff/result are preserved as historical records."
+  },
+  "dispositions": [
+    {
+      "finding": 1,
+      "status": "confirmed; loss and replacement anchor recorded here",
+      "detail": "Original snapshot and offline03 stage paths are absent. Existing sources, before-copies, generated compilation inputs and full receipts remain. Review packet supplies a current exact source/evidence anchor, not proof that the vanished archive remains reconstructable byte-for-byte."
+    },
+    {
+      "finding": 2,
+      "status": "confirmed coverage gap; no code change in review turn",
+      "detail": "Current tests never assert readiness_not_admitted row fields. They test repeated visual admission but not the reachable VISUAL_READY-at-preparation-cutoff case through the actual loop."
+    },
+    {
+      "finding": 3,
+      "status": "confirmed wording correction",
+      "detail": "Baselines are synthetic event sequences. READY without prior visual admission and BLOCKER then READY are defensive sequences, not normal companion04 emissions or observations from visual02. Of the eight check_live tests, six execute the event loop, one directly tests Supervision, and one tests only the extracted wait_normal helper. The overall 114 count remains correct."
+    },
+    {
+      "finding": 4,
+      "status": "portability concern, not a demonstrated external-write defect",
+      "detail": "Build logs show the SDK first-run path. The inspected HOME certificate files predate the work, but that alone does not prove every write stayed inside the stage. The review's broader claim that nothing was written outside the stage is not adopted. No certificate or SDK-setting mutation was made during this review."
+    },
+    {
+      "finding": 5,
+      "status": "confirmed evidence limitation",
+      "detail": "The offline DLL and generated visual-ready outputs were only in the now-absent temporary stage; no DLL hash is recorded. Retained source/build inputs and logs remain inspectable, but are not retained compiled artifacts."
+    },
+    {
+      "finding": 6,
+      "status": "confirmed pre-existing labeling issue; other cleanup requires reachability/scope checks",
+      "detail": "live.py's top-of-loop pre-readiness failure text says preparation deadline even when supervisor.finish_reason is auth_expired. BLOCKER is unused by companion04 but exists in earlier companions and preserved tests, so it is not established globally dead. Inherited pycache files are not removed."
+    }
+  ],
+  "remaining_limits": [
+    "No human, headset, Focused-state, controller or native teardown acceptance.",
+    "SteamVR's later crash still has no established cause.",
+    "The admission stub does not execute native rendering callbacks; concurrent native callback retirement is not tested.",
+    "The synthetic loop cases do not drive the compositor or parent-stdin branches."
+  ],
+  "source_delta_during_review": 0,
+  "review_artifacts": [
+    "request.json",
+    "manifest.json",
+    "tree/",
+    "review.json",
+    "checked-review.json"
+  ]
+}

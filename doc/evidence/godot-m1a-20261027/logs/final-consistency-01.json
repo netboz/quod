@@ -1,0 +1,13 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-m1a-20261027/final-checks.py",
+    "gates-04"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-28T02:21:00Z",
+  "elapsed_seconds": 0.6677348613739014,
+  "child_exit": 1,
+  "timed_out": false,
+  "error_diagnostics": 0
+}

@@ -1,0 +1,16 @@
+SOURCE_VIEW_NAMESPACE_BYTES 255 SHAPE accepted
+SOURCE_VIEW_NAMESPACE_BYTES 256 SHAPE error
+SOURCE_VIEW_NAMESPACE_BYTES 1024 SHAPE error
+OBSERVED_EXISTING_GAP [{255,accepted},{256,error},{1024,error}]
+LOADED_BEAMS [{quod_wire_term,
+                  "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/production10/lib/quod/ebin/quod_wire_term.beam"},
+              {erlog_parse,
+                  "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/production10/source/_build/default/lib/erlog/ebin/erlog_parse.beam"},
+              {quod_client_goal,
+                  "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/production10/lib/quod/ebin/quod_client_goal.beam"},
+              {quod_time,
+                  "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/production10/lib/quod/ebin/quod_time.beam"},
+              {quod_client_view,
+                  "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/production10/lib/quod/ebin/quod_client_view.beam"},
+              {quod_client_goal_parser,
+                  "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/production10/lib/quod/ebin/quod_client_goal_parser.beam"}]

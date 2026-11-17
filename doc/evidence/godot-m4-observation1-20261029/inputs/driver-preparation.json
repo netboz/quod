@@ -1,0 +1,56 @@
+{
+  "local_base_sha256": "19c7c9d1ca74657da52a12188f5575e6d9210eeb811a2a95a600819d7c48f489",
+  "local_supplied_sha256": "7755e9b1d43dc6fd09ff93cb61291cae456d92b1bf423fec1ecf35ee1f6d42dd",
+  "local_changes": [
+    [
+      "p = argparse.ArgumentParser()",
+      "os.umask(0o077)\np = argparse.ArgumentParser()"
+    ],
+    [
+      "killed = False; text = ''",
+      "killed = False; text = ''; output_eof = False"
+    ],
+    [
+      "diagnostic=a.evidence/(label+'-shutdown-stacks.log')",
+      "diagnostic=a.private/'shutdown-diagnostics'/(label+'-native-stacks.log')\n                diagnostic.parent.mkdir(mode=0o700,parents=True,exist_ok=False)"
+    ],
+    [
+      "with diagnostic.open('x') as trace:",
+      "with diagnostic.open('x') as trace:\n                        diagnostic.chmod(0o600)"
+    ],
+    [
+      "['gdb','-q','-batch','-p',str(child.pid),'-ex','set print frame-arguments none','-ex','set print entry-values no','-ex','thread apply all bt 16']",
+      "['gdb','-q','-nx','-batch','-iex','set auto-load off','-iex','set debuginfod enabled off','-p',str(child.pid),'-ex','set print frame-arguments none','-ex','set print entry-values no','-ex','thread apply all bt 16','-ex','detach']"
+    ],
+    [
+      "'watchdog': True,'diagnostic':str(diagnostic)",
+      "'watchdog': True,'owned_pid':child.pid,'output_eof':False,'arguments':False,'memory_dump':False,'gdb_user_init':False,'gdb_auto_load':False,'diagnostic':str(diagnostic)"
+    ],
+    [
+      "if line is None: break",
+      "if line is None: output_eof = True; break"
+    ],
+    [
+      "'external_sigkill_at_observed_seam': killed, 'passed': passed",
+      "'external_sigkill_at_observed_seam': killed, 'output_eof':output_eof, 'watchdog':False, 'passed': passed"
+    ]
+  ],
+  "reader_exception_behavior": "Unchanged original reader. Driver stdout AND stderr are retained separately; missing child traceback does not rule out a daemon reader failure.",
+  "watchdog_silence_seconds": 60,
+  "capture_timeout_seconds": 15,
+  "capture_only_after_actual_watchdog": true,
+  "no_new_capture_timer_or_polling": true,
+  "desktop_input_sha256": "a632e4804a9226abab6aa4c00d7ead7d81cc58c4782987022cd7f4d9978f65cf",
+  "server_base_sha256": "03530b952b02fdccd9df2c565624ce60f533cfe2c5dee966490c43da93e49b36",
+  "server_supplied_sha256": "65bae8ad7637b60e8c5cc7370f445e6919d4c946b74e659ce3f31835f83c2028",
+  "server_changes": "Evidence/private output paths only; same final03 fixture and accepted production inputs",
+  "preparation": "Fresh isolated fixture account via accepted existing Accounts owner; no previous profile/store/unknown operation used",
+  "preparation_source_sha256": "a162085cb0b1ea9a5bc02b7ecd87b7ea07960a8e13b63bb4229ed199cfbfeaf3",
+  "preparation_project_sha256": "d4ebf85579d54574c52c6836e19cfe86dbb1d7a341bb4b4fb1d0e2a93480d9c8",
+  "accepted_preparation_core_module": {
+    "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final03/source/client/godot-tests/bin/Debug/net10.0/Quod.Client.Tests.dll": "1b52e4ea481fe9e829ff382e0aefe8ff58fb1c9a403e748bcd288d8e7aac2bf1",
+    "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final03/source/client/godot-tests/bin/Debug/net10.0/BouncyCastle.Cryptography.dll": "ef92fc661e8d7ba8ec4d39a7cdfcdba41f14cb327f0d24fe79d0b5bb428899b5"
+  },
+  "core_tests_rerun": false,
+  "compiled_application_inputs_in_diagnostic_export": false
+}

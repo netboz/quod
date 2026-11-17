@@ -1,0 +1,23 @@
+{
+  "checkpoint": "QUO-65 charged-controller and shared presentation boundary",
+  "model_and_effort": "inputs/current-session-identity.json",
+  "branch": "worktree/pearl-stone",
+  "head": "293cf6115c0a6b18315eccdbb42cbca396f443d3",
+  "parent": "f716ddf5e578df957a5b18421a0727a32c634f87",
+  "original_base_provenance": "f6c29fe925e666dd68ee7fa68c0e03f5d03391a2",
+  "hardware": "inputs/completed-case06-07-summary.json",
+  "source_only_geometry_manifests": [
+    "inputs/client-physical03-manifest.json",
+    "inputs/client-physical04-manifest.json"
+  ],
+  "geometry_qualification": "physical03 built/not native executed; physical04 real owned render callback/timing qualification, cached/status-unexposed; diagnostic only",
+  "presentation": "../godot-m4-presentation-20261030/qualification.json",
+  "acceptance": "acceptance.json",
+  "failure_dispositions": "failure-dispositions.md",
+  "full_m4_accepted": false,
+  "implementation_writer_frozen": true,
+  "commit_push_deploy_cleanup": false,
+  "exact_freeze_receipt": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/vive-charged-freeze-runs03/result.json",
+  "raw_privacy": "Room geometry/API/private profiles/calibration/stores not public snapshot objects",
+  "source_relocations": 0
+}

@@ -1,0 +1,11 @@
+{
+  "commit": "79b3874617a4eb9f76d5089a3fc908667e605e8a",
+  "repository": "/home/yan/src/quod/_build/default/lib/erlog",
+  "source_sha256": "bc15ba1b92616bb2ceff70ffae5fa22a8000bd482f422ebb289d2335656e6f33",
+  "committed_paths": [
+    "src/erlog_int.erl"
+  ],
+  "committed_afterimage_verified": true,
+  "remote_publication": false,
+  "inherited_generated_files": "preserved; excluded"
+}

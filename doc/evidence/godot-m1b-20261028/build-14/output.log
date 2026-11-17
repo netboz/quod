@@ -1,0 +1,9 @@
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ExportLifecycle.cs(31,58): error CS0119: 'ExportChecks.Control(JsonObject)' is a method, which is not valid in the given context [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+
+Build FAILED.
+
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/tests/ExportLifecycle.cs(31,58): error CS0119: 'ExportChecks.Control(JsonObject)' is a method, which is not valid in the given context [/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj]
+    0 Warning(s)
+    1 Error(s)
+
+Time Elapsed 00:00:03.89

@@ -1,0 +1,19 @@
+{
+  "tool_request": {
+    "provider": "claude-code",
+    "model": "claude-code:fable",
+    "toolScope": "read",
+    "title": "M1a Fable implementation review"
+  },
+  "response": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"sessionId\": \"a2cdb043-2e69-4b70-8f0e-2362b74b65da\",\n  \"title\": \"M1a Fable implementation review\",\n  \"provider\": \"claude-code\",\n  \"model\": \"claude-code:fable\",\n  \"worktreeId\": null,\n  \"worktreePath\": null,\n  \"worktreeMode\": \"none\",\n  \"createdBySessionId\": \"922c7c06-1acb-4c2b-9141-fccf4ab4c947\",\n  \"queuedInitialPrompt\": true,\n  \"parentSessionId\": \"922c7c06-1acb-4c2b-9141-fccf4ab4c947\",\n  \"effortLevel\": null\n}"
+      }
+    ],
+    "isError": false
+  },
+  "input_snapshot": "/tmp/quod-godot-m1a-review-922c7c06-20261027-01",
+  "snapshot_sha256": "39037144d03150dac922a59712827dc7ed724a2c6ebf021229ce5f34dcee6fc0"
+}

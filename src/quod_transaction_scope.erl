@@ -14,7 +14,8 @@ inside an independent wrapper. No knowledge-base state crosses this boundary.
 
 -include("quod_proof_limits.hrl").
 
--export([empty_selection/0, valid_selection/1, selection_lineage/1, selection_mode/1,
+-export([empty_selection/0, empty_selection/1, valid_selection/1, selection_lineage/1, selection_mode/1,
+         selection_read_mode/1,
          checkpoint_depth/1, with_invocation/4,
          current_actor/0, current_selection/1,
          enter/1, finish/1, discard/1, activate/1,
@@ -23,7 +24,8 @@ inside an independent wrapper. No knowledge-base state crosses this boundary.
 
 -type opaque_id() :: <<_:128>>.
 -type lineage() :: none | opaque_id().
--type selection() :: {tx_selection, lineage(), [opaque_id()], ordinary | atomic | independent}.
+-type selection() :: {tx_selection, lineage(), [opaque_id()], ordinary | atomic | independent,
+                      read_write | read_only | committed_read}.
 -type actor() :: {opaque_id(), opaque_id()}.
 -type distributed_token() :: {batch, opaque_id()} | {pending, opaque_id()}.
 
@@ -38,7 +40,8 @@ inside an independent wrapper. No knowledge-base state crosses this boundary.
           metadata :: term(),
           base_batches = [] :: [opaque_id()],
           current_lineage = none :: lineage(),
-          frames = [] :: [#frame{}]
+          frames = [] :: [#frame{}],
+          checkpoint_batch = none :: none | {allocating, reference()} | {ready, opaque_id()}
          }).
 
 -define(KEY, '$quod_transaction_scope').
@@ -48,33 +51,41 @@ valid_lineage(<<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>>) -> true;
 valid_lineage(_) -> false.
 
 -spec empty_selection() -> selection().
-empty_selection() -> {tx_selection, none, [], ordinary}.
+empty_selection() -> empty_selection(read_write).
+
+-spec empty_selection(read_write | read_only | committed_read) -> selection().
+empty_selection(Mode) when Mode =:= read_write; Mode =:= read_only; Mode =:= committed_read ->
+    {tx_selection, none, [], ordinary, Mode}.
 
 -spec valid_selection(term()) -> boolean().
-valid_selection({tx_selection, Lineage, BatchIds, Mode}) ->
+valid_selection({tx_selection, Lineage, BatchIds, Mode, ReadMode}) ->
+    (ReadMode =:= read_write orelse ReadMode =:= read_only orelse ReadMode =:= committed_read) andalso
     (Mode =:= ordinary orelse Mode =:= atomic orelse Mode =:= independent) andalso
     valid_lineage(Lineage) andalso
-        valid_sorted_ids(BatchIds, none, 0) andalso
+        valid_sorted_ids(BatchIds, none) andalso
         (Lineage =/= none orelse BatchIds =:= []);
 valid_selection(_) -> false.
 
 -spec selection_lineage(selection()) -> lineage().
-selection_lineage({tx_selection, Lineage, _BatchIds, _Mode}) -> Lineage.
+selection_lineage({tx_selection, Lineage, _BatchIds, _Mode, _}) -> Lineage.
 
 -spec selection_mode(selection()) -> ordinary | atomic | independent.
-selection_mode({tx_selection, _Lineage, _BatchIds, Mode}) -> Mode.
+selection_mode({tx_selection, _Lineage, _BatchIds, Mode, _}) -> Mode.
+
+-spec selection_read_mode(selection()) -> read_write | read_only | committed_read.
+selection_read_mode({tx_selection, _, _, _, ReadMode}) -> ReadMode.
 
 -spec checkpoint_depth(selection()) -> 0 | 1.
-checkpoint_depth({tx_selection, none, [], _Mode}) -> 0;
+checkpoint_depth({tx_selection, none, [], _Mode, _}) -> 0;
 checkpoint_depth({tx_selection, <<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>>,
-                  BatchIds, _Mode}) when is_list(BatchIds) -> 1.
+                  BatchIds, _Mode, _}) when is_list(BatchIds) -> 1.
 
 -doc "Run one proof step with an exact actor and inherited live transaction selection.".
 -spec with_invocation(actor(), selection(), term(), fun(() -> Result)) ->
           {Result, selection()} when Result :: term().
 with_invocation({<<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>>,
                  <<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>>} = Actor,
-                {tx_selection, Lineage, BaseBatches, _Mode} = Selection,
+                {tx_selection, Lineage, BaseBatches, _Mode, _} = Selection,
                 Metadata, Fun)
   when is_function(Fun, 0) ->
     true = valid_selection(Selection),
@@ -103,7 +114,10 @@ current_selection(St) ->
     case get(?KEY) of
         #state{base_batches = BaseBatches,
                current_lineage = Lineage,
-               frames = Frames} ->
+               frames = Frames} = State ->
+            %% Publishing a selection lets foreign work materialize its live
+            %% batches. No later local checkpoint may assume they are unused.
+            put_state(State#state{checkpoint_batch = none}),
             Tokens = quod_erlog_db_local_prove:live_transaction_tokens(St),
             TokenBatches = lists:filtermap(
                              fun({batch, BatchId}) -> {true, BatchId};
@@ -116,7 +130,8 @@ current_selection(St) ->
                               TxId =/= none, BatchId =/= none],
             selection(Lineage,
                       lists:append([BaseBatches, TokenBatches, EntryBatches]),
-                      quod_erlog_db_local_prove:write_intent(St));
+                      quod_erlog_db_local_prove:write_intent(St),
+                      quod_erlog_db_local_prove:read_mode(St));
         undefined ->
             empty_selection()
     end.
@@ -127,17 +142,11 @@ enter(St) ->
     case get(?KEY) of
         #state{metadata = Metadata, frames = Frames} = State0 ->
             case metadata(St) of
-                Metadata when length(Frames) <
-                              ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF ->
+                Metadata ->
                     FrameId = new_frame_id(Frames),
                     put_state(State0#state{
                                 frames = [#frame{frame_id = FrameId} | Frames]}),
                     FrameId;
-                Metadata ->
-                    throw(
-                      {quod_ask_error,
-                       {savepoint_limit_exceeded,
-                        ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF}});
                 _ ->
                     erlang:error(transaction_scope_context_changed)
             end;
@@ -153,7 +162,9 @@ activate(_St) ->
             PendingOuterFirst =
                 [FrameId || #frame{frame_id = FrameId, tx_id = none} <-
                                 lists:reverse(Frames0)],
-            activate_pending(PendingOuterFirst, State0);
+            State = State0#state{checkpoint_batch = none},
+            put_state(State),
+            activate_pending(PendingOuterFirst, State);
         undefined ->
             ok
     end.
@@ -208,9 +219,9 @@ finish_frame(FrameId, Mode) ->
             case finish_active(Frame, State0, Mode) of
                 {ok, ParentLineage} ->
                     put_state(State0#state{current_lineage = ParentLineage,
-                                           frames = Rest});
+                                           frames = Rest, checkpoint_batch = none});
                 ignored ->
-                    put_state(State0#state{frames = Rest})
+                    put_state(State0#state{frames = Rest, checkpoint_batch = none})
             end;
         #state{} when Mode =:= best_effort ->
             ok;
@@ -249,7 +260,7 @@ checkpoint_token() ->
             case Lineage of
                 none -> Pending;
                 _ ->
-                    case request(State0, {allocate, Lineage}) of
+                    case checkpoint_batch(State0, Lineage) of
                         {ok, BatchId} -> [{batch, BatchId} | Pending];
                         {error, Reason} -> throw({quod_ask_error, Reason});
                         _ -> throw({quod_ask_error,
@@ -258,6 +269,26 @@ checkpoint_token() ->
             end;
         undefined ->
             []
+    end.
+
+%% The controller owns batch authority. Within one invocation, purely local
+%% choice points share its still-unmaterialized token without another round trip.
+checkpoint_batch(#state{checkpoint_batch = {ready, BatchId}}, _Lineage) ->
+    {ok, BatchId};
+checkpoint_batch(State, Lineage) ->
+    Ref = make_ref(),
+    put_state(State#state{checkpoint_batch = {allocating, Ref}}),
+    case request(State, {allocate, Lineage}) of
+        {ok, BatchId} = Reply ->
+            %% A controller wait can dispatch reentrant work. Its invalidation
+            %% must survive this reply instead of restoring a stale assumption.
+            case state() of
+                #state{checkpoint_batch = {allocating, Ref}} = Current ->
+                    put_state(Current#state{checkpoint_batch = {ready, BatchId}});
+                _ -> ok
+            end,
+            Reply;
+        Other -> Other
     end.
 
 -doc "Restore the distributed batches correlated with one local DB checkpoint.".
@@ -289,7 +320,10 @@ pending_baseline(_FrameId, []) -> false.
 restore_batches(_Lineage, [], _State) -> ok;
 restore_batches(none, _BatchIds, _State) ->
     throw({quod_ask_error, {protocol_error, session_binding}});
+restore_batches(_Lineage, [BatchId], #state{checkpoint_batch = {ready, BatchId}}) ->
+    ok;
 restore_batches(Lineage, BatchIds, State) ->
+    put_state(State#state{checkpoint_batch = none}),
     case request(State, {restore, Lineage, BatchIds}) of
         ok -> ok;
         {error, Reason} -> throw({quod_ask_error, Reason});
@@ -304,18 +338,16 @@ result_selection({error, _Reason, Scope, _RevisionPolicy}) ->
     current_selection(quod_proof_scope:state(Scope));
 result_selection(_Result) ->
     #state{current_lineage = Lineage, base_batches = BaseBatches} = state(),
-    selection(Lineage, BaseBatches, ordinary).
+    selection(Lineage, BaseBatches, ordinary, read_write).
 
-selection(Lineage, BatchIds0, Mode) ->
+selection(Lineage, BatchIds0, Mode, ReadMode) ->
     BatchIds = lists:usort(BatchIds0),
-    case length(BatchIds) =< ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF andalso
-         (Lineage =/= none orelse BatchIds =:= []) of
-        true -> {tx_selection, Lineage, BatchIds, Mode};
+    case Lineage =/= none orelse BatchIds =:= [] of
+        true -> {tx_selection, Lineage, BatchIds, Mode, ReadMode};
         false ->
             throw(
               {quod_ask_error,
-               {savepoint_limit_exceeded,
-                ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF}})
+               {protocol_error, bad_selection}})
     end.
 
 request(#state{actor = Actor,
@@ -397,18 +429,17 @@ state() ->
 put_state(#state{} = State) -> _ = put(?KEY, State), ok.
 
 restore_previous(undefined) -> _ = erase(?KEY), ok;
-restore_previous(#state{} = Previous) -> _ = put(?KEY, Previous), ok.
+restore_previous(#state{} = Previous) ->
+    put_state(Previous#state{checkpoint_batch = none}).
 
-valid_sorted_ids([], _Previous, _Count) -> true;
-valid_sorted_ids(_Ids, _Previous,
-                 ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF) -> false;
-valid_sorted_ids([Id | Rest], none, Count) ->
+valid_sorted_ids([], _Previous) -> true;
+valid_sorted_ids([Id | Rest], none) ->
     valid_opaque_id(Id) andalso
-        valid_sorted_ids(Rest, Id, Count + 1);
-valid_sorted_ids([Id | Rest], Previous, Count) ->
+        valid_sorted_ids(Rest, Id);
+valid_sorted_ids([Id | Rest], Previous) ->
     valid_opaque_id(Id) andalso Previous < Id andalso
-        valid_sorted_ids(Rest, Id, Count + 1);
-valid_sorted_ids(_Improper, _Previous, _Count) -> false.
+        valid_sorted_ids(Rest, Id);
+valid_sorted_ids(_Improper, _Previous) -> false.
 
 valid_opaque_id(<<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>>) -> true;
 valid_opaque_id(_) -> false.

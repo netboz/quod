@@ -1,0 +1,46 @@
+{
+  "checkedUtc": "2026-10-29 14:43:34 UTC",
+  "reportSource": "User directly forwarded complete Fable consultation and Yan decision; actual reviewer API now idle/readscope/claude-code:fable/no edits/no pending prompt/no error.",
+  "scope": "Targeted verification of returned claims only. No renewed broad close-chain review or speculative application change.",
+  "A": {
+    "status": "Confirmed observation/reporting gap",
+    "source": [
+      "local.py45-50/54",
+      "journey.py243-249/255"
+    ],
+    "qualification": "text=True readers lack try/finally/error receipt. A reader exception can omit EOF sentinel and be misreported as watchdog silence. Historical child-9 establishes alive at kill but does not rule out reader failure/backpressure; daemon-thread traceback goes to driver stderr, not necessarily saved child.log. No historical cause established; no broad harness rewrite in this task."
+  },
+  "B": {
+    "status": "Confirmed task-ownership structure; historical cause unproven",
+    "source": [
+      "SignedView.cs39/99/103-113/119-123",
+      "Main.cs328-352",
+      "Transport.cs76-86/129-134"
+    ],
+    "qualification": "Renewal task not included in Completion; tokens reach network. Existing observation never exercised automatic BeforeOpen. No claim of universally benign disposal or demonstrated hang; no SignedView change authorized by current decision."
+  },
+  "C": {
+    "status": "Supported source order; absolute broad ruling unsupported",
+    "qualification": "xr shutdown has separate5s bound and immediate desktop return; other awaited tasks have their own semantics. Later passes and PASS/live_sockets markers do not prove where historical stalls occurred. No diagnosis or application patch follows."
+  },
+  "D": {
+    "status": "Supported source composition",
+    "source": [
+      "Main.cs328-352/450-464"
+    ],
+    "qualification": "Two Finish chains compose existing awaitables; live sockets0 alone is not whole-shutdown completion."
+  },
+  "E": {
+    "status": "Reject claimed latent model-cancellation window for active consumer path",
+    "source": [
+      "Main.cs331/452-454",
+      "OpenXRInput.cs281-286/145-149/208-213",
+      "Core/Controllers.cs145-148",
+      "RenderModels.cs32/90-96"
+    ],
+    "qualification": "CloseSession synchronously calls StopSession before awaiting. StopSession retires sources, Router.Remove calls consumer.Remove, visual lease disposal decrements users and last lease calls Retire, cancelling Entry.Lifetime before xr.Completion await. models.Dispose is not the only earlier cancellation path. No ordering patch;0 historical acquisitions also means no model-fetch evidence."
+  },
+  "decision": "Do ONE fresh separately labelled headed desktop backup-import observation using current local.py, with a single post-Quit marker through the real shared close method in a removable diagnostic source/export. Preserve original60s silence watchdog/absolute deadlines, bounded private argument-free owned-child capture and true exits. No extra review, automatic repeat/physics campaign or production tracing; pass never identifies/resolves original stalls.",
+  "writer": "Same sole existing Sol ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f only",
+  "priorBoundaryPreservation": "Both immutable R2 boundaries, original M4/R1 and all existing failures remain intact. New observation gets additive source/evidence/freeze."
+}

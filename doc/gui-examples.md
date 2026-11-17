@@ -66,9 +66,9 @@ space, physics process or accumulating answer history.
 
 ## Shared lifecycle and presentation
 
-The responsible actor's ontology composes
-[gui_question.pl](../priv/ontologies/gui_question.pl); the human's ontology
-composes [gui_hud.pl](../priv/ontologies/gui_hud.pl). The application grants its
+[quod_gui.pl](../priv/ontologies/quod_gui.pl) owns question transitions, HUD
+behavior and their recipes. The responsible actor's and human's storing
+ontologies hold the rows, ACLs and completion reaction. The application grants its
 normal domain authority through `gui_question_policy/3`. The shared committed
 assertion reaction correlates accepted fields to the retained completion request;
 neither example declares `react_on` or sends a client-provided executable goal.
@@ -76,8 +76,10 @@ neither example declares `react_on` or sends a client-provided executable goal.
 Open either form from its application ontology:
 
 ```prolog
-gui_open(atmosphere(personal_sky), Question).
-gui_open(instrument_settings(analyzer_a), Question).
+current_ontology_identity(Ns, Anchor),
+quod:gui::gui_open(form_ref(Ns, Anchor, atmosphere(personal_sky)), Question).
+current_ontology_identity(Ns, Anchor),
+quod:gui::gui_open(form_ref(Ns, Anchor, instrument_settings(analyzer_a)), Question).
 ```
 
 Each call returns an anchored `question_ref(ResponderNamespace, ResponderAnchor,
@@ -183,12 +185,16 @@ integer `percent` from 0 to 100. Display properties are part of the projected
 schema; changing them changes its revision under the same stale-form rules.
 
 `image` and its `icon` subclass accept an `image` attribute containing
-`asset(Digest, <<"image/jpeg">>)`: the same lowercase SHA-256 reference used by
-existing scene textures. Supply a descriptive `label`. An `icon_button` is an
+`image(asset(Digest, Mime), resources(Transfer, Pixels))`, with PNG or JPEG
+bytes stored as `gui_asset(Digest, Mime, Bytes)` facts in `quod:gui`. The client
+reads each digest through the ordinary signed path, checks SHA-256 and the
+authored byte/pixel allowances, and reuses the verified texture by digest.
+Changing `gui_icon/2` refreshes dependent live views through their existing
+installed-change subscriptions. Supply a descriptive `label`. An `icon_button` is an
 ordinary button with that image attribute and a verb label; it uses exactly the
 same activation and submission path. There are no image URLs or client
-callbacks in the ontology. Both adapters reuse verified asset bytes and show
-loading/error feedback; resource leases end when their controls are retired.
+callbacks in the ontology. Godot reuses verified asset bytes; the existing
+browser adapters have not adopted this image shape.
 
 ## Voxel world generation
 
@@ -251,14 +257,14 @@ authored rendering allowance reports the resource, required amount and limit;
 the user can return to the lobby and choose a smaller distance without changing
 the saved terrain or disabling its physics owner.
 
-Fresh human creation lists [human_user_instance.pl](../priv/ontologies/human_user_instance.pl),
-[agent_instance.pl](../priv/ontologies/agent_instance.pl),
-[personal_agent.pl](../priv/ontologies/personal_agent.pl) and
-[gui_hud.pl](../priv/ontologies/gui_hud.pl) as `user_source_file/1` components
-in the signup ontology. The ordinary creation path freezes their complete
-contents into one genesis. The human behavior supplies the HUD allowance;
-the shared HUD owns receiving and pending references. The personal actor uses
-its own vault key and the existing hosting lifecycle, independently of U's
-browser key. Existing human and lobby
-ontologies need explicit authorized source composition; opening the workspace
-never installs or repairs source.
+Fresh human creation uses the exact terms authored by
+[quod_user.pl](../priv/ontologies/quod_user.pl): qualified memberships, slots,
+seven vocabulary pins, ACL clauses, a completion reaction and the two hosting
+derivations. The existing creation owner freezes those terms into one genesis.
+Shared behavior stays at the class owners; HUD allowances, pending references,
+keys and hosting facts remain in the user's ontology. The personal actor uses
+its own vault key independently of U's browser key. Setup asserts ordinary
+parentless S0 in the selected storing ontology and places the same A there in
+one transaction. It does not commission the optional physical lobby preset.
+Existing human and lobby ontologies require authorized edits; opening the
+workspace never installs or repairs source.

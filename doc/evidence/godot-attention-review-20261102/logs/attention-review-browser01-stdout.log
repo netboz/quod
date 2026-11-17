@@ -1,0 +1,41 @@
+✔ HUD uses the authenticated human scope and renews without frame credit or losing its view (85.771933ms)
+✔ question adapter decodes the common form model without world state (17.887088ms)
+✔ HUD expiry discards authorization and late candidates without reconnecting (14.102711ms)
+✔ HUD disconnect discards authorization and late candidates without reconnecting (11.987521ms)
+✔ HUD refusal discards authorization and late candidates without reconnecting (13.981941ms)
+✔ GUI kind mismatch refuses the projection (4.665247ms)
+✔ a HUD cannot select a malformed receiver address (6.71608ms)
+✔ receiver pending retains exact bytes and blocks another selection after reopening (15.409719ms)
+✔ receiver lost response retains exact bytes and blocks another selection after reopening (18.779215ms)
+✔ receiver selection fails closed when its existing operation journal cannot be read (10.589711ms)
+✔ native preparation is hidden, idempotent, retained across refresh and activated only once (13.047558ms)
+✔ signed HUD removal retires activated receipts and reuses capacity without waiting for expiry (35.992938ms)
+✔ native malformed/unsupported preparation is refused: {"descriptor":"unsupported"} (6.970182ms)
+✔ native malformed/unsupported preparation is refused: {"connection":"foreign"} (8.611868ms)
+✔ native malformed/unsupported preparation is refused: {"expires_ms":"0"} (5.192922ms)
+✔ native malformed/unsupported preparation is refused: {"expires_ms":"99999999999999999"} (8.102095ms)
+✔ native malformed/unsupported preparation is refused: {"capacity":0} (7.244044ms)
+✔ native malformed/unsupported preparation is refused: {"question":"question_ref(bad,bad,bad)"} (7.359841ms)
+✔ native support must be explicit (7.933327ms)
+✔ native capacity and disconnect release only local resources (6.449574ms)
+✔ both renderers share one local draft and synchronous submission lock (80.415508ms)
+✔ unknown submission survives reopening and resolves through outcomes without replay (23.480843ms)
+✔ definite refusal preserves editing; changed schema locks and preserves the previous draft (20.250975ms)
+✔ changed defaults preserve input until the human explicitly chooses to replace it (16.828334ms)
+✔ a question first read stale can become editable only with its accepted schema (16.336993ms)
+✔ a successful submission can be cancelled only after its completion is certified negative (14.431506ms)
+✔ only a terminal negative answer permits submitted cancellation (14.539869ms)
+✔ unreadable journal cannot authorize a new write (5.811324ms)
+✔ reopened submitted questions observe status on view progress without dispatching completion (13.261214ms)
+✔ an obsolete status read cannot overwrite the latest projection or authorize cancellation (11.493671ms)
+✔ a saved uncertain write suppresses automatic status reads until exact resolution (14.635495ms)
+✔ withdrawn form access does not prevent status-based cancellation of an awaiting question (5.010379ms)
+✔ prepared controller defers its signed view and shares one draft across mounted consumers (7.087741ms)
+ℹ tests 33
+ℹ suites 0
+ℹ pass 33
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 432.751243

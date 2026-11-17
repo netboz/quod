@@ -1,0 +1,4 @@
+======================== EUnit ========================
+frame_accounting_checks: complete_envelope_body_accounting_is_exact_test (module 'frame_accounting_checks')...[0.006 s] ok
+=======================================================
+  Test passed.

@@ -1,0 +1,19 @@
+{
+  "verified": true,
+  "live_and_built_source_inputs": 1559,
+  "recorded_dependency_entries": 1095,
+  "dependency_source_entries": 1094,
+  "copied_generated_metadata_entries": 1,
+  "generated_metadata": [
+    {
+      "path": "_build/default/lib/.rebar3/rebar_compiler_erl/source_project_apps.dag",
+      "retained_output": "inputs/r1-gates-06-generated-project-graph.dag",
+      "sha256": "467dd433de865c56ac18e653dad9a14db0c0241cc77fd24772ee949ee1f29b60",
+      "original_input_sha256": "fb3bba1df517af0e29b776dd3d813a2f7e1bbf0603a53721365d7cf11675d295"
+    }
+  ],
+  "release_exit": 0,
+  "release_started": false,
+  "compiled_artifacts": 394,
+  "resolved_dependency_apps": 24
+}

@@ -1,0 +1,23 @@
+{
+  "source": "Nimbalyst PromptForUserInput, parent cell202",
+  "respondedBy": "desktop",
+  "respondedAt": 1793719542337,
+  "answers": {
+    "carrier_authorization": {
+      "type": "singleSelect",
+      "selectedId": "authorize"
+    }
+  },
+  "approved_patch": "proposals-carrier02/carrier-custody.patch",
+  "scope": [
+    "src/predicates/quod_ask.erl",
+    "src/quod_dtx_phase_index.erl",
+    "src/quod_scope_wire.erl",
+    "src/quod_signing_journal.erl"
+  ],
+  "question": "Authorize this four-owner correction and its tests?",
+  "selected_label": "Authorize the correction",
+  "selected_description": "Apply the reviewed patch and verify the affected transport and recovery paths. No commit, deployment, data cleanup or execution replay.",
+  "disclosed_invariants": "Preserve permissions, signatures, checksums, recovery validation and actual file/message format widths.",
+  "prior_rejection": "inputs/carrier-edit-rejection01.json"
+}

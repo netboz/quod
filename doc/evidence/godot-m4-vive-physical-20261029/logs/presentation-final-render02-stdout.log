@@ -1,0 +1,25 @@
+WARNING: xdg-toplevel-icon protocol not found! Cannot set window icon.
+     at: init (platform/linuxbsd/wayland/wayland_thread.cpp:5642)
+Godot Engine v4.7.2.stable.mono.custom_build.ed1daf0bf - https://godotengine.org
+Vulkan 1.4.351 - Forward Mobile - Using Device #0: NVIDIA - NVIDIA GeForce RTX 4090
+
+PASS presentation evidence uses a real renderer
+PASS actual admitted GLB retains its shaded materials and textures
+PASS actual original raster retained
+PASS actual ambient-disabled raster retained
+PASS actual ambient-white raster retained
+PASS actual restored raster retained
+PASS ordinary scene illumination reveals the actual shaded controller
+PASS renderer counterfactual isolates missing illumination without changing the model
+PASS illumination preserves black background and exact restored raster coverage
+PASS lighting changes retain actual material texture nodes and model work counters
+PASS rendered model retires through its existing owner
+PASS actual GUI resize preserves equal horizontal and vertical pixel scale (1850, 496)
+PASS actual GUI resize preserves equal horizontal and vertical pixel scale (800, 800)
+PASS actual GUI resize preserves equal horizontal and vertical pixel scale (600, 900)
+PASS panel resize subscription retires with its actual consumer
+M4_PRESENTATION_OBSERVED
+M4_PRESENTATION_PASS
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Create or import a key offline, then connect. Active keys use private files; encrypted backups have a separate passphrase.","controller_status":{"available":false,"revision":null,"digest":null,"choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+M1B_STATE {"state":"offline","busy":false,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Create or import a key offline, then connect. Active keys use private files; encrypted backups have a separate passphrase.","controller_status":{"available":false,"revision":null,"digest":null,"choices":{},"sources":[]},"controller_metrics":{"Running":false,"Subscriptions":0,"sources":0,"appearances":0,"MenuRedraws":0,"LateCallbacks":0,"captures":0,"DriveRequests":0,"StopRequests":0,"SnapRequests":0,"TeleportRequests":0,"resources":{"Acquisitions":0,"Releases":0,"Decodes":0,"InstancesCreated":0,"InstancesReleased":0,"NodesBuilt":0,"TexturesDecoded":0,"LiveTemplates":0,"LiveLeases":0}}}
+{"command": ["/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-presentation-final02/source/client/godot/dist/quod.x86_64", "--display-driver", "wayland", "--audio-driver", "Dummy", "--xr-mode", "off", "--rendering-method", "mobile", "--rendering-driver", "vulkan", "--", "--qualification", "--profile", "/data/quod-m4-vr-ca84d4f8-20261029/private/presentation-final-render02/identity"], "manifest": "doc/evidence/godot-m4-presentation-20261030/inputs/client-presentation-final02-manifest.json", "manifest_sha256": "7abf72a2c42027e889a8df268e1edbcdb2f90e3622bdf023e1e5c84824ae4ff2", "actual_exports_admitted": 196, "stat_bound_digest_hits": 196, "driver_hashes": {"application.py": "b6ba8df50e9a963afbf84907f8a2b444d127b3a22eaafbcb52aa557d2306a8c5", "digests.py": "4ea3723621d5e9e8a5a683acad8c4d819ce787a5f99cbc85b8d8ae9ddf2c8b0f", "desktop_input.py": "a632e4804a9226abab6aa4c00d7ead7d81cc58c4782987022cd7f4d9978f65cf"}, "native_input": [], "watchdog_seconds": 60, "physical_acceptance": false, "passed": true, "reader_errors": [], "client_exit": 0, "eof": {"stdout": true, "stderr": true}, "completion_marker": true, "observation_marker": true}

@@ -1,0 +1,56 @@
+{
+  "/data/quod-m4-vr-ca84d4f8-20261029/private/case19-preparation01/unchanged-owners/godot-m4-vive-retest-20261030/native-vive-product19/result.json": {
+    "sha256": "d720d8f7c75784d31080b97a0dfe6352a3d05bdf8e1786a82862363259719a17",
+    "bytes": 64471,
+    "mode": 384,
+    "retained_privately_not_snapshot_object": true
+  },
+  "/data/quod-m4-vr-ca84d4f8-20261029/private/case19-preparation01/unchanged-owners/godot-m4-vive-retest-20261030/native-vive-product19/client-result.json": {
+    "sha256": "5be47d9e0cbd610cc439f6e1956e8f0ec6094821ed068cdc1cd5581f6f8fd9b2",
+    "bytes": 40379,
+    "mode": 384,
+    "retained_privately_not_snapshot_object": true
+  },
+  "/data/quod-m4-vr-ca84d4f8-20261029/private/case19-preparation01/unchanged-owners/godot-m4-vive-physical-20261029/logs/native-vive-product19-run.json": {
+    "sha256": "4ed8ddfd67ca60e42297b881d7bae8020bb957a0504232423d20d41482f8fa8e",
+    "bytes": 1524,
+    "mode": 384,
+    "retained_privately_not_snapshot_object": true
+  },
+  "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product19-invocation.json": {
+    "sha256": "d122843a28fafbbd313cde4f55f559d0c94baea2672181523d48c56298d817d2",
+    "bytes": 811,
+    "mode": 384,
+    "retained_privately_not_snapshot_object": true
+  },
+  "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product19/client-result.raw.json": {
+    "sha256": "ce70eeb8cb7da9f2c747b2602abe23dc5cacfae714a045e5ea427f6d31288c97",
+    "bytes": 64345,
+    "mode": 384,
+    "retained_privately_not_snapshot_object": true
+  },
+  "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product19/display-rule.json": {
+    "sha256": "a085134a1448d9e32f49a65fab527541c2cb86301d5b80cfd781071997cdb7aa",
+    "bytes": 21972,
+    "mode": 384,
+    "retained_privately_not_snapshot_object": true
+  },
+  "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product19/closure-current-display.json": {
+    "sha256": "0504da228c33746d1a5d673a6952bc68b2a8d41697e44576c2de3ea73ed7b033",
+    "bytes": 10423,
+    "mode": 384,
+    "retained_privately_not_snapshot_object": true
+  },
+  "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product19/read-only-captures/baseline01.raw.json": {
+    "sha256": "28643ed6529b9fbd234b346f291dc02203735abce48a943f182e1bb2e732a010",
+    "bytes": 26527,
+    "mode": 384,
+    "retained_privately_not_snapshot_object": true
+  },
+  "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product19/read-only-captures/withdrawal01.raw.json": {
+    "sha256": "597c3f221a680c79e79f5a6d016c482494dd280acb41438c2a6d43021fe0bc30",
+    "bytes": 41939,
+    "mode": 384,
+    "retained_privately_not_snapshot_object": true
+  }
+}

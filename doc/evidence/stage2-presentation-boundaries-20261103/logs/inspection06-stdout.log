@@ -1,0 +1,14 @@
+======================== EUnit ========================
+quod_lens_tests: exact_predicate_inspection_preserves_full_sorted_catalogue_test...*timed out*
+in function erlog_int:dderef/2 (/work/_checkouts/erlog/src/erlog_int.erl, line 1557)
+in call from erlog_int:dderef/2 (/work/_checkouts/erlog/src/erlog_int.erl, line 1560)
+in call from erlog_int:dderef/2 (/work/_checkouts/erlog/src/erlog_int.erl, line 1560)
+in call from erlog_int:dderef/2 (/work/_checkouts/erlog/src/erlog_int.erl, line 1560)
+in call from erlog_int:dderef/2 (/work/_checkouts/erlog/src/erlog_int.erl, line 1560)
+in call from erlog_int:dderef/2 (/work/_checkouts/erlog/src/erlog_int.erl, line 1568)
+in call from erlog_int:prove_goal/3 (/work/_checkouts/erlog/src/erlog_int.erl, line 558)
+in call from erlog_int:prove_findall/5 (/work/_checkouts/erlog/src/erlog_int.erl, line 973)
+undefined
+=======================================================
+  Failed: 0.  Skipped: 0.  Passed: 0.
+One or more tests were cancelled.

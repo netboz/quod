@@ -1,0 +1,50 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-m4-morning-journey-20261031/rehearse.py",
+    "morning-final07-rehearsal01",
+    "--manifest",
+    "doc/evidence/godot-m4-morning-journey-20261031/inputs/client-morning-final07-manifest.json"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 1,
+  "timed_out": false,
+  "driver_inputs": {
+    "MorningJourneyChecks.cs": "cbd5420389b5668f278fd86f0547a8ea8810c5f354428f78f79874fc27aea493",
+    "MorningJourneyGuide.cs": "1dc9e03a8ba39bcdf02dae12807ce9e7cd91474b13340dc8146db4b6243c3e81",
+    "PhysicalChecks.cs": "a80e46f69e7e8dc56407f475dc760f187e210b9dbcfcc28ae0800b2fed519d08",
+    "ViveLookCue.cs": "cccdf51d73490815baec1f17df9628b2efce733f7068bf964ec2117bfff9cd17",
+    "build.py": "96168aca5d2acff0b6dbe7c0b3d9cc9595ad4f951c3d648401a0e5160706a968",
+    "cue_hashes.py": "0cec06be894a6923314910931fe5f606177ba5359dca6521e82aa04dc4e69716",
+    "launch.py": "0e3c6f63d2994f64b92de4a45a27f7b11dcc062fa27040be1e9c45944fceef43",
+    "rehearse.py": "07e9e155b68a680b320866b739204d3e07e3d38b1d0c2c855fa4238432afdab1",
+    "run.py": "2f8b3a5d2df48848bd4f520724984a11f553bb5b6b8a647810c5f323647a649e"
+  },
+  "start_utc": "2026-10-31T02:10:08Z",
+  "elapsed_seconds": 35.16328549385071,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/morning-final07-rehearsal01/stdout.raw",
+      "sha256": "3dc36da434adb39b9e6b23dd5640073b23f15c8c6eee6b9bdc85d18410cbc0ae",
+      "bytes": 4973
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/morning-final07-rehearsal01/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-morning-journey-20261031/logs/morning-final07-rehearsal01-stdout.log",
+      "sha256": "3dc36da434adb39b9e6b23dd5640073b23f15c8c6eee6b9bdc85d18410cbc0ae",
+      "bytes": 4973
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-morning-journey-20261031/logs/morning-final07-rehearsal01-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

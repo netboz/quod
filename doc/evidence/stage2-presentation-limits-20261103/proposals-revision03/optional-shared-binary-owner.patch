@@ -1,0 +1,25 @@
+--- a/src/quod_proof_session.erl
++++ b/src/quod_proof_session.erl
+@@ -124,13 +124,20 @@
+     case quod_material_admission:policy(proof, Committed) of
+         {ok, #{heap_bytes := Limit} = Limits, Reads} ->
+             WordBytes = erlang:system_info(wordsize),
+-            {total_heap_size, Words} = process_info(self(), total_heap_size),
++            {garbage_collection_info, Info} = process_info(self(), garbage_collection_info),
++            Counters = maps:from_list(Info),
++            %% Use the VM's heap blocks and binary virtual-heap word counters.
++            %% Binary reference lists are not the max_heap_size accounting unit.
++            Words = lists:sum([maps:get(Key, Counters) || Key <-
++                [heap_block_size, old_heap_block_size, mbuf_size,
++                 bin_vheap_size, bin_old_vheap_size]]),
+             case quod_material_admission:check(proof, #{heap_bytes => Words * WordBytes},
+                                                #{heap_bytes => Limit}) of
+                 ok ->
+                     MaxWords = case Limit of unlimited -> 0; _ -> Limit div WordBytes end,
+                     _ = process_flag(max_heap_size,
+-                                     #{size => MaxWords, kill => true, error_logger => true}),
++                                     #{size => MaxWords, kill => true, error_logger => true,
++                                       include_shared_binaries => true}),
+                     {Limits, Reads};
+                 {error, Reason} -> throw({quod_ask_error, Reason})
+             end;

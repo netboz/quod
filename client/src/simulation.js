@@ -39,7 +39,9 @@ function readFrame(frame) {
 
 export function worldProjection(message) {
   const marks = readMarks(message.marks)
-  const ordinary = { marks, ...readViewIdentity(message), selection: message.selection }
+  const name = message.name ?? null
+  if (name !== null && typeof name !== 'string') throw new Error('invalid authored space name')
+  const ordinary = { marks, ...readViewIdentity(message), selection: message.selection, name }
   if (message.selection !== 'active') {
     if (!['nonphysical', 'disabled', 'denied', 'recovering', 'unavailable'].includes(message.selection) ||
         message.frame !== undefined || message.control !== undefined) throw new Error('invalid world selection')
@@ -216,19 +218,16 @@ function terrainDelivery(render) {
       await render(view)
       if (live()) send({ type: 'terrain_ack', view: view.view, token, want })
     } else if (message.token === token) {
-      require(Array.isArray(message.chunks) && typeof message.complete === 'boolean' &&
-        (message.complete || message.chunks.length > 0) &&
+      require(Array.isArray(message.chunks) && message.complete === true &&
         message.chunks.every(chunk => Number.isSafeInteger(chunk.index) && chunk.index >= 0), 'content batch')
-      const acknowledgement = message.complete ? { complete: true } : { through: message.chunks.at(-1).index }
       // Superseded interest releases only this token's delivery credit. It
       // cannot install geometry or announce completion for the newer camera.
       if (manifestInterest !== interest) {
-        send({ type: 'terrain_ack', view: view.view, token, ...acknowledgement })
+        send({ type: 'terrain_ack', view: view.view, token, complete: true })
         return
       }
       const missing = rows.filter(row => !retained.has(key(row)))
-      require(message.chunks.length <= missing.length &&
-        message.complete === (message.chunks.length === missing.length) &&
+      require(message.chunks.length === missing.length &&
         message.chunks.every((chunk, i) => chunk.index === missing[i].index), 'requested chunks')
       const verified = []
       for (const [i, chunk] of message.chunks.entries()) {
@@ -240,7 +239,7 @@ function terrainDelivery(render) {
           .map(n => n.toString(16).padStart(2, '0')).join('')
         if (!live()) return
         if (manifestInterest !== interest) {
-          send({ type: 'terrain_ack', view: view.view, token, ...acknowledgement }); return
+          send({ type: 'terrain_ack', view: view.view, token, complete: true }); return
         }
         require(digest === row.digest, 'content digest')
         const header = new DataView(payload.buffer, payload.byteOffset, payload.byteLength)
@@ -252,11 +251,11 @@ function terrainDelivery(render) {
       view.terrain = retained
       await render(view)
       if (!live()) return
-      if (message.complete && manifestInterest === interest) {
+      if (manifestInterest === interest) {
         view.terrainReady = true
         await render(view)
       }
-      if (live()) send({ type: 'terrain_ack', view: view.view, token, ...acknowledgement })
+      if (live()) send({ type: 'terrain_ack', view: view.view, token, complete: true })
     }
   }
   return { project, discard,

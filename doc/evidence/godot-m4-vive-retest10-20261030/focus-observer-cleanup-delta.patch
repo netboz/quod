@@ -1,0 +1,23 @@
+--- qualified-pure01/focus_events.py
++++ final-prepared/focus_events.py
+@@ -51,7 +51,7 @@
+         rows.append(row);stream.write(json.dumps(row)+'\n');stream.flush()
+         print(json.dumps(row),flush=True)
+     def utc():return datetime.datetime.now(datetime.timezone.utc).isoformat()
+-    observer=FocusEvents(a.address,deadline,emit);connection=None
++    observer=FocusEvents(a.address,deadline,emit);connection=None;selector=None
+     def query(what):return json.loads(subprocess.check_output(['hyprctl','-j',what],stderr=subprocess.PIPE,timeout=5))
+     def incarnation():
+         directory=Path('/proc')/str(pid);data=(directory/'stat').read_text();started=data[data.rfind(')')+2:].split()[19]
+@@ -100,10 +100,10 @@
+                     command=sys.stdin.readline().strip()
+                     if command=='finish':observer.finish(now,utc())
+                     else:observer.error('control_eof_or_cancel',now,utc())
+-        selector.close()
+     except Exception as error:
+         record['errors'].append(type(error).__name__);observer.error(type(error).__name__,time.monotonic(),utc())
+     finally:
++        if selector is not None:selector.close()
+         if connection is not None:connection.close()
+         stream.close();record.update(rows=len(rows),event_messages=observer.events,unparsed_fragment=bool(observer.buffer),
+           local_connection_closed=connection is not None,remote_eof_observed=any(r['kind']=='remote_eof' for r in rows),

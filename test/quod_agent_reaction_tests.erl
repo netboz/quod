@@ -1,5 +1,6 @@
 -module(quod_agent_reaction_tests).
 -include_lib("eunit/include/eunit.hrl").
+-import(quod_agent_hosting_tests, [agent/1, agent_ref/2]).
 -include_lib("erlog/src/erlog_int.hrl").
 
 committed_assertions_use_existing_event_admission_and_composition_test_() ->
@@ -9,7 +10,7 @@ committed_assertions_use_existing_event_admission_and_composition_test_() ->
                            {record_ping, {'Value'}}}, Guard},
         quod_agent_hosting_tests:with_host(fun(#{namespace := Ns, reference := Ref,
                                                 node := Node, key := Key}) ->
-            commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+            commit(Ns, agent({goal, {agent_hosted, agent_ref(Ns, actor), Node, 1, Key}})),
             receive {agent_installed, _, _, #{reference := Ref}, _} -> ok
             after 10000 -> error(assertion_test_agent_not_installed) end,
             Before = maps:get(reactions_executed, quod_runtime:stats(Ns)),
@@ -38,15 +39,44 @@ committed_assertions_use_existing_event_admission_and_composition_test_() ->
         end, [Reaction, Reaction])
     end}.
 
+committed_definition_removal_keeps_retract_reactions_test_() ->
+    {timeout, 60, fun() ->
+        Reaction = {':-', {react_on, {retract, {removed_input, {'Value'}}},
+                           {record_ping, {'Value'}}},
+                          {me, {agent_instance_ref, {'Ns'}, {'Anchor'}, actor}}},
+        quod_agent_hosting_tests:with_host(fun(#{namespace := Ns, reference := Ref,
+                                                node := Node, key := Key}) ->
+            SignedCommit = fun(Goal) ->
+                {ok, Bytes, Sig} = quod_node_actor:signed_goal(execute, {'::', Ns, Goal},
+                    crypto:strong_rand_bytes(32), quod_time:now_ms() + 20000),
+                ?assertMatch({ok, _, {normalized, {committed, _, _}}},
+                    quod_client_goal_ingress:submit(Bytes, Sig))
+            end,
+            commit(Ns, agent({goal, {agent_hosted, agent_ref(Ns, actor), Node, 1, Key}})),
+            receive {agent_installed, _, _, #{reference := Ref}, _} -> ok
+            after 10000 -> error(removal_test_agent_not_installed) end,
+            Before = maps:get(reactions_executed, quod_runtime:stats(Ns)),
+            SignedCommit({abolish, {'/', removed_input, 1}}),
+            ?assertMatch({ok, _, {normalized, {committed, _, _}}}, finished(Ref)),
+            ?assertEqual([original], pings(Ns)),
+            ?assertEqual(fail, quod_prolog:prove_ro(
+                Ns, {current_predicate, {'/', removed_input, 1}})),
+            SignedCommit({trigger_event, {do_work, barrier}}),
+            ?assertMatch({ok, _, {normalized, {committed, _, _}}}, finished(Ref)),
+            ?assertEqual([original, barrier], pings(Ns)),
+            ?assertEqual(Before + 2, maps:get(reactions_executed, quod_runtime:stats(Ns)))
+        end, [Reaction, {removed_input, original}])
+    end}.
+
 ordinary_owned_reactions_use_signed_goal_admission_test_() ->
     {timeout, 60, fun() ->
         Ns = <<"host-test-agent">>,
         Self = {agent_instance_ref, {'Ns'}, {'Anchor'}, {'Self'}},
         Guard = {',', {me, Self},
-                   {',', {instance_of, {'Class'}, {'Self'}}, {isa, {'Class'}, reactive}}},
+                   {',', {instance_of, special, {'Self'}}, {isa, special, reactive}}},
         quod_agent_hosting_tests:with_host(
           fun(#{reference := Ref, node := Node, key := Key}) ->
-              commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+              commit(Ns, agent({goal, {agent_hosted, agent_ref(Ns, actor), Node, 1, Key}})),
               receive
                   {agent_installed, _, _, #{reference := Ref}, _} -> ok
               after 10000 -> error(actor_not_installed)
@@ -110,7 +140,7 @@ nonground_committed_clause_events_do_not_capture_reaction_variables_test_() ->
     {timeout, 30, fun() ->
         quod_agent_hosting_tests:with_host(fun(#{namespace := Ns, reference := Ref,
                                                node := Node, key := Key}) ->
-            commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+            commit(Ns, agent({goal, {agent_hosted, agent_ref(Ns, actor), Node, 1, Key}})),
             receive {agent_installed, _, _, #{reference := Ref}, _} -> ok
             after 5000 -> error(nonground_test_agent_not_installed) end,
             %% Both the authored reaction and this new clause contain {0}

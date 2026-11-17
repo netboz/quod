@@ -1,0 +1,68 @@
+[
+  {
+    "phase": "fresh",
+    "command": [
+      "/home/yan/.cache/quod-m3b-artifacts/quod-m3b-client-final03/source/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/home/yan/.cache/quod-m3b-artifacts/private/final-gui-final03/identity",
+      "--node",
+      "https://127.0.0.1:37593",
+      "--ca",
+      "/home/yan/.cache/quod-m3b-artifacts/private/final-gui-final03/proxy-ca.pem"
+    ],
+    "child_exit": -9,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "elapsed_seconds": 31.927938539000024,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "reset",
+    "command": [
+      "/home/yan/.cache/quod-m3b-artifacts/quod-m3b-client-final03/source/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/home/yan/.cache/quod-m3b-artifacts/private/final-gui-final03/identity",
+      "--node",
+      "https://127.0.0.1:37593",
+      "--ca",
+      "/home/yan/.cache/quod-m3b-artifacts/private/final-gui-final03/proxy-ca.pem"
+    ],
+    "child_exit": -9,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "elapsed_seconds": 21.858798281002237,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "final",
+    "command": [
+      "/home/yan/.cache/quod-m3b-artifacts/quod-m3b-client-final03/source/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/home/yan/.cache/quod-m3b-artifacts/private/final-gui-final03/identity",
+      "--node",
+      "https://127.0.0.1:37593",
+      "--ca",
+      "/home/yan/.cache/quod-m3b-artifacts/private/final-gui-final03/proxy-ca.pem"
+    ],
+    "child_exit": 0,
+    "expected_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "elapsed_seconds": 48.33499298699826,
+    "godot_error_diagnostics": false,
+    "passed": true
+  }
+]

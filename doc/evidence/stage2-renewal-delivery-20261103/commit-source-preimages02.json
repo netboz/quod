@@ -1,0 +1,737 @@
+{
+  "source_files": [
+    {
+      "path": "AGENTS.md",
+      "sha256": "bac00ddbfe8e9785e29185e2ad1267b2017b5356ea5bb3ac3babf8d21950fd88"
+    },
+    {
+      "path": "client/godot/Core/Identity.cs",
+      "sha256": "b0dd34a7e43c95bd870009952ef5f30065f94bc38a65f4b8cad31bca241f0e6d"
+    },
+    {
+      "path": "client/godot/Core/Term.cs",
+      "sha256": "b14a35566a0e7dda2118790bc0b39e03de5deb8d5246dfe4b046c3accdb9c1c0"
+    },
+    {
+      "path": "client/src/agent-references.js",
+      "sha256": "e45e576cbb8e75d8db8da58eab5a6d546f2c5bbcfa2b8d20a9629df2eb883247"
+    },
+    {
+      "path": "client/src/glb-profile.js",
+      "sha256": "1bda5816156cf5d61d8c350a20a81aced1e0207c999f9c087ccb4ef646ca15dd"
+    },
+    {
+      "path": "client/src/marks.js",
+      "sha256": "c2e1ba644420ea03e48a51860e6c9a9e5c7d66cd8c4206f8a6a98a2319ff80b8"
+    },
+    {
+      "path": "client/src/operation-journal.js",
+      "sha256": "cb74856269da813fec1c1af0aae2b63fbcff087ba921698327f10dc8475ec33c"
+    },
+    {
+      "path": "client/src/prolog-edit.js",
+      "sha256": "ed820aac74ec1693774109e57921cce05dd628b2aeff95bace6516ae8b7a8804"
+    },
+    {
+      "path": "client/src/prolog-read.js",
+      "sha256": "dad7b18086e202c871a066435e952c47f0b50bffab827b5338d2d17fa15177e5"
+    },
+    {
+      "path": "client/src/protocol-limits.js",
+      "sha256": "c30d9679abaad8e65525f8f619cc3a03f69cfdf52d1bcd82b426032352fd71f8"
+    },
+    {
+      "path": "client/src/signed-client.js",
+      "sha256": "40a80e895d4d4e429773c9e5dd0680d20ef05125149a9af99275fb01111651cf"
+    },
+    {
+      "path": "client/src/simulation.js",
+      "sha256": "81ac3c65f35e69e04619ff752123ff1aa1887da3776cf94e52919d4cd570ce7e"
+    },
+    {
+      "path": "client/src/voxel-profile.js",
+      "sha256": "0cd2e36293bdfea9f7c8c9717926e9feece3fac76b7f40493d6474938f5e54b6"
+    },
+    {
+      "path": "client/src/world.d.ts",
+      "sha256": "388262c78c0a6d3919c243f01ee770e2a1245e7eea6b0036f45731562eadf322"
+    },
+    {
+      "path": "client/src/world.js",
+      "sha256": "b0941dcd4ff1962ffcfbcf61371d15e6940d879f41be3ba9ec30704080dc39b2"
+    },
+    {
+      "path": "client/test/agent-references.test.js",
+      "sha256": "c421efc8e3d1b256326d98de2fc3d8a669d936af260b9b9353c3b5908ac8be5d"
+    },
+    {
+      "path": "client/test/glb-profile.test.js",
+      "sha256": "f066caf9437f3c496e37062041672655a93ceb43109a2d6c3ca78aef04433f7d"
+    },
+    {
+      "path": "client/test/marks.test.js",
+      "sha256": "4ae3dd3596cbde832b19b02113cbe7a6a28cb49a760a50cf45194454dbd30849"
+    },
+    {
+      "path": "client/test/prolog-edit.test.js",
+      "sha256": "ce9bae97b73caf530cca73435b9b3e1b9402391052a042713c0bc0e67c2727cc"
+    },
+    {
+      "path": "client/test/prolog-term.test.js",
+      "sha256": "5aa74cc1ec2d1dbd816fbea7f017fe35c4d3c770dfe1a48a10aafa812679a9c1"
+    },
+    {
+      "path": "client/test/signed-client.test.js",
+      "sha256": "fa736e3233af1408d9bae49bd8882fe137c388d7f8d715af8f5d07e298db0ed7"
+    },
+    {
+      "path": "client/test/simulation.test.js",
+      "sha256": "bdc802b5ed6262b611c3e89fb51bc7bc472769e29dc0c1e0e694a86f48c9a4e2"
+    },
+    {
+      "path": "client/test/terrain-delivery.test.js",
+      "sha256": "4c924c09745e134fd0eab6d5caeacef1ece085c644fee4f20389c7dd59f1d6bf"
+    },
+    {
+      "path": "client/test/voxel-profile.test.js",
+      "sha256": "0013d59e79f051ea150c21aea51110d21fa8c02fc74061af7ae63049bbf088f0"
+    },
+    {
+      "path": "client/test/world.test.js",
+      "sha256": "5aa9f5bb831faefb6eebc6841dad5db3bab3e5bdf8c8b3fc28bd55fb2714a267"
+    },
+    {
+      "path": "doc/consensus-signatures.md",
+      "sha256": "4005eebc3a05c887fbc358d0cfb3adbeace8173ea0297b6fde56c4c6740db4a9"
+    },
+    {
+      "path": "doc/multiwrite-architecture.md",
+      "sha256": "954ae16b8d48376486bb19daacc8bb596fa21b9bede445ff01c6d2e86c4ef99d"
+    },
+    {
+      "path": "doc/spaces.md",
+      "sha256": "2d8837581807a99ddb1457edb23a840be7f687d1760ac4ffc8d03d1897c40c4c"
+    },
+    {
+      "path": "doc/system-ontology-acls.md",
+      "sha256": "7629141bc03a129fcd4b6930c0fc6fde68c95f830410ff31d90eb6a48fd0608b"
+    },
+    {
+      "path": "include/quod_client_goal_limits.hrl",
+      "sha256": "c601a22226e1998c8b774fb3c0509154bfa4774631111af3723e729b095b2731"
+    },
+    {
+      "path": "include/quod_directory_limits.hrl",
+      "sha256": "72476ecb46c8ed3c2a2b65a3fbc67c015917dd91216805d98a11948fa4bac3af"
+    },
+    {
+      "path": "include/quod_ingress_limits.hrl",
+      "sha256": "ce8c502b9b1445d1b084926aa78d85689e69b17e6b32e6665cc4afbadaaee963"
+    },
+    {
+      "path": "include/quod_proof_limits.hrl",
+      "sha256": "e5efb1c564f3c846e3d66bb8e999d91c8d20cb5ce8006a06a6747c451369aa18"
+    },
+    {
+      "path": "include/quod_term_limits.hrl",
+      "sha256": null
+    },
+    {
+      "path": "include/quod_transport_limits.hrl",
+      "sha256": "f2db98a754ce37235cc5bba632a32511aab7ac3546d04b0560ac8b45867cf0ea"
+    },
+    {
+      "path": "include/quod_vm_limits.hrl",
+      "sha256": null
+    },
+    {
+      "path": "nimbalyst-local/handoffs/stage2-d5-reconciliation-20261103.md",
+      "sha256": "76544deebe3485e575ee5add09e7e30fb24050368e737acf5e54b5a7e15c1ca9"
+    },
+    {
+      "path": "nimbalyst-local/plans/space-conceptual-architecture-review.md",
+      "sha256": "437486cda246bb7ca32b8b84d7c7b6701a1d8ff98e99ff3276e1a11b8cc4a4d0"
+    },
+    {
+      "path": "priv/ontologies/common_predicates.pl",
+      "sha256": "b7da4728aa1df6a7fd5466315d1151065c94cbbba4eb2706225ca9e49a1b1435"
+    },
+    {
+      "path": "priv/ontologies/gui_forms.pl",
+      "sha256": "007032b836948bfbc13dfb3f20c467353b3b7c16cccef247cfc9f6ee5e28133b"
+    },
+    {
+      "path": "priv/ontologies/gui_scene.pl",
+      "sha256": "6b29795ad6705b19ab1a0089b8628100afe3a48d4a09637c73415982781f56e6"
+    },
+    {
+      "path": "priv/ontologies/gui_tools.pl",
+      "sha256": "ea0d5ee6b08cdd29e3ad517cb880e3b09ea913766aef9f24d8ccf450137329c8"
+    },
+    {
+      "path": "priv/ontologies/lobby_worlds.pl",
+      "sha256": "bf7bba8d4aff998ab47512e0c24e0cd29339f366c9704cceaf2d1b2120bd359b"
+    },
+    {
+      "path": "priv/ontologies/material_policy.pl",
+      "sha256": "ad07dc60e23a47f7d55a81aecbeee528cfe3d00dc96b89b08463e33816706169"
+    },
+    {
+      "path": "priv/ontologies/quod_gui.pl",
+      "sha256": "012da0f37e94ab5ab5a4a26e4ea38e422cad9b650d30bc00a7e8d02c4b81f6db"
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "sha256": "70e1c448750c06f487f3f45378a869f09ab3a3281dfc3cdc55700a40b0f1204a"
+    },
+    {
+      "path": "rebar.config",
+      "sha256": "836055f6c4cb2f6c6104c2cc3bdea6af690b1f35f1f8adb4b4abe06b1040e83f"
+    },
+    {
+      "path": "rebar.lock",
+      "sha256": "fdd34e230c409c23c1a5de1bcd1ad2c8a1a40ef18f9925816c3e97f4b983ff58"
+    },
+    {
+      "path": "src/predicates/quod_ask.erl",
+      "sha256": "a6f5704ae8003d4e66bf7ed23d50a9fe677702425cdf1e1eff89ab997c790581"
+    },
+    {
+      "path": "src/predicates/quod_committee_predicates.erl",
+      "sha256": "6d182b51ab5ac16fb6c21f45776b57bdc44c3f079f11f359e7145f5a8389c1e2"
+    },
+    {
+      "path": "src/quod_agent_identity.erl",
+      "sha256": "684b2057128608cf70657f3a608295d9f6cb2f128e05b90577c83d148b91fa63"
+    },
+    {
+      "path": "src/quod_agent_ref.erl",
+      "sha256": "b49117cbd7b066422b9df01c9691e0533b3c2e87f1036874609ca43ae5dabb94"
+    },
+    {
+      "path": "src/quod_agent_vault.erl",
+      "sha256": "5f29e85665cf14e4f3e405bd0710eb3d1de15c4dbab4c16a8d929ea04a5987b1"
+    },
+    {
+      "path": "src/quod_app.erl",
+      "sha256": "594f31678d345f63ee66d7ad827eb9863effe4b9f559fcb0c9646ab5fc3ae094"
+    },
+    {
+      "path": "src/quod_applied_certificate.erl",
+      "sha256": "f1f1505d949ffba3e4039d98ac9282320e258b4b9f7959f288453df9905dbeed"
+    },
+    {
+      "path": "src/quod_atomic.erl",
+      "sha256": "3e26b7888a5e88ed1d87205b3eccf74c9ce2afee312bb8831614641a3168cb0f"
+    },
+    {
+      "path": "src/quod_atomic_admission.erl",
+      "sha256": "a46c053770e451a95843864e05f714cf85b2c56499d71ef0e24bf985b46b7d22"
+    },
+    {
+      "path": "src/quod_catchup.erl",
+      "sha256": "f6b95751b5d525b09c41d8d266623673f0575546e67f633e18ca70b67941da4d"
+    },
+    {
+      "path": "src/quod_client_auth.erl",
+      "sha256": "12b0da84aa085bdd22b99cac4f9892e03f50ff75e57a220cf2c406f4ea0060e9"
+    },
+    {
+      "path": "src/quod_client_goal.erl",
+      "sha256": "3d45ad0d61fd965c0fde034a43df23b2bada5716dfcbe43ab6af26dcfedfcaaa"
+    },
+    {
+      "path": "src/quod_client_goal_endpoint.erl",
+      "sha256": "28af6b91ac7b8bd6b2fd39318c981e7ba89fa273631e0fc393fc92dca5d91b14"
+    },
+    {
+      "path": "src/quod_client_goal_parser.erl",
+      "sha256": "03c6c1864e1ea1201cbfcf261a038d1d222ad3005503b8fc89de289fb970af55"
+    },
+    {
+      "path": "src/quod_client_goal_router.erl",
+      "sha256": "5c7cf90e295b91bd008c4bbbfd3163e7506b1abbb035e01d70cb0dd79aee926d"
+    },
+    {
+      "path": "src/quod_client_http.erl",
+      "sha256": "2968e1b1dd097de38f1c0740342dbed01ae7970c0731952020a1f68fa9de59fa"
+    },
+    {
+      "path": "src/quod_client_result.erl",
+      "sha256": "07be4e8236bc615e864a1b808d09be71e820b767ad7c049d42b3e8088d8fc891"
+    },
+    {
+      "path": "src/quod_client_view.erl",
+      "sha256": "bb1b84c10337d33b24f6193dd34a2206125cf3dd0eae2b020dfda6b42e0bfcbe"
+    },
+    {
+      "path": "src/quod_committed_projection.erl",
+      "sha256": "fa9fc27627799207cb94b559a80b08fa674e4b3059f18ddd0ebacd0ee886dbb7"
+    },
+    {
+      "path": "src/quod_directory_shape.erl",
+      "sha256": "9c2094c120dd6d3246f0950c701cdc56692231c14d8864f274de44f47b103e7f"
+    },
+    {
+      "path": "src/quod_dtx.erl",
+      "sha256": "9505188131fc76ae94bb67a47b7e83d8c9ffb86f5a4185dd484ede82181dce9b"
+    },
+    {
+      "path": "src/quod_dtx_coordinator.erl",
+      "sha256": "2d111b6d5d3b9eaa78fd3169c8203d1379561e448802c43983a300c8e4e99683"
+    },
+    {
+      "path": "src/quod_dtx_current_view.erl",
+      "sha256": "af3dfa41eddd9a0869afa9e7f94812468931d968f15782396896387deecae546"
+    },
+    {
+      "path": "src/quod_dtx_endpoint.erl",
+      "sha256": "bae8583989e3ffb99edb8d57755515f919740ce9ad3882313a8ddfa3eded985c"
+    },
+    {
+      "path": "src/quod_dtx_phase_index.erl",
+      "sha256": "51b464ff30fa9f753c08f83d9f235ee7563f7d6040ef055275c2197b556fd554"
+    },
+    {
+      "path": "src/quod_durable_term.erl",
+      "sha256": "0547a7058f64df374bf7943cfeec5a9f10c30dcbe2bb2be6e104e8eaf2bc424d"
+    },
+    {
+      "path": "src/quod_erlog_db_local_prove.erl",
+      "sha256": "88141b0b5cf41a4aa2796105a4dd552c1661e8ff04d9a0723d6df1382480ce54"
+    },
+    {
+      "path": "src/quod_feed.erl",
+      "sha256": "bd85400a5b04c836151fc14abad252f302dd240809c4d5fd4d6a1ccbe7accf75"
+    },
+    {
+      "path": "src/quod_foreign_log.erl",
+      "sha256": "483ffe8eb2c295c8a82f702b41c4e67ac5d85d95f7fba08c7225547d87583275"
+    },
+    {
+      "path": "src/quod_foreign_projection.erl",
+      "sha256": "c934cef9a2ba9c3b927c63d45bbb145355aa0e4b68be1fa236332343164dc204"
+    },
+    {
+      "path": "src/quod_ingress_state.erl",
+      "sha256": "cc4b06da647f6badbbe71332e999c80aceea4f7e5f3774ad6dc77d79b14e4dd1"
+    },
+    {
+      "path": "src/quod_ledger.erl",
+      "sha256": "e6818fd0f636a3db3ebe06090a5cd9dc6c0d2aa4046c86214178826b8bd1fe8e"
+    },
+    {
+      "path": "src/quod_ledger_store.erl",
+      "sha256": "5cbe8b1382d790cd58a658d8214bafc64020fef05795ba61072cd12b6dc4845f"
+    },
+    {
+      "path": "src/quod_link.erl",
+      "sha256": "e507ef004a849775ea4d5a0cf3ac90e2ff341f5a8ca42336d14269112e348cc2"
+    },
+    {
+      "path": "src/quod_material_admission.erl",
+      "sha256": "ceef0436b16a5127d6e6ae30b60897470084b12cf7ecf28255608eed0753ce2a"
+    },
+    {
+      "path": "src/quod_metrics.erl",
+      "sha256": "7b26abbbec00c3a3c740e2f20862caaba714aeb89c6817ba1b2ee301a5a1f40f"
+    },
+    {
+      "path": "src/quod_ontology.erl",
+      "sha256": "9c994c589272d018e660436f6c1fd4fc62a41c9f05df913f7cb5c5573a661807"
+    },
+    {
+      "path": "src/quod_ontology_name.erl",
+      "sha256": "bade11fb98953f68ffaf63cd29f599189692c52b32ab943b8597bda2e87e6e9f"
+    },
+    {
+      "path": "src/quod_outcome.erl",
+      "sha256": "a0f19ada1ef6e9b5fa1c5f54c1a1589a8c14073bc26537f01b4e1059c6126aa8"
+    },
+    {
+      "path": "src/quod_physics.erl",
+      "sha256": "be812d304da32461b175c3190246239bed22068e92aecc7b3d4c3561aa4844aa"
+    },
+    {
+      "path": "src/quod_prolog.erl",
+      "sha256": "b3a8b2ecefecad8a0286adccf5287198bc6c7ac420202b603ba0ddd11d764ec4"
+    },
+    {
+      "path": "src/quod_proof_session.erl",
+      "sha256": "47481ede0cab64605d40d99c8a1df843ea954a41eea32c37687d05e047a418a0"
+    },
+    {
+      "path": "src/quod_quorum.erl",
+      "sha256": "2632d4dedbcbb0a43d02e7f7fcf9ecfb7beabbb3e5e08d6cf6924ab57f0c6537"
+    },
+    {
+      "path": "src/quod_read_certificate.erl",
+      "sha256": "d5fe2ebe03a96089b0bf97778c769907d2a89436821e86fc7777d81af01f6291"
+    },
+    {
+      "path": "src/quod_relay.erl",
+      "sha256": "6f75a07480b6a6c4064ac7ddc39afb8b4ae533415b9d768ce6d40e2b8d13609f"
+    },
+    {
+      "path": "src/quod_safe_term.erl",
+      "sha256": "84e785e858090b35d50fc9f0f922a7fd681c05f27306a7584ff62628161fe6c9"
+    },
+    {
+      "path": "src/quod_schema.erl",
+      "sha256": "ed291b94a099d93c85b387dea16534f024a8a91312ebbebdb5e96ddad9c7a1f4"
+    },
+    {
+      "path": "src/quod_scope_session.erl",
+      "sha256": "62b706bba9f9c8ea9a73bf3721f16739a417115fe2cdc100f0cddec878a0279c"
+    },
+    {
+      "path": "src/quod_scope_wire.erl",
+      "sha256": "4a47e1aab7f90262c20841c1c7fc6601da1c682fc19727ec848ddd6f10f86621"
+    },
+    {
+      "path": "src/quod_signing_journal.erl",
+      "sha256": "2f453f214c1d1d4f5ef28075d4634f8e577e000835061dfc7ad6c2f431670e86"
+    },
+    {
+      "path": "src/quod_simplex.erl",
+      "sha256": "9b9a7248dd0bee426dcede544f5ec0eb8b9ee2a2f82709404df266a2575f7e57"
+    },
+    {
+      "path": "src/quod_terrain_wire.erl",
+      "sha256": "d831af9ae3114b6635df33a9d178d274c9d6fcd73a41d60b196419bd360a9934"
+    },
+    {
+      "path": "src/quod_transaction.erl",
+      "sha256": "e3ca3267675ca96e36a0edd5414d2530eff51360a0447a0b7f0f4ea68586408f"
+    },
+    {
+      "path": "src/quod_voxel.erl",
+      "sha256": "af39b9b1c30bf1a44007efe706231b9811ebd4d828fd2a4d5f25e0f4d53029e2"
+    },
+    {
+      "path": "src/quod_wire_term.erl",
+      "sha256": "6802ef3237ffda341f5221dc0e0d7783a402aa598a1fce766e6c6e4ca911cb8d"
+    },
+    {
+      "path": "test/quod_agent_attestation_readiness_tests.erl",
+      "sha256": "9e5139c9218533361963cde7ff1d0ad37f984b40759e8b163e5ed40f8865d48d"
+    },
+    {
+      "path": "test/quod_agent_ref_tests.erl",
+      "sha256": "be2e805acf3732fffdabdbdcc55fbf75221fad050a70116a58d03146d4b0db96"
+    },
+    {
+      "path": "test/quod_agent_vault_tests.erl",
+      "sha256": "51ce0f74dcbc28f7e6460e05fad52d30d1c6bdb399dd7f8333fc63620105c7c0"
+    },
+    {
+      "path": "test/quod_ask_SUITE.erl",
+      "sha256": "220206124d8fbba8969d002af9e1344eb2fd100c50211c796f5cf8314026a424"
+    },
+    {
+      "path": "test/quod_ask_tests.erl",
+      "sha256": "745ded56f5d95fef549b4f92173fb8b6fbe6b9e12822ffdad58018b361ee810e"
+    },
+    {
+      "path": "test/quod_atomic_admission_tests.erl",
+      "sha256": "61098b725b71d0935c728b25b75293a9a79c9157330326cc535e390dda26f525"
+    },
+    {
+      "path": "test/quod_atomic_delivery_tests.erl",
+      "sha256": "dc54ddff26ecb9cdef71eedd4ff16545c1e4e934d0449a7ed6acc8cb23360e9a"
+    },
+    {
+      "path": "test/quod_atomic_projection_tests.erl",
+      "sha256": "44be131c4ef99a3cac783302b60dc7eecfd2b120a4ad7b397748150117f2625d"
+    },
+    {
+      "path": "test/quod_atomic_tests.erl",
+      "sha256": "b84e685f256b4113912af6f014402dfe4becf2bd2148bdcf542b7397110d6316"
+    },
+    {
+      "path": "test/quod_catchup_tests.erl",
+      "sha256": "cc88d456bebcc106240c1e225981104cfcef28f8ba03d6336c80ca2f4d879866"
+    },
+    {
+      "path": "test/quod_catchup_verify_tests.erl",
+      "sha256": "424df2adcec87472f06c764c7893d92d835d308c4a28ce2e5168ff284917803d"
+    },
+    {
+      "path": "test/quod_client_auth_tests.erl",
+      "sha256": "f8eb6977048c96b3f25533821adcb2b61abd9378dd20a79b0f6d79194b28000a"
+    },
+    {
+      "path": "test/quod_client_goal_endpoint_tests.erl",
+      "sha256": "54003b940b510bf2ce01c263a3f3709acc04993fe49b89c8d6a48b0f4e82831f"
+    },
+    {
+      "path": "test/quod_client_goal_ingress_tests.erl",
+      "sha256": "0f52d1fbd84016463042fc3efc93e248871dff3b8cc0b8a1abc5f2fb9111bc8f"
+    },
+    {
+      "path": "test/quod_client_goal_parser_tests.erl",
+      "sha256": "eca73dd245a7698c7d4119d2414ff7d8adf6e2e71160b757153de9faf0231f49"
+    },
+    {
+      "path": "test/quod_client_goal_router_tests.erl",
+      "sha256": "fe22cad638804b02cdd51e785ca135fd12b35012a9a99b51869133dd5797395c"
+    },
+    {
+      "path": "test/quod_client_goal_target_tests.erl",
+      "sha256": "757f12439c644b71b91e0748473cc986faa6aaf1ed6b5c0d1c0aa6ba45668924"
+    },
+    {
+      "path": "test/quod_client_goal_tests.erl",
+      "sha256": "c762c6809f9854a02814ed76e63571ca5fa1615085920b177654e6cd33505333"
+    },
+    {
+      "path": "test/quod_client_http_tests.erl",
+      "sha256": "f6d07cfab3700846f05fa506f49129f0284408113df442c5ef6bd7451049a365"
+    },
+    {
+      "path": "test/quod_client_result_tests.erl",
+      "sha256": "179350e984780764e6697da47bdb7e0c72b10e82ba585d61f41ea5a9fbabcd66"
+    },
+    {
+      "path": "test/quod_committee_predicates_tests.erl",
+      "sha256": "b9295276a72c9176eb1eb004ca43f82189bfc5f29a9b12fdc80167ae94f8755b"
+    },
+    {
+      "path": "test/quod_common_primitives_tests.erl",
+      "sha256": "01b0bee2c2d2361e628ca321f04db91ca4b42c05ab0b590c078b491cc7b05dd4"
+    },
+    {
+      "path": "test/quod_directory_control_tests.erl",
+      "sha256": "ef0de871e340e8d851b22ec02a225bc073c8227c829edf9f461ea3051e14bbfe"
+    },
+    {
+      "path": "test/quod_dtx_coordinator_evidence_tests.erl",
+      "sha256": "18d4c5f20b1d1d9894841c96fb731d3f84e360820e57f92e4bbdc764e9fa5f5e"
+    },
+    {
+      "path": "test/quod_dtx_coordinator_tests.erl",
+      "sha256": "6edd11062845b16afc50edf219c6afd125a63848202798b23eb39dc38cfbf901"
+    },
+    {
+      "path": "test/quod_dtx_endpoint_tests.erl",
+      "sha256": "aa1a0828613978c2006c471fe5450b58e198aed8c35d671a8e87958e668928bd"
+    },
+    {
+      "path": "test/quod_dtx_group_trace_tests.erl",
+      "sha256": "aeec72bb3606625f8199f39457dbda42670bf3cc68d00ee6c9f795fa135115bb"
+    },
+    {
+      "path": "test/quod_dtx_tests.erl",
+      "sha256": "dd97a3ac7432316aa99a1118407e05e7044abb1fcf6186ebe319e2183222e1cb"
+    },
+    {
+      "path": "test/quod_durable_term_tests.erl",
+      "sha256": "0a367bc62158673798cbe96ab290a7e2bfe9b60aa5ac890b6dc144c2b8cf8d14"
+    },
+    {
+      "path": "test/quod_effect_journal_tests.erl",
+      "sha256": "ce6ffa885e57eb825739109ccbb524d16d1b431e922b9a7876e31adb30d38755"
+    },
+    {
+      "path": "test/quod_entry_selection_tests.erl",
+      "sha256": "f7a1217289d6c07c7c870dc36408eae12be1c82d040479501f1d2e01197494cc"
+    },
+    {
+      "path": "test/quod_feed_tests.erl",
+      "sha256": "0d434347a16ea2db84ec0f15230f19bbf7cf70adfb2d298a8a066a22a488602d"
+    },
+    {
+      "path": "test/quod_foreign_log_tests.erl",
+      "sha256": "dd055b65447ca501f416892eeabb805718479956775a4af86630c112e1b5bf32"
+    },
+    {
+      "path": "test/quod_foreign_projection_tests.erl",
+      "sha256": "c7453a9b2cb311df12bab0644ed4eafd2875f5143d24b79327dbe5e6334f9a64"
+    },
+    {
+      "path": "test/quod_foreign_residency_tests.erl",
+      "sha256": "fd7e16f1378e84c34cd4c1d76777e79db774a65828d9cf3a503aae558ab0655c"
+    },
+    {
+      "path": "test/quod_genesis_tests.erl",
+      "sha256": "bfd40c56868c8a4b17e83e8425383ac584bfae79123724b8d03dafd4fa2abd17"
+    },
+    {
+      "path": "test/quod_ingress_state_tests.erl",
+      "sha256": "8dbe13b21744dc54a35c888d615da0734123dc8a6478099da74653640388d0b9"
+    },
+    {
+      "path": "test/quod_ledger_artifact_tests.erl",
+      "sha256": "be807163b32de8c11a007e187b5c76269ed29baef5e0d4868692dd25cfd5c924"
+    },
+    {
+      "path": "test/quod_ledger_store_tests.erl",
+      "sha256": "9c28d7cf5a1a53e037f93e6b0270c224e708fcffa7f440f1e2268d1405d65812"
+    },
+    {
+      "path": "test/quod_lens_tests.erl",
+      "sha256": "38885fbd5715e9d153b693eb90d5271a51ce1faee84353e21f01d1e82d011a89"
+    },
+    {
+      "path": "test/quod_licence_tests.erl",
+      "sha256": "58fc5eb01d74ba47f084b08d2f67a429710419f69ae10dbc0e915c8a2d8eab64"
+    },
+    {
+      "path": "test/quod_lifecycle_single_path_tests.erl",
+      "sha256": "9e2a93ffa7d04f4f013d41b8aaaa904268f3e6ccde7f475c1a5e0b264c73e59d"
+    },
+    {
+      "path": "test/quod_link_tests.erl",
+      "sha256": "78cd348ebeb3359f366621da1b06563f89d8b7767dfcdd1d526dead589a9ab09"
+    },
+    {
+      "path": "test/quod_lobby_tests.erl",
+      "sha256": "b9e97dce9a333aee6d9523804a3b7b3cfcc1957e2eb461d7848c75c14869281b"
+    },
+    {
+      "path": "test/quod_material_admission_tests.erl",
+      "sha256": "1bfa75d329e88077a80c5eb14464bd0663bcab0c3207158d23c58e54870984b6"
+    },
+    {
+      "path": "test/quod_measure_tests.erl",
+      "sha256": "941d9e7c2a1c4f466dfe511c129047f0d151e36f06b64930825c686336af0d93"
+    },
+    {
+      "path": "test/quod_names_tests.erl",
+      "sha256": "e3595837aa6d2478db6f374f05816e64256554f33375260f1da6fa162fe1d3b1"
+    },
+    {
+      "path": "test/quod_namespace_layout_tests.erl",
+      "sha256": "c181e30a2729ecbff159c9031ff6f169578add7c13754fb9f0e7fe545892b682"
+    },
+    {
+      "path": "test/quod_namespace_manager_tests.erl",
+      "sha256": "febc765d49fc84b51bc5f49f9afeeb4a980e68c76f32faf78617c095a57c6dfd"
+    },
+    {
+      "path": "test/quod_outcome_endpoint_tests.erl",
+      "sha256": "91dccf828c30dd89249c0f7353c27821a318dc26e1051097ba2409f65c4c1437"
+    },
+    {
+      "path": "test/quod_overlay_tests.erl",
+      "sha256": "0c7c75c85b5649a283ebf2a1b634928c5d6df6b378785bcebd7ac532f7306252"
+    },
+    {
+      "path": "test/quod_physics_tests.erl",
+      "sha256": "c2b2ce308976f8df46f9e596cf6cd27f5d63b42273f00117600a8c72058f88e1"
+    },
+    {
+      "path": "test/quod_predicate_failure_tests.erl",
+      "sha256": "190ad0b84f910f7cd2ec9c657706a198b4e99fe42cfd8a6b2f487a6249a56e20"
+    },
+    {
+      "path": "test/quod_prolog_scope_target_tests.erl",
+      "sha256": "6d97b7e2c7c83a2c098f3dfde2952c9a932d609114219285c6cf7b1cfa5fa497"
+    },
+    {
+      "path": "test/quod_prolog_tests.erl",
+      "sha256": "6c3b06f4c55e57868572f629dabef6df74d9a3cab3afdfd8da150a1a2e4d7fdc"
+    },
+    {
+      "path": "test/quod_proof_answer_tests.erl",
+      "sha256": "a213bcd94b7fa76899691d5085264797741440d036707711ddb969c9fd5fc0ef"
+    },
+    {
+      "path": "test/quod_proof_session_tests.erl",
+      "sha256": "26050a76d371d1dd74af9c446017898fc1b85e0fc405611198715429e49c5867"
+    },
+    {
+      "path": "test/quod_quorum_tests.erl",
+      "sha256": "9704e26bc81e6c4d70052a2fd7e78d69a4f289070ccd69a24b015458f848e83f"
+    },
+    {
+      "path": "test/quod_read_certificate_tests.erl",
+      "sha256": "dac52a78279c4fe80c403f65a0df8d3a8918b6ceec04a23dc6d0b880e33c8555"
+    },
+    {
+      "path": "test/quod_receiver_decode_tests.erl",
+      "sha256": "dcc29bb66d062969cca1441de5211ce4fc95d85e01e7a25062951c3360a69057"
+    },
+    {
+      "path": "test/quod_relay_tests.erl",
+      "sha256": "a97278ce048d0f2f0f60d592c9e081d118b6266d7f40a6ef5e247b3173effc35"
+    },
+    {
+      "path": "test/quod_remaining_admission_tests.erl",
+      "sha256": "3f2560d4bea5f21673ef8079846f02c7aeec5a4912e3ddb338e0aed7b23b8ad1"
+    },
+    {
+      "path": "test/quod_rendering_tests.erl",
+      "sha256": "5673f1be6b47b6adc8336d3f74a439855ec6edc311560e1727545fe7de1daeef"
+    },
+    {
+      "path": "test/quod_runtime_tests.erl",
+      "sha256": "75e9da73a35a4d13129907a2345d1aebcd1c4ba4a78e3dcd0db7c9d349dd3b18"
+    },
+    {
+      "path": "test/quod_safe_term_tests.erl",
+      "sha256": "b9f4ecdc51fe556c339019ff3e4ba24684e2238e3a10583f91e53325659fdbe3"
+    },
+    {
+      "path": "test/quod_schema_tests.erl",
+      "sha256": "b7f289bfb2f3f50b911a10e39e2878ad3f9ec88e030e41e9a4d000aea9b3775a"
+    },
+    {
+      "path": "test/quod_scope_session_tests.erl",
+      "sha256": "084763e7283d7c93f877678278783aa762ec6790cc4af99ab097b72e597abe72"
+    },
+    {
+      "path": "test/quod_scope_wire_tests.erl",
+      "sha256": "19953fb4876e0be5be6f59651983180cdb4a7b1df784b78923d0ffa12e53e62c"
+    },
+    {
+      "path": "test/quod_signing_journal_tests.erl",
+      "sha256": "d9838615300662d8dd8c1de3a3fdaae15dea8689e599aa7082f9b22f100331d5"
+    },
+    {
+      "path": "test/quod_simplex_tests.erl",
+      "sha256": "2528f1b8e4ab0d90bae82eb125caf5afbb4b1d47528b8cbe154a396750e6d663"
+    },
+    {
+      "path": "test/quod_terrain_wire_tests.erl",
+      "sha256": "c2bf44ea87f3c2c9cf8b53567500f4abbecd777591bd783b0a11565fda654140"
+    },
+    {
+      "path": "test/quod_transaction_tests.erl",
+      "sha256": "1e7618edc4cf627652de8e5f1f5bf1a8f67e06a98dc69f2834de901a3bbc33ba"
+    },
+    {
+      "path": "test/quod_voxel_tests.erl",
+      "sha256": "0e2c55652d4c6f11803a68767d91f53228e556aee6052d8dbb42fd84cb4c7a37"
+    },
+    {
+      "path": "test/quod_wire_term_tests.erl",
+      "sha256": "087de5a3109505e79c094573e18a726e69842bc14ae36c78772905ef6d6c4017"
+    },
+    {
+      "path": "test/reason_admission_tests.erl",
+      "sha256": "aa4c4ff161f554115a28810e6f2fe30204763f6ec686781030e4df5ef3f4c535"
+    },
+    {
+      "path": "test/retired_presentation_sizes.hrl",
+      "sha256": "5a9c2982ca7d218b7c5f99a755bc7ef06146da8fc25764ffec5fee367a2b162e"
+    },
+    {
+      "path": "test/retired_remaining_sizes.hrl",
+      "sha256": "4766c118bcd165cd379716454207e73fc9012385d9f1eac67c8a9b94ba278d6d"
+    },
+    {
+      "path": "test/selection_cost_tests.erl",
+      "sha256": "c6a2a6a55777d81cecd758dc78214af56207f23267e2d267a8970c22b7ee9e4a"
+    },
+    {
+      "path": "ui/src/PrologEditor.tsx",
+      "sha256": "6e7375d0e15bf30cae3258adb0b39055e6964eea6cf07e7c8b25edcfe68ebc28"
+    }
+  ],
+  "tracked_delta": {
+    "added": 3294,
+    "removed": 2813
+  },
+  "scope": "Current selected source/test/docs; pending exact new Erlog revision and review. This supersedes draft01 selection accounting only; no staging."
+}

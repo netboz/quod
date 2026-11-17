@@ -2,7 +2,7 @@
 -moduledoc """
 Atom-safe parser for the frozen signed-goal text grammar.
 
-Each supported version owns its lexer, token bounds, variable numbering, and
+Each supported version owns its lexer, variable numbering, and
 exact operator table. Version 2 adds only Erlang-style `<<"...">>` byte terms;
 version 1 remains frozen. Version 3 recognizes an adjacent negative numeric
 literal while preserving spaced unary expressions and binary subtraction.
@@ -23,8 +23,6 @@ compared with the frozen table below; a dependency change therefore fails closed
 instead of silently changing how signed text is interpreted.
 """.
 
--include("quod_client_goal_limits.hrl").
--include("quod_vm_limits.hrl").
 
 -export([parse/2, parse_program/2, supported_version/1,
          format/1, format_clause/1, value_text/1]).
@@ -154,7 +152,8 @@ quoted_symbol(Name) ->
 source_bytes(Bytes, request) -> [source_hex(B) || <<B>> <= Bytes];
 source_bytes(Bytes, value) -> [source_character(B, $") || <<B>> <= Bytes].
 
-source_character(C, Quote) when C =:= Quote; C =:= $\\ -> [$\\, C];
+source_character(C, Quote) when C =:= Quote -> source_hex(C);
+source_character($\\, _Quote) -> "\\\\";
 source_character(C, _Quote) when C >= 32, C =< 126 -> C;
 source_character(C, _Quote) -> source_hex(C).
 
@@ -171,14 +170,13 @@ source_hex(C) -> ["\\x", integer_to_list(C, 16), $\\].
               variables = #{} :: #{binary() => non_neg_integer()},
               variable_names = [] :: [{binary(), non_neg_integer()}],
               next_variable = 0 :: non_neg_integer(),
-              token_count = 0 :: non_neg_integer(),
               parser_version = 1 :: 1 | 2 | 3,
               negative_magnitude = false :: boolean(),
               numeric_annotations = false :: boolean(),
               terminator = final :: final | next}).
 
 -type parse_error() :: invalid_syntax | unsupported_parser |
-                       parser_contract_mismatch | {too_large, goal}.
+                       parser_contract_mismatch.
 
 -doc "Parse exactly one dot-terminated Prolog term under a frozen grammar version.".
 -spec parse(term(), term()) ->
@@ -186,8 +184,7 @@ source_hex(C) -> ["\\x", integer_to_list(C, 16), $\\].
                  variables := [{binary(), non_neg_integer()}]}} |
           {error, parse_error()}.
 parse(Text, Version)
-  when is_binary(Text), byte_size(Text) > 0,
-       byte_size(Text) =< ?QUOD_CLIENT_GOAL_TEXT_BYTES ->
+  when is_binary(Text), byte_size(Text) > 0 ->
     case supported_version(Version) of
         true ->
             case unicode:characters_to_list(Text, utf8) of
@@ -198,12 +195,6 @@ parse(Text, Version)
             end;
         false ->
             {error, unsupported_parser}
-    end;
-parse(Text, Version)
-  when is_binary(Text), byte_size(Text) > ?QUOD_CLIENT_GOAL_TEXT_BYTES ->
-    case supported_version(Version) of
-        true -> {error, {too_large, goal}};
-        false -> {error, unsupported_parser}
     end;
 parse(_Text, Version) ->
     case supported_version(Version) of
@@ -221,7 +212,7 @@ supported_version(_) -> false.
 -doc "Read a source file with the frozen lexer; variable scope restarts at each clause.".
 -spec parse_program(term(), term()) -> {ok, [map()]} | {error, parse_error()}.
 parse_program(Text, Version)
-  when is_binary(Text), byte_size(Text) =< ?QUOD_CLIENT_GOAL_TEXT_BYTES ->
+  when is_binary(Text) ->
     case {supported_version(Version), unicode:characters_to_list(Text, utf8)} of
         {false, _} -> {error, unsupported_parser};
         {true, Chars} when is_list(Chars) ->
@@ -264,18 +255,11 @@ parse_chars(Chars, Version) ->
 
 parsed({ok, Parsed}, #lex{variable_names = NamesRev, numeric_annotations = Annotated}) ->
     Goal = case Annotated of true -> numeric_literals(Parsed); false -> Parsed end,
-    %% The lexer emits only the wire alphabet and validates Unicode values.
-    %% A remaining encoder rejection can therefore only be a structural depth
-    %% bound, for which `too_large` is the accurate public result.
-    case {quod_wire_term:encode(Goal),
-          quod_wire_term:goal_symbol_names(Goal)} of
-        {{ok, _}, {ok, CallableSymbols}}
-          when length(CallableSymbols) =< ?QUOD_MAX_NEW_MATERIAL_ATOMS ->
-            {ok, #{goal => Goal, variables => lists:reverse(NamesRev)}};
-        {{ok, _}, {ok, _TooManySymbols}} ->
-            {error, {too_large, goal}};
-        _ ->
-            {error, {too_large, goal}}
+    %% Parsing creates no atoms. Callable material admission belongs to the
+    %% authenticated ontology, after this grammar and wire-shape validation.
+    case quod_wire_term:encode(Goal) of
+        {ok, _} -> {ok, #{goal => Goal, variables => lists:reverse(NamesRev)}};
+        _ -> {error, invalid_syntax}
     end;
 parsed({error, _}, _Lex) ->
     {error, invalid_syntax}.
@@ -308,20 +292,16 @@ lex(Chars0, Line0, PriorLayout, Lex0) ->
 lex_token([$. | Rest], Line, _Layout, #lex{terminator = next} = Lex0) ->
     case skip_layout(Rest, Line, false) of
         {ok, Tail, EndLine, Layout} when Tail =:= []; Layout =:= true ->
-            case push({'.', Line}, Lex0) of
-                {ok, Lex} -> {ok, lists:reverse(Lex#lex.tokens), Lex, Tail, EndLine};
-                {error, _} = Error -> Error
-            end;
+            Lex = push({'.', Line}, Lex0),
+            {ok, lists:reverse(Lex#lex.tokens), Lex, Tail, EndLine};
         {ok, _, _, _} -> lex_graphic([$. | Rest], Line, Lex0);
         {error, _} = Error -> Error
     end;
 lex_token([$. | Rest], Line, _Layout, Lex0) ->
     case only_layout(Rest, Line) of
         true ->
-            case push({'.', Line}, Lex0) of
-                {ok, Lex} -> {ok, lists:reverse(Lex#lex.tokens), Lex};
-                {error, _} = Error -> Error
-            end;
+            Lex = push({'.', Line}, Lex0),
+            {ok, lists:reverse(Lex#lex.tokens), Lex};
         false ->
             lex_graphic([$. | Rest], Line, Lex0)
     end;
@@ -371,14 +351,10 @@ lex_token([C | _] = Chars, Line, _Layout, Lex0) ->
         false -> {error, invalid_syntax}
     end.
 
-continue(_Rest, _Line, {error, _} = Error) -> Error;
-continue(Rest, Line, {ok, Lex}) -> lex(Rest, Line, false, Lex).
+continue(Rest, Line, Lex) -> lex(Rest, Line, false, Lex).
 
-push(_Token, #lex{token_count = Count})
-  when Count >= ?QUOD_CLIENT_GOAL_MAX_TOKENS ->
-    {error, {too_large, goal}};
-push(Token, #lex{tokens = Tokens, token_count = Count} = Lex) ->
-    {ok, Lex#lex{tokens = [Token | Tokens], token_count = Count + 1}}.
+push(Token, #lex{tokens = Tokens} = Lex) ->
+    Lex#lex{tokens = [Token | Tokens]}.
 
 skip_layout([C | Rest], Line, _Layout)
   when C >= 0, C =< 32 ->
@@ -418,13 +394,7 @@ take_identifier(Rest, Acc) ->
 
 lex_symbol(NameChars, Rest, Line, Lex0) when is_list(NameChars) ->
     Name = unicode:characters_to_binary(NameChars),
-    case byte_size(Name) =< ?QUOD_CLIENT_GOAL_MAX_SYMBOL_BYTES of
-        true ->
-            Token = {atom, Line, symbol_value(Name)},
-            continue(Rest, Line, push(Token, Lex0));
-        false ->
-            {error, {too_large, goal}}
-    end.
+    continue(Rest, Line, push({atom, Line, symbol_value(Name)}, Lex0)).
 
 lex_variable(Name, Rest, Line,
              #lex{variables = Variables, variable_names = Names,
@@ -434,22 +404,14 @@ lex_variable(Name, Rest, Line,
             Lex1 = Lex0#lex{next_variable = Next + 1},
             continue(Rest, Line, push({var, Line, Next}, Lex1));
         _ ->
-            case byte_size(Name) =< ?QUOD_CLIENT_GOAL_MAX_SYMBOL_BYTES of
-                false ->
-                    {error, {too_large, goal}};
-                true ->
-                    case maps:find(Name, Variables) of
-                        {ok, Index} ->
-                            continue(Rest, Line,
-                                     push({var, Line, Index}, Lex0));
-                        error ->
-                            Lex1 = Lex0#lex{
-                                     variables = Variables#{Name => Next},
-                                     variable_names = [{Name, Next} | Names],
-                                     next_variable = Next + 1},
-                            continue(Rest, Line,
-                                     push({var, Line, Next}, Lex1))
-                    end
+            case maps:find(Name, Variables) of
+                {ok, Index} ->
+                    continue(Rest, Line, push({var, Line, Index}, Lex0));
+                error ->
+                    Lex1 = Lex0#lex{variables = Variables#{Name => Next},
+                                   variable_names = [{Name, Next} | Names],
+                                   next_variable = Next + 1},
+                    continue(Rest, Line, push({var, Line, Next}, Lex1))
             end
     end.
 
@@ -487,14 +449,8 @@ lex_quoted(Rest0, Line, Quote, Kind, Lex0) ->
 quoted_token(atom, Chars, Rest, TokenLine, NextLine, Lex0) ->
     case unicode:characters_to_binary(Chars, unicode, utf8) of
         Name when is_binary(Name) ->
-            case byte_size(Name) =< ?QUOD_CLIENT_GOAL_MAX_SYMBOL_BYTES of
-                true ->
-                    continue(
-                      Rest, NextLine,
-                      push({atom, TokenLine, symbol_value(Name)}, Lex0));
-                false ->
-                    {error, {too_large, goal}}
-            end;
+            continue(Rest, NextLine,
+                     push({atom, TokenLine, symbol_value(Name)}, Lex0));
         _ ->
             {error, invalid_syntax}
     end;
@@ -556,10 +512,7 @@ escaped_radix(Chars, Base) ->
     case {Digits, Rest} of
         {[], _} -> error;
         {_, [$\\ | Tail]} ->
-            case length(Digits) =< ?QUOD_CLIENT_GOAL_MAX_NUMBER_CHARS of
-                true -> {ok, list_to_integer(Digits, Base), Tail};
-                false -> error
-            end;
+            {ok, list_to_integer(Digits, Base), Tail};
         _ -> error
     end.
 
@@ -602,8 +555,7 @@ lex_number([$0, Prefix | Rest], Line, Lex0)
   when Prefix =:= $b; Prefix =:= $o; Prefix =:= $x ->
     Base = case Prefix of $b -> 2; $o -> 8; $x -> 16 end,
     {Digits, Tail} = take_radix_digits(Rest, Base, []),
-    case Digits =/= [] andalso
-         length(Digits) =< ?QUOD_CLIENT_GOAL_MAX_NUMBER_CHARS of
+    case Digits =/= [] of
         true ->
             continue(Tail, Line,
                      push_number(list_to_integer(Digits, Base), Line, Lex0));
@@ -646,9 +598,6 @@ exponent_token(BaseChars, Rest, Line, Lex0) ->
 number_token(Digits, Rest, Line, Lex0) ->
     number_value_token(integer, Digits, Rest, Line, Lex0).
 
-number_value_token(_Kind, Chars, _Rest, _Line, _Lex0)
-  when length(Chars) > ?QUOD_CLIENT_GOAL_MAX_NUMBER_CHARS ->
-    {error, {too_large, goal}};
 number_value_token(integer, Chars, Rest, Line, Lex0) ->
     continue(Rest, Line,
              push_number(list_to_integer(Chars), Line, Lex0));

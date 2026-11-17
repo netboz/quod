@@ -1,0 +1,50 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-space-stage2-20261031/rehearse.py",
+    "stage2-candidate15-headless",
+    "--wire-qualification",
+    "doc/evidence/godot-space-stage2-20261031/inputs/stage2-owner-final02.json",
+    "--manifest",
+    "doc/evidence/godot-space-stage2-20261031/inputs/client-stage2-candidate15-manifest.json"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 1,
+  "timed_out": false,
+  "driver_inputs": {
+    "build.py": "bc927a16ef1dfe50938cc10fa5c087ede582ca17b1cb726c206415673c1a56ec",
+    "hashes.py": "c8149c62d70aed27070c685507cdb54ee9b4dfe429fabb37e3b5903c7300e9b1",
+    "owner_checks.py": "72c7b79a32ab6837e2f617ca4aa2a6ab7f7b7376320a5d47b805ba4f5f6fb700",
+    "rehearse.py": "88eb0a23a33e937f6a9bfd5c4ab1055953cb4d0c5abbd59af6e3cda64b734e92",
+    "run.py": "bb083951b41f9578d6ec35bd5fc6e51eb645475936642f1b9e2b725e138a4479",
+    "serve.py": "fb0156bbb53ca07522237a4f9964f90bf58c1ec77bd6373e31166786fae97b44",
+    "term_checks.py": "6321cfee86a95e56bbf9a17885d317bbb7289298624492a78797abf1aaa98e40"
+  },
+  "start_utc": "2026-10-31T15:28:42Z",
+  "elapsed_seconds": 40.40993618965149,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/stage2-candidate15-client/stdout.raw",
+      "sha256": "3fac65a76fb020442605cb76259ba8f49e83084c9bbeb7a628e639c060bde305",
+      "bytes": 7300
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/stage2-candidate15-client/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031/logs/stage2-candidate15-client-stdout.log",
+      "sha256": "3fac65a76fb020442605cb76259ba8f49e83084c9bbeb7a628e639c060bde305",
+      "bytes": 7300
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031/logs/stage2-candidate15-client-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

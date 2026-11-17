@@ -1,0 +1,9 @@
+Godot Engine v4.7.2.stable.mono.custom_build.ed1daf0bf - https://godotengine.org
+OpenXR: Created instance for OpenXR 1.1.54
+OpenXR: Running on OpenXR runtime:  Monado(XRT) by Collabora et al '59be345db769a89c93d1bdf6ed8316fa6209d8ae'   25.1.0
+OpenXR: XrGraphicsRequirementsVulkan2KHR:
+ - minApiVersionSupported:  1.0.0
+ - maxApiVersionSupported:  1023.1023.1023
+Vulkan 1.4.351 - Forward Mobile - Using Device #0: NVIDIA - NVIDIA GeForce RTX 4090
+
+OpenXR head space location not valid (check tracking?)

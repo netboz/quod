@@ -1,0 +1,9 @@
+{
+  "action": "Lossless relocation to verified archive; original bytes and exact path set retained",
+  "source": "/home/yan/src/quod_worktrees/pearl-stone/_build/m3a-gates01/source/native/quod_physics/target",
+  "archive": "/home/yan/src/quod_worktrees/pearl-stone/_build/m3a-retained/gates01-native-target.tar.gz",
+  "archive_sha256": "63c416892a2800cf5a337ab5cf7899b03820ddd65327e44f6e792cfca6ddfa66",
+  "manifest_sha256": "51e36bc8c72c752af5b0930a16d6903983ee847cac90faf9449209e760d706c8",
+  "entries": 1910,
+  "unpacked_released": true
+}

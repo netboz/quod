@@ -257,8 +257,8 @@ client_http_test_() ->
            fun() -> api_reply_is_clean(Port) end},
           {"every route honours the handler contract",
            fun() -> routes_are_crash_free(Port) end},
-          {"an oversized body is refused",
-           fun() -> oversized_body_is_refused(Port) end},
+          {"large malformed bodies retain shape refusals",
+           fun() -> large_invalid_body_is_classified_by_shape(Port) end},
           {"a non-POST is refused",
            fun() -> method_is_enforced(Port) end},
           {"security headers are present",
@@ -339,19 +339,14 @@ routes_are_crash_free(Port) ->
                 end),
     ?assertEqual([], Crashes).
 
-%% `length` in cowboy_req:read_body/2 is a chunk hint, not a limit, so a body
-%% delivered in one piece arrives whole however large it is.
-oversized_body_is_refused(Port) ->
+%% Large malformed bodies reach shape validation without a duplicate quota.
+large_invalid_body_is_classified_by_shape(Port) ->
     {ok, Connection} = connect(Port),
     Body = <<"{\"public_key\":\"", (binary:copy(<<"A">>, 8192))/binary, "\"}">>,
-    ?assertMatch({413, _, _},
+    ?assertMatch({400, _, _},
                  quod_ct:https_request(Connection, post, "/api/auth/challenge", Body)),
-    %% Pin the independent, larger cap on the signed-goal route as well.  Raw
-    %% junk is intentional: body admission must happen before JSON decoding.
-    SignedGoalBody = binary:copy(
-                       <<"A">>, ?QUOD_CLIENT_GOAL_REQUEST_BYTES * 2),
-    ?assertMatch({413, _, _},
-                 quod_ct:https_request(Connection, post, "/api/goals/read", SignedGoalBody)),
+    ?assertMatch({400, _, _}, quod_ct:https_request(Connection, post,
+                 "/api/goals/read", binary:copy(<<"A">>, 600 * 1024))),
     close(Connection).
 
 method_is_enforced(Port) ->

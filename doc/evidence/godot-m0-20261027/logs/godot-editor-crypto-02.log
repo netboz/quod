@@ -1,0 +1,18 @@
+Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+
+PASS browser backup and public key
+PASS exact request UTF8 uint64 binary
+PASS Ed25519 request signature
+PASS exact request UTF8 uint64 binary
+PASS Ed25519 request signature
+PASS Ed25519 challenge signature
+PASS wrong passphrase refuses
+PASS damaged GCM refuses
+PASS OS secure randomness sampled
+PASS encrypted backup round trip
+PASS exact arbitrary integer text
+PASS exact arbitrary integer text
+PASS exact arbitrary integer text
+PASS Godot boundary uses exact text above int64
+CRYPTO_QUALIFIED dependency=BouncyCastle.Cryptography, Version=2.0.0.0, Culture=neutral, PublicKeyToken=072edcf4a5328938
+M0_PROBE_PASS

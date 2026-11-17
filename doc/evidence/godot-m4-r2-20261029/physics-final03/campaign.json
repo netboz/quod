@@ -1,0 +1,80 @@
+{
+  "server_command": [
+    "python3",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/serve.py",
+    "physics-final03-server",
+    "--stage",
+    "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+    "--profile",
+    "prod",
+    "--qualified",
+    "--physics"
+  ],
+  "passed": true,
+  "native_input": [
+    {
+      "command": [
+        "ydotool",
+        "key",
+        "17:1"
+      ],
+      "child_exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "owned_pid": 934866,
+      "before_pid": 934866,
+      "after_pid": 934866,
+      "target_geometry": null
+    },
+    {
+      "command": [
+        "ydotool",
+        "key",
+        "17:0"
+      ],
+      "child_exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "owned_pid": 934866,
+      "before_pid": 934866,
+      "after_pid": 934866,
+      "target_geometry": null
+    }
+  ],
+  "driver_inputs": {
+    "doc/evidence/godot-m4-r2-20261029/physics-campaign.py": "daf496ee59ab5bf7a7174315bb0df7b5b2086f5c906d599f78aa9e200d5c2813",
+    "client/godot-tests/desktop_input.py": "a632e4804a9226abab6aa4c00d7ead7d81cc58c4782987022cd7f4d9978f65cf"
+  },
+  "retained_drivers": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/inputs/physics-final03-drivers",
+  "endpoint": {
+    "port": 44115,
+    "physics": true,
+    "control_port": 39919,
+    "network": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACo"
+  },
+  "private_key_transfer": {
+    "command": [
+      "docker",
+      "cp",
+      "quod-m4-live-physics-final03-server:/m1b/viewer.json",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/physics-final03/viewer.json"
+    ],
+    "child_exit": 0
+  },
+  "client_command": [
+    "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final03/source/client/godot/dist/quod.x86_64",
+    "--display-driver",
+    "wayland",
+    "--",
+    "--qualification",
+    "--profile",
+    "/home/yan/.cache/quod-m4-r2-artifacts/private/physics-final03/identity"
+  ],
+  "executable_sha256": "d776f83ae09d82cfa1295fb3d70ad7ab8a77fe66a4cc4f9d42244fae3665d8cc",
+  "client_child_exit": 0,
+  "client_output_eof": true,
+  "final_input_release_exit": 0,
+  "server_child_exit": 0,
+  "server_output_eof": true,
+  "reader_errors": {}
+}

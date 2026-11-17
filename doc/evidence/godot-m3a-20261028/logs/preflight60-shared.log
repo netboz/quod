@@ -1,0 +1,12 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.15s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_physics_tests: -m3a_shared_component_test_/0-fun-49-...[9.257 s] ok
+quod_physics_tests: -m3a_shared_projection_test_/0-fun-25-...[6.980 s] ok
+quod_physics_tests: -root_body_appearance_frame_test_/0-fun-5-...[1.614 s] ok
+quod_lifecycle_single_path_tests: -default_lobby_physics_startup_test_/0-fun-30-...[6.736 s] ok
+=======================================================
+  All 4 tests passed.

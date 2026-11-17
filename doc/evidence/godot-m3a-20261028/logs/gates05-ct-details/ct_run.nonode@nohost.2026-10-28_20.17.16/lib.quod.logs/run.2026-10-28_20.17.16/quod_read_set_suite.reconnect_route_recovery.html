@@ -1,0 +1,257 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<title>Test quod_read_set_SUITE:reconnect_route_recovery result</title>
+<meta http-equiv="cache-control" content="no-cache"></meta>
+<meta http-equiv="content-type" content="text/html; charset=utf-8"></meta>
+<link rel="stylesheet" href="../../ct_default.css" type="text/css"></link>
+<script type="text/javascript" src="../../jquery-latest.js"></script>
+<script type="text/javascript" src="../../jquery-migrate.js"></script>
+<script type="text/javascript" src="../../jquery.tablesorter.min.js"></script>
+</head>
+<body>
+
+<a name="top"></a><pre>
+=== Test case: <a href="quod_read_set_suite.src.html#reconnect_route_recovery-1">quod_read_set_SUITE:reconnect_route_recovery/1</a> (click for source code)
+
+=== Config value:
+
+    [{watchdog,&lt;0.9814.0&gt;},
+     {tc_logfile,"/work/_build/test/logs/ct_run.nonode@nohost.2026-10-28_20.17.16/lib.quod.logs/run.2026-10-28_20.17.16/quod_read_set_suite.reconnect_route_recovery.html"},
+     {tc_group_properties,[{suite,quod_read_set_SUITE}]},
+     {tc_group_path,[]},
+     {data_dir,"/work/_build/test/lib/quod/test/quod_read_set_SUITE_data/"},
+     {priv_dir,"/work/_build/test/logs/ct_run.nonode@nohost.2026-10-28_20.17.16/lib.quod.logs/run.2026-10-28_20.17.16/log_private/"}]
+
+=== Current directory is "/work/_build/test/logs/ct_run.nonode@nohost.2026-10-28_20.17.16"
+
+=== Started at 2026-10-28 20:26:02
+
+<br />
+=SUPERVISOR REPORT==== 28-Oct-2026::20:26:04.328162 ===
+    supervisor: {local,httpd_acceptor_sup_14568default}
+    errorContext: start_error
+    reason: {listen,eaddrinuse}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor,start_link,
+                       [httpd_14568default,ip_comm,any,14568,inet,
+                        httpd_conf_14568default,15000]}},
+               {restart_type,transient},
+               {significant,false},
+               {shutdown,brutal_kill},
+               {child_type,worker}]
+
+
+=SUPERVISOR REPORT==== 28-Oct-2026::20:26:04.328510 ===
+    supervisor: {local,httpd_instance_sup_14568default}
+    errorContext: start_error
+    reason: {shutdown,
+                {failed_to_start_child,
+                    {httpd_acceptor_sup,any,14568,default},
+                    {listen,eaddrinuse}}}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor_sup,start_link,
+                       [[any,14568,
+                         [{ipfamily,inet},
+                          {bind_address,any},
+                          {modules,[prometheus_httpd]},
+                          {port,14568},
+                          {server_name,"Prometheus.io metrics."},
+                          {document_root,
+                              "/work/_build/default/lib/prometheus_httpd/priv"},
+                          {server_root,
+                              "/work/_build/default/lib/prometheus_httpd/priv"}],
+                         15000,undefined]]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,infinity},
+               {child_type,supervisor}]
+
+
+=WARNING REPORT==== 28-Oct-2026::20:26:04.329009 ===
+quod: prometheus_httpd start: {error,
+                               {{shutdown,
+                                 {failed_to_start_child,
+                                  {httpd_acceptor_sup,any,14568,default},
+                                  {shutdown,
+                                   {failed_to_start_child,
+                                    {httpd_acceptor_sup,any,14568,default},
+                                    {listen,eaddrinuse}}}}},
+                                {child,undefined,
+                                 {httpd_instance_sup,any,14568,default},
+                                 {httpd_instance_sup,start_link,
+                                  [[{bind_address,any},
+                                    {ipfamily,inet},
+                                    {modules,[prometheus_httpd]},
+                                    {port,14568},
+                                    {server_name,"Prometheus.io metrics."},
+                                    {document_root,
+                                     "/work/_build/default/lib/prometheus_httpd/priv"},
+                                    {server_root,
+                                     "/work/_build/default/lib/prometheus_httpd/priv"}],
+                                   15000,[]]},
+                                 permanent,false,infinity,supervisor,
+                                 [httpd_instance_sup]}}}
+
+=SUPERVISOR REPORT==== 28-Oct-2026::20:26:06.111140 ===
+    supervisor: {local,httpd_acceptor_sup_14568default}
+    errorContext: start_error
+    reason: {listen,eaddrinuse}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor,start_link,
+                       [httpd_14568default,ip_comm,any,14568,inet,
+                        httpd_conf_14568default,15000]}},
+               {restart_type,transient},
+               {significant,false},
+               {shutdown,brutal_kill},
+               {child_type,worker}]
+
+
+=SUPERVISOR REPORT==== 28-Oct-2026::20:26:06.111309 ===
+    supervisor: {local,httpd_instance_sup_14568default}
+    errorContext: start_error
+    reason: {shutdown,
+                {failed_to_start_child,
+                    {httpd_acceptor_sup,any,14568,default},
+                    {listen,eaddrinuse}}}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor_sup,start_link,
+                       [[any,14568,
+                         [{ipfamily,inet},
+                          {bind_address,any},
+                          {modules,[prometheus_httpd]},
+                          {port,14568},
+                          {server_name,"Prometheus.io metrics."},
+                          {document_root,
+                              "/work/_build/default/lib/prometheus_httpd/priv"},
+                          {server_root,
+                              "/work/_build/default/lib/prometheus_httpd/priv"}],
+                         15000,undefined]]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,infinity},
+               {child_type,supervisor}]
+
+
+=WARNING REPORT==== 28-Oct-2026::20:26:06.111547 ===
+quod: prometheus_httpd start: {error,
+                               {{shutdown,
+                                 {failed_to_start_child,
+                                  {httpd_acceptor_sup,any,14568,default},
+                                  {shutdown,
+                                   {failed_to_start_child,
+                                    {httpd_acceptor_sup,any,14568,default},
+                                    {listen,eaddrinuse}}}}},
+                                {child,undefined,
+                                 {httpd_instance_sup,any,14568,default},
+                                 {httpd_instance_sup,start_link,
+                                  [[{bind_address,any},
+                                    {ipfamily,inet},
+                                    {modules,[prometheus_httpd]},
+                                    {port,14568},
+                                    {server_name,"Prometheus.io metrics."},
+                                    {document_root,
+                                     "/work/_build/default/lib/prometheus_httpd/priv"},
+                                    {server_root,
+                                     "/work/_build/default/lib/prometheus_httpd/priv"}],
+                                   15000,[]]},
+                                 permanent,false,infinity,supervisor,
+                                 [httpd_instance_sup]}}}
+
+=SUPERVISOR REPORT==== 28-Oct-2026::20:26:08.338698 ===
+    supervisor: {local,httpd_acceptor_sup_14568default}
+    errorContext: start_error
+    reason: {listen,eaddrinuse}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor,start_link,
+                       [httpd_14568default,ip_comm,any,14568,inet,
+                        httpd_conf_14568default,15000]}},
+               {restart_type,transient},
+               {significant,false},
+               {shutdown,brutal_kill},
+               {child_type,worker}]
+
+
+=SUPERVISOR REPORT==== 28-Oct-2026::20:26:08.338932 ===
+    supervisor: {local,httpd_instance_sup_14568default}
+    errorContext: start_error
+    reason: {shutdown,
+                {failed_to_start_child,
+                    {httpd_acceptor_sup,any,14568,default},
+                    {listen,eaddrinuse}}}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor_sup,start_link,
+                       [[any,14568,
+                         [{ipfamily,inet},
+                          {bind_address,any},
+                          {modules,[prometheus_httpd]},
+                          {port,14568},
+                          {server_name,"Prometheus.io metrics."},
+                          {document_root,
+                              "/work/_build/default/lib/prometheus_httpd/priv"},
+                          {server_root,
+                              "/work/_build/default/lib/prometheus_httpd/priv"}],
+                         15000,undefined]]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,infinity},
+               {child_type,supervisor}]
+
+
+=WARNING REPORT==== 28-Oct-2026::20:26:08.339301 ===
+quod: prometheus_httpd start: {error,
+                               {{shutdown,
+                                 {failed_to_start_child,
+                                  {httpd_acceptor_sup,any,14568,default},
+                                  {shutdown,
+                                   {failed_to_start_child,
+                                    {httpd_acceptor_sup,any,14568,default},
+                                    {listen,eaddrinuse}}}}},
+                                {child,undefined,
+                                 {httpd_instance_sup,any,14568,default},
+                                 {httpd_instance_sup,start_link,
+                                  [[{bind_address,any},
+                                    {ipfamily,inet},
+                                    {modules,[prometheus_httpd]},
+                                    {port,14568},
+                                    {server_name,"Prometheus.io metrics."},
+                                    {document_root,
+                                     "/work/_build/default/lib/prometheus_httpd/priv"},
+                                    {server_root,
+                                     "/work/_build/default/lib/prometheus_httpd/priv"}],
+                                   15000,[]]},
+                                 permanent,false,infinity,supervisor,
+                                 [httpd_instance_sup]}}}
+
+<a name="end"></a>
+
+
+=== Ended at 2026-10-28 20:26:15
+=== successfully completed test case
+=== === Returned value: ok
+</pre>
+<center>
+<br /><hr /><p>
+<a href="../../../all_runs.html">Test run history
+</a>  |  <a href="../../../index.html">Top level test index
+</a>  |  <a href="../../../suite.log.latest.html">Latest test result</a>
+</p>
+<div class="copyright">Copyright &copy; 2026 <a href="http://www.erlang.org">Open Telecom Platform</a><br />
+Updated: <!--date-->Wed Oct 28 2026 20:26:02<!--/date--><br />
+</div>
+</center>
+</body>
+</html>

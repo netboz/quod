@@ -1,0 +1,5 @@
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj : error : Could not resolve SDK "Godot.NET.Sdk". Exactly one of the probing messages below indicates why we could not resolve the SDK. Investigate and resolve that message to correctly specify the SDK.
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj : error :   SDK resolver "Microsoft.DotNet.MSBuildWorkloadSdkResolver" returned null.
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj : error :   Unable to find package Godot.NET.Sdk. No packages exist with this id in source(s): nuget.org
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj : warning : Unable to load the service index for source https://api.nuget.org/v3/index.json.
+/home/yan/src/quod_worktrees/pearl-stone/client/godot/Quod.csproj : error MSB4236: The SDK 'Godot.NET.Sdk/4.7.2' specified could not be found.

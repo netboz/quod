@@ -1,0 +1,78 @@
+{
+  "private_originals": "/tmp/quod-m1a-private-logs-922c7c06-20261028-02",
+  "rule": "Completed M1a logs only; all numeric Erlang binaries of exactly32 or64 bytes, including public identifiers. Running CT output is untouched. Full originals retained externally with mode0600.",
+  "files": [
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/custody-and-parts-01.log",
+      "raw_sha256": "749c81374f6f26dacaccb977ef54cd04dbe6585e4d5b637532ad27dfbd0260aa",
+      "redacted_sha256": "88e1508f6328410050059273ce259efdd87f4244d94869f0f3e31e427e66fe2e",
+      "replacements": 74
+    },
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/focused-foundations-20.log",
+      "raw_sha256": "655e86ed64b7d28cea48c27cc61ac5045300edb2548662ab8017090d63430696",
+      "redacted_sha256": "80503332edfe4b8bdc6aedbbc55bde768ab9262890275c87630ab396f329fc34",
+      "replacements": 64
+    },
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/focused-foundations-21.log",
+      "raw_sha256": "0726128c00d952a3113aa764390dd7b18498dac5b9c5adffd257819f05e1905f",
+      "redacted_sha256": "2e50793a73bcd77842f5e595d8d0d8d71ba0abf011cdd929109d2713b78196e9",
+      "replacements": 64
+    },
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/focused-foundations-23.log",
+      "raw_sha256": "0b123852118a5b01f93fc0fb41235ad91c3c9ecf5f8626420932a45f2e926ab2",
+      "redacted_sha256": "53d017319de12d84909e30dd4de108da58b06cdc2926e8e6b58d950f0ea50db2",
+      "replacements": 64
+    },
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/gates-01-eunit.log",
+      "raw_sha256": "aff27c35419440e65dcf679b11138757bf878c91fd2ab31564baf824ee75473f",
+      "redacted_sha256": "c9d7456dc04249e74cdaa129012e9176dc04fc3c6635d51483f5eb5b5698f930",
+      "replacements": 686
+    },
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/gates-02-eunit.log",
+      "raw_sha256": "214d57f345f23e999bdce6c8689982eeed5bade0a1ba9afe0d53b2bdfc3fd216",
+      "redacted_sha256": "1ff715f785b1d3873e71cd39c626fded3cf0331019d4604d6840cf2835c7dc48",
+      "replacements": 685
+    },
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/physical-lifecycle-regressions-01.log",
+      "raw_sha256": "504a8c6326378261242257203503340e2db650202824222aec4cf3fb4a0e2a17",
+      "redacted_sha256": "beecea18551c72343ba505c37f51aeac234f7de74032e3c2fdae376cd6b72efc",
+      "replacements": 159
+    },
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/physical-lifecycle-regressions-02.log",
+      "raw_sha256": "155437fba6f5a2bcdf9f70860232488ab16d17fc8bcb225756a4780a78114ca9",
+      "redacted_sha256": "281dfd2b336a1556a12bb2f6ee85930f18d78d3715c8e8533d06f3fad3c96790",
+      "replacements": 169
+    },
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/semantic-owners-01.log",
+      "raw_sha256": "9c2085feac1f997dbde2951925a96217f8283a2c329061783457cde808225b1f",
+      "redacted_sha256": "b7261347cb5ff74dc850f1ed2ac347142ce445dccc57e4fbc6b173d3345d5013",
+      "replacements": 8278
+    },
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/semantic-owners-02.log",
+      "raw_sha256": "6b136901ec144f6ec07ee1863a2320f14e207f67b4f7e5507e3fc533792ca3cf",
+      "redacted_sha256": "68d619481f40cfabccf1a572e38954c707d188b793b02f85d3b85e8560ccf1f4",
+      "replacements": 68
+    },
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/semantic-owners-03.log",
+      "raw_sha256": "cdba8b99a0e45462574d9bd2833c99c707087c63ba3956b0c3a6e003ad86a7f4",
+      "redacted_sha256": "69cf11cddf3c131b0539b805e7e0e29ee5f2ad9e664ff4edb60d49590cdc3554",
+      "replacements": 4
+    },
+    {
+      "file": "doc/evidence/godot-m1a-20261027/logs/wrong-key-03.log",
+      "raw_sha256": "cb6890c71578f4bc590936a6aff424ac2be4fdf54e256718656f080f15157182",
+      "redacted_sha256": "af98f0af01c9b10137708c78e63b129902328e1d6cbc82f8bedfdc95ff246a37",
+      "replacements": 19
+    }
+  ]
+}

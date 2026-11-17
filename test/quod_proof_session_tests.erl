@@ -27,6 +27,55 @@ resumable_invocation_preserves_solution_order_test() ->
         quod_proof_session:stop(Session)
     end.
 
+computed_answers_do_not_echo_ground_inputs_test() ->
+    Input = binary:copy(<<"x">>, 45000),
+    Goal = {choice, Input, Input, {'X'}, {'X'}},
+    Session = quod_proof_session:start(committed([
+        {choice, Input, Input, first, first},
+        {choice, Input, Input, second, second}]), #{read_set => true}),
+    Invocation = invocation_id(1),
+    try
+        ok = quod_proof_session:open(Session, Invocation, Goal, allowed,
+                                    context(), empty_selection()),
+        lists:foreach(fun(Expected) ->
+            {solution, Answer} = quod_proof_session:next(Session, Invocation),
+            ?assert(erlang:external_size(Answer) < byte_size(Input)),
+            {ok, Bindings} = quod_ask:test_bind_answer(Goal, Answer),
+            ?assertEqual(Expected, erlog_int:dderef({'X'}, Bindings)),
+            ?assertEqual({ok, #{'X' => Expected}},
+                         quod_proof_session:bindings(Session, Invocation))
+        end, [first, second]),
+        ?assertMatch({complete, _}, quod_proof_session:next(Session, Invocation))
+    after quod_proof_session:stop(Session)
+    end.
+
+computed_answer_preserves_unbound_aliases_and_real_output_limit_test() ->
+    Large = binary:copy(<<"x">>, 80000),
+    Session = quod_proof_session:start(committed([
+        {material_limit_override, proof, answer_bytes, 1000},
+        {alias, {'A'}, {'A'}}, {output, Large}]),
+        #{read_set => true, proof_context => {origin, test}}),
+    try
+        AliasGoal = {alias, {'X'}, {'Y'}},
+        Alias = invocation_id(1),
+        ok = quod_proof_session:open(Session, Alias, AliasGoal, allowed,
+                                    context(), empty_selection()),
+        {solution, Answer} = quod_proof_session:next(Session, Alias),
+        {ok, Bindings} = quod_ask:test_bind_answer(AliasGoal, Answer),
+        X = erlog_int:dderef({'X'}, Bindings),
+        ?assertMatch({_}, X),
+        ?assertEqual(X, erlog_int:dderef({'Y'}, Bindings)),
+        Output = invocation_id(2),
+        ok = quod_proof_session:open(Session, Output, {output, {'Value'}},
+                                    allowed, context(), empty_selection()),
+        {ok, Bytes} = quod_wire_term:encode_canonical({output, Large}),
+        ?assertEqual({error, {material_limit, proof, answer_bytes, byte_size(Bytes), 1000}},
+                     quod_proof_session:next(Session, Output)),
+        ?assertEqual({error, unknown_invocation},
+                     quod_proof_session:bindings(Session, Output))
+    after quod_proof_session:stop(Session)
+    end.
+
 independent_intent_belongs_to_an_invocation_not_the_shared_revision_test() ->
     Session = quod_proof_session:start(
       quod_transaction_predicates:load(committed([])),
@@ -157,8 +206,8 @@ failed_branch_write_is_visible_to_its_next_alternative_test() ->
     try
         ok = quod_proof_session:open(
                Session, Invocation, Goal, allowed, context(), empty_selection()),
-        ?assertEqual(
-           {solution, Goal}, quod_proof_session:next(Session, Invocation)),
+        {solution, Answer} = quod_proof_session:next(Session, Invocation),
+        ?assertMatch({ok, _}, quod_ask:test_bind_answer(Goal, Answer)),
         ?assert(has_assert(
                   {retained, value},
                   quod_proof_session:local_changes(Session)))
@@ -322,7 +371,7 @@ run_first_keeps_existing_result_contract_test() ->
        quod_proof_session:run_first(
          {child, bob}, Est, #{read_set => true})).
 
-invocation_continuations_are_bounded_test() ->
+invocations_retain_distinct_lifetime_ids_test() ->
     Session = quod_proof_session:start(committed([]), #{}),
     try
         lists:foreach(
@@ -331,12 +380,12 @@ invocation_continuations_are_bounded_test() ->
                      Session, invocation_id(Id), true, allowed, context(),
                      empty_selection())
           end,
-          lists:seq(1, ?QUOD_MAX_INVOCATIONS_PER_SCOPE)),
+          lists:seq(1, 129)),
         ?assertEqual(
            {error,
-            {proof_limit_exceeded, <<"quod:session-test">>}},
+            {protocol_error, bad_binding}},
            quod_proof_session:open(
-             Session, invocation_id(65535), true, allowed, context(),
+             Session, invocation_id(1), true, allowed, context(),
              empty_selection()))
     after
         quod_proof_session:stop(Session)
@@ -555,7 +604,7 @@ committed_authorization_preserves_infrastructure_fences_test() ->
 close_proof_gate_2(Goal, Next, #est{bs = Bs} = St) ->
     {close_proof_gate, <<_:256>> = GroupId} = erlog_int:dderef(Goal, Bs),
     true = ets:insert(
-             'quod_simplex_genesis_quod:session-guard-test',
+             binary_to_atom(quod_simplex:genesis_table_name(<<"quod:session-guard-test">>), utf8),
              quod_ct:proof_gate_row(
                true, 7, [{GroupId, 1, 7}])),
     erlog_int:prove_body(Next, St).
@@ -563,7 +612,7 @@ close_proof_gate_2(Goal, Next, #est{bs = Bs} = St) ->
 close_policy_gate_4(_Goal, Next, St) ->
     GroupId = <<103:256>>,
     true = ets:insert(
-             'quod_simplex_genesis_quod:session-guard-test',
+             binary_to_atom(quod_simplex:genesis_table_name(<<"quod:session-guard-test">>), utf8),
              quod_ct:proof_gate_row(
                true, 7, [{GroupId, 1, 7}])),
     erlog_int:prove_body(Next, St).
@@ -623,7 +672,7 @@ with_policy_predicate(#est{db = Db} = Est) ->
 
 with_proof_gate(Fun) ->
     Namespace = <<"quod:session-guard-test">>,
-    Table = 'quod_simplex_genesis_quod:session-guard-test',
+    Table = binary_to_atom(quod_simplex:genesis_table_name(<<"quod:session-guard-test">>), utf8),
     Tab = ets:new(Table, [named_table, protected, set]),
     true = ets:insert(Tab, quod_ct:proof_gate_row(true, 7, [])),
     Access = {quod_proof_access, Namespace, self(), 7, <<251:256>>},

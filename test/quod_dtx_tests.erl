@@ -1,4 +1,5 @@
 -module(quod_dtx_tests).
+-include("retired_presentation_sizes.hrl").
 
 %% Slice-4 sealing: signed local plans, invocation transcripts, and the
 %% live-bridge gate (`m:quod_dtx`), driven through real proof sessions over a
@@ -10,7 +11,6 @@
 -include("quod_ledger.hrl").
 -include("quod_client_goal_limits.hrl").
 -include("quod_proof_limits.hrl").
--include("quod_vm_limits.hrl").
 
 -define(NS, <<"quod:dtx">>).
 
@@ -386,10 +386,10 @@ large_goal_seals_and_roundtrips_test() ->
         after quod_proof_session:stop(Session) end
     end).
 
-decode_is_bounded_and_shape_checked_test() ->
-    ?assertEqual({error, {too_large, plan}},
+decode_is_canonical_and_shape_checked_test() ->
+    ?assertEqual({error, {protocol_error, bad_payload}},
                  quod_dtx:decode(
-                   <<0:(?QUOD_MAX_PLAN_ENVELOPE_BYTES + 1)/unit:8>>)),
+                   <<0:(?LEGACY_MAX_PLAN_ENVELOPE_BYTES + 1)/unit:8>>)),
     ?assertMatch({error, {protocol_error, bad_payload}},
                  quod_dtx:decode(<<"not etf">>)),
     ?assertMatch({error, {protocol_error, bad_payload}},
@@ -656,7 +656,7 @@ overlay_separates_tokens_from_bridge_markers_test() ->
     quod_erlog_db_local_prove:cleanup_read_set(Wrapped1).
 
 %% ------------------------------------------------------------------
-%% transcript ordering, terminal tags, and the pre-run byte bound
+%% transcript ordering, terminal tags, and canonical goal/plan bounds
 %% ------------------------------------------------------------------
 
 transcript_orders_invocations_and_tags_terminals_test() ->
@@ -726,58 +726,66 @@ peer_ready_taint_is_exempt_only_for_membership_diff_test() ->
         quod_proof_session:stop(Membership)
     end.
 
-transcript_charge_is_taken_before_the_goal_runs_test() ->
+transcript_population_uses_the_complete_plan_envelope_test() ->
     Session = session([]),
+    Goal = {pad, binary:copy(<<$p>>, 6000)},
     try
-        %% Fill the transcript to exactly the limit, then show the next open
-        %% is refused at admission — the goal never runs, so nothing escapes
-        %% the transcript's accounting.
-        ok = fill_transcript_to_limit(Session, 0),
-        ?assertEqual({error, {too_large, transcript}},
-                     open(Session, <<3:128>>, pad_goal(0))),
-        %% The refused invocation does not exist afterwards.
-        ?assertEqual({error, unknown_invocation},
-                     quod_proof_session:next(Session, <<3:128>>))
+        %% A real session retains every invocation beyond the old component
+        %% quota; the complete sealed plan uses its pinned material policy.
+        [ok = open(Session, <<I:128>>, Goal) || I <- lists:seq(1, 65)],
+        {Entries, _} = quod_proof_session:transcript(Session),
+        ?assertEqual(65, length(Entries)),
+        ?assert(byte_size(wire_blob(Entries)) > 128 * 1024),
+        {_Read, {complete, _}} = first(Session, {missing, fact}),
+        {ok, Plan} = quod_dtx:seal_session(Session, bind()),
+        {ok, Encoded} = quod_dtx:encode(Plan),
+        {ok, Decoded} = quod_dtx:decode(Encoded),
+        {SealedEntries, _} = quod_proof_session:transcript(Session),
+        ?assertEqual(SealedEntries, quod_ct:plan_material(transcript, Decoded)),
+        %% Include a material read so admission examines the complete plan.
+        Extra = ?LEGACY_MAX_PLAN_ENVELOPE_BYTES div 6000 + 1,
+        [ok = open(Session, <<I:128>>, Goal) || I <- lists:seq(66, 65 + Extra)],
+        {ok, LargerPlan} = quod_dtx:seal_session(Session, bind()),
+        {ok, LargerBytes} = quod_dtx:encode(LargerPlan),
+        ?assert(byte_size(LargerBytes) > ?LEGACY_MAX_PLAN_ENVELOPE_BYTES),
+        ?assertEqual({ok, LargerPlan}, quod_dtx:decode(LargerBytes))
     after
         quod_proof_session:stop(Session)
     end.
 
-transcript_boundary_is_exact_test() ->
-    Boundary = fun(Slack) ->
-        Session = session([]),
-        try
-            fill_transcript_to_limit(Session, Slack)
-        after
-            quod_proof_session:stop(Session)
-        end
-    end,
-    ?assertEqual(ok, Boundary(0)),
-    ?assertEqual({error, {too_large, transcript}}, Boundary(1)).
+binary_heavy_nested_goal_uses_complete_plan_admission_test() ->
+    Session = session([]),
+    Value = binary:copy(<<$p>>,160000),
+    Goal = {assertz,{large_value,Value}},
+    try
+        {_Id,{solution,_}} = first(Session,Goal),
+        {ok,Plan} = quod_dtx:seal_session(Session,bind()),
+        {ok,Bytes} = quod_dtx:encode(Plan),
+        {ok,Decoded} = quod_dtx:decode(Bytes),
+        {Entries,_} = quod_proof_session:transcript(Session),
+        ?assertEqual(Entries,quod_ct:plan_material(transcript,Decoded)),
+        [{_,_,Blob,allowed,1,_,active}] = Entries,
+        ?assertEqual({ok,Goal},quod_wire_term:decode_canonical(Blob,?LEGACY_MAX_PLAN_ENVELOPE_BYTES))
+    after quod_proof_session:stop(Session) end.
 
-pad_goal(PadBytes) -> {pad, binary:copy(<<$p>>, PadBytes)}.
-
-fill_transcript_to_limit(Session, Slack) ->
-    Id1 = <<1:128>>,
-    Id2 = <<2:128>>,
-    FirstPad = 6000,
-    SecondPad = ?QUOD_MAX_SCOPE_TRANSCRIPT_BYTES
-        - charged_cost(Id1, pad_goal(FirstPad))
-        - charged_cost(Id2, pad_goal(0)) + Slack,
-    true = SecondPad >= 0,
-    ok = open(Session, Id1, pad_goal(FirstPad)),
-    open(Session, Id2, pad_goal(SecondPad)).
-
-%% Mirrors the session's charge: the entry's external size plus the fixed
-%% per-invocation slack for count, chained digest, and completion tag.
-charged_cost(Id, Goal) ->
-    Chain = quod_predicates:ctx_chain(ctx()),
-    GoalBin = wire_blob(Goal),
-    erlang:external_size({Id, Chain, GoalBin, allowed}) + 96.
+binary_heavy_cancel_and_malformed_goal_preserve_transcript_lifecycle_test() ->
+    Session = session([]), Id = <<3:128>>, BadId = <<4:128>>,
+    Goal = {pad,binary:copy(<<$p>>,160000)},
+    try
+        ?assertEqual({error,{protocol_error,bad_payload}},open(Session,BadId,{pad,self()})),
+        ?assertEqual({error,unknown_invocation},quod_proof_session:next(Session,BadId)),
+        ?assertEqual({[],0},quod_proof_session:transcript(Session)),
+        ok = open(Session,Id,Goal),
+        ok = quod_proof_session:cancel(Session,Id),
+        ?assertEqual({error,unknown_invocation},quod_proof_session:next(Session,Id)),
+        ?assertMatch({[{Id,_,_,allowed,0,_,cancelled}],_},quod_proof_session:transcript(Session)),
+        ?assertEqual([],quod_proof_session:local_changes(Session))
+    after quod_proof_session:stop(Session) end.
 
 denied_transcript_keeps_request_and_never_executes_it_test() ->
     Session = session([]),
     InvocationId = <<19:128>>,
-    RequestedGoal = {assertz, {must_not_run, true}},
+    RequestedGoal = {assertz, {must_not_run, binary:copy(<<$d>>,160000)}},
     try
         ok = quod_proof_session:open(
                Session, InvocationId, RequestedGoal, denied, ctx(),
@@ -934,13 +942,13 @@ failed_material_proof_aborts_without_sealing_test() ->
 %% Manifest and atomic control boundaries
 %% ------------------------------------------------------------------
 
-maximum_signed_request_is_preserved_by_transaction_and_vote_test() ->
+large_signed_request_is_preserved_by_transaction_and_vote_test() ->
     Goal = <<"assertz(saved(ok)).">>,
     GoalText =
         <<(binary:copy(
-             <<" ">>, ?QUOD_CLIENT_GOAL_TEXT_BYTES - byte_size(Goal)))/binary,
+             <<" ">>, 140 * 1024 - byte_size(Goal)))/binary,
           Goal/binary>>,
-    Ns = binary:copy(<<"n">>, ?DIRECTORY_MAX_NAMESPACE_BYTES),
+    Ns = binary:copy(<<"n">>, 1024),
     Target = {Ns, key(221)},
     Fixture = quod_ct:signed_atomic_fixture(
                 #{target => Target, goal_text => GoalText}),
@@ -959,8 +967,8 @@ maximum_signed_request_is_preserved_by_transaction_and_vote_test() ->
     ?assert(quod_atomic:requires_network_identity(Material)),
     ?assertMatch({ok, _}, quod_atomic:encode_record(Vote)),
     Request = maps:get(request, Fixture),
-    ?assertEqual(
-       {error, {too_large, goal_text}},
+    ?assertMatch(
+       {ok, _},
        quod_client_goal:encode(
          Request#{goal_text => <<GoalText/binary, " ">>})).
 
@@ -1592,7 +1600,7 @@ assert_symbols_absent(Names) ->
 
 with_proof_gate(Fun) ->
     Namespace = <<"quod:dtx-guard-test">>,
-    Table = 'quod_simplex_genesis_quod:dtx-guard-test',
+    Table = binary_to_atom(quod_simplex:genesis_table_name(<<"quod:dtx-guard-test">>), utf8),
     Tab = ets:new(Table, [named_table, protected, set]),
     true = ets:insert(Tab, quod_ct:proof_gate_row(true, 7, [])),
     Access = {quod_proof_access, Namespace, self(), 7, <<251:256>>},

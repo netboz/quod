@@ -1,0 +1,14 @@
+{
+  "test/quod_lobby_tests.erl": {
+    "before": "/data/quod-m4-vr-ca84d4f8-20261029/private/answer-policy-tests-before01/test/quod_lobby_tests.erl",
+    "sha256": "3bf6dacdddca35c13049dadfd35b3b551af38febd2d6acc454a94f5e3bfc48bb",
+    "mode": 33188,
+    "stat_key": [
+      66305,
+      32914543,
+      103553,
+      1793210701655172934,
+      1793210701655172934
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "command": [
+    "cat",
+    "/home/yan/.cache/quod-m3b-artifacts/private/quod-m3b-live-final-gui-final03-server/server-raw.log"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T02:35:47Z",
+  "elapsed_seconds": 0.002044200897216797,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/tmp/quod-m3b-8b352c53/private/logs/final-gui-final03-server-log.log",
+  "raw_sha256": "4e8a97480223f8668fc56d0d812f309247e9cce93d05b2dc16e11ee2286fa523",
+  "sanitized_sha256": "4e8a97480223f8668fc56d0d812f309247e9cce93d05b2dc16e11ee2286fa523",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

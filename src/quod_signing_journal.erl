@@ -53,14 +53,8 @@ accepts only the compact result of an already-validated history fold.
 -define(MAX_SLOT, 16#FFFFFFFFFFFFFFFF).
 -define(COMPACT_BYTES, (1024 * 1024)).
 
-%% Exact deterministic-ETF overhead of
-%% {quod_signing_pending_dtx,7,Admission,Author,MaxU64,Group,Body,Envelope}
-%% outside the two variable blobs.  The boundary therefore follows the shared
-%% DTX limits automatically instead of duplicating their current values.
--define(PENDING_WRAPPER_BYTES, 163).
--define(MAX_FRAME_PAYLOAD_BYTES,
-        max((?QUOD_MAX_DTX_BODY_BYTES + ?QUOD_MAX_DTX_CONTROL_BYTES +
-             ?PENDING_WRAPPER_BYTES), (?MAX_BLOCK_BYTES + 4096))).
+%% The journal frame has an unsigned 32-bit payload length.
+-define(FRAME_PAYLOAD_CAPACITY, ((1 bsl 32) - 1)).
 
 -type block_hash() :: <<_:256>>.
 -type final_vote() :: none | {commit, block_hash()} | complaint.
@@ -98,6 +92,7 @@ accepts only the compact result of an already-validated history fold.
 -spec initialize(binary(), <<_:256>>, file:filename_all()) -> {ok, handle()}.
 initialize(Ns, Domain, DataDir)
   when is_binary(Ns), is_binary(Domain), byte_size(Domain) =:= 32 ->
+    ok = quod_ledger_store:check_namespace_layout(DataDir, Ns),
     Dir = quod_ledger_store:ns_dir(DataDir, Ns),
     Path = journal_path(Dir),
     ok = quod_file:ensure_parent(Path),
@@ -125,6 +120,7 @@ initialize(_, _, _) ->
 -spec recover(binary(), <<_:256>>, file:filename_all()) -> {ok, handle()}.
 recover(Ns, Domain, DataDir)
   when is_binary(Ns), is_binary(Domain), byte_size(Domain) =:= 32 ->
+    ok = quod_ledger_store:check_namespace_layout(DataDir, Ns),
     Dir = quod_ledger_store:ns_dir(DataDir, Ns),
     Path = journal_path(Dir),
     case file:open(Path, [read, write, raw, binary]) of
@@ -504,8 +500,6 @@ control_material(Control) ->
             case valid_control_kind(Kind) andalso
                  valid_lane({Admission, Author}) andalso
                  valid_sequence(Sequence) andalso
-                 byte_size(Body) =< ?QUOD_MAX_DTX_BODY_BYTES andalso
-                 byte_size(Envelope) =< ?QUOD_MAX_DTX_CONTROL_BYTES andalso
                  quod_atomic:verify_control(Target, Control) of
                 true ->
                     {ok, Kind, {Admission, Author}, Sequence, Body, Envelope};
@@ -528,7 +522,7 @@ transaction_submission(
   when is_integer(Sequence), Sequence >= 1,
        is_binary(Author), byte_size(Author) =:= 32,
        is_binary(Signature), byte_size(Signature) =:= 64,
-       is_binary(Body), byte_size(Body) =< ?MAX_BLOCK_BYTES ->
+       is_binary(Body) ->
     Envelope = term_to_binary(Submission, [deterministic]),
     case {quod_transaction:verify_submission(Submission),
           Transaction#transaction.author =:= Author,
@@ -542,8 +536,8 @@ transaction_submission(_Transaction, _Submission) -> error.
 decoded_transaction(<<_:256>> = TxId, Sequence, State, Body, Envelope)
   when is_integer(Sequence), Sequence >= 1, Sequence =< ?MAX_SLOT,
        (State =:= dormant orelse State =:= bound orelse State =:= ready),
-       is_binary(Body), byte_size(Body) =< ?MAX_BLOCK_BYTES,
-       is_binary(Envelope), byte_size(Envelope) =< (?MAX_BLOCK_BYTES + 1024) ->
+       is_binary(Body),
+       is_binary(Envelope) ->
     try binary_to_term(Envelope, [safe]) of
         {submit, Author, Signature, Body} = Submission
           when is_binary(Author), byte_size(Author) =:= 32,
@@ -580,8 +574,7 @@ empty_round() -> #{support => none, final => none, block => none}.
 
 supported_block(#block{era = <<_:256>> = Era, slot = Slot, block_bytes = Bytes} = Block)
   when is_integer(Slot), Slot >= 1, Slot =< ?MAX_SLOT,
-       is_binary(Bytes),
-       byte_size(Bytes) =< ?QUOD_MAX_CANONICAL_BLOCK_BYTES ->
+       is_binary(Bytes) ->
     case quod_ledger:valid_block_view(Block) of
         true -> {ok, {Era, Slot}, crypto:hash(sha256, Bytes), Bytes};
         false -> error
@@ -703,8 +696,7 @@ read_current_frame(Fd, Offset, Mode, Header)
   when byte_size(Header) < ?HDR_BYTES ->
     torn_tail(Fd, Offset, Mode);
 read_current_frame(Fd, Offset, Mode,
-                   <<?MAGIC:32, Len:32, CRC:32>>)
-  when Len =< ?MAX_FRAME_PAYLOAD_BYTES ->
+                   <<?MAGIC:32, Len:32, CRC:32>>) ->
     case file:pread(Fd, Offset + ?HDR_BYTES, Len) of
         {ok, Payload} when byte_size(Payload) =:= Len ->
             case erlang:crc32(Payload) of
@@ -716,9 +708,6 @@ read_current_frame(Fd, Offset, Mode,
         {error, Reason} ->
             error({signing_journal_io_error, Offset, Reason})
     end;
-read_current_frame(_Fd, Offset, _Mode,
-                   <<?MAGIC:32, Len:32, _CRC:32>>) ->
-    error({signing_journal_corruption, {frame_too_big, Len}, Offset});
 read_current_frame(_Fd, Offset, _Mode, _Header) ->
     error({signing_journal_corruption, bad_magic, Offset}).
 
@@ -752,7 +741,7 @@ expected_domain(Expected, Actual) ->
     error({signing_journal_domain_mismatch, Actual, Expected}).
 
 decode_canonical(Payload, Offset) ->
-    case quod_safe_term:decode(Payload, ?MAX_FRAME_PAYLOAD_BYTES) of
+    case quod_safe_term:decode(Payload, ?FRAME_PAYLOAD_CAPACITY) of
         {ok, Term} ->
             case encode(Term) =:= Payload of
                 true -> Term;
@@ -859,8 +848,7 @@ apply_record(Other, _Rounds, _Floors, _Pending, _Effects, Offset) ->
 
 decoded_supported_block({<<_:256>> = Era, Slot} = Position, Bytes)
   when is_integer(Slot), Slot >= 1, Slot =< ?MAX_SLOT,
-       is_binary(Bytes),
-       byte_size(Bytes) =< ?QUOD_MAX_CANONICAL_BLOCK_BYTES ->
+       is_binary(Bytes) ->
     case quod_ledger:decode_block(Bytes) of
         {ok, #block{era = Era, slot = Slot} = Block} ->
             case supported_block(Block) of
@@ -895,8 +883,8 @@ valid_pending_successor(_Old, _New, Offset) ->
 
 decoded_pending(Lane, Sequence, GroupId, Body, Envelope, Offset)
   when is_binary(GroupId), byte_size(GroupId) =:= 32,
-       is_binary(Body), byte_size(Body) =< ?QUOD_MAX_DTX_BODY_BYTES,
-       is_binary(Envelope), byte_size(Envelope) =< ?QUOD_MAX_DTX_CONTROL_BYTES ->
+       is_binary(Body),
+       is_binary(Envelope) ->
     case quod_atomic:decode_control(Envelope) of
         {ok, Control} ->
             case control_material(Control) of
@@ -927,7 +915,7 @@ persist_mutation(Term, J = #journal{fd = Fd, offset = Offset}) ->
     end.
 
 frame(Payload) when is_binary(Payload),
-                    byte_size(Payload) =< ?MAX_FRAME_PAYLOAD_BYTES ->
+                    byte_size(Payload) =< ?FRAME_PAYLOAD_CAPACITY ->
     <<?MAGIC:32, (byte_size(Payload)):32,
       (erlang:crc32(Payload)):32, Payload/binary>>;
 frame(Payload) when is_binary(Payload) ->
@@ -949,8 +937,8 @@ valid_reconciliation(
     current_admissions := Admissions,
     pending_dtx := ValidatedPending} = Summary, PendingDtx)
   when map_size(Summary) =:= 4, is_map(Archived),
-       is_map(Live), map_size(Live) =< ?MAX_VALIDATORS,
-       is_map(Admissions), map_size(Admissions) =< ?MAX_VALIDATORS,
+       is_map(Live),
+       is_map(Admissions),
        is_map(ValidatedPending) ->
     case valid_archived_protocol(maps:to_list(Archived)) andalso
          valid_live_lanes(maps:to_list(Live)) andalso
@@ -1134,5 +1122,5 @@ temporary_path(Dir) -> filename:join(Dir, "signing.0001.new").
 
 -ifdef(TEST).
 test_frame(Payload) -> frame(Payload).
-test_max_frame_payload_bytes() -> ?MAX_FRAME_PAYLOAD_BYTES.
+test_max_frame_payload_bytes() -> ?FRAME_PAYLOAD_CAPACITY.
 -endif.

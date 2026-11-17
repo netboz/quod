@@ -1,0 +1,21 @@
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS actual authored row raster retained
+PASS explicit authored row retains interleaved action and field order
+PASS authored layout preserves exact local values
+PASS actual authored grid raster retained
+PASS explicit authored grid retains interleaved action and field order
+PASS the explicit grid uses its native grid container rather than a coincidentally vertical substitute
+PASS authored layout preserves exact local values
+PASS actual authored column raster retained
+PASS explicit authored column retains interleaved action and field order
+PASS authored layout preserves exact local values
+PASS actual authored implicit raster retained
+PASS explicit authored implicit retains interleaved action and field order
+PASS authored layout preserves exact local values
+GUI_USABILITY_PASS
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>

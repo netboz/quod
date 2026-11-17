@@ -1,0 +1,5 @@
+======================== EUnit ========================
+quod_controller_tests: -invalid_saved_preferences_offer_fenced_reset_test_/0-fun-11-...[10.070 s] ok
+=======================================================
+  Test passed.
+M0_CAPTURE_PASS requests=17 decoded_bindings=14

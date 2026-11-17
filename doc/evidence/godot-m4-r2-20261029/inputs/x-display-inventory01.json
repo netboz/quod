@@ -1,0 +1,14 @@
+[
+  {
+    "display": ":1",
+    "child_exit": 0,
+    "stdout": "Screen 0: minimum 16 x 16, current 5760 x 1080, maximum 32767 x 32767\nDP-1 connected 1920x1080+0+0 (normal left inverted right x axis y axis) 160mm x 90mm\n   1920x1080     59.96*+\n   1440x1080     59.99  \n   1400x1050     59.98  \n   1280x1024     59.89  \n   1280x960      59.94  \n   1152x864      59.96  \n   1024x768      59.92  \n   800x600       59.86  \n   640x480       59.38  \n   320x240       59.29  \n   1680x1050     59.95  \n   1440x900      59.89  \n   1280x800      59.81  \n   1152x720      59.97  \n   960x600       59.63  \n   928x580       59.88  \n   800x500       59.50  \n   768x480       59.90  \n   720x480       59.71  \n   640x400       59.95  \n   320x200       58.14  \n   1600x900      59.95  \n   1368x768      59.88  \n   1280x720      59.86  \n   1024x576      59.90  \n   864x486       59.92  \n   720x400       59.27  \n   640x350       59.28  \nDP-3 connected 1920x1080+1920+0 (normal left inverted right x axis y axis) 510mm x 290mm\n   1920x1080     59.96*+\n   1440x1080     59.99  \n   1400x1050     59.98  \n   1280x1024     59.89  \n   1280x960      59.94  \n   1152x864      59.96  \n   1024x768      59.92  \n   800x600       59.86  \n   640x480       59.38  \n   320x240       59.29  \n   1680x1050     59.95  \n   1440x900      59.89  \n   1280x800      59.81  \n   1152x720      59.97  \n   960x600       59.63  \n   928x580       59.88  \n   800x500       59.50  \n   768x480       59.90  \n   720x480       59.71  \n   640x400       59.95  \n   320x200       58.14  \n   1600x900      59.95  \n   1368x768      59.88  \n   1280x720      59.86  \n   1024x576      59.90  \n   864x486       59.92  \n   720x400       59.27  \n   640x350       59.28  \nDP-2 connected 1920x1080+3840+0 (normal left inverted right x axis y axis) 1060mm x 600mm\n   1920x1080     59.88*+\n   1440x1080     59.87  \n   1400x1050     59.86  \n   1280x1024     59.76  \n   1280x960      59.79  \n   1152x864      59.78  \n   1024x768      59.68  \n   800x600       59.86  \n   640x480       59.38  \n   320x240       59.29  \n   1680x1050     59.85  \n   1440x900      59.89  \n   1280x800      59.81  \n   1152x720      59.75  \n   960x600       59.63  \n   928x580       59.88  \n   800x500       59.50  \n   768x480       59.38  \n   720x480       59.71  \n   640x400       59.20  \n   320x200       58.14  \n   1600x900      59.82  \n   1368x768      59.88  \n   1280x720      59.86  \n   1024x576      59.90  \n   864x486       59.45  \n   720x400       59.27  \n   640x350       59.28  \n",
+    "stderr": "WARNING: running xrandr against an Xwayland server. See the xrandr man page for details.\n"
+  },
+  {
+    "display": ":0",
+    "child_exit": 1,
+    "stdout": "",
+    "stderr": "Authorization required, but no authorization protocol specified\n\nCan't open display :0\n"
+  }
+]

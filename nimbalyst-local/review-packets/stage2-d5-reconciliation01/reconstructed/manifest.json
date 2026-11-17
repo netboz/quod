@@ -1,0 +1,257 @@
+{
+  "client/godot/Core/Eidolons.cs": {
+    "sha256": "32d9962d715d4fbcf79e271730822df72a298d8340161f71a39f87b956be835b",
+    "bytes": 2034,
+    "mode": 420
+  },
+  "client/godot/Core/Scene.cs": {
+    "sha256": "51854d7c4229f1854286e0c05a8bc421803b0ba1e607c75c726d7a44cfc3f008",
+    "bytes": 5815,
+    "mode": 420
+  },
+  "client/godot/Core/SignedView.cs": {
+    "sha256": "db5588da9961b6ff5630d31379cd806c496a1cc8289d50f531ad45bced22c39f",
+    "bytes": 7600,
+    "mode": 420
+  },
+  "client/godot/Core/World.cs": {
+    "sha256": "7e49eeb8a694f534aaf4edb14e996890f1971ea18f00f47545e6518f66c23f57",
+    "bytes": 11801,
+    "mode": 420
+  },
+  "client/godot/Main.cs": {
+    "sha256": "a635f30437c8a89be912185d542b4f1ce95f2b7cba651e864ed0a36642e18502",
+    "bytes": 48605,
+    "mode": 420
+  },
+  "client/godot/ScenePanel.cs": {
+    "sha256": "6b27234967e1ced1fed31a76afca1b6b37ecbfe088fa4b987669de39c8a059b2",
+    "bytes": 26336,
+    "mode": 420
+  },
+  "client/godot/tests/NavigationChecks.cs": {
+    "sha256": "fb84f3758c386373d46c016fbbed5174785d0aa6188d887390edbda4ea56b3e1",
+    "bytes": 16729,
+    "mode": 420
+  },
+  "client/godot/tests/PhysicsChecks.cs": {
+    "sha256": "76102f6c4682398805e3aef2f0e64d5bfb6897e7c425c543c8ed7cafb0789d28",
+    "bytes": 18382,
+    "mode": 420
+  },
+  "doc/evidence/godot-m3b-20261029/failure-dispositions.md": {
+    "sha256": "883b9b49432cf38ef90b7d3ef8015bf28e591b3cf52810e4c8344cb2a4400de2",
+    "bytes": 8383,
+    "mode": 420
+  },
+  "doc/evidence/godot-m3b-20261029/final-navigation-final03/m3-final-result.json": {
+    "sha256": "457305c787e3e7860b791519a18c979bda24af08215337ceff00563766719720",
+    "bytes": 4140,
+    "mode": 420
+  },
+  "doc/evidence/godot-m3b-20261029/final-navigation-final03/m3-left-result.json": {
+    "sha256": "05af2d9309e8bbf24885063c98b8b2309d5e9bee5f0251dff4e9d073d551d987",
+    "bytes": 4481,
+    "mode": 420
+  },
+  "doc/evidence/godot-m3b-20261029/final-navigation-final03/phases.json": {
+    "sha256": "0ec92e45cfa0248c5e1e09d82630d14d2ac7f7ac3cee1283a4ab79b972f94384",
+    "bytes": 4194,
+    "mode": 420
+  },
+  "doc/evidence/godot-m3b-20261029/final-navigation-final03/recursive-scene.png.work.json": {
+    "sha256": "c2ad30c2440140cbf01a3b8352fd5923e05f218cbdaa04bce60ad4e15a5600ea",
+    "bytes": 383,
+    "mode": 420
+  },
+  "doc/evidence/godot-m3b-20261029/physics-final03/client-result.json": {
+    "sha256": "6b5445579810cadf8f540cb3994f9151bfb6c047837f04777260e368f82de640",
+    "bytes": 13556,
+    "mode": 420
+  },
+  "doc/evidence/godot-m3b-20261029/physics-final03/client-result.json.renewals.json": {
+    "sha256": "7e7a4a4e7acd143f228518cf23b557b6b65b1013513256061050d8644c85c7a0",
+    "bytes": 466,
+    "mode": 420
+  },
+  "doc/evidence/godot-m3b-20261029/qualification.json": {
+    "sha256": "961489ea91527e06b828ed393603ac2132eb7d68a68a4089422ab3619bea912c",
+    "bytes": 9528,
+    "mode": 420
+  },
+  "doc/evidence/godot-space-stage2-20261031/failure-disposition.md": {
+    "sha256": "b2b7a7c1b6b5e522acdc16dd4efec7d022aa8b8309ad0addcf137b6d1807eee1",
+    "bytes": 6481,
+    "mode": 420
+  },
+  "doc/evidence/godot-space-stage2-20261031/result.json": {
+    "sha256": "48b12f1cb9153937182a2a6104b89aa4e153c9eaf2f2b6d03d78cc3cca7bc48b",
+    "bytes": 357210,
+    "mode": 384
+  },
+  "doc/evidence/godot-space-stage2-20261031/stage2-final01-headless/result.json": {
+    "sha256": "2cb951d6ebec08e65a013d83a61580725f33d020390764e0b94234d61ad8f14a",
+    "bytes": 17197,
+    "mode": 384
+  },
+  "doc/evidence/godot-space-stage2-20261031/stage2-final03-contents/result.json": {
+    "sha256": "6ae16b8999611d5d06fcb40e985814d24b56d0c9f210839692e43b2f5dee27bb",
+    "bytes": 4838,
+    "mode": 384
+  },
+  "doc/evidence/stage2-d5-reconciliation-20261103/audit-result.json": {
+    "sha256": "bb3d09f82fab2468800004a034040388d9e4dee0fcde86a306155c9c21671904",
+    "bytes": 13112,
+    "mode": 420
+  },
+  "doc/evidence/stage2-d5-reconciliation-20261103/audit.py": {
+    "sha256": "a173abb0aad594995c1d98bac8d461f44a493ec99ff9ef377b02edbf09d25d47",
+    "bytes": 5224,
+    "mode": 420
+  },
+  "doc/evidence/stage2-d5-reconciliation-20261103/audit01-result.json": {
+    "sha256": "c1a8255731f5e7be54e439b839c07535934f5e1df9ad14636e32f51520445f4a",
+    "bytes": 365,
+    "mode": 420
+  },
+  "doc/evidence/stage2-d5-reconciliation-20261103/audit01-stderr.log": {
+    "sha256": "c96e8210e59e7bbd9e1c23823dc849657f70cc0970381a442c960bae63fad4c8",
+    "bytes": 400,
+    "mode": 420
+  },
+  "doc/evidence/stage2-d5-reconciliation-20261103/audit01-stdout.log": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "mode": 420
+  },
+  "doc/evidence/stage2-d5-reconciliation-20261103/audit02-result.json": {
+    "sha256": "4698c3e44280bf5d7059f0f5b50ff1a035ba6b43a7124f014509d8c46504157d",
+    "bytes": 163,
+    "mode": 420
+  },
+  "doc/evidence/stage2-d5-reconciliation-20261103/audit02-stderr.log": {
+    "sha256": "c6e03b458301ebbe80d64f75a1fa656617e747846793833c890b95f876a32d4a",
+    "bytes": 994,
+    "mode": 420
+  },
+  "doc/evidence/stage2-d5-reconciliation-20261103/audit02-stdout.log": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "mode": 420
+  },
+  "doc/evidence/stage2-d5-reconciliation-20261103/audit03-result.json": {
+    "sha256": "665e0d8fe6d0af47fe6cd0ed53ca9e82568d28f80b8f6346c7159ffbb6850666",
+    "bytes": 163,
+    "mode": 420
+  },
+  "doc/evidence/stage2-d5-reconciliation-20261103/audit03-stderr.log": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "mode": 420
+  },
+  "doc/evidence/stage2-d5-reconciliation-20261103/audit03-stdout.log": {
+    "sha256": "2d9bbc614a7ad61cb36b0e0b563d782f0476dd72fa664c5e84c7a11c9dd2a0e0",
+    "bytes": 147,
+    "mode": 420
+  },
+  "doc/evidence/stage2-d5-reconciliation-20261103/before/audit01.py": {
+    "sha256": "554e723a68938f186e68c6e7d50bfcf2b36898f4c2b4ffeda7c980f53c18ff5c",
+    "bytes": 5139,
+    "mode": 420
+  },
+  "doc/evidence/stage2-d5-reconciliation-20261103/before/audit02.py": {
+    "sha256": "30142a528f6557639439e173547e6d532c995a808dcacf345a35426a250b263d",
+    "bytes": 5225,
+    "mode": 420
+  },
+  "doc/evidence/stage2-d5-reconciliation-20261103/before/space-conceptual-architecture-review.md": {
+    "sha256": "71625b198911f23608790a1bf448425d4b332dd5b871dbd1b451556c2fc1daea",
+    "bytes": 120875,
+    "mode": 420
+  },
+  "doc/evidence/stage2-d5-reconciliation-20261103/failure-disposition.md": {
+    "sha256": "770278271275297e15061633995b4f0b32f3f1b9e8596efdcc16e232c27779cf",
+    "bytes": 768,
+    "mode": 420
+  },
+  "doc/evidence/stage2-d5-reconciliation-20261103/freeze.py": {
+    "sha256": "b50847e9005e73be148e7f02cd089c05f16e9e61075942dd96af447c7aa8e3cc",
+    "bytes": 3730,
+    "mode": 420
+  },
+  "doc/evidence/stage2-d5-reconciliation-20261103/inherited-index.patch": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "mode": 420
+  },
+  "doc/evidence/stage2-d5-reconciliation-20261103/inherited-source.json": {
+    "sha256": "78d964ddad4f000c43dce888f71860fc90c149a739c0f983f5d23faff41d133e",
+    "bytes": 124474,
+    "mode": 420
+  },
+  "doc/evidence/stage2-d5-reconciliation-20261103/inherited-tracked.patch": {
+    "sha256": "1d4422a9031f508982424d75abaed4ba5df2b602ba1978d33a8ac6d2d5276796",
+    "bytes": 379986,
+    "mode": 420
+  },
+  "doc/evidence/stage2-d5-reconciliation-20261103/tracker-metadata-result.json": {
+    "sha256": "3d7e01b37571fd2c307732568985b56e65a80d1ef9182e32a2c984321c81c009",
+    "bytes": 649,
+    "mode": 420
+  },
+  "nimbalyst-local/handoffs/stage2-d5-reconciliation-20261103.md": {
+    "sha256": "f328ff2184cb919252d7c146fe5e5c77ad691d363ad54eb77eda20ef5e4ded77",
+    "bytes": 7611,
+    "mode": 420
+  },
+  "nimbalyst-local/plans/space-conceptual-architecture-review.md": {
+    "sha256": "368ad1184108d177b51d94dd3fd6807cc99f0a36f98b6abb080ad2874f2291ae",
+    "bytes": 122704,
+    "mode": 420
+  },
+  "priv/ontologies/common_predicates.pl": {
+    "sha256": "65a0d8dc83009939603d7875249d0826d1540652303773df9f970623a9a6dba2",
+    "bytes": 26362,
+    "mode": 420
+  },
+  "priv/ontologies/gui_scene.pl": {
+    "sha256": "ff972d8136bc4355c985b232c6ee21ff7f44c3c1484a089aab976e4c7ccfa617",
+    "bytes": 25320,
+    "mode": 420
+  },
+  "priv/ontologies/quod_physics.pl": {
+    "sha256": "b24718fe4ee6f8c7aff9644dc3580d36cb2963e08cb936a3af0b119d0af7c439",
+    "bytes": 59455,
+    "mode": 420
+  },
+  "priv/ontologies/quod_space.pl": {
+    "sha256": "1253476fcfbe135bb92d2c3266b6a4d62e59849e969c5ed96fd02dba6b9abff2",
+    "bytes": 33326,
+    "mode": 420
+  },
+  "src/quod_client_view.erl": {
+    "sha256": "1126cf38dc14600a2fc3736c5fb20715af233e5450febe7839857984242ed5ec",
+    "bytes": 52939,
+    "mode": 420
+  },
+  "src/quod_physics.erl": {
+    "sha256": "6d7c32892a3c61a213cf57543de849527de2a0d3db61878b40b3d52c55d43b44",
+    "bytes": 79687,
+    "mode": 420
+  },
+  "src/quod_physics_frames.erl": {
+    "sha256": "9fca5aa05c60b5ae11e49c595e3ebfe5151a2d5599566611e90fc64695be3332",
+    "bytes": 2366,
+    "mode": 420
+  },
+  "src/quod_runtime.erl": {
+    "sha256": "2c55f13ef0171ad3a6b998ffb8f666b24cf905d34c6c3b2725b162e8d965d779",
+    "bytes": 174037,
+    "mode": 420
+  },
+  "test/quod_physics_tests.erl": {
+    "sha256": "2d1edb8aef277e4a2d2b233ad73f6e310e504ea9355a833f81b7f93c4ab4d282",
+    "bytes": 402001,
+    "mode": 420
+  }
+}

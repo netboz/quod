@@ -1,0 +1,180 @@
+{
+  "command": [
+    "docker",
+    "run",
+    "--rm",
+    "-i",
+    "--init",
+    "--user",
+    "1000:1000",
+    "--network",
+    "host",
+    "--name",
+    "quod-m4-live-gui-signed17-server",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source:/work:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone:/code:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101:/evidence:ro",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-gui-signed17-server:/m1b",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-gui-signed17-server/tmp:/tmp",
+    "-w",
+    "/work",
+    "-e",
+    "QUOD_M3B_PRIVATE=/m1b",
+    "-e",
+    "ERL_FLAGS=+S 4:4 +SDio 2 +SDcpu 2",
+    "--entrypoint",
+    "/bin/sh",
+    "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+    "-c",
+    "exec erl -noshell -pa /work/_build/test/checkouts/*/ebin /work/_build/test/lib/*/ebin /work/_build/test/lib/quod/test -eval \"$1\"",
+    "sh",
+    "\n{ok,quod_lifecycle_single_path_tests}=compile:file(\"/m1b/quod_lifecycle_single_path_tests.erl\",[export_all,{outdir,\"/m1b/ebin\"},{i,\"/work/include\"}]),\n{ok,quod_physics_tests}=compile:file(\"/work/test/quod_physics_tests.erl\",[export_all,{outdir,\"/m1b/ebin\"},{i,\"/work/include\"}]),\n{ok,godot_m3b_fixture}=compile:file(\"/m1b/godot_m3b_fixture.erl\",[{outdir,\"/m1b/ebin\"}]),\ntrue=code:add_patha(\"/m1b/ebin\"),godot_m3b_fixture:start(),halt().\n"
+  ],
+  "stage": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source",
+  "profile": "test",
+  "clean_source_binding": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source-manifest.json",
+    "sha256": "a248a8c3df61c80d248af8762e0fe4cf3fd5c6e6f7ad50540c1e1f33f65cd869",
+    "image": "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+    "compiled_application_inputs_copied": false
+  },
+  "runtime_recompiled": false,
+  "executed_current_sources": {
+    "src/quod_material_admission.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/gui-signed17-server-quod_material_admission.erl",
+      "sha256": "ceef0436b16a5127d6e6ae30b60897470084b12cf7ecf28255608eed0753ce2a",
+      "compiled_object": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source/_build/test/lib/quod/ebin/quod_material_admission.beam",
+        "sha256": "1ced9a9336083dd4c62ee8bfebfc0ee3978c616458861c91394c28c6b58131b5",
+        "bytes": 6952
+      }
+    },
+    "src/quod_proof_session.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/gui-signed17-server-quod_proof_session.erl",
+      "sha256": "ee606a6fb1ef4c8e4fb5f59464c637a6ed42509034e67ba5c5a702a54d5c56a8",
+      "compiled_object": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source/_build/test/lib/quod/ebin/quod_proof_session.beam",
+        "sha256": "f54d55524101d44265048eeb477d25af0b53c36ceb144db087de69ab302c85f8",
+        "bytes": 44572
+      }
+    },
+    "src/quod_scope_session.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/gui-signed17-server-quod_scope_session.erl",
+      "sha256": "d743d77e2d9cc5eb17b725b6cdc54a4de99e0f01f086abc7805e789ee34b77d9",
+      "compiled_object": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source/_build/test/lib/quod/ebin/quod_scope_session.beam",
+        "sha256": "b108826f39b3a813e8c3a2f3126bebe76bba951c8a6801532632fd9853b4b30f",
+        "bytes": 82156
+      }
+    },
+    "src/quod_scope_wire.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/gui-signed17-server-quod_scope_wire.erl",
+      "sha256": "1a1273770b1a713616e06704e9969ca0f14cd7d294147720c6ddd00ae298e472",
+      "compiled_object": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source/_build/test/lib/quod/ebin/quod_scope_wire.beam",
+        "sha256": "10090cbe9e38213d33a0d23377e623853596f1fdca7de812fc96133c717a937e",
+        "bytes": 45076
+      }
+    },
+    "src/predicates/quod_ask.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/gui-signed17-server-quod_ask.erl",
+      "sha256": "e8eff6a298a631db396c7b84024e9edd57f25f32dd22f571440424bf9cac8b06",
+      "compiled_object": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source/_build/test/lib/quod/ebin/quod_ask.beam",
+        "sha256": "956f437c5918b3b340216443a42b576ad030e3da1c0de7a389e710d29b2603bf",
+        "bytes": 90100
+      }
+    },
+    "src/quod_wire_term.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/gui-signed17-server-quod_wire_term.erl",
+      "sha256": "693a2613a8e79c79094810c7777df846fd2b393d076809fb43faf5b989f2f5ff",
+      "compiled_object": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source/_build/test/lib/quod/ebin/quod_wire_term.beam",
+        "sha256": "ad069a6e52a47f1b592df723e02e810e9067dd438e82f0adee42a6e354033895",
+        "bytes": 32932
+      }
+    },
+    "src/quod_client_view.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/gui-signed17-server-quod_client_view.erl",
+      "sha256": "6a68ed523ab1575428a3f472ce43b104f6fd63e09e48d7a6728221a3c9580a2c",
+      "compiled_object": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source/_build/test/lib/quod/ebin/quod_client_view.beam",
+        "sha256": "75096163252d304d068d6312de44f91a95dfdee6da278f7ec413597dfc56ec2d",
+        "bytes": 78940
+      }
+    },
+    "src/quod_ontology_name.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/gui-signed17-server-quod_ontology_name.erl",
+      "sha256": "bade11fb98953f68ffaf63cd29f599189692c52b32ab943b8597bda2e87e6e9f",
+      "compiled_object": {
+        "path": "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source/_build/test/lib/quod/ebin/quod_ontology_name.beam",
+        "sha256": "d771eb3cc986035004489969e1cb2cbc9c8e4c887b4fd6949f51692687e491df",
+        "bytes": 2700
+      }
+    },
+    "priv/ontologies/material_policy.pl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/gui-signed17-server-material_policy.pl",
+      "sha256": "ad07dc60e23a47f7d55a81aecbeee528cfe3d00dc96b89b08463e33816706169"
+    },
+    "priv/ontologies/common_predicates.pl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/gui-signed17-server-common_predicates.pl",
+      "sha256": "48dba94f659bfd0cd9662764cba224f719c8350c76d4874ca3f28de0a58b7f50"
+    },
+    "priv/ontologies/quod_space.pl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/gui-signed17-server-quod_space.pl",
+      "sha256": "2fd737f7e949bb931ea36ce24ebb12823e8184fd05cdd6b04e27c6b2ad569c38"
+    },
+    "priv/ontologies/gui_tools.pl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/gui-signed17-server-gui_tools.pl",
+      "sha256": "54e497c546088f20becc8bfbb434ab54843924b3ec9d30a428d1ca817ab9f39a"
+    }
+  },
+  "worker_session": "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
+  "factory_adapter": {
+    "original_sha256": "749de71b7c5278fd2924854d5104528e2b038904a9744255abfadcff4d15d8a9",
+    "adapted_sha256": "8472844cfeb12bd0798b1e36561cf8615326c233c467126fcf36eb04083ee22b",
+    "exact_replacements": [
+      {
+        "before": "_ = file:del_dir_r(Dir),\n    ok.",
+        "after": "ok.",
+        "reason": "Preserve private disposable fixture storage after stopping all owners; never include its credentials in source snapshots."
+      }
+    ]
+  },
+  "driver_sources": {
+    "serve.py": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/gui-signed17-server-serve.py",
+      "sha256": "74f27e34f2afa1fe1cc69dfa2e5e970401685203abc8de8b17bfb8f79f089a19"
+    },
+    "godot_m3b_fixture.erl": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/gui-signed17-server-godot_m3b_fixture.erl",
+      "sha256": "bdb10e1a18d12574a7a2a491e46b84e21c436b636adaed0cebb4adbb89c84a69"
+    },
+    "godot_m3b_physics_fixture.erl": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/gui-signed17-server-godot_m3b_physics_fixture.erl",
+      "sha256": "443dcc79943d9e235ddfc9556061225b3348d15cf3757501fc895a5de3e05425"
+    }
+  },
+  "private_raw_log": "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-gui-signed17-server/server-raw.log",
+  "child_exit": 0,
+  "elapsed_seconds": 50.56438955999329,
+  "affected_compiled_outputs": {
+    "ebin/godot_m3b_fixture.beam": {
+      "sha256": "13831803937b9e533ac82ab5c6500b6df98e56c0bca430fad140952c71823fe7",
+      "bytes": 12040
+    },
+    "ebin/quod_lifecycle_single_path_tests.beam": {
+      "sha256": "c4dc31e1020803798e499e81a42358aab4bcb6338a4230f32731e1724eb47c2b",
+      "bytes": 213336
+    },
+    "ebin/quod_physics_tests.beam": {
+      "sha256": "bd3b75efeb67ea39d246cca912be64dfad6398ac32c17d9220dc8ab87e6ab98d",
+      "bytes": 484204
+    }
+  }
+}

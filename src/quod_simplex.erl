@@ -129,7 +129,8 @@ Historical open-work and hardware acceptance records are in `doc/outdated/deferr
 -export([init/1, callback_mode/0, running/3, terminate/3]).
 
 -ifdef(TEST).
--export([apply_operation_projection/3, await_operation_recovery/5,
+-export([genesis_table_name/1, buffer_frame/2,
+         apply_operation_projection/3, await_operation_recovery/5,
          cancel_operation_waiter/4,
          finish_operation_target_result/5, install_operation_snapshot/2,
          drop_operation_recovery_owner/4, drop_operation_waiter/3,
@@ -740,8 +741,8 @@ sanitize_cert_bounded(Domain, C, K, {Era, Sl} = Position, BH, Sigs, Validators, 
     end.
 
 %% Validator lists come from authenticated history but still cross untrusted
-%% replay/catch-up boundaries. Count only through the shared limit so an
-%% oversized or improper list is rejected before signer traversal or crypto.
+%% replay/catch-up boundaries. The shared committee owner rejects improper
+%% lists and supplies the actual population for quorum and signer checks.
 bounded_validator_count(Validators) ->
     quod_quorum:committee_size(Validators).
 
@@ -998,7 +999,6 @@ eng_retained_block(Slot, Eng = #eng{block_slots = Slots}) ->
           batch_window_ms => 25,        %% per-ontology micro-batch collection window
           data_dir     => undefined}).
 
--define(MAX_OUTBOX, 1024).   %% per-peer cap on frames buffered while a link opens (bounds memory vs a dead peer)
 -define(TICK_MS,     300).   %% consensus re-drive cadence: re-dial peers whose link never came up (liveness)
 -define(DIAL_TIMEOUT_MS, 15000).  %% presume a dial lost if neither link_up nor link_error arrives within this
 -define(LINK_CLOSE_TIMEOUT_MS, 500). %% graceful incarnation boundary: allow the ordered link FIFO to drain,
@@ -1329,7 +1329,6 @@ eng_retained_block(Slot, Eng = #eng{block_slots = Slots}) ->
             r_stale    = 0 :: non_neg_integer(),    %% author sequence superseded (stale_seq — retryable,
                                                     %% NOT malformed; keeping it out of r_bad keeps the
                                                     %% "malformed workload" alarm honest)
-            ingress_overflow  = 0 :: non_neg_integer(),  %% parks refused: queue item/byte/per-author bound hit
             ingress_expired   = 0 :: non_neg_integer(),  %% parked items cut by ?INGRESS_TTL_MS
             ingress_forwarded = 0 :: non_neg_integer(),  %% drained items routed onward after state moved
             ingress_retargets = 0 :: non_neg_integer(),  %% exact signed submissions placed again after local exclusion
@@ -1439,6 +1438,7 @@ test_install_projection(Projection, S) ->
 test_state_projection(S) ->
     state_projection(S).
 test_restore_storage(Ns, Cfg, Self) ->
+    ok = quod_ledger_store:preflight_namespace(Ns, Cfg),
     {ok, Store} = quod_ledger_store:open(Ns, quod_ledger_store:ledger_dir(Cfg)),
     try restore_storage(#s{ns = Ns, self = Self, store = Store}, Cfg) of
         {S, Anchor, Journal} ->
@@ -3188,7 +3188,7 @@ call(Ns, Req, Default) ->
 %% table name, which fails closed while the namespace is down or being initialized.
 genesis_table(Ns) -> binary_to_atom(genesis_table_name(Ns), utf8).
 
-genesis_table_name(Ns) -> <<"quod_simplex_genesis_", Ns/binary>>.
+genesis_table_name(Ns) -> <<"quod_simplex_genesis_", (quod_ledger_store:namespace_key(Ns))/binary>>.
 
 %%%===================================================================
 %%% init
@@ -3206,6 +3206,7 @@ init({Ns, Config}) ->
     end.
 
 init_store(Ns, Cfg, Id) ->
+    ok = quod_ledger_store:preflight_namespace(Ns, Cfg),
     {ok, Store} = quod_ledger_store:open(Ns, quod_ledger_store:ledger_dir(Cfg)),
     Chan = term_to_binary({log, Ns}, [deterministic]),   %% the committee's consensus channel
     RelayChan = term_to_binary({ingress, Ns}, [deterministic]),
@@ -4660,7 +4661,6 @@ enqueue_dtx_intent(_From, EnginePid, IntentId, Material, GroupRef, DeadlineMs, S
                     Owned = admission_state(S),
                     project_pending_votes(S#s.ns, Journal),
                     {ok, S#s{dtx_admission = Owned#dtx_admission{waiting = Rows}}};
-                {false, {error, busy}} -> {error, busy};
                 _ -> {error, invalid_dtx_intent}
             end;
         {false, _, _, _} -> {error, stale_engine};
@@ -4716,7 +4716,6 @@ admit_owned_vote(Material = {Record, _, _}, Waiter, S0) ->
                     {ok, Registry} = quod_dtx_owner:attach_waiter(Digest, Waiter, S0#s.retained_dtx),
                     {ok, schedule_dtx_drive(S0#s{retained_dtx = Registry})};
                 [] ->
-                    Prior = admission_state(S0),
                     %% A duplicate cannot replace durable missing/bound
                     %% preparation permission with peer-supplied own material.
                     Pending = pending_votes_snapshot(S0#s.signing_journal),
@@ -4724,17 +4723,10 @@ admit_owned_vote(Material = {Record, _, _}, Waiter, S0) ->
                         {ok, #{material := Saved}} -> Saved;
                         error -> Material
                     end,
-                    case maps:is_key(Id, Pending) orelse
-                         quod_atomic_admission:has_capacity(Id, Prior#dtx_admission.waiting) of
-                        false -> {error, busy};
-                        true ->
-                            %% Rejected admissions install no monitor or other
-                            %% side effect which their unchanged state would lose.
-                            S = refresh_dtx_admission_engine(S0), A = admission_state(S),
-                            Rows = quod_atomic_admission:admit(
-                                     Chosen, Waiter, quod_trace:context(), A#dtx_admission.waiting),
-                            {ok, schedule_dtx_drive(S#s{dtx_admission = A#dtx_admission{waiting = Rows}})}
-                    end
+                    S = refresh_dtx_admission_engine(S0), A = admission_state(S),
+                    Rows = quod_atomic_admission:admit(
+                             Chosen, Waiter, quod_trace:context(), A#dtx_admission.waiting),
+                    {ok, schedule_dtx_drive(S#s{dtx_admission = A#dtx_admission{waiting = Rows}})}
             end;
         error -> {error, invalid_dtx_submission}
     end.
@@ -5971,7 +5963,6 @@ start_dtx_endpoint_operation(_Peer, Destination,
                     {Delivered, Actions} = deliver_dtx_endpoint_response(
                         Destination, {presented, RequestId, GroupId}, [], Next),
                     {ok, Delivered, Actions};
-                {error, busy} = Busy -> Busy;
                 {error, _} -> {error, not_ready}
             end;
         error -> {error, invalid_request}
@@ -7063,8 +7054,7 @@ applied_evidence_committee(
   Target,
   #{identity := Target, committee := Committee,
     committee_id := <<_:256>> = CommitteeId})
-  when is_list(Committee), Committee =/= [],
-       length(Committee) =< ?MAX_VALIDATORS ->
+  when is_list(Committee), Committee =/= [] ->
     case quod_quorum:committee_size(Committee) of
         {ok, N} when N =:= length(Committee) -> {ok, Committee, CommitteeId};
         _ -> error
@@ -8493,40 +8483,26 @@ sign_local_change(#transaction{}, _InitialState, _S) ->
 
 reject_append(From, bad_change, S) ->
     reply_now(From, {error, bad_change}, S#s{r_bad = S#s.r_bad + 1});
-reject_append(From, too_large, S) ->
-    reply_now(From, {error, too_large}, S#s{r_bad = S#s.r_bad + 1});
 reject_append(From, stale_seq, S) ->   %% a newer sequence became approved first; retryable by contract,
                                        %% so it counts as r_stale, NEVER as r_bad — r_bad is
                                        %% the "malformed workload" alarm and must stay quiet
                                        %% for a locally confirmed sequence race
-    reply_now(From, {error, stale_seq}, S#s{r_stale = S#s.r_stale + 1});
-reject_append(From, busy, S) ->
-    reply_now(From, {error, busy}, S#s{r_busy = S#s.r_busy + 1}).
+    reply_now(From, {error, stale_seq}, S#s{r_stale = S#s.r_stale + 1}).
 
 %%%===================================================================
 %%% ingress park queue — take a ticket, drain on the pipeline's own events
 %%%===================================================================
 
-%% Park one append at the queue tail. Overflow of any bound is the real backpressure
-%% boundary. Custody and relay maps have independent bounds.
+%% Park one append at the queue tail; the existing owner retains FIFO demand.
 park_ingress(Origin, Cause, Waiter, Request, Anchor,
              S = #s{ingress = Ingress}) ->
-    case quod_ingress_state:enqueue(
-           Origin, Waiter, Request, Anchor, Ingress) of
-        full ->
-            {S1, Actions} = reject_append(Waiter, busy, S),
-            {S1#s{ingress_overflow = S1#s.ingress_overflow + 1}, Actions};
-        {ok, Depth, Ingress1} ->
-            _ = quod_trace:add_event(
-                  waiter_trace_ctx(Waiter), <<"consensus.parked">>,
-                  #{'quod.ingress.depth' => Depth,
-                    'quod.ingress.cause' => Cause}),
-            S1 = S#s{ingress = Ingress1},
-            %% Parked demand arms the head watchdog constructively: every park is a
-            %% claim that the pipeline floor must move, so register it as demand
-            %% instead of relying on the park cause to coincide with head evidence.
-            {watch_requested((S1#s.eng)#eng.view, S1), []}
-    end.
+    {ok, Depth, Ingress1} = quod_ingress_state:enqueue(
+                            Origin, Waiter, Request, Anchor, Ingress),
+    _ = quod_trace:add_event(
+          waiter_trace_ctx(Waiter), <<"consensus.parked">>,
+          #{'quod.ingress.depth' => Depth, 'quod.ingress.cause' => Cause}),
+    S1 = S#s{ingress = Ingress1},
+    {watch_requested((S1#s.eng)#eng.view, S1), []}.
 
 %% Retained signed work drains before unsigned ingress. The ordered ready set
 %% contains only origin-local submissions whose exact prior slot is durably
@@ -9055,7 +9031,7 @@ material_window_open(Parent, S) ->
 live_protocol_view(View, #eng{base = Base, view = Current}) ->
     View > Base andalso View =< Current + 1.
 
-%% Capacity and membership gating live in `quod_ingress_state` — inadmissible
+%% Membership and FIFO gating live in `quod_ingress_state` — inadmissible
 %% work parks rather than rejecting. Only CONTENT verdicts remain here: a sequence below
 %% the floor is `stale_seq` (retryable — newer approved history won first, while the
 %% content remains valid), and a duplicate tx_id is `bad_change` (terminal).
@@ -9415,7 +9391,7 @@ dtx_wave_candidate(#dtx_submission{control = Control, selection = Selection} = R
             {ParentHeight, _} = protocol_parent_material(Parent, S),
             {ok, Block} = quod_ledger:new_block({Era, View}, Parent, ParentHeight + 1, Payload, Timestamp),
             Required = [Hint || Hint = {{applied, _, _}, _} <- dtx_wave_validation_sidecar(Wave)],
-            byte_size(encode(Ns, {propose, Block, Required})) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES
+            byte_size(encode(Ns, {propose, Block, Required})) =< ?QUOD_LINK_PAYLOAD_CAPACITY
                 andalso {ok, NextProjection, Block};
         {error, _} -> false
     end.
@@ -9545,10 +9521,9 @@ reject_collected_batch(Items, Count, S) ->
     S1#s{collecting = none, r_bad = S1#s.r_bad + Count}.
 
 encoded_change_size(Change) ->
-    case quod_transaction:encode_ledger_transaction(Change) of
-        {ok, Blob} -> byte_size(Blob);
-        {error, _} -> ?MAX_BLOCK_BYTES + 1
-    end.
+    %% Collection is reached only with a canonically validated transaction.
+    {ok, Blob} = quod_transaction:encode_ledger_transaction(Change),
+    byte_size(Blob).
 
 consensus_barrier(S) ->
     consensus_barrier(S, include_retained_dtx).
@@ -10629,7 +10604,7 @@ well_formed_block_payload(Pl) ->
 
 encoded_block_payload_fits(Payload) ->
     case quod_ledger:encoded_payload_size(Payload) of
-        {ok, Bytes} -> Bytes =< ?MAX_BLOCK_BYTES;
+        {ok, _Bytes} -> true;
         error -> false
     end.
 well_formed_share(#share{kind = K, slot = Sl, block_hash = BH, signer = Sg, sig = Sig}) ->
@@ -11951,8 +11926,9 @@ send_protocol_evidence(Peer, {Era, View, Finalized},
         {Link, _Ref} ->
             Missing = lists:sort([{V, Kind, Cert} || {{Kind, V, _}, Cert} <- maps:to_list(Certs),
                                   V > Finalized, V =< View + 1]),
-            [_ = quod_link:send_ordered(Link, encode(S#s.ns, {cert, Cert}))
-             || {_V, _Kind, Cert} <- Missing],
+            lists:foreach(fun({_V, _Kind, Cert}) ->
+                quod_link:send_ordered(Link, encode(S#s.ns, {cert, Cert}))
+            end, Missing),
             S;
         undefined -> S
     end;
@@ -12762,7 +12738,6 @@ valid_genesis_identity(
         andalso genesis_predicate_manifest(Genesis) =/= error
         andalso Removes =:= []
         andalso Adds =/= []
-        andalso length(Adds) =< ?MAX_VALIDATORS
         andalso Author =:= lists:min(Adds)
         andalso founding_set_matches(ExpectedFounders, Adds);
 valid_genesis_identity(
@@ -12891,13 +12866,9 @@ valid_target_transaction_id(_Target, _Change) -> false.
 
 nonempty_binary(Value) -> is_binary(Value) andalso byte_size(Value) > 0.
 
-%% Does a diff touch the committee (any `peer_admitted` assert/retract)? Hostile diffs can hold ANY
-%% term as an element — the catch-all keeps the scan total.
+%% Include definition removal in the same committee mutation gate.
 touches_committee(Diff) ->
-    lists:any(fun({K, {{peer_admitted, _, _, _, _}, _}})
-                    when K =:= assert; K =:= asserta; K =:= retract -> true;
-                 (_)                                      -> false
-              end, Diff).
+    quod_diff:touches_functor(Diff, {peer_admitted, 4}).
 
 %% The membership gate — PURE (no KB access; the KB `can_join` re-proof is the deferred support in
 %% `support_or_validate/2`): a
@@ -12923,7 +12894,7 @@ membership_diff_acceptable(Diff, Validators) ->
         false -> false;
         true ->
             Next = apply_membership_diff(Diff, Validators),
-            Next =/= [] andalso length(Next) =< ?MAX_VALIDATORS
+            Next =/= []
     end.
         %% False for >1 op, mixed content, malformed heads, Id =/= Pk,
         %% non-binary keys, and a transition that would empty the committee.
@@ -13069,10 +13040,10 @@ send_readiness(Peer, Frame, S = #s{chan = Chan, conns = Conns, dialing = Dialing
 
 buffer_frame(Frame, Frames) ->
     %% Periodic vote redrive must leave one recoverable copy for a disconnected peer,
-    %% not fill the bounded outbox with the same signed bytes every tick.
+    %% not fill the outbox with the same signed bytes every tick.
     case lists:member(Frame, Frames) of
         true  -> Frames;
-        false -> lists:sublist([Frame | Frames], ?MAX_OUTBOX)
+        false -> [Frame | Frames]
     end.
 
 %% Re-drive (tick): re-dial every peer with buffered frames but no live link and no dial in flight — the
@@ -13381,7 +13352,7 @@ encode(Ns, Msg) ->
 %% shared transport frame; exceeding it is therefore an internal format error.
 fit_consensus_validation_sidecar(Ns, MakeMessage, ValidationSidecar) ->
     Frame = encode(Ns, MakeMessage(ValidationSidecar)),
-    case byte_size(Frame) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES of
+    case byte_size(Frame) =< ?QUOD_LINK_PAYLOAD_CAPACITY of
         true -> ValidationSidecar;
         false when ValidationSidecar =/= [] ->
             case drop_optional_entry_hint(ValidationSidecar) of
@@ -15413,11 +15384,7 @@ valid_committee(Cfg) ->
         L ->
             case proper_list(L) andalso lists:all(fun valid_member/1, L) of
                 true ->
-                    Count = length(founding(Cfg, maps:get(node_id, Cfg))),
-                    case Count =< ?MAX_VALIDATORS of
-                        true  -> valid_mode(Cfg);
-                        false -> {error, {committee_too_large, Count}}
-                    end;
+                    valid_mode(Cfg);
                 false -> {error, {bad_committee, L}}   %% a malformed element ⇒ fail-fast
             end
     end.
@@ -15537,7 +15504,6 @@ stats_map(S) ->
       r_busy => S#s.r_busy, r_redirect => S#s.r_redirect, r_bad => S#s.r_bad,
       r_stale => S#s.r_stale,
       ingress_queued => IngressQueued,
-      ingress_overflow => S#s.ingress_overflow,
       ingress_expired => S#s.ingress_expired,
       ingress_forwarded => S#s.ingress_forwarded,
       custody_depth => map_size(S#s.custody),

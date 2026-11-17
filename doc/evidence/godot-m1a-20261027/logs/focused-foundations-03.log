@@ -1,0 +1,218 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.24s
+===> Analyzing applications...
+===> Compiling quod
+      \x{250C}\x{2500} src/quod_physics.erl:
+      \x{2502}
+ 1192 \x{2502}      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      \x{2502}                                                               \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} src/quod_physics.erl:
+      \x{2502}
+ 1192 \x{2502}      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      \x{2502}                                                                   \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} src/quod_physics.erl:
+      \x{2502}
+ 1192 \x{2502}      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      \x{2502}                                                                       \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+    \x{250C}\x{2500} test/quod_physics_coordinates_tests.erl:
+    \x{2502}
+ 28 \x{2502}      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    \x{2502}                               \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    \x{250C}\x{2500} test/quod_physics_coordinates_tests.erl:
+    \x{2502}
+ 28 \x{2502}      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    \x{2502}                                   \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    \x{250C}\x{2500} test/quod_physics_coordinates_tests.erl:
+    \x{2502}
+ 28 \x{2502}      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    \x{2502}                                       \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+      \x{250C}\x{2500} test/quod_physics_tests.erl:
+      \x{2502}
+ 1042 \x{2502}              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+      \x{2502}                                                \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} test/quod_physics_tests.erl:
+      \x{2502}
+ 1667 \x{2502}          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      \x{2502}                                   \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} test/quod_physics_tests.erl:
+      \x{2502}
+ 1667 \x{2502}          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      \x{2502}                                         \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+[0;31mF[0m
+Failures:
+
+  1) quod_lifecycle_single_path_tests:-m1a_seven_foundations_test_/0-fun-15-/0
+[0;31m     Failure/Error: {error,
+                     {badmatch,
+                      {ok,
+                       #{request =>
+                          #{mode => execute,
+                            agent_namespace => <<"quod:user">>,
+                            agent_genesis_anchor =>
+                             <<REDACTED_DISPOSABLE_BINARY_32>>,
+                            not_after_ms => 1793135391141,parser_version => 2,
+                            network_identity =>
+                             <<REDACTED_DISPOSABLE_BINARY_32>>,
+                            operation_id =>
+                             <<REDACTED_DISPOSABLE_BINARY_32>>,
+                            signing_public_key =>
+                             <<REDACTED_DISPOSABLE_BINARY_32>>,
+                            agent_instance_text =>
+                             <<"'\\x73\\\\x69\\\\x67\\\\x6E\\\\x75\\\\x70\\'(<<\"\\xEA\\\\x1B\\\\x53\\\\x80\\\\x13\\\\x75\\\\xFC\\\\xE5\\\\x52\\\\x2\\\\xF\\\\xAD\\\\xDD\\\\x73\\\\x19\\\\x53\\\\x6F\\\\xAA\\\\x1\\\\xDE\\\\x8F\\\\xD0\\\\x58\\\\xE6\\\\xA2\\\\x3E\\\\xFC\\\\xF7\\\\xB9\\\\x13\\\\x52\\\\xD4\\\">>).">>,
+                            goal_text =>
+                             <<"'\\x73\\\\x69\\\\x67\\\\x6E\\\\x75\\\\x70\\'(<<\"\\x9D\\\\xB1\\\\x39\\\\x92\\\\xF\\\\x4\\\\x75\\\\x37\\\\x43\\\\x33\\\\xD1\\\\xA\\\\x17\\\\xF3\\\\xAD\\\\x6B\\\\x65\\\\xA7\\\\x61\\\\x4B\\\\xB7\\\\x67\\\\xD3\\\\x45\\\\x7A\\\\xA6\\\\xD2\\\\x4F\\\\x9E\\\\xB7\\\\x68\\\\x7F\\\">>,<<\"\\x68\\\\x75\\\\x6D\\\\x61\\\\x6E\\\\x3A\\\\x6E\\\\x62\\\\x45\\\\x35\\\\x6B\\\\x67\\\\x38\\\\x45\\\\x64\\\\x54\\\\x64\\\\x44\\\\x4D\\\\x39\\\\x45\\\\x4B\\\\x46\\\\x5F\\\\x4F\\\\x74\\\\x61\\\\x32\\\\x57\\\\x6E\\\\x59\\\\x55\\\\x75\\\\x33\\\\x5A\\\\x39\\\\x4E\\\\x46\\\\x65\\\\x71\\\\x62\\\\x53\\\\x54\\\\x35\\\\x36\\\\x33\\\\x61\\\\x48\\\\x38\\\">>,V0).">>},
+                         signature =>
+                          <<REDACTED_DISPOSABLE_BINARY_64>>,
+                         request_digest =>
+                          <<REDACTED_DISPOSABLE_BINARY_32>>,
+                         request_bytes =>
+                          <<113,117,111,100,46,97,103,101,110,116,46,103,111,
+                            97,108,46,118,49,0,244,25,68,96,88,109,121,24,99,
+                            162,5,166,157,181,117,56,47,20,50,53,2,199,169,72,
+                            135,112,242,7,248,235,17,142,234,27,83,128,19,117,
+                            252,229,82,2,15,173,221,115,25,83,111,170,1,222,
+                            143,208,88,230,162,62,252,247,185,19,82,212,10,11,
+                            76,107,187,40,49,172,62,255,7,214,102,219,59,127,
+                            92,87,67,81,178,106,78,239,40,176,107,133,191,249,
+                            57,157,0,9,113,117,111,100,58,117,115,101,114,33,
+                            75,8,222,89,119,152,204,50,167,224,19,248,27,156,
+                            161,238,224,32,8,243,242,67,112,68,23,7,34,78,82,
+                            83,167,0,0,0,198,39,92,120,55,51,92,92,120,54,57,
+                            92,92,120,54,55,92,92,120,54,69,92,92,120,55,53,92,
+                            92,120,55,48,92,39,40,60,60,34,92,120,69,65,92,92,
+                            120,49,66,92,92,120,53,51,92,92,120,56,48,92,92,
+                            120,49,51,92,92,120,55,53,92,92,120,70,67,92,92,
+                            120,69,53,92,92,120,53,50,92,92,120,50,92,92,120,
+                            70,92,92,120,65,68,92,92,120,68,68,92,92,120,55,51,
+                            92,92,120,49,57,92,92,120,53,51,92,92,120,54,70,92,
+                            92,120,65,65,92,92,120,49,92,92,120,68,69,92,92,
+                            120,56,70,92,92,120,68,48,92,92,120,53,56,92,92,
+                            120,69,54,92,92,120,65,50,92,92,120,51,69,92,92,
+                            120,70,67,92,92,120,70,55,92,92,120,66,57,92,92,
+                            120,49,51,92,92,120,53,50,92,92,120,68,52,92,34,62,
+                            62,41,46,1,2,0,0,1,161,127,50,177,165,0,0,1,197,39,
+                            92,120,55,51,92,92,120,54,57,92,92,120,54,55,92,92,
+                            120,54,69,92,92,120,55,53,92,92,120,55,48,92,39,40,
+                            60,60,34,92,120,57,68,92,92,120,66,49,92,92,120,51,
+                            57,92,92,120,57,50,92,92,120,70,92,92,120,52,92,92,
+                            120,55,53,92,92,120,51,55,92,92,120,52,51,92,92,
+                            120,51,51,92,92,120,68,49,92,92,120,65,92,92,120,
+                            49,55,92,92,120,70,51,92,92,120,65,68,92,92,120,54,
+                            66,92,92,120,54,53,92,92,120,65,55,92,92,120,54,49,
+                            92,92,120,52,66,92,92,120,66,55,92,92,120,54,55,92,
+                            92,120,68,51,92,92,120,52,53,92,92,120,55,65,92,92,
+                            120,65,54,92,92,120,68,50,92,92,120,52,70,92,92,
+                            120,57,69,92,92,120,66,55,92,92,120,54,56,92,92,
+                            120,55,70,92,34,62,62,44,60,60,34,92,120,54,56,92,
+                            92,120,55,53,92,92,120,54,68,92,92,120,54,49,92,92,
+                            120,54,69,92,92,120,51,65,92,92,120,54,69,92,92,
+                            120,54,50,92,92,120,52,53,92,92,120,51,53,92,92,
+                            120,54,66,92,92,120,54,55,92,92,120,51,56,92,92,
+                            120,52,53,92,92,120,54,52,92,92,120,53,52,92,92,
+                            120,54,52,92,92,120,52,52,92,92,120,52,68,92,92,
+                            120,51,57,92,92,120,52,53,92,92,120,52,66,92,92,
+                            120,52,54,92,92,120,53,70,92,92,120,52,70,92,92,
+                            120,55,52,92,92,120,54,49,92,92,120,51,50,92,92,
+                            120,53,55,92,92,120,54,69,92,92,120,53,57,92,92,
+                            120,53,53,92,92,120,55,53,92,92,120,51,51,92,92,
+                            120,53,65,92,92,120,51,57,92,92,120,52,69,92,92,
+                            120,52,54,92,92,120,54,53,92,92,120,55,49,92,92,
+                            120,54,50,92,92,120,53,51,92,92,120,53,52,92,92,
+                            120,51,53,92,92,120,51,54,92,92,120,51,51,92,92,
+                            120,54,49,92,92,120,52,56,92,92,120,51,56,92,34,62,
+                            62,44,86,48,41,46>>,
+                         variables => [{<<"V0">>,0}],
+                         goal =>
+                          {{'$quod_symbol',<<"signup">>},
+                           <<REDACTED_DISPOSABLE_BINARY_32>>,
+                           <<"human:nbE5kg8EdTdDM9EKF_Ota2WnYUu3Z9NFeqbST563aH8">>,
+                           {0}},
+                         operation_ref =>
+                          {operation,<<"quod:user">>,
+                           <<REDACTED_DISPOSABLE_BINARY_32>>,
+                           <<131,104,2,97,4,108,0,0,0,4,104,2,97,0,109,0,0,0,
+                             18,97,103,101,110,116,95,105,110,115,116,97,110,
+                             99,101,95,114,101,102,104,2,97,1,109,0,0,0,9,113,
+                             117,111,100,58,117,115,101,114,104,2,97,1,109,0,0,
+                             0,32,33,75,8,222,89,119,152,204,50,167,224,19,248,
+                             27,156,161,238,224,32,8,243,242,67,112,68,23,7,34,
+                             78,82,83,167,104,2,97,4,108,0,0,0,2,104,2,97,0,
+                             109,0,0,0,6,115,105,103,110,117,112,104,2,97,1,
+                             109,0,0,0,32,234,27,83,128,19,117,252,229,82,2,15,
+                             173,221,115,25,83,111,170,1,222,143,208,88,230,
+                             162,62,252,247,185,19,82,212,106,106>>,
+                           <<REDACTED_DISPOSABLE_BINARY_32>>},
+                         goal_blob =>
+                          <<131,104,2,97,4,108,0,0,0,4,104,2,97,0,109,0,0,0,6,
+                            115,105,103,110,117,112,104,2,97,1,109,0,0,0,32,
+                            157,177,57,146,15,4,117,55,67,51,209,10,23,243,173,
+                            107,101,167,97,75,183,103,211,69,122,166,210,79,
+                            158,183,104,127,104,2,97,1,109,0,0,0,49,104,117,
+                            109,97,110,58,110,98,69,53,107,103,56,69,100,84,
+                            100,68,77,57,69,75,70,95,79,116,97,50,87,110,89,85,
+                            117,51,90,57,78,70,101,113,98,83,84,53,54,51,97,72,
+                            56,104,2,97,4,108,0,0,0,1,104,2,97,2,97,0,106,106>>,
+                         agent_ref_blob =>
+                          <<131,104,2,97,4,108,0,0,0,4,104,2,97,0,109,0,0,0,
+                            18,97,103,101,110,116,95,105,110,115,116,97,110,
+                            99,101,95,114,101,102,104,2,97,1,109,0,0,0,9,113,
+                            117,111,100,58,117,115,101,114,104,2,97,1,109,0,0,
+                            0,32,33,75,8,222,89,119,152,204,50,167,224,19,248,
+                            27,156,161,238,224,32,8,243,242,67,112,68,23,7,34,
+                            78,82,83,167,104,2,97,4,108,0,0,0,2,104,2,97,0,
+                            109,0,0,0,6,115,105,103,110,117,112,104,2,97,1,
+                            109,0,0,0,32,234,27,83,128,19,117,252,229,82,2,15,
+                            173,221,115,25,83,111,170,1,222,143,208,88,230,
+                            162,62,252,247,185,19,82,212,106,106>>},
+                       {normalized,{error,proof_unavailable}}}},
+                     [{quod_lifecycle_single_path_tests,m1a_signup,3,
+                       [{file,
+                         "/work/test/quod_lifecycle_single_path_tests.erl"},
+                        {line,517}]},
+                      {quod_lifecycle_single_path_tests,
+                       '-m1a_seven_foundations_test_/0-lc$^7/1-3-',4,
+                       [{file,
+                         "/work/test/quod_lifecycle_single_path_tests.erl"},
+                        {line,474}]},
+                      {quod_lifecycle_single_path_tests,
+                       '-m1a_seven_foundations_test_/0-fun-15-',0,
+                       [{file,
+                         "/work/test/quod_lifecycle_single_path_tests.erl"},
+                        {line,474}]},
+                      {eunit_test,run_testfun,1,
+                       [{file,"eunit_test.erl"},{line,83}]},
+                      {eunit_proc,run_test,1,
+                       [{file,"eunit_proc.erl"},{line,554}]},
+                      {eunit_proc,with_timeout,3,
+                       [{file,"eunit_proc.erl"},{line,379}]},
+                      {eunit_proc,handle_test,2,
+                       [{file,"eunit_proc.erl"},{line,537}]},
+                      {eunit_proc,tests_inorder,3,
+                       [{file,"eunit_proc.erl"},{line,479}]}]}
+[0m
+
+Finished in 4.530 seconds
+[0;31m1 tests, 1 failures
+[0m===> Error running tests

@@ -1,0 +1,11 @@
+{
+  "true_child_exit": 1,
+  "no_timeout": true,
+  "completed_partial_source_paths": 25786,
+  "completed_groups": 14,
+  "final_guard_failure": "Coordinator authorization88 added during freeze, tracked patch unchanged.",
+  "full_partial_boundary_preserved": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/quod-godot-m4-vive-focus11-handoff-ca84d4f8-20261030-02",
+  "partial_is_not_sealed_or_accepted": true,
+  "post_link_caches_reused_with_exact_stat_keys": true,
+  "prior_result_sha256": "10d78ed9c5bb3b9cb73a77f809df3af49cc7c973a84b2321c54014ae35f3b912"
+}

@@ -1,0 +1,91 @@
+{
+  "main_proposal": {
+    "dependency_production": {
+      "files": 2,
+      "added": 23,
+      "removed": 51,
+      "net": -28
+    },
+    "dependency_tests": {
+      "files": 1,
+      "added": 16,
+      "removed": 23,
+      "net": -7
+    },
+    "specs": {
+      "files": 2,
+      "added": 21,
+      "removed": 9,
+      "net": 12
+    },
+    "repository_production": {
+      "files": 33,
+      "added": 396,
+      "removed": 560,
+      "net": -164
+    },
+    "tests": {
+      "files": 38,
+      "added": 452,
+      "removed": 268,
+      "net": 184
+    }
+  },
+  "namespace_increment": {
+    "tests": {
+      "files": 28,
+      "added": 126,
+      "removed": 38,
+      "net": 88
+    },
+    "repository_production": {
+      "files": 17,
+      "added": 87,
+      "removed": 49,
+      "net": 38
+    },
+    "specs": {
+      "files": 1,
+      "added": 22,
+      "removed": 0,
+      "net": 22
+    }
+  },
+  "combined_from_current_source": {
+    "repository_production": {
+      "files": 42,
+      "added": 483,
+      "removed": 609,
+      "net": -126
+    },
+    "tests": {
+      "files": 59,
+      "added": 578,
+      "removed": 306,
+      "net": 272
+    },
+    "dependency_production": {
+      "files": 2,
+      "added": 23,
+      "removed": 51,
+      "net": -28
+    },
+    "specs": {
+      "files": 2,
+      "added": 43,
+      "removed": 9,
+      "net": 34
+    },
+    "dependency_tests": {
+      "files": 1,
+      "added": 16,
+      "removed": 23,
+      "net": -7
+    }
+  },
+  "applied_production": {
+    "added": 0,
+    "removed": 0
+  },
+  "note": "Production includes TEST-only seams; tests/specs/dependency separate."
+}

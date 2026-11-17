@@ -1,0 +1,12 @@
+PASS enabled action create-key
+PASS enabled action connect
+PASS enabled action register
+PASS enabled action prepare
+PASS enabled action setup
+PASS ordinary authorized source transaction authors an independent non-space instrument form and appearance
+PASS exact anchored subject reaches its authored operation through existing signed discovery and form owners
+PASS actual native signed instrument raster retained
+PASS authored appearance reaches the native primary action instead of the adapter default
+PASS explicit fixture source change commits once
+PASS explicit fixture source change commits once
+{"passed": false, "failure": "Empty: ", "children": {"server": 0, "client-appearance-independent": -15}, "native_inputs": 0}

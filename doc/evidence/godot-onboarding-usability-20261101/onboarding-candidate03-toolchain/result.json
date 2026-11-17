@@ -1,0 +1,9 @@
+{
+  "command": [
+    "dotnet",
+    "--info"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 0.37418662098934874
+}

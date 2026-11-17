@@ -1,0 +1,20 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-space-contextual-20261101/qualify.py",
+    "--label",
+    "contextual-qualification01",
+    "--product",
+    "contextual-product01",
+    "--diagnostic",
+    "contextual-candidate06",
+    "--run",
+    "contextual-final06",
+    "--entry",
+    "contextual-entry-final06"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 0.5767216649837792
+}

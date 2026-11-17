@@ -1,0 +1,19 @@
+{
+  "server_campaign": "gates02",
+  "client_campaign": "final19",
+  "production_campaign": "production10",
+  "m2_final_assertions": 165,
+  "m1_final_assertions": 71,
+  "scene_assertions": 13,
+  "all_required_receipts_pass": true,
+  "feedback_processed": [
+    "meta-1793179596024-ykqpbai",
+    "meta-1793179640476-wcl5r06"
+  ],
+  "exact_tree_inputs": {
+    "server": 1427,
+    "client": 59,
+    "client_exports": 195
+  },
+  "publication": "No body write attempted; final metadata receipts are separate from source freeze."
+}

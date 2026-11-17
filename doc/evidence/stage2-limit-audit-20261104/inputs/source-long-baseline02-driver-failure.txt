@@ -1,0 +1,1 @@
+True exit 1 before Erlang invocation: run_long.py attempted to write inputs/source-long-baseline02-driver.py, but the new evidence inputs directory did not yet exist. No runtime verdict. The directory was created and baseline03 is a separate label.

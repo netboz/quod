@@ -1,0 +1,17 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Compiling test/quod_resource_basis_tests.erl failed
+    ┌─ test/quod_resource_basis_tests.erl:
+    │
+ 11 │  -export([opaque_native/3]).
+    │   ╰── attribute export after function definitions
+
+
+     ┌─ test/quod_resource_basis_tests.erl:
+     │
+ 104 │  opaque_native(opaque_native, Next, St) ->
+     │  ╰── Warning: function opaque_native/3 is unused
+
+

@@ -1,0 +1,6 @@
+{
+  "first_attempt": "independent-verification-01.json",
+  "cause": "Coordinator verifier incorrectly required a bytes field in original provider index rows, which store only original path and SHA256. Actual archive hash equals original indexed hash for the reported file.",
+  "correction": "Require exact SHA256 for every provider entry and exact path set; compare every size/mode field when recorded. All other output manifests retain size/mode verification. No source/test change.",
+  "retry_label": "independent-verification-02.json"
+}

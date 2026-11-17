@@ -209,12 +209,22 @@ complete_edit_groups_predicates_and_preserves_unchanged_contents_test() ->
         ?assertEqual([after_value], value({'Values'},
             {findall, after_value, {fresh, updated}, {'Values'}}, Current)),
         ?assertEqual(complete_source(Edited), complete_source(Current)),
-        %% A saved draft need not have canonical across-predicate order.
-        Same = edit(Compiler, all, Draft1, Draft1),
-        {succeed, Unchanged} = erlog_int:prove_goal(Same, Current),
-        ?assertEqual([], changes(Unchanged)),
         ?assert(maps:is_key({fresh, 1},
             quod_erlog_db_local_prove:get_read_set(db_ref(Edited))))
+    end).
+
+complete_edit_accepts_unchanged_noncanonical_draft_test() ->
+    Facts = [{choice, updated}, {unselected, runtime_value},
+             {':-', {fresh, {'X'}}, {choice, {'X'}}}],
+    with_editor(Facts, fun(Compiler, Current, _Committed) ->
+        %% A saved draft need not have canonical across-predicate order.
+        Expected = complete_source(Current),
+        Choice = <<"choice(updated) :- true.\n">>,
+        ?assertMatch({_, _}, binary:match(Expected, Choice)),
+        Draft = <<(binary:replace(Expected, Choice, <<>>))/binary, Choice/binary>>,
+        Same = edit(Compiler, all, Draft, Draft),
+        {succeed, Unchanged} = erlog_int:prove_goal(Same, Current),
+        ?assertEqual([], changes(Unchanged))
     end).
 
 complete_edit_detects_changed_baseline_and_accept_time_phantoms_test() ->
@@ -287,8 +297,17 @@ compiler_data_helpers_have_no_implicit_following_test() ->
             {clauses, Clauses} = quod_erlog_db_local_prove:get_procedure(db_ref(Compiler), Functor),
             ?assertNot(lists:any(fun({{'$quod_follower', _}, _, _}) -> true;
                                    (_) -> false end, Clauses))
-        end, [{prolog_code, 3}, {prolog_clause, 2}, {prolog_numbered_entries, 3},
-              {prolog_group_tail, 4}, {prolog_predicate_edit, 5}])
+        end, [{prolog_clause, 2}, {prolog_edit_body, 4}, {prolog_predicate_edits, 3},
+              {prolog_predicate_edit, 5}])
+    end).
+
+workbench_replace_uses_canonical_fact_identity_test() ->
+    with_editor([], fun(Compiler, _Target, _Committed) ->
+        {source_chunk, done, Draft} = value({'Draft'},
+            {prolog_workbench_draft, <<"attribute(me,name,old).">>,
+             {replace, {attribute, me, name, old}, {attribute, me, name, new}},
+             {'Draft'}}, Compiler),
+        ?assertEqual(<<"attribute(me, name, new).\n">>, Draft)
     end).
 
 complete_source(St) ->
@@ -330,7 +349,7 @@ read_view(St) -> quod_erlog_db_local_prove:wrap_state(St).
 
 with_editor(Facts, Fun) ->
     {ok, Terms} = erlog_io:read_file(filename:join(
-                     [code:priv_dir(quod), "ontologies", "quod_prolog.pl"])),
+                     [code:priv_dir(quod), "ontologies", "gui_tools.pl"])),
     CompilerStore = committed(Terms), TargetStore = committed(Facts),
     Compiler = wrap(CompilerStore), Target = wrap(TargetStore),
     try Fun(Compiler, Target, TargetStore)

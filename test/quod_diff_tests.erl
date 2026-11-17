@@ -258,18 +258,14 @@ policy_self_seal_uses_final_state_test() ->
     ?assert(policy_present(Replaced1)),
     ?assert(policy_present(Replaced2)).
 
-abolish_expansion_cannot_remove_all_policy_test() ->
+abolish_cannot_remove_all_policy_test() ->
     P1 = {can_invoke, one, principal, [], namespace},
     P2 = {can_invoke, two, principal, [], namespace},
     Est0 = quod_ct:committed_kb([P1, P2]),
-    %% The prove overlay represents abolish/1 as one exact retract per clause;
-    %% the shared helper therefore needs no abolish-specific operation.
-    [Assert1] = quod_ct:diff_for(P1),
-    [Assert2] = quod_ct:diff_for(P2),
-    Retracts = [as_retract(Assert1), as_retract(Assert2)],
+    Removal = [{abolish, {can_invoke, 4}}],
     ?assertEqual(
        {error, policy_self_seal_forbidden},
-       quod_diff:apply_ops_preserving_policy(Est0, Retracts)),
+       quod_diff:apply_ops_preserving_policy(Est0, Removal)),
     ?assert(policy_present(Est0)).
 
 unrelated_diff_does_not_revalidate_policy_test() ->

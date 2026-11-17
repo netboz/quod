@@ -1,0 +1,17 @@
+{
+  "failed": [
+    [
+      "eunit",
+      1
+    ],
+    [
+      "ct",
+      1
+    ]
+  ],
+  "input_count": 1077,
+  "changed_inputs": [
+    "src/quod_client_goal_parser.erl",
+    "test/quod_client_goal_parser_tests.erl"
+  ]
+}

@@ -1,0 +1,22 @@
+[
+  {
+    "phase": "backup-import",
+    "case": "backup-import",
+    "command": [
+      "/home/yan/.cache/quod-m3b-artifacts/quod-m3b-client-final03/source/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/home/yan/.cache/quod-m3b-artifacts/private/final-navigation-final03-backup-import/identity",
+      "--node",
+      "https://127.0.0.1:40727",
+      "--ca",
+      "/home/yan/.cache/quod-m3b-artifacts/private/quod-m3b-live-final-navigation-final03-server/backend-ca.pem"
+    ],
+    "child_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "passed": true
+  }
+]

@@ -1,0 +1,1 @@
+{"changed_client_inputs": 11, "line_deltas": {"production": {"added": 27, "removed": 11}, "qualification/tool": {"added": 123, "removed": 33}, "documentation": {"added": 10, "removed": 5}}, "server_inputs_verified_twice": 1432, "production_tracing": false, "retirements": 0}

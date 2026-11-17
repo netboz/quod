@@ -1,0 +1,71 @@
+{
+  "label": "onboarding-start-candidate03",
+  "qualification_phase": "onboarding-start",
+  "passed": true,
+  "physical": false,
+  "native_runtime_started": false,
+  "hardware_queried": false,
+  "display_or_focus_action": false,
+  "manifest": "doc/evidence/godot-onboarding-usability-20261101/inputs/client-onboarding-candidate03-manifest.json",
+  "manifest_sha256": "89db76a15adb45dd81073e3d8a42cd7e3dad1fcfe1ddb310cdb16a8967ee9244",
+  "sources": {
+    "doc/evidence/godot-onboarding-usability-20261101/run.py": "2ad86c75624e58024ab72d47541b259f13e3cc2b9b1ee95c87bae53bb3ec7d68",
+    "doc/evidence/godot-onboarding-usability-20261101/hashes.py": "36226eb6eb22aa41ee6aa39b205f8037cde4e6a66f647bf52b160b0715bd4245",
+    "doc/evidence/godot-m4-vive-physical-20261029/environment.py": "c3a54c8ce4d8360f8711e027d31f7a98f29cf3b9b4436c43a84984cf2c1f20f9"
+  },
+  "reader_errors": [],
+  "children": {
+    "client": {
+      "command": [
+        "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-onboarding-candidate03/source/client/godot/dist/quod.x86_64",
+        "--display-driver",
+        "wayland",
+        "--audio-driver",
+        "Dummy",
+        "--xr-mode",
+        "off",
+        "--rendering-method",
+        "gl_compatibility",
+        "--rendering-driver",
+        "opengl3",
+        "--",
+        "--qualification",
+        "--profile",
+        "/data/quod-m4-vr-ca84d4f8-20261029/private/onboarding-start-candidate03/identity"
+      ],
+      "true_exit": 0
+    }
+  },
+  "eof": {
+    "client-stdout": true,
+    "client-stderr": true
+  },
+  "build_export_digest_reused": true,
+  "explicit_completion": true,
+  "streams": {
+    "client-stdout.raw": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/onboarding-start-candidate03/client-stdout.raw",
+      "sha256": "adb42e8e5da207b8dda30f5a8ad918b5227fa763ae7bb86a09892c68fbf37826",
+      "bytes": 4111,
+      "public_sha256": "b2dbf62a1308665c60bb5e69974f1071af2ef197cf6d1353f68157090e80c3e0"
+    },
+    "client-stderr.raw": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/onboarding-start-candidate03/client-stderr.raw",
+      "sha256": "9faee901efd231152076fcde9be460be08252114e7e7d68aad945d86f14ffc85",
+      "bytes": 137,
+      "public_sha256": "91270bebc3f403f7c67a7c1ee424c92bb05335733f2dd43e5a0861a5030cac8d"
+    }
+  },
+  "diagnostics": [],
+  "client_result_sha256": "4d6c97aecae8e78d5d07eda3cd97d308a3449eabf6a4c515b55e3ff416446a3a",
+  "client_report_passed": true,
+  "checks": [
+    "current startup raster retained",
+    "fresh offline profile permits key creation/import only",
+    "first-run presentation excludes unavailable account workspace actions",
+    "fresh first action is recognizable as the primary action"
+  ],
+  "prior_checks": [],
+  "total_checks": 4,
+  "elapsed_seconds": 2.1291316080023535
+}

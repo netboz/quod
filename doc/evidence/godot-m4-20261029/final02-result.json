@@ -1,0 +1,144 @@
+{
+  "client": "final02",
+  "source": "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-final02/source",
+  "commands": [
+    {
+      "label": "input-final03",
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/run.py",
+        "--timeout",
+        "900",
+        "input-final03",
+        "--",
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/input-campaign.py",
+        "input-final03",
+        "--engine",
+        "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-final02/source/client/godot/dist/quod.x86_64",
+        "--desktop"
+      ],
+      "child_exit": 0
+    },
+    {
+      "label": "scene-final03",
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/run.py",
+        "--timeout",
+        "900",
+        "scene-final03",
+        "--",
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/input-campaign.py",
+        "scene-final03",
+        "--engine",
+        "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-final02/source/client/godot/dist/quod.x86_64",
+        "--desktop",
+        "--phase",
+        "scene"
+      ],
+      "child_exit": 0
+    },
+    {
+      "label": "gui-final02",
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/run.py",
+        "--timeout",
+        "900",
+        "gui-final02",
+        "--",
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/campaign.py",
+        "gui-final02",
+        "--client",
+        "final02",
+        "--stage",
+        "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+        "--profile",
+        "prod",
+        "--journey",
+        "gui",
+        "--desktop",
+        "--controllers"
+      ],
+      "child_exit": 0
+    },
+    {
+      "label": "spaces-final02",
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/run.py",
+        "--timeout",
+        "900",
+        "spaces-final02",
+        "--",
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/campaign.py",
+        "spaces-final02",
+        "--client",
+        "final02",
+        "--stage",
+        "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+        "--profile",
+        "prod",
+        "--journey",
+        "spaces",
+        "--desktop"
+      ],
+      "child_exit": 0
+    },
+    {
+      "label": "navigation-final02",
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/run.py",
+        "--timeout",
+        "900",
+        "navigation-final02",
+        "--",
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/campaign.py",
+        "navigation-final02",
+        "--client",
+        "final02",
+        "--stage",
+        "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+        "--profile",
+        "prod",
+        "--journey",
+        "navigation",
+        "--desktop"
+      ],
+      "child_exit": 0
+    },
+    {
+      "label": "physics-final04",
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/run.py",
+        "--timeout",
+        "900",
+        "physics-final04",
+        "--",
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/physics-campaign.py",
+        "physics-final04",
+        "--client",
+        "final02",
+        "--stage",
+        "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+        "--profile",
+        "prod"
+      ],
+      "child_exit": 0
+    }
+  ],
+  "passed": true,
+  "unchanged_server_gates_reused": true,
+  "retained_driver": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/inputs/final02-driver.py",
+  "driver_sha256": "b4779dbf50c71bd8c90ca1e65b3243244ee44e43922a5b61e31d6d572e24346f",
+  "source_unchanged": true,
+  "all_true_child_exits_zero": true
+}

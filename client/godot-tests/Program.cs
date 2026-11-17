@@ -1,0 +1,330 @@
+using Quod.Client;
+using System.Security.Cryptography;
+using System.Text.Json.Nodes;
+using System.Numerics;
+
+[assembly: System.Runtime.Versioning.SupportedOSPlatform("linux")]
+
+static class Tests
+{
+    static int checks;
+    static void Check(bool value, string name) { if (!value) throw new Exception(name); checks++; Console.WriteLine("PASS " + name); }
+    static void Reject(Action action, string name) { try { action(); } catch (Exception) { Check(true, name); return; } throw new Exception("Did not refuse: " + name); }
+    public static int Main(string[] args)
+    {
+        try {
+            if (args[0] == "admission-codecs") { AdmissionCodecChecks.Run(); return 0; }
+            if (args[0] == "recovery-errors") { awaitRecovery(args[1]); return 0; }
+            if (args[0] == "resource-errors") { ResourceErrorChecks.Run().GetAwaiter().GetResult(); return 0; }
+            if (args[0] == "crash") { Crash(args); return 0; }
+            string repo = Path.GetFullPath(args[0]);
+            var corpus = JsonNode.Parse(File.ReadAllText(Path.Combine(repo, "client/test/fixtures/native-contract/contracts.json")))!;
+            using var key = Backup.Import(Json.S(corpus, "bundle"), Json.S(corpus, "passphrase"));
+            Check(key.PublicText == Json.S(corpus, "public_key"), "browser backup public identity");
+            var future = JsonNode.Parse(Json.S(corpus, "bundle"))!; future["version"] = 2;
+            Reject(() => Backup.Import(future.ToJsonString(), Json.S(corpus, "passphrase")), "unknown encrypted-backup version refuses");
+            foreach (var row in corpus["requests"]!.AsArray()) {
+                var actor = row!["account"]!;
+                byte[] bytes = Wire.Encode(Identity.Decode(Json.S(actor, "network")), key.PublicKey, Identity.Decode(Json.S(row, "operation")),
+                    new(Json.S(actor, "namespace"), Json.S(actor, "anchor"), Json.S(actor, "instanceText")), 0,
+                    Json.U(row, "deadline"), Json.S(row, "goal"));
+                Check(Identity.Encode(bytes) == Json.S(row, "bytes"), "browser exact UTF8 uint64 wire");
+                Check(Identity.Encode(key.Sign(bytes)) == Json.S(row, "signature"), "browser Ed25519 signature");
+            }
+            var challenge = corpus["challenge"]!;
+            Check(Identity.Encode(key.Sign(Identity.Decode(Json.S(challenge, "bytes")))) == Json.S(challenge, "signature"), "challenge signature");
+            Reject(() => Backup.Import(Json.S(corpus, "bundle"), "wrong passphrase"), "wrong backup passphrase");
+            var damaged = JsonNode.Parse(Json.S(corpus, "bundle"))!; byte[] ciphertext = Identity.Decode(Json.S(damaged, "ciphertext")); ciphertext[0] ^= 1;
+            damaged["ciphertext"] = Identity.Encode(ciphertext); Reject(() => Backup.Import(damaged.ToJsonString(), Json.S(corpus, "passphrase")), "GCM tamper");
+            string encrypted = Backup.Export(key, Json.S(corpus, "passphrase")); using var restored = Backup.Import(encrypted, Json.S(corpus, "passphrase"));
+            Check(restored.PublicText == key.PublicText, "new encrypted backup restores original identity");
+            if (args.Length > 1) File.WriteAllText(args[1], encrypted);
+            foreach (var row in corpus["terms"]!.AsArray()) Check(Term.Parse(Json.S(row, "text")).ToString() == Json.S(row, "canonical"), "functional data term canonical bytes");
+            foreach (var invalid in corpus["invalidTerms"]!.AsArray()) Reject(() => Term.Parse(invalid!.GetValue<string>()), "malformed functional term");
+            int verified = 0;
+            foreach (string file in new[] { "production-protocol-fixtures.json", "production-controller-reset-fixtures.json" }) {
+                var fixture = JsonNode.Parse(File.ReadAllText(Path.Combine(repo, "doc/evidence/godot-m0-20261027", file)))!;
+                foreach (var r in fixture["requests"]!.AsArray()) {
+                    byte[] bytes = Identity.Decode(Json.S(r, "request_bytes")); byte mode = Json.S(r, "mode") == "read" ? (byte)0 : (byte)1;
+                    // The network occupies the first fixed field after the domain.
+                    int domain = System.Text.Encoding.UTF8.GetByteCount("quod.agent.goal.v1\0");
+                    byte[] reconstructed = Wire.Encode(bytes.AsSpan(domain, 32).ToArray(), Identity.Decode(Json.S(r, "public_key")),
+                        Identity.Decode(Json.S(r, "operation_id")), new(Json.S(r, "namespace"), Json.S(r, "anchor"), Json.S(r, "actor")),
+                        mode, Json.U(r, "not_after_ms"), Json.S(r, "goal"));
+                    Check(bytes.SequenceEqual(reconstructed) && Identity.Verify(Identity.Decode(Json.S(r, "public_key")), bytes, Identity.Decode(Json.S(r, "signature"))), "production exact request and signature"); verified++;
+                }
+            }
+            Check(verified == 100, "all 100 real production fixtures including Reset");
+            Store(key); Forms(); Outcomes(); Scenes(); WorldFrames(); Models(repo); Menus(); Icons(repo);
+            Console.WriteLine("CORE_PASS checks=" + checks); return 0;
+        } catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+    }
+    static void awaitRecovery(string path) => RecoveryErrorChecks.Run(path).GetAwaiter().GetResult();
+    static void Menus()
+    {
+        string anchor = "<<\"" + new string('a', 32) + "\">>";
+        string Choice(string style) => "choice(entity_ref(<<\"ns\">>," + anchor + ",room),eidolon(playing," + style + ",recipe(<<\"ns\">>," + anchor + ",r)))";
+        string Item(string id, string label, int slot, bool enabled = true, bool confirm = false, string help = "") =>
+            $"component({id},menu_item,[property(label,<<\"{label}\">>),property(help,<<\"{help}\">>),property(enabled,{(enabled ? "true" : "false")})," +
+            $"property(target,{Choice(id)}),property(confirm,{(confirm ? "true" : "false")}),property(image,none),property(slot,{slot})],[])";
+        string Menu(string id, string label, string slot, int wedges, string back, params string[] children) =>
+            $"component({id},menu,[property(label,<<\"{label}\">>),property(help,<<\"\">>),property(enabled,true),property(layout,column)," +
+            $"property(appearance,inherit),property(image,none),property(slot,{slot}),property(wedges,{wedges}),property(back,{back})],[{string.Join(",", children)}])";
+        var view = Term.Parse("menu(" + Menu("menu", "Workshop", "auto", 8, "none",
+            Item("leave", "Leave space", 5, confirm: true),
+            Menu("show", "Show as", "2", 8, "6", Item("solid", "Solid", 1), Item("wire", "Wire box", 3, false, help: "Not here."))) + ")");
+        var root = MenuNode.Decode(view)!;
+        Check(root.Label == "Workshop" && root.At(5)!.Confirm && root.At(2)!.Back == 6 && root.At(2)!.At(3)!.Enabled == false, "pie decodes authored wedges, confirmation and back direction");
+        Check(MenuNode.Decode(Term.Atom("none")) == null, "a subject without a menu decodes as none");
+        Reject(() => MenuNode.Decode(Term.Parse(view.ToString().Replace("property(back,6)", "property(back,3)"))), "a back wedge may not overlap an item");
+        Reject(() => MenuNode.Decode(Term.Parse(view.ToString().Replace("menu_item", "button"))), "only menus and menu items form a pie");
+        Check(MenuNode.Direction(new(0, -1), .24f, 8) == 1 && MenuNode.Direction(new(1, 0), .24f, 8) == 3 && MenuNode.Direction(new(0, 1), .24f, 8) == 5, "forward, right and back map to wedges 1, 3 and 5");
+        Check(MenuNode.Direction(new(.2f, 0), .24f, 8) == 0 && MenuNode.Direction(new(.25f, 0), .24f, 8) == 3, "the authored dead zone keeps the centre");
+        Check(MenuNode.Direction(MenuNode.Toward(7, 8), .24f, 8) == 7 && MenuNode.Direction(new(-.71f, -.7f), .24f, 8) == 8, "every wedge round-trips its own direction");
+        var profile = DeviceProfile.Vive;
+        Check(profile.FollowYaw(null, 10) == 10 && profile.FollowYaw(10, 40) == 10 && profile.FollowYaw(10, 50) == 50 && profile.FollowYaw(350, 20) == 350 && profile.FollowYaw(350, 30) == 30,
+            "the HUD strip keeps its heading until the head turns past 35°, across north");
+        var nav = new PieNavigator(root, .24f, 300);
+        Check(nav.Commit() == PieOutcome.Cancelled, "commit in the centre cancels");
+        nav.Move(new(0, 1), 0); Check(nav.Title == "Leave space" && nav.Note == "" && nav.Commit() == PieOutcome.Open && nav.Title == "Leave space" && nav.Note == "Press again", "a confirmed item asks for a second press");
+        nav.Move(new(0, -1), 10); Check(nav.Armed == null && nav.Hovered == 0 && nav.Title == "Workshop" && nav.Note == "", "moving off an armed wedge disarms it; empty wedges count as centre, which names the menu");
+        nav.Move(new(.7f, -.7f), 20); nav.Move(new(.7f, -.7f), 200); Check(nav.Level == root, "a short rest does not open the sub-pie");
+        nav.Move(new(.71f, -.7f), 400); Check(nav.Level.Label == "Show as" && nav.Hovered == 0, "resting on a sub-pie opens it (marking mode)");
+        nav.Move(new(.71f, -.7f), 405); nav.Move(new(.7f, -.71f), 800);
+        Check(nav.Hovered == 0 && nav.Level.Label == "Show as", "the still-held pad direction points nothing in the new level, however long it rests");
+        nav.Move(new(0, 0), 810); nav.Move(new(.71f, -.7f), 820); Check(nav.Hovered == 0, "wedge 2 of the sub-pie is empty, so that direction is the centre");
+        nav.Move(new(1, 0), 410); Check(nav.Hovered == 3 && !nav.HoveredItem!.Enabled && nav.Title == "Wire box" && nav.Note == "Not here." && nav.Commit() == PieOutcome.Open, "a disabled wedge stays visible with its reason and never selects");
+        nav.Move(new(-.7f, .7f), 420); Check(nav.HoveringBack && nav.Title == "Back" && nav.Note == "Workshop" && nav.Commit() == PieOutcome.Open && nav.Level == root, "the reserved back wedge returns to the parent");
+        Check(nav.Choose(2) && nav.Commit() == PieOutcome.Open && nav.Choose(1) && nav.Commit() == PieOutcome.Selected && nav.Selection!.Choice.ToString().Contains("solid"), "click and keyboard choice open sub-pies and select a leaf");
+    }
+    static void Icons(string repo)
+    {
+        var source = File.ReadAllText(Path.Combine(repo, "priv/ontologies/quod_gui.pl"));
+        var icons = System.Text.RegularExpressions.Regex.Matches(source, @"gui_icon\(\w+, (image\(asset\(.*?\), resources\(\d+, \d+\)\))\)\.");
+        Check(icons.Count == 38, "every authored icon declares its own resources");
+        var assets=source.Split('\n').Where(line=>line.StartsWith("gui_asset(")).Select(line=>Term.Parse(line.TrimEnd('.')).Require("gui_asset",3))
+            .ToDictionary(row=>row[0].TextValue,row=>(Mime:row[1].TextValue,Bytes:row[2].Bytes));
+        Check(assets.Count==38 && assets.Values.Sum(asset=>asset.Bytes.Length)==106039,"all icon bytes belong to the GUI ontology");
+        Check(!Directory.Exists(Path.Combine(repo,"priv/explorer/assets/icons")),"the node has no static icon directory");
+        foreach (System.Text.RegularExpressions.Match row in icons) {
+            var term = Term.Parse(row.Groups[1].Value);
+            var image = Component.ImageAsset(term);
+            var stored=assets[Path.GetFileNameWithoutExtension(image.File!)];
+            byte[] bytes=stored.Bytes;
+            Check(Convert.ToHexStringLower(SHA256.HashData(bytes)) == image.File!.Split('.')[0] && bytes.LongLength == image.Transfer &&
+                StaticGlb.ImagePixels(bytes, stored.Mime) == image.Pixels, "authored icon digest, transfer and pixels match the stored bytes");
+            string ComponentText(string value) => $"component(f,form,[property(label,f),property(image,{value})],[])";
+            Check(Component.Decode(Term.Parse(ComponentText(term.ToString()))).Properties["image"].ToString() == term.ToString(), "form preserves the declared image allowance");
+            var menu = Term.Parse($"menu(component(m,menu,[property(label,<<\"Menu\">>),property(help,<<\"\">>),property(enabled,true),property(image,{term}),property(slot,auto),property(wedges,8),property(back,none)],[]))");
+            var decoded = MenuNode.Decode(menu)!;
+            Check((decoded.Image, decoded.Transfer, decoded.Pixels) == image, "menu carries the declared image allowance to its consumer");
+            Check(decoded.Signature != (decoded with { Transfer = decoded.Transfer + 1 }).Signature, "changed icon allowance invalidates the menu signature");
+        }
+        string asset = "asset(<<\"" + new string('a', 64) + "\">>,<<\"image/png\">>)";
+        foreach (string invalid in new[] { asset, $"image({asset},resources(0,1))", $"image({asset},resources(1,-1))", $"image({asset},resources(1.5,1))" })
+            Reject(() => Component.ImageAsset(Term.Parse(invalid)), "missing or invalid authored icon allowance refuses");
+    }
+    static void Scenes()
+    {
+        Check(ScenePose.Turn(-20) == 340 && ScenePose.Turn(-180) == 180 && ScenePose.Turn(-90.4) == 270 && ScenePose.Turn(359.6) == 0 &&
+            ScenePose.Turn(-0.4) == 0 && ScenePose.Turn(90) == 90 && ScenePose.Turn(720.2) == 0, "a heading measured either way becomes a scene turn from 0 to 359");
+        string anchor = Term.Binary(new byte[32]).ToString();
+        string group = $"mark(<<\"source\">>,<<\"group\">>,[],transform(1000,2000,3000,15,35,75),no_surface,unlabelled,depicts(<<\"storage\">>,{anchor},object))";
+        string box = "mark(<<\"source/edges\">>,<<\"wire_box\">>,[f(<<\"width\">>,'/'(1,3)),f(<<\"height\">>,1001),f(<<\"depth\">>,'/'(1001,2))],relative(<<\"source\">>,transform(0,0,0,0,0,0)),surface(<<\"#6A90D9\">>,0,700,1000,1000,[]),unlabelled,depicts_nothing)";
+        var marks = SceneMark.Decode(Term.Parse("[" + group + "," + box + "]"));
+        Check(marks[1].Size[0] == new Length(1,3) && marks[1].Size[1] == new Length(1001,1) && marks[1].Parent == "source", "scene retains odd and submillimetre exact rational lengths and parent");
+        Check(Math.Abs(marks[1].Size[0].RenderMetres() - 1f/3000) < 1e-10f, "rational conversion occurs at engine boundary without millimetre rounding");
+        Check(marks[0].Subject!.ToString().StartsWith("entity_ref("), "scene keeps exact anchored subject independent of occurrence");
+        Check(new Length(10000,1).RenderMetres() == 10, "the default extent is ten metres");
+        Check(marks[1].Looks.Single().Opacity == 1000 && SceneMark.Decode(Term.Parse("[" + group + "," + box.Replace(",1000,1000,[])", ",1000,220,[])") + "]"))[1].Looks.Single().Opacity == 220,
+            "surface opacity is decoded as authored permille");
+        string plain = "surface(<<\"#6A90D9\">>,0,700,1000,1000,[])", gold = "surface(<<\"#F9C80E\">>,0,700,0,80,[])";
+        string corners = box.Replace("wire_box", "corner_box"), states = $"surfaces({plain},{gold},{gold.Replace(",80,", ",220,")})";
+        var marker = SceneMark.Decode(Term.Parse("[" + group + "," + corners.Replace(plain, states) + "]"))[1];
+        Check(marker.Kind == "corner_box" && marker.Edges && marker.Size[0] == new Length(1,3), "a corner box keeps exact rational lengths like a wire box");
+        Check(marker.Looks.Select(l => (l.Colour, l.Opacity)).SequenceEqual([("#6A90D9",1000),("#F9C80E",80),("#F9C80E",220)]), "a mark carries its display, pointed-at and selected surfaces in order");
+        Check(marks[0].Looks.Length == 0 && SceneMark.Decode(Term.Parse("[" + group + "," + corners + "]"))[1].Looks.Length == 1, "a group has no surface and a plain surface stays one look");
+        foreach (string bad in new[] { $"surfaces({plain},{gold})", $"surfaces({plain},{gold},no_surface)", $"surfaces({plain},{gold},{gold.Replace("#F9C80E","gold")})", $"surfaces({states},{gold},{gold})" })
+            Reject(() => SceneMark.Decode(Term.Parse("[" + group + "," + corners.Replace(plain, bad) + "]")), "incomplete or invalid state surfaces refuse");
+        Reject(() => SceneMark.Decode(Term.Parse("[" + group.Replace("no_surface", states) + "]")), "a group with state surfaces refuses");
+        Reject(() => SceneMark.Decode(Term.Parse("[" + group + "," + box.Replace(",1000,1000,[])", ",1000,1001,[])") + "]")), "opacity above 1000 refuses");
+        Reject(() => SceneMark.Decode(Term.Parse("[" + group + "," + box.Replace(",1000,1000,[])", ",1000,[])") + "]")), "a surface without opacity refuses");
+        var huge = BigInteger.One << 1600;
+        Check(Math.Abs(new Length(huge,huge+1).RenderMetres() - .001f) < 1e-9, "wide exact fractions convert without intermediate double overflow");
+        Reject(() => SceneMark.Decode(Term.Parse("[" + box + "]")), "orphan relative scene refuses");
+        Reject(() => SceneMark.Decode(Term.Parse("[" + group + "," + group + "]")), "duplicate scene occurrence refuses");
+        Reject(() => SceneMark.Decode(Term.Parse("[" + group + "," + box.Replace("'/'(1,3)","'/'(2,6)") + "]")), "unreduced scene rational refuses");
+        Reject(() => SceneMark.Decode(Term.Parse("[" + group + "," + box.Replace("'/'(1,3)","0.5") + "]")), "floating scene dimensions refuse");
+        Reject(() => SceneMark.Decode(Term.Parse("[" + group.Replace(anchor,"<<\"wrong\">>") + "]")), "wrong depicted anchor refuses");
+        Reject(() => new Length(BigInteger.One << 2000,1).RenderMetres(), "unrenderable finite extent refuses explicitly");
+        // Rain: one more texture of a surface, carried text or a named source.
+        string Rain(string text, string glyph) => box.Replace(",1000,1000,[])", $",1000,1000,[texture(<<\"rain\">>,{text},glyph({glyph}))])");
+        string named = $"source(ontology_ref(<<\"quod:space\">>,{anchor}))";
+        var written = SceneMark.Decode(Term.Parse("[" + group + "," + Rain("text(<<\"a :- b.\">>)", "60") + "]"))[1].Looks.Single().Rain!;
+        Check(written.Text == "a :- b." && written.Source == null && written.Height == new Length(60,1), "a rain carries its text and its letter height");
+        var source = SceneMark.Decode(Term.Parse("[" + group + "," + Rain(named, "100") + "]"))[1].Looks.Single().Rain!;
+        Check(source.Text == null && source.Source!.ToString() == $"ontology_ref(<<\"quod:space\">>,{anchor})" && source.Key == source.Source.ToString(), "a rain names an exact ontology whose source is read once by its identity");
+        Check(SceneMark.Decode(Term.Parse("[" + group + "," + box + "]"))[1].Looks.Single().Rain == null, "a plain surface has no rain");
+        string picture = $"texture(<<\"base_colour\">>,asset(<<\"{new string('a',64)}\">>,<<\"image/jpeg\">>),repeat(1000,1000))";
+        foreach (string bad in new[] {
+            box.Replace(",1000,1000,[])", $",1000,1000,[{picture}])"),
+            box.Replace(",1000,1000,[])", $",1000,1000,[texture(<<\"rain\">>,text(<<\"a\">>),glyph(60)),texture(<<\"rain\">>,text(<<\"b\">>),glyph(60))])"),
+            box.Replace(",1000,1000,[])", $",1000,1000,[texture(<<\"rain\">>,text(<<\"a\">>),glyph(60)),{picture}])"),
+            Rain("text(<<\"a\">>)", "0"), Rain("text(<<\"a\">>)", "-60"), Rain("text(<<\"a\">>)", "'/'(1,3)"), Rain("text(<<\"\">>)", "60"),
+            Rain("text(a)", "60"), Rain($"source(ontology_ref(<<\"quod:space\">>,<<\"short\">>))", "60"), Rain($"source(ontology_ref(<<\"\">>,{anchor}))", "60"),
+            Rain("source(<<\"quod:space\">>)", "60"), box.Replace(",1000,1000,[])", ",1000,1000,[texture(<<\"rain\">>,text(<<\"a\">>),repeat(1000,1000))])") })
+            Reject(() => SceneMark.Decode(Term.Parse("[" + group + "," + bad + "]")), "a picture, two rains, a bad height, text or anchor refuse");
+        var cells = RainCells.Of("foo(X) :-\n\t bar(X, 'é').\r\n");
+        Check(string.Concat(cells.Cells.Select(i => cells.Letters[i])) == "foo(X):-bar(X,'é')." && cells.Letters.Length == 14 &&
+              cells.Letters[cells.Cells[^4]] == "é" && cells.Cells.Length == 19, "rain cells drop white space and keep each distinct letter once, a non-ASCII letter included");
+        Check(RainCells.Of("aaa").Letters.SequenceEqual(["a"]) && RainCells.Of("aaa").Cells.SequenceEqual([0,0,0]), "a repeated letter is one letter of the set");
+        Reject(() => RainCells.Of(" \n\t "), "a text of white space only has no rain");
+    }
+    static void Models(string repo)
+    {
+        string digest="bd201855c8114b9b0e9cdd465d6f08413d18604894c839fb78d54d890c2adc94";
+        byte[] bytes=File.ReadAllBytes(Path.Combine(repo,"priv/explorer/assets/models",digest+".glb"));
+        Check(Convert.ToHexStringLower(SHA256.HashData(bytes))==digest,"controller bytes match authored class-selected digest");
+        var report=StaticGlb.Validate(bytes);
+        var asset=new ModelAsset(digest,"gltf2-static-v1",[-59,-70,-117,59,23,106],[1114152,665696,17551,17344,37,1,4194304]);
+        report.Admit(asset);Check(report.Costs.SequenceEqual(asset.Allowed) && report.Bounds.SequenceEqual(asset.Bounds),"portable GLB measurement agrees with existing verified Vive model metadata");
+        Reject(()=>report.Admit(asset with { Allowed=[1114151,665696,17551,17344,37,1,4194304] }),"each appearance enforces transfer allowance against reusable verification");
+        Reject(()=>report.Admit(asset with { Bounds=[-60,-70,-117,59,23,106] }),"verified model refuses mismatched declared bounds");
+        var corrupt=(byte[])bytes.Clone();corrupt[0]=0;Reject(()=>StaticGlb.Validate(corrupt),"invalid GLB is rejected before engine decode");
+        uint jsonLength=System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(12,4));
+        var document=System.Text.Json.Nodes.JsonNode.Parse(bytes.AsSpan(20,(int)jsonLength))!;document["images"]="malformed";
+        byte[] json=System.Text.Encoding.UTF8.GetBytes(document.ToJsonString());int padded=(json.Length+3)/4*4;
+        var malformed=new byte[bytes.Length-(int)jsonLength+padded];bytes.AsSpan(0,20).CopyTo(malformed);malformed.AsSpan(20,padded).Fill(32);json.CopyTo(malformed,20);bytes.AsSpan(20+(int)jsonLength).CopyTo(malformed.AsSpan(20+padded));
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(malformed.AsSpan(8,4),(uint)malformed.Length);System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(malformed.AsSpan(12,4),(uint)padded);
+        Reject(()=>StaticGlb.Validate(malformed),"malformed optional GLB arrays refuse instead of becoming empty facilities");
+    }
+    static void WorldFrames()
+    {
+        var anchor=Term.Binary(new byte[32]); var space=new Actor("world-fixture",Identity.Encode(new byte[32]),"room.");
+        var nav=new JsonObject { ["value"]="navigation(18446744073709551616,unplaced,[playing,edition])",["dependencies"]="[]" };
+        var location=Navigation.Decode(nav);
+        Check(location.Space==null && location.Revision==BigInteger.One<<64,"unplaced navigation preserves a wide committed assignment revision");
+        nav["value"]="navigation(1,missing,[playing,edition])";
+        Reject(()=>Navigation.Decode(nav),"unknown navigation does not become unplaced");
+        string depicts=$"depicts(<<\"source\">>,{anchor},object)";
+        var marks=Term.Parse($"[mark(<<\"body\">>,<<\"group\">>,[],body_pose(18446744073709551615,1),no_surface,unlabelled,{depicts}),mark(<<\"copy\">>,<<\"group\">>,[],body_frame_pose(18446744073709551615,1),no_surface,unlabelled,{depicts})]");
+        var frame=new JsonObject { ["schema"]=2,["units"]="metres_seconds",["space"]="local",
+            ["world"]=$"world_ref(<<\"world-fixture\">>,{anchor},room)",["authority"]=Term.Call("agent_instance_ref",space.Entity.Args).ToString(),
+            ["epoch"]="1",["generation"]="1",["incarnation"]=Identity.Encode(new byte[32]),["registration"]=Identity.Encode(new byte[32]),
+            ["structure"]="1",["tick"]="7",["origin_seq"]="0",["origin_mm"]=new JsonArray("18446744073709551617","0","0"),
+            ["poses"]=new JsonArray(new JsonObject { ["body"]="18446744073709551615",["revision"]="1",
+                ["position"]=new JsonArray(1.0,2.0,3.0),["rotation"]=new JsonArray(0.0,0.0,0.0,1.0) }) };
+        var projection=new JsonObject { ["view"]="current",["selection"]="active",["marks"]=marks.ToString(),["control"]="none",
+            ["view_frame"]=$"view_frame({space.Entity},[],[body_frame(18446744073709551615,1,<<\"source-path\">>,[])])",["frame"]=frame };
+        var world=new WorldProjection(projection,space);
+        Check(world.Sample!.Origin[0]==BigInteger.Parse("18446744073709551617") && world.Marks[0].Pose.Body==ulong.MaxValue && world.BodyFrames.Count==1,"wide exact origins and body IDs survive independent appearances");
+        var control=Term.Parse($"control(agent_instance_ref(<<\"world-fixture\">>,{anchor},room),1,controlled_agent(pilot,1,18446744073709551615,1,motion(free,2000,1600,1000,query_limits(2,0,8,128),[]),viewpoint(eye,pose(vector(0,100,0),rotation(0,0,0)),view_only)))");
+        Check(ControlBinding.Decode(control,space,world.Sample)?.Body==ulong.MaxValue,"native control binds the exact signed principal and authoritative body");
+        Reject(()=>ControlBinding.Decode(control,space with {InstanceText="another."},world.Sample),"another principal cannot acquire the projected control binding");
+        Reject(()=>ControlBinding.Decode(Term.Parse(control.ToString().Replace("view_only","unsupported_tracking")),space,world.Sample),"unqualified tracking mapping cannot silently become a desktop viewpoint");
+        var message=new JsonObject { ["view"]="current",["frame"]=frame.DeepClone() };
+        Check(!world.Advance(message),"duplicate native cursor does no presentation work");
+        message["frame"]!["tick"]="6";Check(!world.Advance(message),"older native tick is ignored");
+        message["frame"]!["tick"]="8"; message["view"]="retired";Check(!world.Advance(message),"retired view cannot move current bodies");
+        message["view"]="current"; message["frame"]!["registration"]=Identity.Encode(Enumerable.Repeat((byte)1,32).ToArray());
+        Check(!world.Advance(message),"retired native registration cannot move current bodies");
+        message["frame"]=frame.DeepClone(); message["frame"]!["poses"]![0]!["position"]![0]=99.0;
+        Reject(()=>world.Advance(message),"changed pose at the same cursor refuses");
+        message["frame"]=frame.DeepClone(); message["frame"]!["tick"]="8"; message["frame"]!["poses"]=new JsonArray();
+        Reject(()=>world.Advance(message),"missing required body refuses instead of using static pose");
+        message["frame"]=frame.DeepClone();message["frame"]!["tick"]="8";message["frame"]!["origin_mm"]![0]="18446744073709551618";
+        Reject(()=>world.Advance(message),"a later tick cannot change the exact origin without advancing its origin sequence");
+        message["frame"]=frame.DeepClone(); message["frame"]!["tick"]="8";
+        Check(world.Advance(message) && world.Sample.Tick==8,"a real native advance still applies");
+        projection["view_frame"]=$"view_frame({space.Entity},[],[])";
+        Reject(()=>new WorldProjection(projection,space),"missing decorative source receipt refuses");
+        projection["selection"]="unavailable";
+        Reject(()=>new WorldProjection(projection,space),"unavailable physical selection never becomes an empty successful scene");
+    }
+    static void Store(Identity key)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "quod-m1b-store-tests-" + Guid.NewGuid());
+        Directory.CreateDirectory(root, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        string saved;
+        using (var store = new LocalStore(root)) {
+            store.Create(key.Payload()); string file = Path.Combine(root, "active.json");
+            byte[] before = File.ReadAllBytes(file); var modified = File.GetLastWriteTimeUtc(file);
+            for (int i = 0; i < 3; i++) { Check(store.Snapshot!.Payload == key.Payload(), "unchanged read exact original key"); store.Update(_ => { }); }
+            Check(File.ReadAllBytes(file).SequenceEqual(before) && File.GetLastWriteTimeUtc(file) == modified, "unchanged update does not replace active file");
+            Reject(() => new LocalStore(root), "second writer lease");
+            string network = Identity.Encode(new byte[32]);
+            store.Update(s => s.Accounts[network] = new(new("human:test", network, "me.")));
+            saved = store.PortablePayload();
+            string backup = Backup.Export(key, "public fixture passphrase", saved);
+            string imported = Backup.Decrypt(backup, "public fixture passphrase");
+            Check(JsonNode.Parse(imported)!["accounts"]!.AsArray().Count == 1, "portable backup retains exact account references");
+        }
+        using (var reopened = new LocalStore(root)) Check(reopened.Snapshot!.Accounts.Count == 1, "restart retains account identity");
+        using (var faulted = new LocalStore(root)) {
+            faulted.DurabilityBoundary = point => { if (point == "after-rename") throw new IOException("Injected directory-durability failure."); };
+            Reject(() => faulted.Update(s => s.Endpoint = "https://verified-update.example:14570"), "durability failure remains visible");
+            Reject(() => faulted.Update(s => s.Endpoint = "https://must-not-overwrite.example:14570"), "failed durability blocks later overwrites until reopen");
+        }
+        using (var recovered = new LocalStore(root)) {
+            Check(recovered.Snapshot!.Endpoint == "https://verified-update.example:14570", "reopen observes original post-rename result");
+            Check(recovered.Snapshot.Payload == key.Payload(), "durability failure preserves original key");
+        }
+        File.SetUnixFileMode(Path.Combine(root, "active.json"), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead);
+        Reject(() => new LocalStore(root), "insecure active file");
+        File.SetUnixFileMode(Path.Combine(root, "active.json"), UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        File.WriteAllText(Path.Combine(root, "active.json"), "broken"); Reject(() => new LocalStore(root), "corrupt store never replaced");
+        File.Delete(Path.Combine(root, "active.json")); File.CreateSymbolicLink(Path.Combine(root, "active.json"), Path.Combine(root, "writer.lock"));
+        Reject(() => new LocalStore(root), "symlink refuses");
+        // Only this test's newly generated directory is removed.
+        Directory.Delete(root, true);
+    }
+    static void Forms()
+    {
+        string text = "component(f,form,[property(label,<<\"Generic test\">>)],[component(g,group,[property(label,<<\"Nested\">>)],[component(n,number_input,[property(label,<<\"Exact\">>),property(range,range(18446744073709551615,18446744073709551619,2))],[]),component(c,selection,[property(label,<<\"Choice\">>),property(options,[option(a,<<\"A\">>),option(b,<<\"B\">>)])],[])]),component(save,button,[property(label,<<\"Apply\">>)],[])])";
+        var form = Form.Decode(Term.Parse(text), Term.Parse("[field(n,18446744073709551615),field(c,a)]"), Term.Atom("save"));
+        var draft = new Dictionary<string, string>(form.Defaults) { ["n"] = "18446744073709551619", ["c"] = "b" };
+        Check(form.Fields(draft).ToString() == "[field(n,18446744073709551619),field(c,b)]", "nested generic fields preserve above-uint64 integers");
+        draft["n"] = "18446744073709551618"; Reject(() => form.Fields(draft), "offered numeric step");
+        draft["n"] = "18446744073709551619"; draft["c"] = "invented"; Reject(() => form.Fields(draft), "choice membership");
+        Reject(() => Component.Decode(Term.Parse(text.Replace("number_input", "unknown_widget"))), "unsupported descriptor explicit refusal");
+        Reject(() => Component.Decode(Term.Parse(text.Replace("property(label,<<\"Exact\">>)", "property(script,untrusted)"))), "unsupported executable descriptor property");
+        Reject(() => Term.Parse("[X]").Ground(), "nonground projection");
+        string required = "component(f,form,[property(label,f)],[component(b,checkbox,[property(label,b),property(required,true)],[]),component(c,selectable_list,[property(label,c),property(required,true),property(multiple,true),property(options,[option(a,a)])],[]),component(save,button,[property(label,save)],[])])";
+        var initial = Form.Decode(Term.Parse(required), Term.Parse("[field(b,false),field(c,[])]"), Term.Atom("save"));
+        Check(initial.Defaults["b"] == "false" && initial.Defaults["c"] == "[]", "required unchecked and empty defaults remain displayable");
+        Reject(() => initial.Fields(initial.Defaults), "required defaults still need edits before submission");
+        var edited = new Dictionary<string,string>(initial.Defaults) { ["b"] = "true" };
+        Reject(() => initial.Fields(edited), "empty required selection still refuses submission");
+        edited["c"] = "[a]";
+        Check(initial.Fields(edited).ToString() == "[field(b,true),field(c,[a])]", "edited required fields retain exact typed bindings");
+        // A viewer pose is filled by the device and submitted as given: none, or eyes plus look direction.
+        string viewed = "component(f,form,[property(label,f)],[component(v,viewer_pose,[property(label,v),property(required,false),property(readonly,false)],[]),component(save,button,[property(label,save)],[])])";
+        var pose = Form.Decode(Term.Parse(viewed), Term.Parse("[field(v,none)]"), Term.Atom("save"));
+        Check(pose.Tree.Leaves.Single(c => c.Role == "v").Input && pose.Fields(pose.Defaults).ToString() == "[field(v,none)]", "a viewer pose starts as none");
+        var looked = new Dictionary<string,string>(pose.Defaults) { ["v"] = "view(transform(1000,1600,0,0,90,0),forward(-1000,0,0))" };
+        Check(pose.Fields(looked).ToString() == "[field(v,view(transform(1000,1600,0,0,90,0),forward(-1000,0,0)))]", "a device's viewer pose is submitted exactly");
+        looked["v"] = "view(transform(1000,1600,0,0,90,0),forward(a,0,0))"; Reject(() => pose.Fields(looked), "a viewer pose holds integers only");
+        Reject(() => Form.Decode(Term.Parse(required), Term.Parse("[field(b,<<\"false\">>),field(c,[])]"), Term.Atom("save")), "initial boolean type stays strict");
+        Reject(() => Form.Decode(Term.Parse(required), Term.Parse("[field(b,false),field(c,[invented])]"), Term.Atom("save")), "initial choice membership stays strict");
+    }
+    static void Outcomes()
+    {
+        foreach (string aggregate in new[] { "all_applied", "all_rejected", "mixed" }) {
+            var reply = JsonNode.Parse("{\"result\":\"operation_outcome\",\"status\":\"completed\",\"terminal\":true}")!;
+            reply["aggregate"] = aggregate;
+            Check(Json.Terminal(reply) && Json.Committed(reply) == (aggregate == "all_applied"), "completed vector preserves aggregate " + aggregate);
+            reply["result"] = "ok";
+            Check(Json.Committed(reply) == (aggregate == "all_applied"), "direct vector preserves aggregate " + aggregate);
+        }
+        Check(!Json.Committed(JsonNode.Parse("{\"result\":\"operation_outcome\",\"status\":\"completed\",\"terminal\":true}")!), "completed without an aggregate cannot install account refs");
+    }
+    static void Crash(string[] args)
+    {
+        using var store = new LocalStore(args[1]);
+        if (args[2] == "create") { using var key = Identity.Create(); store.Create(key.Payload()); Console.WriteLine("CREATED"); return; }
+        string before = store.Snapshot!.Payload;
+        store.DurabilityBoundary = point => { if (point == args[2]) { Console.WriteLine("CRASH_SEAM " + point); Console.Out.Flush(); Console.ReadLine(); throw new Exception("Expected external SIGKILL."); } };
+        store.Update(s => s.Endpoint = "https://updated.example:14570");
+        Check(store.Snapshot!.Payload == before, "update retains original identity");
+    }
+}

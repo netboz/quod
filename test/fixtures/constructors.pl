@@ -2,9 +2,8 @@
 %% the assertion hook, identity allocation, authorization and whole-attempt savepoint.
 test_initialize(Class, Instance) :-
     '$quod_build_plan'(Inputs),
-    '$quod_constructor_plan'(Class, Instance, Inputs, Order, Attributes),
-    '$quod_initial_attribute_writes'(Instance, Attributes),
-    '$quod_run_constructors'(Order, Instance, Inputs).
+    '$quod_constructor_plan'(Class, Instance, Inputs, _, Attributes),
+    '$quod_initial_attribute_writes'(Instance, Attributes).
 
 isa(vehicle, thing).
 isa(car, vehicle).
@@ -15,14 +14,6 @@ constructor_order(amphibious, [car, boat]).
 have_attribute(vehicle, name, binary, default(<<"Vehicle">>)).
 have_attribute(vehicle, wheels, integer, default(0)).
 have_attribute(car, wheels, integer, default(4)).
-constructor(vehicle, I, Inputs) :-
-    attribute(I, wheels, W), assertz(ran(vehicle, I, W, Inputs)).
-constructor(car, I, Inputs) :-
-    attribute(I, wheels, W), assertz(ran(car, I, W, Inputs)).
-constructor(boat, I, Inputs) :-
-    attribute(I, wheels, W), assertz(ran(boat, I, W, Inputs)).
-constructor(amphibious, I, Inputs) :-
-    attribute(I, wheels, W), assertz(ran(amphibious, I, W, Inputs)).
 isa(trailer, car).
 isa(failing_child, car).
 constructor(failing_child, _, _) :- fail.
@@ -34,17 +25,10 @@ isa(head, thing).
 isa(eye, thing).
 have_attribute(head, name, binary, default(<<"Head">>)).
 have_attribute(head, color, atom, default(red)).
-have_part(head, left_eye).
 have_attribute(eye, name, binary, default(<<"Eye">>)).
-have_attribute(eye, color, atom, default(blue)).
-constructor(head, I, Inputs) :-
-    '$quod_build_plan'([]),
-    build_plan_part(Inputs, left_eye, Left),
-    with_build_plan(Left, test_initialize(eye, left(I))),
-    test_initialize(eye, right(I)),
-    assertz(parts(I, left(I), right(I))).
-constructor(eye, I, _) :- attribute(I, color, Color), Color \== invalid.
-
+have_attribute(eye, color, eye_color, default(blue)).
+eye_color(blue).
+eye_color(green).
 %% The pool provider is tested against the real naming rules with a tiny pool.
 isa(place, thing).
 have_attribute(place, name, binary, default_from(place_name)).

@@ -1,0 +1,17 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-m4-r2-20261029/audit-source.py",
+    "final03"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T12:35:01Z",
+  "elapsed_seconds": 2.1207683086395264,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m4-r2-artifacts/private/logs/final03-source-audit.log",
+  "raw_sha256": "bd0199b87a283955c2845ad5cd640b601c71fb35c4a1b3f4ac719f7d091fa32c",
+  "sanitized_sha256": "bd0199b87a283955c2845ad5cd640b601c71fb35c4a1b3f4ac719f7d091fa32c",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

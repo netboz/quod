@@ -1,0 +1,427 @@
+OWNER_BEAMS [{erlog_int,"/checks/lib/erlog/ebin/erlog_int.beam"},
+             {quod_prolog,"/checks/lib/quod/ebin/quod_prolog.beam"},
+             {quod_erlog_db_local_prove,
+                 "/checks/lib/quod/ebin/quod_erlog_db_local_prove.beam"},
+             {quod_agent_hosting_tests,
+                 "/checks/lib/quod/test/quod_agent_hosting_tests.beam"}]
+======================== EUnit ========================
+module 'quod_remaining_admission_tests'
+  quod_remaining_admission_tests: committee_population_keeps_crypto_and_exact_honest_count_test...[0.028 s] ok
+  quod_remaining_admission_tests: complete_page_above_former_count_and_byte_quotas_test...[0.015 s] ok
+  quod_remaining_admission_tests: callable_population_preserves_opaque_argument_data_test...[0.002 s] ok
+  quod_remaining_admission_tests: single_effect_with_canonical_large_actor_keeps_semantic_singleton_test...[0.005 s] ok
+  quod_remaining_admission_tests: complete_diagnostics_and_explicit_finite_callback_test...[0.022 s] ok
+  [done in 0.087 s]
+module 'quod_namespace_layout_tests'
+  quod_namespace_layout_tests: long_namespace_has_one_exact_representable_key_test...[0.021 s] ok
+  quod_namespace_layout_tests: old_journal_in_other_root_refuses_before_ledger_creation_test...[0.008 s] ok
+  quod_namespace_layout_tests: old_archive_refuses_even_when_new_layout_exists_test...ok
+  quod_namespace_layout_tests: long_namespace_reopens_same_store_without_alias_test...[0.006 s] ok
+  quod_namespace_layout_tests: old_foreign_manifest_refuses_before_projection_cleanup_test...[0.010 s] ok
+  [done in 0.060 s]
+module 'quod_quorum_tests'
+  quod_quorum_tests: threshold_matches_simplex_rule_test...ok
+  quod_quorum_tests: committee_and_signature_bounds_are_shared_test...ok
+  quod_quorum_tests: honest_threshold_has_one_arithmetic_owner_test...ok
+  quod_quorum_tests: canonical_certificate_rows_share_shape_order_and_duplicate_rules_test...ok
+  quod_quorum_tests: honest_signature_rows_are_bounded_once_test...[0.007 s] ok
+  quod_quorum_tests: committee_is_validated_once_at_each_public_policy_test...[0.002 s] ok
+  quod_quorum_tests: exact_honest_verifier_rejects_noncanonical_and_extra_rows_test...[0.001 s] ok
+  quod_quorum_tests: public_policies_share_member_signature_checks_test...[0.003 s] ok
+  [done in 0.037 s]
+module 'quod_applied_certificate_tests'
+  quod_applied_certificate_tests: exact_operation_result_certificate_test...[0.002 s] ok
+  quod_applied_certificate_tests: application_occurrence_and_every_domain_field_are_bound_test...ok
+  quod_applied_certificate_tests: quorum_is_distinct_and_historical_test...ok
+  quod_applied_certificate_tests: only_canonical_terminal_results_are_signed_test...ok
+  quod_applied_certificate_tests: receipt_identity_excludes_interchangeable_signature_subsets_test...[0.003 s] ok
+  [done in 0.020 s]
+module 'quod_client_auth_tests'
+  quod_client_auth_tests: challenge_is_single_use_test...[0.011 s] ok
+  quod_client_auth_tests: session_is_node_local_and_bounded_test...ok
+  quod_client_auth_tests: default_session_lasts_fifteen_minutes_test...ok
+  quod_client_auth_tests: default_client_goal_admission_has_no_rate_policy_test...ok
+  quod_client_auth_tests: default_challenge_admission_has_no_rate_policy_test...[0.002 s] ok
+  quod_client_auth_tests: application_rate_policy_is_applied_and_explicit_options_override_test...[0.001 s] ok
+  quod_client_auth_tests: invalid_signature_consumes_challenge_test...ok
+  quod_client_auth_tests: full_sessions_do_not_consume_a_challenge_test...ok
+  quod_client_auth_tests: challenge_budget_is_bounded_per_peer_test...ok
+  quod_client_auth_tests: full_challenge_table_does_not_charge_the_peer_test...ok
+  quod_client_auth_tests: signed_goal_admission_is_bounded_by_signing_key_and_peer_test...ok
+  quod_client_auth_tests: paired_goal_budgets_commit_only_when_both_admit_test...ok
+  quod_client_auth_tests: paired_symbol_budgets_commit_only_when_both_admit_test...ok
+  quod_client_auth_tests: signed_goal_materialization_leaves_data_opaque_test...ok
+  quod_client_auth_tests: self_scoped_request_materializes_and_charges_callable_test...ok
+  quod_client_auth_tests: signed_request_materializes_origin_but_not_remote_goal_test...ok
+  quod_client_auth_tests: materialized_atom_ceiling_survives_auth_owner_restart_test...ok
+  quod_client_auth_tests: malformed_requests_are_not_authentication_failures_test...ok
+  quod_client_auth_tests: owner_ready_notice_identifies_each_auth_incarnation_test...ok
+  quod_client_auth_tests: default_auth_tables_retain_more_than_256_entries_test...*failed*
+in function quod_client_auth_tests:signed_challenge/2 (/checks/source/test/quod_client_auth_tests.erl, line 413)
+in call from quod_client_auth_tests:'-default_auth_tables_retain_more_than_256_entries_test/0-lc$^0/1-0-'/2 (/checks/source/test/quod_client_auth_tests.erl, line 480)
+in call from quod_client_auth_tests:'-default_auth_tables_retain_more_than_256_entries_test/0-lc$^0/1-0-'/2 (/checks/source/test/quod_client_auth_tests.erl, line 480)
+in call from quod_client_auth_tests:'-default_auth_tables_retain_more_than_256_entries_test/0-fun-7-'/0 (/checks/source/test/quod_client_auth_tests.erl, line 480)
+in call from quod_client_auth_tests:with_auth/2 (/checks/source/test/quod_client_auth_tests.erl, line 449)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+**error:{badmatch,{error,client_auth_busy}}
+  output:<<"">>
+
+  [done in 0.074 s]
+module 'quod_wire_term_tests'
+  quod_wire_term_tests: self_scoped_symbols_use_the_same_admission_walk_test...ok
+  quod_wire_term_tests: foreign_scope_defers_inner_symbols_even_when_nested_test...ok
+  quod_wire_term_tests: opaque_rule_clause_heads_remain_executable_test...ok
+  quod_wire_term_tests: roundtrip_existing_terms_test...ok
+  quod_wire_term_tests: unknown_symbol_does_not_allocate_atom_test...ok
+  quod_wire_term_tests: answer_bytes_bind_identically_before_and_after_atom_creation_test...ok
+  quod_wire_term_tests: variable_name_is_not_treated_as_goal_vocabulary_test...ok
+  quod_wire_term_tests: opaque_spelling_wins_when_retained_goal_contains_both_test...ok
+  quod_wire_term_tests: malformed_reserved_marker_is_not_walked_as_vocabulary_test...ok
+  quod_wire_term_tests: unknown_predicate_stays_opaque_until_target_materializes_test...ok
+  quod_wire_term_tests: malformed_reserved_symbol_markers_are_rejected_test...ok
+  quod_wire_term_tests: goal_symbol_names_is_atom_safe_and_uses_callable_positions_test...ok
+  quod_wire_term_tests: remote_selector_is_materialized_but_inner_goal_stays_opaque_test...ok
+  quod_wire_term_tests: database_update_clause_heads_are_callable_positions_test...ok
+  quod_wire_term_tests: independent_walks_owned_goals_but_not_foreign_goals_or_data_test...ok
+  quod_wire_term_tests: independent_with_other_arity_does_not_materialize_data_test...ok
+  quod_wire_term_tests: -transaction_owned_goal_positions_test_/0-fun-8- (atom)...ok
+  quod_wire_term_tests: -transaction_owned_goal_positions_test_/0-fun-8- (opaque)...ok
+  quod_wire_term_tests: transaction_other_arity_keeps_data_opaque_test...ok
+  quod_wire_term_tests: deep_value_roundtrip_test...ok
+  quod_wire_term_tests: flat_list_spine_does_not_consume_depth_test...ok
+  quod_wire_term_tests: flat_content_uses_enclosing_byte_bound_test...[0.005 s] ok
+  quod_wire_term_tests: improper_tuple_item_list_is_rejected_test...ok
+  quod_wire_term_tests: real_erlog_failure_stack_roundtrips_canonically_test...[0.001 s] ok
+  quod_wire_term_tests: quod_policy_preserves_the_real_erlog_stack_before_encoding_test...[0.005 s] ok
+  quod_wire_term_tests: failure_reason_count_and_shape_bounds_are_exact_test...ok
+  quod_wire_term_tests: failure_reason_canonical_byte_bounds_are_exact_test...ok
+  quod_wire_term_tests: empty_failure_stack_is_a_canonical_scope_completion_test...ok
+  quod_wire_term_tests: failure_stack_decode_rejects_noncanonical_etf_test...ok
+  [done in 0.098 s]
+module 'quod_agent_ref_tests'
+  quod_agent_ref_tests: canonical_ground_reference_roundtrip_test...ok
+  quod_agent_ref_tests: variables_and_noncanonical_blobs_are_rejected_test...ok
+  quod_agent_ref_tests: opaque_identity_symbols_do_not_have_a_population_quota_test...[0.001 s] ok
+  [done in 0.010 s]
+module 'quod_client_goal_tests'
+  quod_client_goal_tests: unsigned_selector_does_not_parse_or_authorize_the_goal_test...[0.002 s] ok
+  quod_client_goal_tests: typed_request_decode_preserves_bytes_without_allocating_atoms_test...ok
+  quod_client_goal_tests: wire_bytes_are_browser_reproducible_test...ok
+  quod_client_goal_tests: browser_ed25519_roundtrip_vector_test...ok
+  quod_client_goal_tests: v2_binary_literals_are_signed_as_exact_opaque_bytes_test...ok
+  quod_client_goal_tests: v3_negative_literal_signature_keeps_v2_evidence_frozen_test...ok
+  quod_client_goal_tests: non_ascii_browser_signature_vector_test...ok
+  quod_client_goal_tests: all_mode_tags_roundtrip_test...ok
+  quod_client_goal_tests: signature_binds_every_request_field_test...[0.001 s] ok
+  quod_client_goal_tests: verified_variable_names_bind_the_durable_result_test...ok
+  quod_client_goal_tests: anonymous_variables_are_omitted_from_named_results_test...ok
+  quod_client_goal_tests: validator_context_is_exact_and_uses_admission_time_test...ok
+  quod_client_goal_tests: decode_is_exact_and_total_test...[0.002 s] ok
+  quod_client_goal_tests: invalid_goal_is_rejected_after_authentication_test...ok
+  quod_client_goal_tests: field_bounds_and_utf8_are_rejected_before_signature_work_test...[0.005 s] ok
+  [done in 0.055 s]
+module 'quod_dtx_tests'
+  quod_dtx_tests: era_reference_names_material_height_and_a_compact_preferred_head_test...[0.045 s] ok
+  quod_dtx_tests: era_verified_selected_entry_discharges_an_unavailable_preferred_witness_test...[0.009 s] ok
+  quod_dtx_tests: sealed_plan_carries_exact_diff_and_read_tokens_test...[0.015 s] ok
+  quod_dtx_tests: seal_rechecks_namespace_gate_before_exposing_plan_test...[0.009 s] ok
+  quod_dtx_tests: untouched_scope_is_not_material_test...[0.008 s] ok
+  quod_dtx_tests: signed_origin_scope_seals_operation_claim_without_database_diff_test...[0.008 s] ok
+  quod_dtx_tests: signed_non_origin_empty_scope_remains_not_material_test...[0.008 s] ok
+  quod_dtx_tests: read_only_participant_seals_empty_diff_with_read_check_test...[0.008 s] ok
+  quod_dtx_tests: independent_lane_is_explicit_and_selects_the_canonical_vector_test...[0.015 s] ok
+  quod_dtx_tests: write_lane_routing_is_derived_only_from_sealed_plans_test...[0.055 s] ok
+  quod_dtx_tests: signed_plan_verifies_and_rejects_tamper_test...[0.009 s] ok
+  quod_dtx_tests: large_goal_seals_and_roundtrips_test...[0.009 s] ok
+  quod_dtx_tests: decode_is_canonical_and_shape_checked_test...[0.008 s] ok
+  quod_dtx_tests: origin_outcome_identity_keeps_foreign_payloads_opaque_test...[0.008 s] ok
+  quod_dtx_tests: verified_plan_restart_materializes_new_functor_at_owner_test...ok
+  quod_dtx_tests: superseded_keyed_plan_v5_is_rejected_test...ok
+  quod_dtx_tests: plan_material_replays_admitted_vocabulary_on_a_cold_vm_test...[0.003 s] ok
+  quod_dtx_tests: plan_material_rejects_invalid_diff_and_duplicate_reads_test...ok
+  quod_dtx_tests: legacy_or_unclassified_transcript_is_rejected_test...[0.008 s] ok
+  quod_dtx_tests: outcome_bridge_refuses_in_owner_contexts_before_reading_test...[0.009 s] ok
+  quod_dtx_tests: outcome_reads_survive_extraction_and_sealing_test...[0.008 s] ok
+  quod_dtx_tests: material_diff_with_live_bridge_fails_seal_test...[0.008 s] ok
+  quod_dtx_tests: bridge_use_without_a_diff_still_seals_test...[0.010 s] ok
+  quod_dtx_tests: overlay_separates_tokens_from_bridge_markers_test...[0.008 s] ok
+  quod_dtx_tests: transcript_orders_invocations_and_tags_terminals_test...[0.008 s] ok
+  quod_dtx_tests: transcript_invocation_ids_are_never_reused_test...[0.008 s] ok
+  quod_dtx_tests: peer_ready_taint_is_exempt_only_for_membership_diff_test...[0.017 s] ok
+  quod_dtx_tests: transcript_population_uses_the_complete_plan_envelope_test...[0.012 s] ok
+  quod_dtx_tests: binary_heavy_nested_goal_uses_complete_plan_admission_test...[0.011 s] ok
+  quod_dtx_tests: binary_heavy_cancel_and_malformed_goal_preserve_transcript_lifecycle_test...[0.010 s] ok
+  quod_dtx_tests: denied_transcript_keeps_request_and_never_executes_it_test...[0.010 s] ok
+  quod_dtx_tests: read_only_session_records_no_transcript_test...[0.008 s] ok
+  quod_dtx_tests: finalize_seals_local_scope_and_stores_the_plan_test...[0.013 s] ok
+  quod_dtx_tests: finalize_of_a_clean_proof_seals_nothing_test...[0.009 s] ok
+  quod_dtx_tests: finalize_fails_the_proof_on_a_refused_seal_test...[0.008 s] ok
+  quod_dtx_tests: failed_material_proof_aborts_without_sealing_test...[0.008 s] ok
+  quod_dtx_tests: large_signed_request_is_preserved_by_transaction_and_vote_test...[0.046 s] ok
+  quod_dtx_tests: plan_attestation_rejects_a_different_valid_plan_test...[0.037 s] ok
+  quod_dtx_tests: effect_only_plan_is_admitted_once_by_the_shared_dtx_validator_test...[0.001 s] ok
+  quod_dtx_tests: noncanonical_plan_envelope_cannot_change_a_group_id_test...[0.024 s] ok
+  quod_dtx_tests: manifest_yields_exact_event_context_test...[0.024 s] ok
+  quod_dtx_tests: more_than_sixty_four_disjoint_groups_vote_without_a_cap_test...[0.669 s] ok
+  quod_dtx_tests: batch_rejects_duplicate_signed_lane_sequence_test...[0.021 s] ok
+  quod_dtx_tests: batch_reducer_preserves_per_control_attribution_test...[0.023 s] ok
+  quod_dtx_tests: overlapping_writes_block_and_batch_failure_is_atomic_test...[0.020 s] ok
+  quod_dtx_tests: ordinary_content_blocks_only_on_an_exact_active_conflict_test...[0.022 s] ok
+  quod_dtx_tests: read_write_and_write_read_conflicts_are_symmetric_test...[0.020 s] ok
+  quod_dtx_tests: same_effect_custody_conflicts_even_when_effect_ids_differ_test...[0.004 s] ok
+  quod_dtx_tests: event_only_resolve_retains_only_the_source_completion_marker_test...[0.005 s] ok
+  quod_dtx_tests: independent_commit_fences_acknowledge_in_reverse_order_test...[0.021 s] ok
+  quod_dtx_tests: certified_entry_ref_binds_exact_entry_test...[0.021 s] ok
+  quod_dtx_tests: certified_entry_ref_accepts_another_valid_quorum_subset_test...[0.021 s] ok
+  quod_dtx_tests: certified_entry_ref_binds_pinned_genesis_test...ok
+  [done in 1.528 s]
+module 'quod_dtx_endpoint_tests'
+  quod_dtx_endpoint_tests: owner_errors_use_the_wire_refusal_vocabulary_test...[0.001 s] ok
+  quod_dtx_endpoint_tests: outcome_binding_depth_roundtrips_through_transport_test...ok
+  quod_dtx_endpoint_tests: channel_and_wire_bounds_are_fixed_test...ok
+  quod_dtx_endpoint_tests: trace_carrier_is_transport_only_and_never_changes_correlation_test...ok
+  quod_dtx_endpoint_tests: all_request_shapes_roundtrip_deterministically_test...ok
+  quod_dtx_endpoint_tests: all_response_shapes_roundtrip_and_correlate_test...ok
+  quod_dtx_endpoint_tests: certified_remote_application_response_correlates_test...[0.010 s] ok
+  quod_dtx_endpoint_tests: direction_namespace_and_exact_correlation_are_enforced_test...ok
+  quod_dtx_endpoint_tests: read_attest_correlation_binds_the_exact_plan_test...ok
+  quod_dtx_endpoint_tests: applied_response_carries_signer_and_signature_test...ok
+  quod_dtx_endpoint_tests: cancel_operation_effect_rejects_the_old_tuple_test...ok
+  quod_dtx_endpoint_tests: entry_hint_roundtrips_as_untrusted_sidecar_test...[0.008 s] ok
+  quod_dtx_endpoint_tests: application_result_sidecar_roundtrips_entry_and_member_vote_test...[0.037 s] ok
+  quod_dtx_endpoint_tests: malformed_received_hint_is_ignored_without_losing_the_request_test...[0.008 s] ok
+  quod_dtx_endpoint_tests: entry_sidecar_keeps_foreign_symbols_wrapped_test...ok
+  quod_dtx_endpoint_tests: published_group_pending_status_uses_current_wire_vocabulary_test...ok
+  quod_dtx_endpoint_tests: outcome_view_and_floor_correlation_are_exact_test...ok
+  quod_dtx_endpoint_tests: old_phase_refusal_and_absence_barrier_vocabulary_is_rejected_test...ok
+  quod_dtx_endpoint_tests: submit_digest_correlation_is_exact_test...ok
+  quod_dtx_endpoint_tests: selected_negative_vote_correlates_without_becoming_an_uncommitted_refusal_test...[0.019 s] ok
+  quod_dtx_endpoint_tests: malformed_and_noncanonical_frames_fail_closed_test...[0.001 s] ok
+  quod_dtx_endpoint_tests: committed_outcome_preserves_unknown_binding_symbols_test...ok
+  quod_dtx_endpoint_tests: unknown_atoms_are_not_created_test...ok
+  quod_dtx_endpoint_tests: invalid_fixed_shapes_are_rejected_test...ok
+  [done in 0.157 s]
+module 'quod_scope_wire_tests'
+  quod_scope_wire_tests: scope_open_trace_metadata_is_transient_and_fail_closed_test...[0.003 s] ok
+  quod_scope_wire_tests: all_command_shapes_roundtrip_deterministically_test...ok
+  quod_scope_wire_tests: independent_metadata_roundtrips_and_refuses_malformed_values_test...ok
+  quod_scope_wire_tests: savepoint_lineage_and_public_intent_are_independent_wire_fields_test...ok
+  quod_scope_wire_tests: scope_v5_authentication_digest_is_exact_and_bounded_test...ok
+  quod_scope_wire_tests: scope_v5_binding_rejects_principal_and_authentication_substitution_test...ok
+  quod_scope_wire_tests: all_events_carry_exact_state_and_roundtrip_test...ok
+  quod_scope_wire_tests: prepared_budget_error_is_bounded_and_survives_scope_wire_test...ok
+  quod_scope_wire_tests: scope_error_target_binding_does_not_constrain_invocation_errors_test...ok
+  quod_scope_wire_tests: answer_binding_protocol_error_round_trips_test...ok
+  quod_scope_wire_tests: seal_operations_round_trip_without_material_subquota_test...ok
+  quod_scope_wire_tests: manifest_attestation_payloads_are_canonical_test...ok
+  quod_scope_wire_tests: read_certificate_scope_results_use_the_closed_error_catalog_test...ok
+  quod_scope_wire_tests: group_effect_binding_is_exact_and_bounded_test...ok
+  quod_scope_wire_tests: operation_effect_submission_crosses_scope_without_subquota_test...ok
+  quod_scope_wire_tests: scope_namespace_uses_directory_bound_test...*failed*
+in function quod_scope_wire_tests:scope_namespace_uses_directory_bound_test/0 (/checks/source/test/quod_scope_wire_tests.erl, line 387)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{assertEqual,[{module,quod_scope_wire_tests},
+              {line,387},
+              {expression,"quod_scope_wire : encode_command ( TooLarge )"},
+              {expected,{error,{protocol_error,bad_identity}}},
+              {value,{ok,<<131,104,3,109,0,0,0,10,...>>}}]}
+  output:<<"">>
+
+  quod_scope_wire_tests: submit_operations_round_trip_without_material_subquota_test...ok
+  quod_scope_wire_tests: retired_generic_public_errors_are_rejected_test...ok
+  quod_scope_wire_tests: goal_stays_opaque_until_explicit_payload_decode_test...ok
+  quod_scope_wire_tests: opaque_goal_symbol_survives_scope_codec_test...ok
+  quod_scope_wire_tests: payload_byte_bounds_are_exact_test...[0.020 s] ok
+  quod_scope_wire_tests: large_malformed_scope_envelope_still_fails_closed_test...ok
+  quod_scope_wire_tests: outer_safe_etf_and_version_are_fail_closed_test...ok
+  quod_scope_wire_tests: unknown_outer_atom_is_not_created_test...ok
+  quod_scope_wire_tests: identity_probe_and_response_are_fixed_safe_frames_test...ok
+  quod_scope_wire_tests: ids_sequences_chain_generation_and_dirty_are_bounded_test...ok
+  quod_scope_wire_tests: dirty_is_mandatory_and_error_vocabulary_is_closed_test...ok
+  quod_scope_wire_tests: lineage_controller_shapes_and_limits_are_exact_test...[0.001 s] ok
+  quod_scope_wire_tests: superseded_transaction_wire_shapes_are_rejected_test...ok
+  [done in 0.112 s]
+module 'quod_schema_tests'
+  quod_schema_tests: parse_test...[0.021 s] ok
+  quod_schema_tests: defaults_test...ok
+  quod_schema_tests: two_ontologies_test...ok
+  quod_schema_tests: batch_window_parse_test...ok
+  quod_schema_tests: explorer_read_budget_parse_test...ok
+  quod_schema_tests: owner_tracing_node_policy_parse_test...ok
+  quod_schema_tests: owner_tracing_content_policy_rejected_test...ok
+  quod_schema_tests: owner_tracing_invalid_node_policy_test...ok
+  quod_schema_tests:94: -explorer_read_budget_invalid_test_/0-fun-2-...ok
+  quod_schema_tests:94: -explorer_read_budget_invalid_test_/0-fun-2-...ok
+  quod_schema_tests:94: -explorer_read_budget_invalid_test_/0-fun-2-...ok
+  quod_schema_tests:94: -explorer_read_budget_invalid_test_/0-fun-2-...ok
+  quod_schema_tests:94: -explorer_read_budget_invalid_test_/0-fun-2-...ok
+  quod_schema_tests:99: -removed_directory_authority_fields_rejected_test_/0-fun-2-...ok
+  quod_schema_tests:99: -removed_directory_authority_fields_rejected_test_/0-fun-2-...ok
+  quod_schema_tests: removed_directory_bootstraps_rejected_test...ok
+  quod_schema_tests:120: -removed_ask_scope_config_names_rejected_test_/0-fun-2-...ok
+  quod_schema_tests:120: -removed_ask_scope_config_names_rejected_test_/0-fun-2-...ok
+  quod_schema_tests:120: -removed_ask_scope_config_names_rejected_test_/0-fun-2-...ok
+  quod_schema_tests: -boot_client_certificate_matches_advertised_ip_test_/0-fun-14- (192.0.2.27)...[0.044 s] ok
+  quod_schema_tests: -boot_client_certificate_matches_advertised_ip_test_/0-fun-14- (2001:db8::27)...[0.011 s] ok
+  quod_schema_tests: local_vault_boot_does_not_require_https_provider_test...[0.013 s] ok
+  quod_schema_tests: boot_identity_test...[0.007 s] ok
+  quod_schema_tests: identity_dir_override_test...[0.015 s] ok
+  quod_schema_tests: directory_boot_conversion_test...[0.006 s] ok
+  quod_schema_tests: owner_tracing_boot_reaches_dynamic_resume_test...[0.008 s] ok
+  quod_schema_tests: -env_override_test_/0-fun-3-...ok
+  quod_schema_tests: genesis_hash_default_test...ok
+  quod_schema_tests: genesis_hash_parse_test...ok
+  quod_schema_tests: build_ns_config_genesis_hash_test...ok
+  quod_schema_tests: build_ns_config_no_genesis_hash_test...ok
+=WARNING REPORT==== 3-Nov-2026::16:40:38.998755 ===
+quod: ignoring invalid root recovery contact: <<":14567">>
+=WARNING REPORT==== 3-Nov-2026::16:40:38.998821 ===
+quod: ignoring invalid root recovery contact: <<"bad">>
+  quod_schema_tests: root_recovery_contacts_ignore_invalid_content_seed_test...ok
+  quod_schema_tests: worker_allowances_keep_explicit_finite_configuration_test...ok
+  [done in 0.224 s]
+module 'erlog_failure_reasons_tests'
+  erlog_failure_reasons_tests: direct_failure_reason_test...ok
+  erlog_failure_reasons_tests: standard_predicate_gets_default_reason_test...ok
+  erlog_failure_reasons_tests: nested_predicates_form_failure_trace_test...ok
+  erlog_failure_reasons_tests: explicit_reason_is_root_cause_of_trace_test...ok
+  erlog_failure_reasons_tests: internal_predicates_do_not_pollute_failure_trace_test...ok
+  erlog_failure_reasons_tests: ecall_is_not_available_test...ok
+  erlog_failure_reasons_tests: unbound_default_arguments_are_frozen_test...ok
+  erlog_failure_reasons_tests: non_prolog_default_arguments_are_sanitized_test...ok
+  erlog_failure_reasons_tests: backtracking_fallback_reads_reason_test...ok
+  erlog_failure_reasons_tests: reasons_are_newest_first_test...ok
+  erlog_failure_reasons_tests: cut_retains_reason_history_test...ok
+  erlog_failure_reasons_tests: fresh_proof_resets_reasons_test...ok
+  erlog_failure_reasons_tests: negation_retains_explicit_reason_test...ok
+  erlog_failure_reasons_tests: findall_retains_explicit_reason_test...ok
+  erlog_failure_reasons_tests: successful_negation_retains_automatic_trace_test...ok
+  erlog_failure_reasons_tests: successful_findall_retains_automatic_trace_test...ok
+  erlog_failure_reasons_tests: get_fail_reasons_does_not_frame_itself_test...ok
+  erlog_failure_reasons_tests: successful_call_boundaries_are_retained_test...ok
+  erlog_failure_reasons_tests: non_ground_reason_is_error_test...ok
+  erlog_failure_reasons_tests: non_portable_reason_is_error_test...ok
+  erlog_failure_reasons_tests: large_reason_is_preserved_test...ok
+  erlog_failure_reasons_tests: outer_frames_preserve_a_large_inner_reason_test...ok
+  erlog_failure_reasons_tests: total_reason_stack_is_preserved_test...ok
+  erlog_failure_reasons_tests: custom_stack_policy_truncates_at_creation_test...ok
+  erlog_failure_reasons_tests: remote_merge_preserves_order_and_bounds_test...ok
+  [done in 0.075 s]
+module 'erlog_findall_cut_tests'
+  erlog_findall_cut_tests: generator_cut_prunes_its_alternatives_test...ok
+  erlog_findall_cut_tests: generator_without_cut_keeps_all_alternatives_test...ok
+  erlog_findall_cut_tests: bare_cut_still_reaches_collector_test...ok
+  erlog_findall_cut_tests: alternatives_after_cut_are_not_pruned_test...ok
+  erlog_findall_cut_tests: cut_then_failure_returns_empty_collection_test...ok
+  erlog_findall_cut_tests: generator_cut_does_not_prune_callers_alternative_test...ok
+  erlog_findall_cut_tests: nested_collectors_keep_distinct_cut_boundaries_test...ok
+  erlog_findall_cut_tests: call_cut_is_local_to_call_inside_generator_test...ok
+  erlog_findall_cut_tests: once_cut_is_local_to_once_inside_generator_test...ok
+  erlog_findall_cut_tests: negation_cut_is_local_to_negation_inside_generator_test...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (inline:negation_failed_cut)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (inline:negation_successful_cut)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (inline:if_failed_cut_else)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (inline:if_successful_cut_then)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (inline:once_failed_cut_keeps_caller)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (inline:once_successful_cut)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (inline:call_failed_cut_keeps_caller)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (inline:call_successful_cut)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (inline:nested_condition_failed_inner_cut)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (inline:failed_condition_without_cut)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (clause:negation_failed_cut)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (clause:negation_successful_cut)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (clause:if_failed_cut_else)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (clause:if_successful_cut_then)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (clause:once_failed_cut_keeps_caller)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (clause:once_successful_cut)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (clause:call_failed_cut_keeps_caller)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (clause:call_successful_cut)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (clause:nested_condition_failed_inner_cut)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (clause:failed_condition_without_cut)...ok
+  erlog_findall_cut_tests: -cut_before_failure_still_prunes_later_clauses_test_/0-fun-2- (plain)...ok
+  erlog_findall_cut_tests: -cut_before_failure_still_prunes_later_clauses_test_/0-fun-2- (unreachable_cut)...ok
+  erlog_findall_cut_tests: generator_bindings_do_not_escape_test...ok
+  erlog_findall_cut_tests: ordinary_generator_keeps_staged_writes_test...ok
+  erlog_findall_cut_tests: checkpointed_generator_restores_writes_after_cut_test...ok
+  erlog_findall_cut_tests: checkpointed_cut_failure_restores_generator_writes_test...ok
+  erlog_findall_cut_tests: generator_error_after_cut_cleans_collector_test...ok
+  [done in 0.111 s]
+module 'erlog_choicepoint_owned_tests'
+  erlog_choicepoint_owned_tests: owned_data_survives_relation_clause_retry_test...ok
+  erlog_choicepoint_owned_tests: owned_data_is_gone_after_relation_exhaustion_test...ok
+  erlog_choicepoint_owned_tests: owned_data_is_gone_after_cut_test...ok
+  erlog_choicepoint_owned_tests: owned_data_is_per_activation_test...ok
+  [done in 0.012 s]
+module 'erlog_choicepoint_checkpoint_tests'
+  erlog_choicepoint_checkpoint_tests: default_mode_keeps_standard_non_backtrackable_writes_test...ok
+  erlog_choicepoint_checkpoint_tests: inherited_checkpoint_mode_survives_fresh_proof_entry_test...ok
+  erlog_choicepoint_checkpoint_tests: checkpoint_mode_restores_failed_disjunction_branch_test...ok
+  erlog_choicepoint_checkpoint_tests: write_before_choicepoint_is_retained_test...ok
+  erlog_choicepoint_checkpoint_tests: retract_and_abolish_are_restored_test...ok
+  erlog_choicepoint_checkpoint_tests: interpreted_clause_retry_restores_failed_clause_test...ok
+  erlog_choicepoint_checkpoint_tests: compiled_list_retry_restores_failed_alternative_test...ok
+  erlog_choicepoint_checkpoint_tests: cut_discards_checkpoint_without_rolling_back_test...ok
+  erlog_choicepoint_checkpoint_tests: failure_reasons_survive_database_restore_test...ok
+  erlog_choicepoint_checkpoint_tests: findall_accumulator_survives_generator_backtracking_test...ok
+  erlog_choicepoint_checkpoint_tests: findall_generator_writes_are_restored_test...ok
+  erlog_choicepoint_checkpoint_tests: nested_checkpoint_depth_is_balanced_test...ok
+  erlog_choicepoint_checkpoint_tests: unsupported_mutable_database_fails_cleanly_test...[0.001 s] ok
+  [done in 0.040 s]
+module 'erlog_observation_tests'
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (plain:false)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (direct:false)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (failed_alternative:false)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (negation:false)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (meta_call:false)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (cut:false)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (collector:false)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (enumeration:false)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (failed_value:false)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (absent_flag:false)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (exception:false)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (writes:false)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (plain:true)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (direct:true)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (failed_alternative:true)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (negation:true)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (meta_call:true)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (cut:true)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (collector:true)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (enumeration:true)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (failed_value:true)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (absent_flag:true)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (exception:true)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (writes:true)...ok
+  erlog_observation_tests: constant_lookup_does_not_read_other_flags_test...ok
+  erlog_observation_tests: redo_observations_survive_failure_test...ok
+  erlog_observation_tests: cut_pruned_branch_observation_survives_leaving_checkpoints_test...ok
+  erlog_observation_tests: native_entry_is_explicitly_unclassified_test...ok
+  erlog_observation_tests: internal_unknown_flag_is_observed_test...ok
+  erlog_observation_tests: sink_failure_is_not_silent_incomplete_success_test...ok
+  [done in 0.090 s]
+module 'erlog_opaque_functor_tests'
+  erlog_opaque_functor_tests: opaque_functor_is_valid_data_inside_a_goal_test...ok
+  erlog_opaque_functor_tests: opaque_functor_is_not_executable_test...ok
+  erlog_opaque_functor_tests: byte_literals_remain_a_single_term_test...ok
+  [done in 0.009 s]
+module 'erlog_io_tests'
+  erlog_io_tests: read_string_terms_preserves_order_and_variables_test...ok
+  erlog_io_tests: read_string_terms_accepts_empty_source_test...ok
+  erlog_io_tests: read_string_terms_accepts_final_dot_without_space_test...ok
+  erlog_io_tests: read_string_terms_reports_scanner_line_test...ok
+  erlog_io_tests: read_string_terms_reports_parser_line_test...ok
+  erlog_io_tests: read_string_terms_reports_actual_ending_line_test...ok
+  erlog_io_tests: mid_source_expected_error_keeps_token_line_test...ok
+  erlog_io_tests: read_file_uses_actual_ending_line_test...ok
+  erlog_io_tests: read_file_accepts_final_dot_without_space_test...ok
+  [done in 0.027 s]
+=======================================================
+  Failed: 2.  Skipped: 0.  Passed: 348.

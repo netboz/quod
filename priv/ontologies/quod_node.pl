@@ -10,12 +10,12 @@ can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).
 node_query(isa(_, _)).
 node_query(Goal) :- public_source_query(Goal).
 
-isa(node, agent).
+isa(node, quod:agent:agent).
 
 %% The applicant owns only this key-bound enrollment identity. Completed
 %% identities are ordinary ontologies, not instances stored in this class.
 open_node_enrollment.
-instance_of(agent, enrolling(Key)) :- node_enrollment_key(Key).
+instance_of(quod:agent:agent, enrolling(Key)) :- node_enrollment_key(Key).
 agent_key(enrolling(Key), Key, active) :-
     open_node_enrollment, node_enrollment_key(Key).
 
@@ -23,8 +23,9 @@ node_enrollment_key(Key) :- binary_codes(Key, Bytes), length(Bytes, 32).
 node_applicant(agent_instance_ref(Namespace, Anchor, enrolling(Key)), Key) :-
     current_ontology_identity(Namespace, Anchor), node_enrollment_key(Key).
 
-can_invoke(enroll_node(_), Principal, _, _) :- node_applicant(Principal, _).
-can_invoke(node_identity_status(_), Principal, _, _) :- node_applicant(Principal, _).
+can_invoke(Goal, agent_instance_ref(Ns, _, enrolling(Key)), _, Ns) :-
+    node_enrollment_key(Key),
+    member(Goal, [enroll_node(_), node_identity_status(_)]).
 node_query(ontology_creation_allowed(_, _, _)).
 node_query(ontology_hosting_allowed(_, _, _, _, _)).
 node_query(node_enrollment_parameters(_)).

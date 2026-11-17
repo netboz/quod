@@ -1,0 +1,296 @@
+diff --git a/priv/ontologies/gui_scene.pl b/priv/ontologies/gui_scene.pl
+index d569ac66..3d886813 100644
+--- a/priv/ontologies/gui_scene.pl
++++ b/priv/ontologies/gui_scene.pl
+@@ -31,10 +31,11 @@
+ %% The descriptor:
+ %%   mark(Id, Kind, Size, Transform, Material, Label, Depicts)
+ %%     Id        a view-scoped occurrence identity, not a domain name
+-%%     Size      ordered mm fields (exact rational for wire_box), or typed assets
++%%     Size      ordered mm fields (exact rational for edge-only boxes), or typed assets
+ %%     Transform transform(X,Y,Z,RX,RY,RZ) | body_pose(Id, Revision)
+ %%               | relative(Parent, transform(...)) | relative(Parent, body_pose(...))
+ %%     Material  surface(Colour, Metal, Rough, Emission, Opacity, Textures) |
++%%               surfaces(Display, Pointed, Selected), three such surfaces |
+ %%               asset_surfaces for meshes | no_surface for groups.
+ %%               Optical factors, opacity and repeats are permille; a surface
+ %%               below full opacity is drawn from both sides.
+@@ -66,6 +67,7 @@ rendering_query(depicted(_, _, _, _, _)).
+ 
+ mark_kind(<<"box">>).
+ mark_kind(<<"wire_box">>).
++mark_kind(<<"corner_box">>).
+ mark_kind(<<"sphere">>).
+ mark_kind(<<"plane">>).
+ mark_kind(<<"cylinder">>).
+@@ -82,6 +84,9 @@ geometry_field(<<"box">>, 3, <<"depth">>).
+ geometry_field(<<"wire_box">>, 1, <<"width">>).
+ geometry_field(<<"wire_box">>, 2, <<"height">>).
+ geometry_field(<<"wire_box">>, 3, <<"depth">>).
++geometry_field(<<"corner_box">>, 1, <<"width">>).
++geometry_field(<<"corner_box">>, 2, <<"height">>).
++geometry_field(<<"corner_box">>, 3, <<"depth">>).
+ geometry_field(<<"sphere">>, 1, <<"diameter">>).
+ geometry_field(<<"plane">>, 1, <<"width">>).
+ geometry_field(<<"plane">>, 2, <<"height">>).
+@@ -120,8 +125,13 @@ sized([Field | Fields], [f(Field, Extent) | Rest]) :-
+     Extent > 0,
+     sized(Fields, Rest).
+ 
++%% Edge-only boxes. A wire_box draws its twelve edges whole. A corner_box
++%% draws each edge from both of its corners, opaque at the corner and fading
++%% to nothing a third of the way along, so the middle of every edge is empty.
+ %% Twelve edges cost the same at any extent. Interior dimensions are not a
+ %% geometry allocation budget. Keep exact reduced fractions on the wire.
++edge_box(<<"wire_box">>).
++edge_box(<<"corner_box">>).
+ exact_sized([],[]).
+ exact_sized([Field|Fields],[f(Field,Extent)|Rest]) :-
+     exact_length(Extent), exact_sized(Fields,Rest).
+@@ -130,7 +140,7 @@ exact_length(N/D) :- integer(N), integer(D), N > 0, D > 1, exact_gcd(N,D,1).
+ exact_gcd(N,0,N).
+ exact_gcd(N,D,G) :- D > 0, R is N mod D, exact_gcd(D,R,G).
+ 
+-geometry(<<"wire_box">>,Fields,Size) :- exact_sized(Fields,Size).
++geometry(Kind,Fields,Size) :- edge_box(Kind), exact_sized(Fields,Size).
+ 
+ geometry(<<"mesh">>, [],
+          mesh_asset(asset(Digest, <<"model/gltf-binary">>), <<"gltf2-static-v1">>,
+@@ -160,7 +170,7 @@ geometry(<<"terrain">>, [], terrain_geometry(<<"qvt1">>,Palette,
+     resource(Transfer), resource(Geometry),
+     resource(Vertices), resource(Triangles),
+     resource(Chunks).
+-geometry(Kind, Fields, Size) :- Kind \== <<"mesh">>, Kind \== <<"terrain">>, Kind \== <<"wire_box">>, sized(Fields, Size).
++geometry(Kind, Fields, Size) :- Kind \== <<"mesh">>, Kind \== <<"terrain">>, \+ edge_box(Kind), sized(Fields, Size).
+ 
+ terrain_palette([],_).
+ terrain_palette([material(Id,Surface)|Rest],Previous) :-
+@@ -237,7 +247,14 @@ appearance(<<"group">>, no_surface, Label) :- labelled(Label).
+ appearance(<<"mesh">>, asset_surfaces, Label) :- labelled(Label).
+ appearance(<<"terrain">>, terrain_surfaces, unlabelled).
+ appearance(Kind, Material, Label) :-
+-    Kind \== <<"group">>, Kind \== <<"mesh">>, Kind \== <<"terrain">>, surfaced(Material), labelled(Label).
++    Kind \== <<"group">>, Kind \== <<"mesh">>, Kind \== <<"terrain">>, shown(Material), labelled(Label).
++
++%% Beside its ordinary look, a mark may carry how it looks while pointed at
++%% and once selected. All three travel together and the client switches
++%% between them itself, so that feedback never waits for a read.
++shown(Surface) :- surfaced(Surface).
++shown(surfaces(Display, Pointed, Selected)) :-
++    surfaced(Display), surfaced(Pointed), surfaced(Selected).
+ 
+ %% A colour is written the way a designer writes it: 35 is "#", and the six
+ %% digits are upper-case hex so one colour has one spelling.
+@@ -352,7 +369,7 @@ model_parts([part(Id, Shape, At, Surface, Label, Subject) | Parts],
+     model_transform(At, Placed), model_parts(Parts, Marks).
+ 
+ %% Source-level arithmetic is evaluated by Prolog once, not shipped as client
+-%% code. Wire boxes preserve their already-resolved exact rational fields.
++%% code. Edge-only boxes preserve their already-resolved exact rational fields.
+ model_dimensions([], []).
+ model_dimensions([f(Name, Expression) | Rest], [f(Name, Value) | Values]) :-
+     Value is Expression, model_dimensions(Rest, Values).
+@@ -369,9 +386,9 @@ model_geometry(<<"mesh">>,
+     PX is EPX, PY is EPY, PZ is EPZ.
+ model_geometry(<<"terrain">>, terrain_geometry(Profile,Palette,View,Resources),
+                terrain_geometry(Profile,Palette,View,Resources)).
+-model_geometry(<<"wire_box">>,Fields,Fields).
++model_geometry(Kind,Fields,Fields) :- edge_box(Kind).
+ model_geometry(Kind, Expressions, Size) :-
+-    Kind \== <<"mesh">>, Kind \== <<"terrain">>, Kind \== <<"wire_box">>, model_dimensions(Expressions, Size).
++    Kind \== <<"mesh">>, Kind \== <<"terrain">>, \+ edge_box(Kind), model_dimensions(Expressions, Size).
+ model_transform(transform(EX, EY, EZ, ERX, ERY, ERZ), transform(X, Y, Z, RX, RY, RZ)) :-
+     X is EX, Y is EY, Z is EZ, RX is ERX, RY is ERY, RZ is ERZ.
+ model_transform(body_pose(Body, Revision), body_pose(Body, Revision)).
+@@ -385,6 +402,8 @@ shape(box(W, H, D), <<"box">>,
+       [f(<<"width">>, W), f(<<"height">>, H), f(<<"depth">>, D)]).
+ shape(wire_box(W,H,D),<<"wire_box">>,
+       [f(<<"width">>,W),f(<<"height">>,H),f(<<"depth">>,D)]).
++shape(corner_box(W,H,D),<<"corner_box">>,
++      [f(<<"width">>,W),f(<<"height">>,H),f(<<"depth">>,D)]).
+ shape(sphere(D), <<"sphere">>, [f(<<"diameter">>, D)]).
+ shape(plane(W, H), <<"plane">>, [f(<<"width">>, W), f(<<"height">>, H)]).
+ shape(cylinder(D, H), <<"cylinder">>, [f(<<"diameter">>, D), f(<<"height">>, H)]).
+@@ -409,6 +428,7 @@ align(Shape, Face, TargetShape, TargetFace, Gap, transform(X, Y, Z, 0, 0, 0)) :-
+     aligned_axis(ZMin, ZMax, FZ, TZMin, TZMax, TZ, Gap, Z).
+ 
+ bounds(box(W, H, D), W, H, D).
++bounds(corner_box(W, H, D), W, H, D).
+ bounds(sphere(D), D, D, D).
+ bounds(plane(W, H), W, H, 0).
+ bounds(cylinder(D, H), D, H, D).
+@@ -500,3 +520,37 @@ scoped_transform(Prefix, transform(X,Y,Z,RX,RY,RZ),
+                  relative(Prefix, transform(X,Y,Z,RX,RY,RZ))).
+ scoped_transform(Prefix, body_pose(Body,Revision), relative(Prefix,body_pose(Body,Revision))).
+ scoped_transform(Prefix, body_frame_pose(Body,Revision),relative(Prefix,body_frame_pose(Body,Revision))).
++
++%% --- shared recipes -----------------------------------------------------------
++%% Named looks that any class may select in class_eidolon/4 or nest through
++%% place_model/5. Each reads only its subject's label, in the subject's own
++%% ontology.
++
++%% House colours, named once so recipes do not repeat their digits.
++house_colour(gray, <<"#848FA5">>).
++house_colour(gray_blue, <<"#C9D2DB">>).
++house_colour(gold, <<"#F9C80E">>).
++
++%% marker: the half-metre box that stands for a thing, whatever the thing
++%% measures. See-through sides and fading corner lines; gold while pointed
++%% at, fuller gold once selected.
++eidolon(marker, subject(ontology_ref(Ns, A), Entity),
++        [part(<<"sides">>, box(500, 500, 500), transform(0, 0, 0, 0, 0, 0),
++              surfaces(surface(Gray, 0, 700, 0, 100, []),
++                       surface(Gold, 0, 700, 0, 80, []),
++                       surface(Gold, 0, 700, 0, 220, [])),
++              unlabelled, depicts_nothing),
++         part(<<"corners">>, corner_box(500, 500, 500), transform(0, 0, 0, 0, 0, 0),
++              Lines, Label, depicts_nothing)]) :-
++    house_colour(gray, Gray), house_colour(gold, Gold), corner_lines(Lines),
++    in_ontology(Ns, A, client_subject_label(Entity, Label)).
++
++%% extent: a real-size outline in the marker's corner style.
++eidolon(extent(W, H, D), subject(ontology_ref(Ns, A), Entity),
++        [part(<<"extent">>, corner_box(W, H, D), transform(0, 0, 0, 0, 0, 0),
++              Lines, Label, depicts_nothing)]) :-
++    corner_lines(Lines), in_ontology(Ns, A, client_subject_label(Entity, Label)).
++
++corner_lines(surfaces(surface(GrayBlue, 0, 700, 1000, 1000, []), Pointed, Pointed)) :-
++    house_colour(gray_blue, GrayBlue), house_colour(gold, Gold),
++    Pointed = surface(Gold, 0, 700, 1000, 1000, []).
+diff --git a/test/quod_gui_menu_tests.erl b/test/quod_gui_menu_tests.erl
+index cffd5bf7..eef3d564 100644
+--- a/test/quod_gui_menu_tests.erl
++++ b/test/quod_gui_menu_tests.erl
+@@ -154,6 +154,41 @@ interior_boundary_uses_the_exterior_recipes_test_() ->
+         end)
+     end) end}.
+ 
++%% The shared looks are ordinary recipes of the pinned GUI vocabulary. They
++%% read only the subject's label, and model/2 accepts what they return.
++shared_marker_and_extent_recipes_test_() ->
++    {timeout,90,fun() -> with_menus(fun(C=#{namespace:=Ns}) ->
++        Gui = <<"quod:gui">>, A = quod_simplex:genesis_hash(Ns), At = {transform,0,0,0,0,0,0},
++        Subject = {subject,{ontology_ref,Ns,A},room},
++        Recipe = fun(Name) -> read(C,{'::',Gui,{eidolon,Name,Subject,{'Parts'}}}) end,
++        Line = fun(Colour) -> {surface,Colour,0,700,1000,1000,[]} end,
++        Side = fun(Colour,Opacity) -> {surface,Colour,0,700,0,Opacity,[]} end,
++        Lines = {surfaces,Line(<<"#C9D2DB">>),Line(<<"#F9C80E">>),Line(<<"#F9C80E">>)},
++        edit(Ns,{assertz,{attribute,room,name,<<"Room">>}}),
++        Label = {label,<<"Room">>,<<"above">>},
++        Marker = Recipe(marker),
++        ?assertEqual(
++            [{part,<<"sides">>,{box,500,500,500},At,
++              {surfaces,Side(<<"#848FA5">>,100),Side(<<"#F9C80E">>,80),Side(<<"#F9C80E">>,220)},
++              unlabelled,depicts_nothing},
++             {part,<<"corners">>,{corner_box,500,500,500},At,Lines,Label,depicts_nothing}],Marker),
++        ?assertMatch([{mark,<<"sides">>,<<"box">>,_,At,{surfaces,_,_,_},unlabelled,depicts_nothing},
++                      {mark,<<"corners">>,<<"corner_box">>,
++                       [{f,<<"width">>,500},{f,<<"height">>,500},{f,<<"depth">>,500}],At,Lines,Label,depicts_nothing}],
++                     read(C,{'::',Gui,{model,Marker,{'Marks'}}})),
++        %% The outline keeps exact lengths at any size.
++        Third = {'/',10000,3},
++        Extent = Recipe({extent,Third,100000000,4000}),
++        ?assertEqual([{part,<<"extent">>,{corner_box,Third,100000000,4000},At,Lines,Label,depicts_nothing}],Extent),
++        ?assertMatch([{mark,<<"extent">>,<<"corner_box">>,
++                       [{f,<<"width">>,Third},{f,<<"height">>,100000000},{f,<<"depth">>,4000}],At,Lines,Label,depicts_nothing}],
++                     read(C,{'::',Gui,{model,Extent,{'Marks'}}})),
++        %% An unnamed subject is shown without a label, never with an invented one.
++        edit(Ns,{assertz,{':-',{instance_of,note,plain},true}}),
++        ?assertMatch([_,{part,<<"corners">>,_,_,_,unlabelled,_}],
++            read(C,{'::',Gui,{eidolon,marker,{subject,{ontology_ref,Ns,A},plain},{'Parts'}}}))
++    end) end}.
++
+ boundary(C,Ns,A) ->
+     Marks = read(C,space({world_view,ref(Ns,room),playing,{'Marks'}})),
+     case [M || M={mark,_,<<"group">>,_,_,_,_,{depicts,N,H,room}} <- Marks, {N,H}=:={Ns,A}] of
+diff --git a/test/quod_rendering_tests.erl b/test/quod_rendering_tests.erl
+index aca59f8f..3eb91ba5 100644
+--- a/test/quod_rendering_tests.erl
++++ b/test/quod_rendering_tests.erl
+@@ -13,7 +13,7 @@
+ kinds_declare_their_fields_in_order_test() ->
+     with_rendering(fun(St) ->
+         Kinds = solutions({'K'}, {mark_kind, {'K'}}, St),
+-        ?assertEqual([<<"box">>, <<"capsule">>, <<"cylinder">>, <<"group">>, <<"mesh">>,
++        ?assertEqual([<<"box">>, <<"capsule">>, <<"corner_box">>, <<"cylinder">>, <<"group">>, <<"mesh">>,
+                       <<"plane">>, <<"sky_sphere">>, <<"sphere">>, <<"terrain">>, <<"torus">>, <<"wire_box">>],
+                      lists:sort(Kinds)),
+         %% Every kind's fields are declared at consecutive positions from 1, so
+@@ -29,22 +29,58 @@ kinds_declare_their_fields_in_order_test() ->
+                      solutions({'F'}, {geometry_field, <<"box">>, {'_'}, {'F'}}, St))
+     end).
+ 
+-exact_edge_box_retains_rational_lengths_test() ->
++exact_edge_boxes_retain_rational_lengths_test() ->
+     with_rendering(fun(St) ->
+         Width = {'/',1,3}, Height = 100001, Depth = {'/',1001,2},
+         Size = [{f,<<"width">>,Width},{f,<<"height">>,Height},{f,<<"depth">>,Depth}],
+-        Mark = sized(<<"wire_box">>,Size),
+-        holds({well_formed_mark,Mark},St),
+-        Expected = {mark,<<"edges">>,<<"wire_box">>,Size,{transform,10,20,30,15,35,75},
+-            {surface,<<"#FFFFFF">>,0,700,0,1000,[]},unlabelled,depicts_nothing},
+-        holds({model,[{part,<<"edges">>,{wire_box,Width,Height,Depth},
+-            {transform,10,20,30,15,35,75},{surface,<<"#FFFFFF">>,0,700,0,1000,[]},
+-            unlabelled,depicts_nothing}],[Expected]},St),
+-        [fails({well_formed_mark,sized(<<"wire_box">>,lists:keyreplace(<<"width">>,2,Size,{f,<<"width">>,Bad}))},St)
+-            || Bad <- [0,-1,0.5,{'/',1,0},{'/',2,6},{'/',1,1},{'/',-1,3}]],
++        lists:foreach(fun({Kind,Shape}) ->
++            Mark = sized(Kind,Size),
++            holds({well_formed_mark,Mark},St),
++            Expected = {mark,<<"edges">>,Kind,Size,{transform,10,20,30,15,35,75},
++                {surface,<<"#FFFFFF">>,0,700,0,1000,[]},unlabelled,depicts_nothing},
++            holds({model,[{part,<<"edges">>,{Shape,Width,Height,Depth},
++                {transform,10,20,30,15,35,75},{surface,<<"#FFFFFF">>,0,700,0,1000,[]},
++                unlabelled,depicts_nothing}],[Expected]},St),
++            [fails({well_formed_mark,sized(Kind,lists:keyreplace(<<"width">>,2,Size,{f,<<"width">>,Bad}))},St)
++                || Bad <- [0,-1,0.5,{'/',1,0},{'/',2,6},{'/',1,1},{'/',-1,3}]]
++        end, [{<<"wire_box">>,wire_box},{<<"corner_box">>,corner_box}]),
+         fails({well_formed_mark,sized(<<"box">>,Size)},St)
+     end).
+ 
++%% A whole-millimetre corner box has faces to align against, like a box; the
++%% edge-only wire box and a rational corner box offer none.
++corner_box_aligns_by_its_faces_test() ->
++    with_rendering(fun(St) ->
++        ?assertEqual([{transform,0,300,0,0,0,0}],
++            solutions({'At'},{align,{box,100,100,100},bottom,{corner_box,500,500,500},top,0,{'At'}},St)),
++        fails({align,{box,100,100,100},bottom,{corner_box,{'/',1,3},500,500},top,0,{'_'}},St),
++        fails({align,{box,100,100,100},bottom,{wire_box,500,500,500},top,0,{'_'}},St)
++    end).
++
++%% The pointed-at and selected looks travel with the mark. A plain surface
++%% stays exactly what it was; the three-surface form needs all three valid.
++a_mark_may_carry_its_pointed_and_selected_surfaces_test() ->
++    with_rendering(fun(St) ->
++        Plain = {surface,<<"#848FA5">>,0,700,0,100,[]},
++        Gold = {surface,<<"#F9C80E">>,0,700,0,80,[]},
++        Part = fun(Material) -> {part,<<"sides">>,{box,500,500,500},{transform,0,0,0,0,0,0},
++                                 Material,unlabelled,depicts_nothing} end,
++        Mark = fun(Material) -> {mark,<<"sides">>,<<"box">>,
++                                 [{f,<<"width">>,500},{f,<<"height">>,500},{f,<<"depth">>,500}],
++                                 {transform,0,0,0,0,0,0},Material,unlabelled,depicts_nothing} end,
++        States = {surfaces,Plain,Gold,Gold},
++        ?assertEqual([[Mark(Plain)]],solutions({'M'},{model,[Part(Plain)],{'M'}},St)),
++        ?assertEqual([[Mark(States)]],solutions({'M'},{model,[Part(States)],{'M'}},St)),
++        lists:foreach(fun(Bad) -> fails({well_formed_mark,Mark(Bad)},St) end,
++            [{surfaces,Plain,Gold},{surfaces,Plain,Gold,Gold,Gold},
++             {surfaces,Plain,Gold,{surface,<<"gold">>,0,700,0,80,[]}},
++             {surfaces,Plain,no_surface,Gold},{surfaces,States,Gold,Gold}]),
++        %% Groups, meshes and terrain keep their own single appearance.
++        fails({well_formed_mark,{mark,<<"g">>,<<"group">>,[],{transform,0,0,0,0,0,0},
++                                 States,unlabelled,depicts_nothing}},St),
++        fails({well_formed_mark,setelement(6,mesh_mark(),States)},St)
++    end).
++
+ a_well_formed_mark_test() ->
+     with_rendering(fun(St) ->
+         holds({well_formed_mark, box(<<"m1">>)}, St),
+@@ -195,7 +231,7 @@ a_scene_needs_distinct_mark_ids_test() ->
+ the_class_view_is_derived_test() ->
+     with_rendering(fun(St) ->
+         holds({isa, mark, thing}, St),
+-        ?assertEqual([<<"box">>, <<"capsule">>, <<"cylinder">>, <<"group">>, <<"mesh">>,
++        ?assertEqual([<<"box">>, <<"capsule">>, <<"corner_box">>, <<"cylinder">>, <<"group">>, <<"mesh">>,
+                       <<"plane">>, <<"sky_sphere">>, <<"sphere">>, <<"terrain">>, <<"torus">>, <<"wire_box">>],
+                      lists:sort(solutions({'K'}, {instance_of, geometry, {'K'}}, St))),
+         ?assertEqual([<<"diameter">>, <<"height">>],

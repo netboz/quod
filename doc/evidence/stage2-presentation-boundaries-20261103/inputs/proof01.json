@@ -1,0 +1,32 @@
+{
+  "command": [
+    "docker",
+    "run",
+    "--rm",
+    "--init",
+    "--user",
+    "1000:1000",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source:/work:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone:/code:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04:/checks",
+    "-w",
+    "/code",
+    "-e",
+    "ERL_FLAGS=+S 4:4 +SDio 2 +SDcpu 2",
+    "--entrypoint",
+    "/bin/sh",
+    "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+    "-c",
+    "exec erl -noshell -pa /work/_build/test/checkouts/*/ebin /work/_build/test/lib/*/ebin /work/_build/test/lib/quod/test -eval \"$1\"",
+    "sh",
+    "true=code:add_patha(\"/checks/ebin\"),case eunit:test([quod_scope_wire_tests,quod_proof_session_tests,quod_proof_answer_tests,quod_scope_session_tests,quod_dtx_tests,quod_ask_tests,quod_material_admission_tests],[verbose]) of ok->halt(0);_->halt(1) end."
+  ],
+  "source_owner": "owner04",
+  "true_exit": 0,
+  "stdout_eof": true,
+  "stderr_eof": true,
+  "elapsed_seconds": 9.40264388200012
+}

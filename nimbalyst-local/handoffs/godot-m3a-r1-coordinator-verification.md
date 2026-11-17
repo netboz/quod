@@ -1,0 +1,35 @@
+# Coordinator verification of M3a-R1
+
+Coordinator `ed9cd520-b2a4-4607-a8f5-ff99d08f3e46` accepts the bounded M3a server checkpoint **with its R1 correction**. The confirmed retained-frame isolation finding in [the review addendum](godot-m3a-review-addendum.md) is resolved on the newly verified source. This supersedes that addendum's M3b prerequisite hold, without rewriting the historical review, original handoff or gates06 evidence. Full QUO-64/M3, M3b and broader Stage2/D5/D6/D7 remain open. This verification does not authorize a launch.
+
+Worktree `/home/yan/src/quod_worktrees/pearl-stone`, branch `worktree/pearl-stone`, unchanged HEAD `69196a36caeeb06e6ee07982f1ab1988d7c16b43`, parent `d027f9f65bbce2f484f906c92bf07ebaa4669c38`; original base `f6c29fe925e666dd68ee7fa68c0e03f5d03391a2`. Source remains uncommitted. The original implementation writer was observed idle, waitingForInput=false, pending/executing queue0. Root `922c7c06-1acb-4c2b-9141-fccf4ab4c947` retains sole serial launch ownership and was also observed idle.
+
+## Source and artifacts
+
+New immutable boundary: `/home/yan/.cache/quod-m3a-artifacts/quod-godot-m3a-r1-handoff-8d55a3f3-20261029-01`.
+
+- Snapshot SHA256: `7b12df73ac1493201ac9e06f7f2f16337580d343026be1fb7d3ed69aff292e1c`.
+- Binary HEAD patch: `203ab29f324805f94528f06c003bb322d6cbce058bc60ead68ad39599a91d7ea`.
+- Base archive: `4ab75080d3a732353c95ceb4ab94c0b77c95dc3449e69a43eba6353a2f910821`.
+
+Independently checked all81 indexed artifact hashes/sizes and read-only files; boundary mode555. All21,324 live file/symlink entries and exact path set match the manifest, including contents, symlink targets and executable bits. Live binary diff equals the retained patch. Independently streamed every base/untracked archive byte, applied the real binary patch to changed tracked paths outside any checkout with child0, and checked the complete reconstructed source set/content. Also independently checked all21,324 entries/content/links/full recorded modes in the existing complete materialized reconstruction outside every checkout.
+
+All1436 authored server inputs match live and final stage. Verified1094 dependency archive entries,2059 compiled/native archive entries and current stage objects,6397 indexed R1 provider originals,10 derived Rebar/PLT outputs, and all1453 release path entries (1347 files/symlinks plus directories). Verified195 reused client export files and59 unchanged authored client inputs. All65 Cargo package archives and3555 authored unpacked sources match the actual final stage. The preserved original M3a artifacts match their indexed predecessor bytes. Dependencies/outputs/toolchains remain distinct; the local builder ID is not a published digest.
+
+Machine receipt: `/tmp/quod-m3a-r1-coordinator-verification-ed9cd520.json`. Independent verifiers: `/tmp/quod-m3a-r1-coordinator-verify-ed9cd520.py` and `/tmp/quod-m3a-r1-coordinator-supplement-ed9cd520.py`. Scratch reconstruction paths are retained in those receipts. No qualified tests or builds were rerun by the coordinator.
+
+## Correction, regression and quality
+
+Read the result, qualification/source-quality/failure dispositions, R1/HEAD deltas, original failing receipts and final acceptance receipts. Independently compared the original reconstructed runtime/test/spec to current source. Exactly three files differ among the original20,749 source/evidence entries: runtime +42/-22 (net+20 production), physical tests +119/-17 (net+102), physical specification +6/-1 (net+5). All other original bytes remain unchanged. Independently recounted the accumulated HEAD delta: production net+695, tests+874, specifications+174, archive5 separate; original356 framework relocation lines remain included in active counts. No new R1 production file/relocation exists.
+
+The runtime has one shared selector result contract for geometry, delegation and frame member/export reads. Physical consumers propagate expected failure values into the existing per-world unavailable fold; strict callers retain their existing error adapter. Healthy worlds still reach project/install before the caller receives the existing reason-bearing physics_materialization response. Successful and missing reads remain observed, including foreign basis/fences. Unexpected evaluator exceptions retain class/reason/stack instead of being treated as empty geometry. The source-dependent lifecycle, deadlines and cancellation remain with existing owners. No frame-specific exception catch, static pose fallback, second selector/process/domain or policy/limit change was introduced. No blocking defect was found in this bounded correction inspection.
+
+Original-code receipts reproduce both signed local triggers: unresolved retained frame export and removed required member each leave the independent snapshot unavailable. Final receipts show both independent snapshots available. Inspected regression assertions require affected snapshots and signed control to refuse; exact independent PID/spec/body state/incarnation is retained, installs/steps/tick remain1/1/1 across failure/repair, and a real committed repair drives notification recovery. The old registration remains refused and fresh signed control succeeds. Each case traces zero watched reader/history/native-install/ledger/write/sync calls across three unchanged failed and three recovered repeats. This is now runtime regression evidence, beyond the original source-only diagnosis; it does not claim every foreign edit initially invalidates unrelated worlds.
+
+Verified all six sequential R1 gates01 child exits0, explicit completion/no timeout/no stop, source_unchanged=true, unrun[], and exact sanitized log hashes: native56, EUnit4266, CT149, xref, Dialyzer and local release. Original same-A route remains revision11 with original Enter result/exact state after owner restart. Affected founding/HTTPS/privacy/GUI/source/creation/physics fixtures ran in the full suite. All prior failed focused/packaging/reconstruction attempts remain retained; no failure was relabelled as acceptance.
+
+## Tracker and next boundary
+
+Own-UUID explicit-project radar and current QUO-60/64 reads succeeded: one Yan lane, no shared-item signals; QUO-64 stays in-review13%, parent in-development50%. Worker metadata receipts also retain Stage2 in-review25%. No redundant tracker mutation, blocked body retry or attribution/publication claim was made. Shared checklist bodies can remain stale under the prior automatic approval rejection.
+
+[The refreshed M3b prompt](godot-m3b-prompt.md) now names this R1 prerequisite. This new verification and that prompt refresh are later coordination changes outside the immutable R1 boundary; original implementation/evidence/reviews/snapshots are preserved. The root receives one informational verification report. No M3b writer/review was launched, no commit/push/deployment/app restart/deletion occurred, and full M3/parent credit remains held for M3b's actual installed Godot rendering/navigation/reconnect/recovery outcome.

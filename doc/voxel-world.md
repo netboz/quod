@@ -315,7 +315,7 @@ A common `terrain` mark uses
 `terrain_geometry(<<"qvt1">>,Palette,view_distance(Distance,Prefetch,Retention),resources(Transfer,Geometry,Vertices,Triangles,Chunks))`,
 `terrain_surfaces`, an anchored subject and an ordinary body/revision pose.
 The palette contains ordered `material(Id,Surface)` entries using the same
-`surface(Colour,Metallic,Roughness,Emission,Textures)` contract as ordinary
+`surface(Colour,Metallic,Roughness,Emission,Opacity,Textures)` contract as ordinary
 marks. Both share one PBR binding implementation and the existing verified
 texture leases. Dominant-face planar texture coordinates cover floors, walls
 and overhangs. Their phase is derived from exact canonical coordinates, so

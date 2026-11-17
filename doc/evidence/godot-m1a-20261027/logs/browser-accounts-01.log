@@ -1,0 +1,58 @@
+TAP version 13
+# Subtest: signup retains its receipt through preparation and hands off once to atomic U/A/S0 setup
+ok 1 - signup retains its receipt through preparation and hands off once to atomic U/A/S0 setup
+  ---
+  duration_ms: 12.542111
+  type: 'test'
+  ...
+# Subtest: lost setup reply resolves exact bytes and signature without another creation or preparation
+ok 2 - lost setup reply resolves exact bytes and signature without another creation or preparation
+  ---
+  duration_ms: 3.794187
+  type: 'test'
+  ...
+# Subtest: failed local account save retains original signup outcome for recovery
+ok 3 - failed local account save retains original signup outcome for recovery
+  ---
+  duration_ms: 2.293735
+  type: 'test'
+  ...
+# Subtest: a consumed signup handoff cannot advance twice
+ok 4 - a consumed signup handoff cannot advance twice
+  ---
+  duration_ms: 1.382285
+  type: 'test'
+  ...
+# Subtest: definite setup refusal can be explicitly retried while retaining the original U
+ok 5 - definite setup refusal can be explicitly retried while retaining the original U
+  ---
+  duration_ms: 2.197717
+  type: 'test'
+  ...
+# Subtest: disconnect during preparation retains committed signup evidence and resolves it before dependent setup
+ok 6 - disconnect during preparation retains committed signup evidence and resolves it before dependent setup
+  ---
+  duration_ms: 1.537357
+  type: 'test'
+  ...
+# Subtest: a fresh device with the same account reads complete source state without writes or a journal
+ok 7 - a fresh device with the same account reads complete source state without writes or a journal
+  ---
+  duration_ms: 0.768364
+  type: 'test'
+  ...
+# Subtest: setup refuses a result with replacement actor or owner references and retains recovery evidence
+ok 8 - setup refuses a result with replacement actor or owner references and retains recovery evidence
+  ---
+  duration_ms: 2.042545
+  type: 'test'
+  ...
+1..8
+# tests 8
+# suites 0
+# pass 8
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 48.09245

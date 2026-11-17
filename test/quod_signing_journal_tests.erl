@@ -1,4 +1,5 @@
 -module(quod_signing_journal_tests).
+-include("retired_presentation_sizes.hrl").
 
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
@@ -1134,27 +1135,18 @@ unknown_atom_record_is_rejected_without_atom_creation_test() ->
           ?assertEqual(Atoms, erlang:system_info(atom_count))
       end).
 
-frame_bound_tracks_shared_dtx_limits_exactly_test() ->
-    Fixed = <<0:256>>,
-    Body = binary:copy(<<0>>, ?QUOD_MAX_DTX_BODY_BYTES),
-    Envelope = binary:copy(<<0>>, ?QUOD_MAX_DTX_CONTROL_BYTES),
-    AtLimit = term_to_binary(
-                {quod_signing_pending_dtx, 7, Fixed, Fixed,
-                 16#FFFFFFFFFFFFFFFF, Fixed, Body, Envelope},
-                [deterministic]),
-    ?assertEqual(quod_signing_journal:test_max_frame_payload_bytes(),
-                 byte_size(AtLimit)),
-    Frame = quod_signing_journal:test_frame(AtLimit),
-    ?assertEqual(byte_size(AtLimit) + ?HDR_BYTES, byte_size(Frame)),
-    Over = term_to_binary(
-             {quod_signing_pending_dtx, 7, Fixed, Fixed,
-              16#FFFFFFFFFFFFFFFF, Fixed, Body,
-             <<Envelope/binary, 0>>},
-             [deterministic]),
-    OverSize = byte_size(Over),
-    ?assertError(
-       {signing_journal_frame_too_big, OverSize},
-       quod_signing_journal:test_frame(Over)).
+frame_capacity_follows_its_uint32_encoding_test() ->
+    ?assertEqual((1 bsl 32) - 1,
+                 quod_signing_journal:test_max_frame_payload_bytes()),
+    %% Exercise complete framing beyond the old derived material quota without
+    %% allocating the actual four-gigabyte representability boundary.
+    Payload = binary:copy(<<0>>, ?LEGACY_MAX_DTX_BODY_BYTES +
+                                ?LEGACY_MAX_DTX_CONTROL_BYTES + 164),
+    <<?MAGIC:32, Size:32, CRC:32, Actual/binary>> =
+        quod_signing_journal:test_frame(Payload),
+    ?assertEqual(byte_size(Payload), Size),
+    ?assertEqual(erlang:crc32(Payload), CRC),
+    ?assertEqual(Payload, Actual).
 
 %% ------------------------------------------------------------------
 %% helpers

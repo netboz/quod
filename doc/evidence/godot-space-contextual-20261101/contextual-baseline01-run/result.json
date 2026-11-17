@@ -1,0 +1,14 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-space-contextual-20261101/signed.py",
+    "contextual-baseline01",
+    "doc/evidence/godot-space-contextual-20261101/inputs/client-contextual-baseline01-manifest.json",
+    "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source",
+    "contextual"
+  ],
+  "exit": 1,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 40.225141485978384
+}

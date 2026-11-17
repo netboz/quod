@@ -1,6 +1,6 @@
 -module(quod_space_creation_tests).
 -include_lib("eunit/include/eunit.hrl").
--export([with_spaces/2, with_models/2]).
+-export([with_spaces/2, with_spaces/3]).
 
 signed_empty_space_results_and_recovery_test_() ->
     [{atom_to_list(Lane), {timeout, 90, fun() -> with_spaces(fun(C) ->
@@ -9,23 +9,29 @@ signed_empty_space_results_and_recovery_test_() ->
         Inputs = case Lane of
             ordinary -> [];
             foreign -> [{attribute, name, <<"Workshop">>}, {attribute, dimensions, mixed_dimensions()}];
-            atomic -> [{attribute, dimensions, infinite}, placement(Destination)]
+            atomic -> [{attribute, dimensions, infinite}]
         end,
-        {Bindings, Bytes, Outcome} = create(C, Target, Inputs),
+        Placement = case Lane of atomic -> placement(Destination); _ -> near_agent end,
+        {Bindings, Bytes, Outcome} = create(C, Target, Inputs, Placement),
         [Space = {entity_ref, Target, _, Id}, Name] = [V || {_, V} <- Bindings],
         ?assertEqual(26, byte_size(Id)),
-        ?assertEqual(case Lane of foreign -> <<"Workshop">>; _ -> <<"Space">> end, Name),
+        %% A supplied name is kept; otherwise the class draws a place name.
+        case Lane of
+            foreign -> ?assertEqual(<<"Workshop">>, Name);
+            _ -> ?assertMatch({ok,[_],_}, quod_prolog:prove_ro(<<"quod:names">>,
+                    {name,Name,{'_'},<<"place">>,<<"neutral">>}))
+        end,
         holds(Target, {attribute, Id, owner, maps:get(human, C)}),
         Dimensions = case Lane of ordinary -> default_dimensions(); foreign -> mixed_dimensions(); atomic -> infinite end,
-        Saved = conj([{instance_of, space, Id}, {attribute, Id, name, Name},
+        Saved = conj([{instance_of, space_class(), Id}, {attribute, Id, name, Name},
                       {attribute, Id, dimensions, Dimensions}]),
         holds(Target, Saved),
         fails(Target, {attribute, Id, placement, {'_'}}),
         case Lane of
             atomic ->
-                holds(Target, {space_assignment, Id, 1, Destination}),
+                assignment(C, Target, Id, 1, Destination),
                 holds(maps:get(destination, C), {space_placement, room, Space, 1});
-            _ -> holds(Target, {space_assignment, Id, 0, none})
+            _ -> assignment(C, Target, Id, 0, none)
         end,
         empty_resources(C, Target, Id),
         %% No received reference or browser journal is used by the fresh device.
@@ -40,7 +46,7 @@ signed_empty_space_results_and_recovery_test_() ->
         end),
         holds(Target, Saved), Resolve(),
         %% Current membership is not the creation receipt.
-        edit(Target, {retract, {instance_of, space, Id}}),
+        edit(Target, {retract, {instance_of, space_class(), Id}}),
         Resolve(),
         quod_outcome_result_tests:assert_unchanged_reads(Owners, Resolve, Reads)
     end) end}} || Lane <- [ordinary, foreign, atomic]].
@@ -49,48 +55,93 @@ explicit_and_near_agent_placement_test_() ->
     {timeout, 90, fun() -> with_spaces(fun(C = #{namespace := Ns, storage := Target,
                                                destination := Dest}) ->
         Room = ref(Dest, room), Local = ref(Ns, room),
-        signed(C, conj([{space_place, personal, 0, Room},
-                       {assertz, {attribute, personal, transform, {transform, 200,300,400,0,45,0}}}])),
+        signed(C, inside(Room, ref(Ns,personal), {transform,200,300,400,0,45,0})),
+        %% Near the agent is two metres plus half the shared marker's depth,
+        %% read from the scene vocabulary: 400 - 2000 - 250.
         {Bindings, _, _} = create(C, Target, []),
         [{_, Space = {entity_ref, Target, _, Id}}, _] = Bindings,
-        holds(Target, {space_assignment, Id, 1, Room}),
-        holds(Target, {attribute, Id, transform, {transform, 1200,300,400,0,45,0}}),
+        assignment(C, Target, Id, 1, Room),
+        holds(Target, {attribute, Id, transform, {transform, 200,300,-1850,0,45,0}}),
         holds(Dest, {space_placement, room, Space, 1}),
-        {Explicit, _, _} = create(C, Target, [placement(Local)]),
-        [{_, ExplicitRef = {entity_ref, Target, _, ExplicitId}}, _] = Explicit,
-        holds(Target, {space_assignment, ExplicitId, 1, Local}),
+        %% Later ones from the same standing point take the next free places:
+        %% one and a half markers to the right, then to the left. None moves.
+        [begin
+            {Next, _, _} = create(C, Target, []),
+            [{_, {entity_ref, Target, _, NextId}}, _] = Next,
+            holds(Target, {attribute, NextId, transform, {transform, X,300,-1850,0,45,0}})
+         end || X <- [950, -550, 1700]],
+        holds(Target, {attribute, Id, transform, {transform, 200,300,-1850,0,45,0}}),
+        {Explicit, _, _} = create(C, Target, [], placement(Local)),
+        [{_, ExplicitRef = {entity_ref, Target, _, ExplicitId}}, {_, ExplicitName}] = Explicit,
+        assignment(C, Target, ExplicitId, 1, Local),
         holds(Ns, {space_placement, room, ExplicitRef, 1}),
         fails(Dest, {space_placement, room, ExplicitRef, {'_'}}),
         %% Execute the complete existing scene/recipe/modelling/rendering path.
-        with_models(C, fun() ->
-            {ok,_,{normalized,{committed,[Binding],_}}} = signed_result(C,
-                conj([{world_view,room,playing,{'Marks'}},{assertz,projected}])),
-            {ok,[{_,Marks}]} = quod_client_result:decode_binding(Binding),
-            ?assertMatch([{mark,_,<<"group">>,[],{transform,10,20,30,0,0,0},
-                          no_surface,unlabelled,{depicts,Target,_,ExplicitId}},
-                         {mark,_,<<"box">>,[{f,<<"width">>,500},{f,<<"height">>,500},
-                            {f,<<"depth">>,500}],_,_,_,_}], Marks)
-        end),
+        Marks = read(C, space({world_view,ref(Ns,room),playing,{'Marks'}})),
+        Size = [{f,<<"width">>,500},{f,<<"height">>,500},{f,<<"depth">>,500}],
+        ?assertMatch([{mark,_,<<"group">>,[],{transform,10,20,30,0,0,0},
+                      no_surface,unlabelled,{depicts,Target,_,ExplicitId}},
+                     {mark,_,<<"box">>,Size,_,{surfaces,_,_,_},unlabelled,_},
+                     {mark,_,<<"corner_box">>,Size,_,{surfaces,_,_,_},{label,ExplicitName,<<"above">>},_}], Marks),
         %% Placement is one-time, not a subscription following A.
         edit(Ns, {retract, {attribute,personal,transform,{'_'}}}),
-        holds(Target, {attribute, Id, transform, {transform,1200,300,400,0,45,0}}),
+        holds(Target, {attribute, Id, transform, {transform,200,300,-1850,0,45,0}}),
         denied_creation(C, Target, []),
-        create(C, Target, [placement(Local)])
+        create(C, Target, [], placement(Local))
     end) end}.
 
-explicit_owner_obeys_committed_creation_policy_test_() ->
+%% "In front of me" with the viewer's pose from the device: the near distance
+%% along where the eyes look, at the agent's floor height, turned to face the
+%% viewer; the next one takes the next free place to the eyes' right. A pose
+%% that is not a level unit direction is refused and creates nothing.
+viewer_pose_placement_test_() ->
+    {timeout, 90, fun() -> with_spaces(fun(C = #{namespace := Ns, storage := Target, destination := Dest}) ->
+        Room = ref(Dest, room),
+        signed(C, inside(Room, ref(Ns,personal), {transform,200,300,400,0,45,0})),
+        %% Eyes at (1000, 1900, 0) looking along -X: yaw 90 degrees.
+        View = {view,{transform,1000,1900,0,0,90,0},{forward,-1000,0,0}},
+        [begin
+            {Made, _, _} = create(C, Target, [], {viewed,near_agent,View}),
+            [{_, {entity_ref, Target, _, Id}}, _] = Made,
+            assignment(C, Target, Id, 1, Room),
+            holds(Target, {attribute, Id, transform, Expected})
+         end || Expected <- [{transform,-1250,300,0,0,90,0},{transform,-1250,300,-750,0,90,0}]],
+        denied_creation(C, Target, [], {viewed,near_agent,{view,{transform,1000,1900,0,0,90,0},{forward,-700,0,0}}}),
+        %% A look to the right arrives as the scene turn 270 and lands along +X.
+        {Right, _, _} = create(C, Target, [], {viewed,near_agent,{view,{transform,1000,1900,0,0,270,0},{forward,1000,0,0}}}),
+        [{_, RightRef = {entity_ref, Target, _, RightId}}, _] = Right,
+        Faced = {transform,3250,300,0,0,270,0},
+        holds(Target, {attribute, RightId, transform, Faced}),
+        %% A turn outside 0 to 359 is no scene pose, whoever writes it: the
+        %% viewer's pose at the form, the stored attribute, and representing.
+        denied_creation(C, Target, [], {viewed,near_agent,{view,{transform,1000,1900,0,0,-90,0},{forward,1000,0,0}}}),
+        denied_creation(C, Target, [{attribute,transform,{transform,0,0,0,0,-90,0}}]),
+        Turned = {transform,3250,300,0,0,90,0},
+        Represent = fun(From, To) -> {'::',<<"quod:space">>,{space_represent,RightRef,solid,From,none,solid,To,none}} end,
+        signed(C, Represent(Faced, Turned)),
+        holds(Target, {attribute, RightId, transform, Turned}),
+        failed(signed_result(C, Represent(Turned, {transform,3250,300,0,0,-90,0}))),
+        holds(Target, {attribute, RightId, transform, Turned}),
+        %% Without a viewer pose the agent's own place and facing decide, as before.
+        {Plain, _, _} = create(C, Target, [], {viewed,near_agent,none}),
+        [{_, {entity_ref, Target, _, PlainId}}, _] = Plain,
+        holds(Target, {attribute, PlainId, transform, {transform,200,300,-1850,0,45,0}})
+    end) end}.
+
+explicit_owner_and_class_defaults_test_() ->
     {timeout, 90, fun() -> with_spaces(fun(C = #{storage := Target, agent := Actor}) ->
-        Inputs = [{attribute, owner, Actor}],
-        denied_creation(C, Target, Inputs),
-        %% Proposed policy cannot authorize this operation's chosen owner.
-        failed(signed_result(C, scoped(Target, conj([
-            {assertz, {allowed_creation_owner, Actor}}, creation_goal(Inputs)])))),
-        fails(Target, {allowed_creation_owner, Actor}),
-        edit(Target, {assertz, {allowed_creation_owner, Actor}}),
-        {Bindings, _, _} = create(C, Target, Inputs),
+        {Bindings, _, _} = create(C, Target, [{attribute, owner, Actor}]),
         [{_, {entity_ref, Target, _, Id}}, _] = Bindings,
         holds(Target, {attribute, Id, owner, Actor}),
-        denied_creation(C, Target, [{attribute, owner, malformed}])
+        denied_creation(C, Target, [{attribute, owner, malformed}]),
+        %% A plain local name is not an alias for the shared class.
+        failed(signed_result(C, scoped(Target, {assert,{instance_of,space,{'Id'}}}))),
+        fails(Target, {isa,space,space}),
+        %% Constructor bodies are rejected at the real class owner.
+        Body = {constructor,space,{'_'},[]},
+        edit(<<"quod:space">>, {assertz,Body}),
+        try denied_creation(C, Target, [])
+        after edit(<<"quod:space">>, {retract,Body}) end
     end) end}.
 
 invalid_dimensions_roll_back_through_signed_actor_test_() ->
@@ -110,98 +161,160 @@ authorization_and_lookup_failures_never_fall_back_test_() ->
     {timeout, 90, fun() -> with_spaces(fun(C = #{namespace := Ns, storage := Target,
                                                destination := Dest}) ->
         Room = ref(Dest, room),
-        signed(C, conj([{space_place,personal,0,Room},
-                       {assertz,{attribute,personal,transform,{transform,0,0,0,0,0,0}}}])),
-        denied_creation(C, Target, [placement(ref(Dest, closed))]),
-        lists:foreach(fun({Owner, Flag}) ->
-            edit(Owner, {retract, Flag}),
-            denied_creation(C, Target, [placement(Room)]),
-            edit(Owner, {assertz, Flag})
-        end, [{Target,creation_enabled}, {Target,creation_requirement_enabled},
-              {Target,entry_enabled}, {Target,storage_open}, {Dest,admission_enabled}]),
-        %% Staging a permission does not replace committed class policy.
-        edit(Target, {retract, entry_enabled}),
-        Goal = scoped(Target, conj([{assertz,entry_enabled}, creation_goal([placement(Room)])])),
-        failed(signed_result(C, Goal)),
-        fails(Target, entry_enabled), edit(Target, {assertz, entry_enabled}),
-        %% Even caught refusal restores creation and both placement participants.
+        signed(C, inside(Room,ref(Ns,personal),{transform,0,0,0,0,0,0})),
+        denied_creation(C, Target, [], placement(ref(Dest, closed))),
+        [with_withheld(Operation, fun() ->
+            denied_creation(C, Target, [], placement(Room))
+         end) || Operation <- [create,space_enter,space_admit]],
+        edit(Target, {retract,storage_open}),
+        denied_creation(C, Target, [], placement(Room)),
+        edit(Target, {assertz,storage_open}),
+        Denial = {instance_permission,room,space_admit,deny},
+        edit(Dest, {assertz,Denial}),
+        %% A staged removal cannot bypass the committed destination ACL.
+        failed(signed_result(C, {transaction,conj([
+            scoped(Dest,{retract,Denial}),
+            scoped(Target,creation_goal([],placement(Room)))])})),
+        holds(Dest,Denial), edit(Dest,{retract,Denial}),
         Before = instances(Target),
-        signed(C, scoped(Target, {';', creation_goal([placement(ref(Dest,closed))]),
+        signed(C, scoped(Target, {';', creation_goal([],placement(ref(Dest,closed))),
                                       {assertz,refusal_observed}})),
         ?assertEqual(Before, instances(Target)), holds(Target, refusal_observed),
         AdmissionBefore = placements(Dest),
-        signed(C, {';', {transaction,conj([scoped(Target,creation_goal([placement(Room)])),fail])},
+        signed(C, {';', {transaction,conj([scoped(Target,creation_goal([],placement(Room))),fail])},
                        {assertz,outer_refusal_observed}}),
         ?assertEqual(Before,instances(Target)),
         ?assertEqual(AdmissionBefore,placements(Dest)),
-        %% Denied lookup is not absence. An explicit destination avoids the lookup.
-        edit(Ns, {retract, {personal_agent_query,{space_location,personal,{'_'}}}}),
-        denied_creation(C, Target, []), create(C, Target, [placement(Room)]),
-        edit(Ns, {assertz, {personal_agent_query,{space_location,personal,{'_'}}}}),
+        %% Denied lookup is not absence; explicit placement avoids the lookup.
+        [Grant = {':-',Head,Body}] = [T || T = {':-',
+            {can_invoke,{'_'},{agent_instance_ref,{'Ns'},{'_'},personal},[{'Owner'}|{'_'}],{'Ns'}},_}
+            <- quod_personal_agent_tests:user_terms()],
+        Restricted = {':-',Head,setelement(3,Body,
+            {member,{'Owner'},[<<"quod:gui">>,<<"quod:agent">>,<<"quod:user">>]})},
+        edit(Ns,{',',{retract,Grant},{assertz,Restricted}}),
+        try denied_creation(C,Target,[]), create(C,Target,[],placement(Room))
+        after edit(Ns,{',',{retract,Restricted},{assertz,Grant}}) end,
         edit(Ns, {assertz, {space_assignment_state,personal,2,none}}),
         denied_creation(C, Target, []),
         edit(Ns, {retract, {space_assignment_state,personal,2,none}}),
-        %% Exact destination history is enforced before admission.
-        denied_creation(C, Target, [placement(setelement(3,Room,<<0:256>>))]),
-        denied_creation(C, Target, [placement(ref(Dest,absent))])
+        denied_creation(C, Target, [], placement(setelement(3,Room,<<0:256>>))),
+        denied_creation(C, Target, [], placement(ref(Dest,absent)))
     end) end}.
+
+existing_occupants_and_creation_commit_together_test_() ->
+    [{atom_to_list(Lane), {timeout,90,fun() -> with_spaces(fun(C=#{namespace:=Ns,storage:=Target}) ->
+        Occupant = case Lane of local -> ref(Target,resident); foreign -> ref(Ns,personal) end,
+        Store = element(2,Occupant), Id = element(4,Occupant),
+        Goal = conj([creation_goal([],unplaced),
+                     inside({'Ref'},Occupant,{transform,0,0,0,0,0,0})]),
+        Before = instances(Target),
+        failed(signed_result(C,scoped(Target,{transaction,{',',Goal,fail}}))),
+        ?assertEqual(Before,instances(Target)), assignment(C,Store,Id,0,none),
+        ?assertEqual([],placements(Target)),
+        %% Nonexistent participants and wrong histories leave no partial space.
+        [begin
+            BadGoal = conj([creation_goal([],unplaced),inside({'Ref'},Bad,{transform,0,0,0,0,0,0})]),
+            failed(signed_result(C,scoped(Target,{transaction,BadGoal}))),
+            ?assertEqual(Before,instances(Target))
+         end || Bad <- [ref(Store,absent),setelement(3,Occupant,<<0:256>>)]],
+        {ok,Evidence,{normalized,{committed,[Blob],_}}} = signed_result(C,scoped(Target,{transaction,Goal})),
+        Op = quod_client_goal:operation_ref(Evidence),
+        ?assertMatch(#{operation_state:=terminal},quod_ct:await_operation_complete(element(2,Op),Op,10000)),
+        {ok,Bindings} = quod_client_result:decode_binding(Blob),
+        [Space={entity_ref,Target,_,SpaceId}] = [R || {_,R={entity_ref,_,_,_}} <- Bindings],
+        assignment(C,Store,Id,1,Space), holds(Target,{space_placement,SpaceId,Occupant,1}),
+        %% Reaching the same desired state twice does not allocate another revision.
+        Height = quod_prolog:applied(Target),
+        ?assertMatch({ok,_,{normalized,{answers,_,_}}},
+            signed_result(C,inside(Space,Occupant,{transform,0,0,0,0,0,0}))),
+        ?assertEqual(Height,quod_prolog:applied(Target)), assignment(C,Store,Id,1,Space),
+        empty_resources(C,Target,SpaceId,[Occupant])
+    end,[{instance_of,{':',quod,{':',agent,agent}},resident}]) end}} || Lane <- [local,foreign]].
 
 with_spaces(Fun) ->
     with_spaces(Fun, []).
 
 with_spaces(Fun, Extra) ->
-    Sources = source("space.pl") ++ source("space_view.pl") ++ fixture() ++ Extra,
-    quod_personal_agent_tests:with_personal(fun(C = #{namespace := Ns, agent := A,
+    with_spaces(Fun, Extra, source("quod_space.pl")).
+
+with_spaces(Fun, Extra, SpaceSource) ->
+    Sources = fixture() ++ Extra,
+    quod_personal_agent_tests:with_personal(fun(C = #{namespace := Ns, agent := A, human := Human,
                                                     directory := Dir, identity := Node}) ->
-        {ok, Foreign} = quod_foreign_log:start_link(#{cache_dir => filename:join(Dir,"foreign")}),
         Measure = <<"creation-measure">>, Target = <<"creation-storage">>, Dest = <<"creation-destination">>,
-        MSup = quod_agent_hosting_tests:start_ontology(Measure,Dir,Node,[],source("quod_measure.pl")),
+        MSup = quod_agent_hosting_tests:start_ontology(Measure,Dir,Node,[],source("gui_measure.pl")),
         MeasureRef = {measure_vocabulary,Measure,quod_simplex:genesis_hash(Measure)},
-        Terms = Sources ++ [MeasureRef, {creation_actor,A}, storage_open,
-            {':-', {can_invoke,{'_'},A,{'_'},{'_'}},storage_open}],
+        Owner = <<"quod:space">>,
+        SSup = quod_agent_hosting_tests:start_ontology(Owner,Dir,Node,[],SpaceSource ++ [MeasureRef]),
+        %% A space given no name draws one from the names ontology.
+        NSup = quod_agent_hosting_tests:start_ontology(<<"quod:names">>,Dir,Node,[],
+            quod_prolog:read_terms("priv/ontologies/quod_names.pl")),
+        Pin = {space_vocabulary,Owner,quod_simplex:genesis_hash(Owner)},
+        Terms = Sources ++ [Pin, storage_open,
+            {':-', {can_invoke,{'_'},A,{'_'},{'_'}},storage_open},
+            {':-', {can_invoke,{'_'},Human,{'_'},{'_'}},storage_open}],
         TSup = quod_agent_hosting_tests:start_ontology(Target,Dir,Node,[],Terms),
         DSup = quod_agent_hosting_tests:start_ontology(Dest,Dir,Node,[],Terms),
-        edit(Ns, conj([{assertz,MeasureRef},{assertz,{creation_actor,A}},
-            {assertz,{can_invoke,{',',{current_ontology_identity,Ns,quod_simplex:genesis_hash(Ns)},
-                {space_accept_placement,room,{'_'},{'_'}}}, A, {'_'}, Ns}},
-            {assertz,{can_invoke,{',',{current_ontology_identity,Ns,quod_simplex:genesis_hash(Ns)},
-                {space_assignment,{'_'},{'_'},{'_'}}}, A, {'_'}, Ns}}])),
+        edit(Ns, {assertz,Pin}),
+        %% Like the system GUI on a node, a scene vocabulary is always there:
+        %% it draws spaces and decides what a pose is.
+        Render = <<"creation-rendering">>, Model = <<"creation-modelling">>,
+        RSup = quod_agent_hosting_tests:start_ontology(Render,Dir,Node,[],source("gui_scene.pl")),
+        GSup = quod_agent_hosting_tests:start_ontology(Model,Dir,Node,[],source("gui_scene.pl") ++
+            [{rendering_vocabulary,Render,quod_simplex:genesis_hash(Render)}]),
+        [edit(Store,{assertz,{modelling_vocabulary,Model,quod_simplex:genesis_hash(Model)}})
+            || Store <- [Ns,Owner]],
         try Fun(C#{storage=>Target,destination=>Dest,measure=>Measure})
-        after [quod_agent_hosting_tests:stop_ontology(S) || S <- [DSup,TSup,MSup]],
-              gen_server:stop(Foreign) end
+        after [quod_agent_hosting_tests:stop_ontology(S) || S <- [GSup,RSup,DSup,TSup,NSup,SSup,MSup]] end
     end, Sources).
 
-source(File) -> quod_prolog:read_terms(filename:join(code:priv_dir(quod),"ontologies/"++File)).
+source(File) ->
+    case File of
+        "gui_measure.pl" -> quod_ct:gui_terms();
+        "gui_scene.pl" -> quod_ct:gui_terms();
+        "gui_tools.pl" -> quod_ct:gui_terms();
+        "quod_gui.pl" -> quod_ct:gui_terms();
+        _ -> quod_prolog:read_terms(filename:join(code:priv_dir(quod),"ontologies/"++File))
+    end.
 fixture() -> quod_prolog:read_terms("test/fixtures/space-creation.pl").
 ref(Ns, Entity) -> {entity_ref,Ns,quod_simplex:genesis_hash(Ns),Entity}.
-placement(Ref) -> {attribute,placement,{at,Ref,{transform,10,20,30,0,0,0}}}.
-default_dimensions() -> {box,{q,100,<<"m">>},{q,100,<<"m">>},{q,100,<<"m">>}}.
+placement(Ref) -> {at,Ref,{transform,10,20,30,0,0,0}}.
+space_class() -> {':',quod,{':',space,space}}.
+space(Goal) -> {'::',<<"quod:space">>,Goal}.
+inside(Destination,Entity,Pose) -> space({goal,{inside,Destination,Entity,Pose}}).
+default_dimensions() -> {box,{q,10,<<"m">>},{q,10,<<"m">>},{q,10,<<"m">>}}.
 mixed_dimensions() -> {box,{q,{'/',1,3},<<"ft">>},{q,200,<<"cm">>},{q,3,<<"km">>}}.
-creation_goal(Inputs) ->
-    conj([{with_build_plan,Inputs,{assert,{instance_of,space,{'Space'}}}},
-          {current_ontology_identity,{'Ns'},{'Anchor'}},
-          {'=',{'Ref'},{entity_ref,{'Ns'},{'Anchor'},{'Space'}}},
-          {attribute,{'Space'},name,{'Name'}}]).
+creation_goal(Inputs,{viewed,Placement,View}) ->
+    {creation_result,Inputs,Placement,View,{'Ref'},{'Name'}};
+creation_goal(Inputs,Placement) ->
+    {creation_result,Inputs,Placement,{'Ref'},{'Name'}}.
 at_target(#{namespace := Ns}, Ns, Goal) ->
     {',',{current_ontology_identity,Ns,quod_simplex:genesis_hash(Ns)},Goal};
 at_target(_, Ns, Goal) -> scoped(Ns, Goal).
 scoped(Ns, Goal) -> {'::',Ns,{',',{current_ontology_identity,Ns,quod_simplex:genesis_hash(Ns)},Goal}}.
 
-create(C, Target, Inputs) ->
+create(C, Target, Inputs) -> create(C, Target, Inputs, near_agent).
+create(C, Target, Inputs, Placement) ->
     quod_personal_agent_tests:await_runtime_ready(maps:get(namespace,C)),
     %% Anonymous locals leave only the anchored reference and name as outputs.
-    Goal = at_target(C, Target, {creation_result, Inputs, {'Ref'}, {'Name'}}),
+    Goal = at_target(C, Target, creation_goal(Inputs,Placement)),
     %% The fixture helper is authored Prolog composition, not another executor.
     {Instruction, Bytes} = quod_personal_agent_tests:instruction(C,Goal),
-    {ok, Evidence, {normalized,{committed,[Binding],_}}} =
-        quod_personal_agent_tests:instruct(C,submit,Instruction),
+    Reply = quod_personal_agent_tests:instruct(C,submit,Instruction),
+    case Reply of
+        {ok,_,{normalized,{failed,Reasons}}} ->
+            {ok,Decoded} = quod_wire_term:decode_failure_reasons(Reasons),
+            error({creation_refused,Decoded});
+        _ -> ok
+    end,
+    {ok, Evidence, {normalized,{committed,[Binding],_}}} = Reply,
     Operation = quod_client_goal:operation_ref(Evidence),
     ?assertMatch(#{operation_state:=terminal},
         quod_ct:await_operation_complete(element(2,Operation),Operation,10000)),
     {ok, Bindings} = quod_client_result:decode_binding(Binding),
     {ok, #{request := #{operation_id := OperationId}}} = quod_client_goal:request_identity(Bytes),
     Lookup = quod_personal_agent_tests:request(C,read,
-        {personal_instruction_lookup,OperationId,{'Bytes'},{'Signature'}}),
+        {'::',<<"quod:user">>,{personal_instruction_lookup,OperationId,{'Bytes'},{'Signature'}}}),
     Ns = maps:get(namespace,C), true = quod_reg:subscribe({runtime,Ns}),
     {ok, _, {operation_outcome,_,Outcome}} = try
         quod_personal_agent_tests:await_result(C,Lookup,quod_time:mono_ms()+10000)
@@ -217,27 +330,37 @@ signed_result(C,Goal) ->
     quod_personal_agent_tests:instruct(C,submit,Instruction).
 signed(C,Goal) ->
     Result = signed_result(C,Goal),
+    case Result of {ok,_,{normalized,{failed,Reasons}}}->
+        {ok,Decoded}=quod_wire_term:decode_failure_reasons(Reasons),
+        io:format("Creation fixture refusal: ~tp~n",[Decoded]); _->ok end,
     ?assertMatch({ok,_,{normalized,{committed,_,_}}},Result),
     {ok,Evidence,_} = Result,
     Op = quod_client_goal:operation_ref(Evidence),
     ?assertMatch(#{operation_state:=terminal},quod_ct:await_operation_complete(element(2,Op),Op,10000)).
 failed(R) -> ?assertMatch({ok,_,{normalized,{failed,_}}},R).
-denied_creation(C,Target,Inputs) ->
+denied_creation(C,Target,Inputs) -> denied_creation(C,Target,Inputs,near_agent).
+denied_creation(C,Target,Inputs,Placement) ->
     Before = instances(Target),
-    failed(signed_result(C,at_target(C,Target,creation_goal(Inputs)))),
+    failed(signed_result(C,at_target(C,Target,creation_goal(Inputs,Placement)))),
     ?assertEqual(Before,instances(Target)).
 instances(Ns) ->
-    {ok,[#{'Rows':=Rows}],_} = quod_prolog:prove_ro(Ns,{findall,{'I'},{instance_of,space,{'I'}},{'Rows'}}), Rows.
+    {ok,[#{'Rows':=Rows}],_} = quod_prolog:prove_ro(Ns,{findall,{'I'},{instance_of,space_class(),{'I'}},{'Rows'}}), Rows.
 placements(Ns) ->
     {ok,[#{'Rows':=Rows}],_} = quod_prolog:prove_ro(Ns,
         {findall,{placement,{'S'},{'I'},{'R'}},{space_placement,{'S'},{'I'},{'R'}},{'Rows'}}), Rows.
 holds(Ns,Goal) -> ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,Goal)).
 fails(Ns,Goal) -> ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,Goal)).
-edit(Ns,Goal) -> ?assertMatch({ok,_,_},quod_prolog:execute(Ns,Goal)).
+edit(Ns,Goal) ->
+    case quod_prolog:execute(Ns,Goal) of
+        {ok,_,_} -> ok; Other -> error({fixture_edit_failed,Ns,Goal,Other})
+    end.
 conj([G]) -> G;
 conj([G|Rest]) -> {',',G,conj(Rest)}.
-empty_resources(C,Target,Id) ->
-    [fails(Target,G) || G <- [{space_contains,Id,{'_'}},{instance_of,physical_space,Id},
+empty_resources(C,Target,Id) -> empty_resources(C,Target,Id,[]).
+empty_resources(C,Target,Id,ExpectedContents) ->
+    Contents = read(C,{findall,{'E'},space({space_contains,ref(Target,Id),{'E'}}),{'Contents'}}),
+    ?assertEqual(lists:sort(ExpectedContents),lists:sort(Contents)),
+    [fails(Target,G) || G <- [{instance_of,physical_space,Id},
         {instance_of,voxel_world,Id},{instance_of,sky_sphere,{'_'}},{physics_space,Id,{'_'},{'_'}},
         {physics_body_definition,Id,{'_'},{'_'},{'_'},{'_'},{'_'}},{voxel_world,{'_'}}]],
     [begin
@@ -246,15 +369,6 @@ empty_resources(C,Target,Id) ->
                                              all,quod_time:mono_ms()+10000),
         ?assertEqual(#{},gen_server:call(quod_reg:via({quod_runtime,Ns}),physics_worlds))
     end || Ns <- lists:usort([Target,maps:get(namespace,C),maps:get(destination,C)])].
-
-with_models(#{namespace := Ns, directory := Dir, identity := Node}, Fun) ->
-    Render = <<"creation-rendering">>, Model = <<"creation-modelling">>,
-    RSup = quod_agent_hosting_tests:start_ontology(Render,Dir,Node,[],source("quod_rendering.pl")),
-    MSup = quod_agent_hosting_tests:start_ontology(Model,Dir,Node,[],source("quod_modelling.pl") ++
-        [{rendering_vocabulary,Render,quod_simplex:genesis_hash(Render)}]),
-    edit(Ns,{assertz,{modelling_vocabulary,Model,quod_simplex:genesis_hash(Model)}}),
-    try Fun()
-    after [quod_agent_hosting_tests:stop_ontology(S) || S <- [MSup,RSup]] end.
 
 atomic_completion_wait_includes_complete_record_test_() ->
     {timeout, 30, fun() -> with_spaces(fun(C = #{namespace := Ns, destination := Dest}) ->
@@ -268,8 +382,7 @@ atomic_completion_wait_includes_complete_record_test_() ->
         application:set_env(quod, dtx_test_phase_barrier, {hold, terminal}),
         try
             {ok, Evidence, {normalized, {committed, _, _}}} = signed_result(C,
-                conj([{space_place, personal, 0, ref(Dest, room)},
-                      {assertz, {attribute, personal, transform, {transform,0,0,0,0,0,0}}}])),
+                inside(ref(Dest,room),ref(Ns,personal),{transform,0,0,0,0,0,0})),
             Op = quod_client_goal:operation_ref(Evidence),
             {Coordinator, Barrier} = receive
                 {trace, Pid, call, {application, set_env,
@@ -297,7 +410,7 @@ atomic_completion_wait_includes_complete_record_test_() ->
                     after 5000 -> error(complete_did_not_release_waiter) end,
                     ?assertMatch({ok, #{status := committed}}, quod_prolog:outcome(Group)),
                     quod_personal_agent_tests:await_runtime_ready(Ns),
-                    denied_creation(C, maps:get(storage, C), [placement(ref(Dest, closed))])
+                    denied_creation(C, maps:get(storage, C), [], placement(ref(Dest, closed)))
                 after
                     exit(Waiter, kill), demonitor(Monitor, [flush])
                 end
@@ -308,3 +421,21 @@ atomic_completion_wait_includes_complete_record_test_() ->
                              {ok, Old} -> application:set_env(quod, dtx_test_phase_barrier, Old) end
         end
     end) end}.
+
+assignment(C,Ns,Id,Revision,Destination) ->
+    ?assertEqual(true,read(C,{',',space({space_assignment,ref(Ns,Id),Revision,Destination}),{'=',{'Result'},true}})).
+
+read(C,Goal) ->
+    {Bytes,Signature} = quod_personal_agent_tests:request(C,read,Goal),
+    {ok,_,{normalized,{read,_,{answers,_,[Blob]}}}} =
+        quod_client_goal_ingress:submit(Bytes,Signature),
+    {ok,Bindings} = quod_client_result:decode_binding(Blob),
+    %% findall leaves its generator variable unbound; select the bound answer.
+    [Value] = [V || {_,V} <- Bindings, not (is_tuple(V) andalso tuple_size(V)=:=1)], Value.
+
+with_withheld(Operation,Fun) ->
+    [Default={':-',Head,Body}] = [T || T={':-',{class_permission,space,_,allow},_} <- source("quod_space.pl")],
+    Withheld = {':-',Head,{',',Body,{'\\=',element(3,Head),Operation}}},
+    edit(<<"quod:space">>,{',',{retract,Default},{assertz,Withheld}}),
+    try Fun()
+    after edit(<<"quod:space">>,{',',{retract,Withheld},{assertz,Default}}) end.

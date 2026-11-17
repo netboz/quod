@@ -1,0 +1,23 @@
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+CLOSE_OWNER {"stage":"session.close.begin","monotonic":129086492796063,"frequency":1000000000,"status":null}
+CLOSE_OWNER {"stage":"session.close.returned","monotonic":129086509862481,"frequency":1000000000,"status":null}
+CLOSE_OWNER {"stage":"views.begin","monotonic":129086510061041,"frequency":1000000000,"status":"WaitingForActivation"}
+CLOSE_OWNER {"stage":"action.begin","monotonic":129086510489529,"frequency":1000000000,"status":"RanToCompletion"}
+CLOSE_OWNER {"stage":"action.settled","monotonic":129086510611319,"frequency":1000000000,"status":"RanToCompletion"}
+CLOSE_OWNER {"stage":"backup.begin","monotonic":129086510619460,"frequency":1000000000,"status":"RanToCompletion"}
+CLOSE_OWNER {"stage":"backup.settled","monotonic":129086510625586,"frequency":1000000000,"status":"RanToCompletion"}
+CLOSE_OWNER {"stage":"xr.completion.begin","monotonic":129086510628251,"frequency":1000000000,"status":"RanToCompletion"}
+CLOSE_OWNER {"stage":"xr.completion.settled","monotonic":129086510631021,"frequency":1000000000,"status":"RanToCompletion"}
+CLOSE_OWNER {"stage":"owners.await","monotonic":129086510634948,"frequency":1000000000,"status":null}
+CLOSE_OWNER {"stage":"views.settled","monotonic":129086512046391,"frequency":1000000000,"status":"RanToCompletion"}
+CLOSE_OWNER {"stage":"owners.settled","monotonic":129086512321590,"frequency":1000000000,"status":null}
+CLOSE_OWNER {"stage":"models.begin","monotonic":129086512761395,"frequency":1000000000,"status":"RanToCompletion"}
+CLOSE_OWNER {"stage":"models.settled","monotonic":129086512774002,"frequency":1000000000,"status":"RanToCompletion"}
+CLOSE_OWNER {"stage":"models.settled","monotonic":129086512788067,"frequency":1000000000,"status":null}
+CLOSE_OWNER {"stage":"xr.shutdown.begin","monotonic":129086512790095,"frequency":1000000000,"status":null}
+CLOSE_OWNER {"stage":"xr.shutdown.returned","monotonic":129086517285502,"frequency":1000000000,"status":null}
+CLOSE_OWNER {"stage":"identity.release.begin","monotonic":129086517311307,"frequency":1000000000,"status":null}
+CLOSE_OWNER {"stage":"identity.release.returned","monotonic":129086517440375,"frequency":1000000000,"status":null}
+CLOSE_OWNER {"stage":"tree.quit.requested","monotonic":129086517446156,"frequency":1000000000,"status":null}
+CLOSE_OWNER {"stage":"tree.exit.entered","monotonic":129086543924758,"frequency":1000000000,"status":null}

@@ -1,0 +1,5 @@
+{
+  "target": "local",
+  "on": "quod-matrix-rehearsal",
+  "expression": "quod_refound_operator:space()"
+}

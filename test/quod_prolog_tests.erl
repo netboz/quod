@@ -11,18 +11,27 @@ native_execution_uses_ordinary_acl_and_commit_test_() ->
       fun(#{namespace := Ns, identity := #{pubkey := Key}}) ->
           Principal = {node, Key},
           Allowed = {',', {me, Principal}, {assertz, native_committed}},
-          lists:foreach(fun(Goal) ->
-              ?assertMatch({ok, _, _}, quod_ct:rp(Ns,
-                {assertz, {can_invoke, Goal, Principal, {'_'}, Ns}}))
-          end, [Allowed, native_committed, native_refused]),
-          %% Remove the native founding grant to exercise its ordinary ACL.
-          ?assertMatch({ok, _, _}, quod_ct:rp(Ns,
-                        {retract, {can_invoke, {'_'}, {'_'}, [], {'_'}}})),
+          %% Install only the grants exercised below, replacing fixture-wide admission.
+          Grants = [{assertz, {can_invoke, Goal, Principal, {'_'}, Ns}}
+                    || Goal <- [Allowed, native_committed, native_refused]],
+          Policy = lists:foldr(fun(G, Rest) -> {',', G, Rest} end, true,
+                               [{abolish, {'/', can_invoke, 4}} | Grants]),
+          ?assertMatch({ok, _, _}, quod_ct:rp(Ns, Policy)),
           ?assertMatch({ok, _, _}, quod_prolog:execute(Ns, Allowed)),
           ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, native_committed)),
           ?assertMatch({fail, _}, quod_prolog:execute(Ns, {assertz, native_refused})),
           ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, native_refused))
       end) end}.
+
+origin_heap_policy_refusal_preserves_engine_and_committed_height_test_() ->
+    {timeout,60,fun() -> quod_agent_hosting_tests:with_host(fun(#{namespace := Ns}) ->
+        Engine = quod_reg:where({quod_prolog,Ns}),
+        Height = quod_prolog:applied(Ns),
+        ?assertMatch({error,{material_limit,proof,heap_bytes,Actual,0}} when Actual > 0,
+            quod_prolog:execute(Ns,{assertz,must_not_commit_without_heap})),
+        ?assert(is_process_alive(Engine)),
+        ?assertEqual(Height,quod_prolog:applied(Ns))
+    end,[{material_limit_override,proof,heap_bytes,0}]) end}.
 
 native_engine_loss_before_checkpoint_is_not_an_unknown_operation_test_() ->
     {timeout, 60, fun() -> with_native_barrier(fun(Ns) ->
@@ -120,7 +129,7 @@ with_native_barrier(Fun) ->
     end).
 
 native_waiting() ->
-    receive {local_proof_waiting, Worker} -> Worker
+    receive {local_proof_waiting, Worker, _} -> Worker
     after 5000 -> error(native_proof_not_started) end.
 
 owned_async_execute_preserves_absolute_deadline_test_() ->
@@ -139,7 +148,7 @@ owned_async_execute_preserves_absolute_deadline_test_() ->
             Deadline = quod_time:mono_ms() + 1000,
             Goal = {',', test_local_wait, {assertz, expired_during_proof}},
             {ok, Engine} = quod_prolog:execute_async(Target, Goal, self(), Call, Deadline),
-            Worker = receive {local_proof_waiting, Pid} -> Pid
+            Worker = receive {local_proof_waiting, Pid, _} -> Pid
                      after 5000 -> error(async_proof_not_started) end,
             Monitor = monitor(process, Worker),
             receive {quod_proof_reply, Engine, Call, Reply} ->
@@ -326,7 +335,7 @@ agent_identity_signing_accepts_unrelated_height_advance_test() ->
       signing_key := SigningKey, agent_instance := Instance} = Fixture,
     KeyFact = {agent_key, Instance, SigningKey, active},
     GenesisTable = binary_to_atom(
-                     <<"quod_simplex_genesis_", Ns/binary>>, utf8),
+                     quod_simplex:genesis_table_name(Ns), utf8),
     GenesisTable = ets:new(GenesisTable, [named_table, protected, set]),
     true = ets:insert(
              GenesisTable,
@@ -439,7 +448,7 @@ keyed_engine_threads_its_signer_into_scope_plans_test() ->
     {Pubkey, Seed} = quod_identity:generate(),
     Anchor = <<51:256>>,
     GenesisTable = binary_to_atom(
-                     <<"quod_simplex_genesis_", Ns/binary>>, utf8),
+                     quod_simplex:genesis_table_name(Ns), utf8),
     GenesisTable = ets:new(GenesisTable, [named_table, protected]),
     true = ets:insert(GenesisTable, {anchor, Anchor}),
     Identity = #{pubkey => Pubkey,
@@ -663,7 +672,7 @@ t_submit_plan_validation({Ns, _}) ->
             KeyedNs = <<Ns/binary, ":keyed">>,
             KeyedAnchor = <<52:256>>,
             GenesisTable = binary_to_atom(
-                             <<"quod_simplex_genesis_", KeyedNs/binary>>,
+                             quod_simplex:genesis_table_name(KeyedNs),
                              utf8),
             GenesisTable = ets:new(
                              GenesisTable, [named_table, protected]),
@@ -2034,7 +2043,9 @@ t_replay_reentry({Ns, Engine}) ->
         %% The real publication feeds the socket's existing receive handler.
         %% A different owner and duplicate starts cannot invalidate this view.
         View = #{peer => {127,0,0,1},owners => #{Engine => Ns},
-                 heights => #{Ns => 1},local_ready => #{Ns => true}},
+                 heights => #{Ns => 1},local_ready => #{Ns => true},follows => #{},
+                 anchors => #{Ns => quod_simplex:genesis_hash(Ns)},dependency_monitors => #{},
+                 follow_requests => gen_server:reqids_new(),snapshots => gen_server:reqids_new()},
         ?assertEqual({ok,View},quod_client_view:websocket_info(
             {replay_started,{self(),make_ref()},1},View)),
         {reply,{text,Paused},Recovering} = quod_client_view:websocket_info(Started,View),
@@ -2181,3 +2192,27 @@ hist(Ns) -> maps:get(kb_history_predicates, quod_prolog:stats(Ns), 0).
 
 %% apply one more block at the next height (reads the current applied height first).
 ab_next(Ns, Change) -> ab(Ns, quod_prolog:applied(Ns) + 1, Change).
+
+default_proof_owner_retains_65_live_workers_and_releases_capacity_test_() ->
+    {timeout, 60, fun() -> with_native_barrier(fun(Ns) ->
+        Parent = self(),
+        Rows = [begin
+            Tag = make_ref(),
+            Caller = spawn(fun() -> Parent ! {Tag, quod_prolog:execute(Ns, test_local_wait)} end),
+            {Caller, native_waiting(), Tag}
+        end || _ <- lists:seq(1, 65)],
+        try
+            ?assertEqual(65, maps:get(proof_workers, quod_prolog:stats(Ns))),
+            lists:foreach(fun({_Caller, Worker, _Tag}) -> Worker ! release end, Rows),
+            lists:foreach(fun({_Caller, _Worker, Tag}) ->
+                receive {Tag, Result} -> ?assertMatch({ok, _, _}, Result)
+                after 5000 -> error(worker_release_did_not_complete) end
+            end, Rows),
+            %% Replies pass through finish_proof at the engine. A subsequent
+            %% stats call observes processed completion, without polling/sleep.
+            ?assertEqual(0, maps:get(proof_workers, quod_prolog:stats(Ns))),
+            ?assertMatch({ok, _, _}, quod_prolog:execute(Ns, true))
+        after
+            lists:foreach(fun({Caller, Worker, _}) -> Worker ! release, exit(Caller, kill) end, Rows)
+        end
+    end) end}.

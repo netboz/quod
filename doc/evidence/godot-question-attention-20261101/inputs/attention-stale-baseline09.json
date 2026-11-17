@@ -1,0 +1,63 @@
+{
+  "passed": false,
+  "reader_errors": [],
+  "host_input_or_focus_action": false,
+  "software_native_Control_inputs": true,
+  "setup_Control_signals": true,
+  "no_headset_or_runtime": true,
+  "companion_not_distributed": true,
+  "production_auth_lifetime_unchanged": true,
+  "manifest_sha256": "6826dabd51be8213cc5718bcb9c0c72bef23701122d75399b39c1b017f931a03",
+  "driver_inputs": {
+    "signed.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-stale-baseline09/drivers/signed.py",
+      "sha256": "8eea2f27093e0ee11d2e04d9aca89ab4362799a502bd7e2aba23d3fec74626b4"
+    },
+    "isolation.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-stale-baseline09/drivers/isolation.py",
+      "sha256": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8"
+    },
+    "hashes.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-stale-baseline09/drivers/hashes.py",
+      "sha256": "2df13f387f7d127b47265dec1ead54f38736e42bf874a3b20ecfa1ba5f2be6d7"
+    }
+  },
+  "failure": "AssertionError: ",
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-attention-stale-stdout": true,
+    "client-attention-stale-stderr": true
+  },
+  "streams": {
+    "server-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-stale-baseline09/server-stdout.raw",
+      "sha256": "388fdd6cbfa944c7187ce57b74ccaff38950411ebf299edecfe3b1a9d1794e64",
+      "bytes": 129
+    },
+    "client-attention-stale-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-stale-baseline09/client-attention-stale-stdout.raw",
+      "sha256": "c71a226a2a57b0d85588ee00e2c1857ae0e9b4f504b025fb2c3ff6c0a90246db",
+      "bytes": 128778
+    },
+    "client-attention-stale-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-stale-baseline09/client-attention-stale-stderr.raw",
+      "sha256": "fb1597493c12e28a0ec882cf9a4e2d36f2fd1971e0349e54cf0f9bc87c1972cf",
+      "bytes": 5944
+    },
+    "server-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/attention-stale-baseline09/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "native_input_count": 0,
+  "children": {
+    "server": {
+      "true_exit": 0
+    },
+    "client-attention-stale": {
+      "true_exit": 1
+    }
+  }
+}

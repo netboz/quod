@@ -2,7 +2,6 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
--include("quod_vm_limits.hrl").
 
 -define(NS, <<"test:transactions">>).
 -define(ANCHOR, <<11:256>>).
@@ -751,16 +750,22 @@ authenticated_relay_replays_admitted_vocabulary_on_a_cold_vm_test() ->
     ?assertEqual({ok, Submission}, quod_transaction:submission(?BINDING, Materialized)),
     [?assert(is_atom(binary_to_existing_atom(Name, utf8))) || Name <- Names].
 
-bounded_material_failure_is_total_test() ->
+deep_material_and_invalid_runtime_term_are_distinct_test() ->
     {Author, Identity} = identity(),
-    %% The wire codec's existing maximum depth is 64. Use a clearly deeper
-    %% fixture so the surrounding material wrappers cannot leave it on the edge.
     DeepTerm = deep_term(70, leaf),
-    %% Invalid material is rejected by the signing codec itself; it does not
-    %% need (and cannot acquire) a canonical semantic id first.
+    Deep = quod_transaction:bind_id(
+             {?NS, ?ANCHOR}, (unsigned(Author))#transaction{
+                 diff = [{assert, {{deep, DeepTerm}, true}}]}),
+    {ok, Signed, Submission} = quod_transaction:sign_submission(
+                                ?BINDING, Deep, Identity),
+    ?assert(quod_transaction:verify(?BINDING, Signed)),
+    ?assert(quod_transaction:verify_submission(Submission)),
+    {ok, Decoded} = quod_transaction:decode_verified_submission(?BINDING, Submission),
+    ?assertEqual(Deep#transaction.diff, Decoded#transaction.diff),
+    %% A runtime process identity is nonportable material, regardless of depth.
     Transaction = (unsigned(Author))#transaction{
                     tx_id = <<1:256>>,
-                    diff = [{assert, {{deep, DeepTerm}, true}}]},
+                    diff = [{assert, {{runtime_value, self()}, true}}]},
     ?assertEqual(
        {error, bad_term},
        quod_transaction:bytes(?BINDING, Transaction)),

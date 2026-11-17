@@ -1,0 +1,251 @@
+{
+  "checked_at_utc": "2026-10-28T22:36:10.529848+00:00",
+  "checker_session_id": "8d55a3f3-e558-46e2-afbb-2e028558f371",
+  "reviewer_session_id": "ca58432f-ea5c-4d98-aeeb-c92a8e6a120b",
+  "reviewer_provider": "claude-code",
+  "reviewer_model": "claude-code:fable",
+  "reviewer_tool_scope": "read",
+  "reviewer_reported_edited_files": [],
+  "reviewer_builds_or_tests_run": false,
+  "parent_new_tests_or_runtime_reproduction": false,
+  "verification_method": "Independent source/caller/specification tracing and exact byte hashes",
+  "branch": "worktree/pearl-stone",
+  "head": "69196a36caeeb06e6ee07982f1ab1988d7c16b43",
+  "immutable_boundary": "/home/yan/.cache/quod-m3a-artifacts/quod-godot-m3a-handoff-8d55a3f3-20261028-01",
+  "snapshot_sha256": "318a51191e540aa9f37efbd527569027593b73415f5e3620d003d5459e757f4c",
+  "binary_patch_sha256": "36501ebd291888f9f93de6005ac76c271e4dcfaadc116733b155c18d96ccf588",
+  "frozen_binary_patch_sha256": "36501ebd291888f9f93de6005ac76c271e4dcfaadc116733b155c18d96ccf588",
+  "binary_patch_equal": true,
+  "scope_count": 44,
+  "scope_hashes_match": true,
+  "scope_files": [
+    {
+      "path": "doc/godot-foundation-contract.md",
+      "expected": "fc917e4ebc5820fd2b2d6c75649869f77762f914389785d4b0757b31205cfe95",
+      "actual": "fc917e4ebc5820fd2b2d6c75649869f77762f914389785d4b0757b31205cfe95"
+    },
+    {
+      "path": "doc/gui-implementation-plan.md",
+      "expected": "cca6c3309e03856cb98205e59d5edbecdb0e7366a6e0bad0bdd5d39268c4b930",
+      "actual": "cca6c3309e03856cb98205e59d5edbecdb0e7366a6e0bad0bdd5d39268c4b930"
+    },
+    {
+      "path": "doc/multiwrite-architecture.md",
+      "expected": "5283e82bc7ed9234e2940dc3029ce8a335720b5928f78425a6b76dc9fecf229c",
+      "actual": "5283e82bc7ed9234e2940dc3029ce8a335720b5928f78425a6b76dc9fecf229c"
+    },
+    {
+      "path": "doc/physics-native.md",
+      "expected": "ac11fb27931170add7b32e7e2dec38f1fd766e182f5217c33abc80a41eec1eda",
+      "actual": "ac11fb27931170add7b32e7e2dec38f1fd766e182f5217c33abc80a41eec1eda"
+    },
+    {
+      "path": "doc/runtime-and-agents.md",
+      "expected": "4c6aa48b098b7d0ba18de4ee760ff403666af7cc279ab3af6e5370cf6850de4a",
+      "actual": "4c6aa48b098b7d0ba18de4ee760ff403666af7cc279ab3af6e5370cf6850de4a"
+    },
+    {
+      "path": "doc/spaces.md",
+      "expected": "75d8552232cfbd0ecc76d5eed40b6c8aa324ca6f998dc12f74282c8246237122",
+      "actual": "75d8552232cfbd0ecc76d5eed40b6c8aa324ca6f998dc12f74282c8246237122"
+    },
+    {
+      "path": "nimbalyst-local/handoffs/godot-m3a-prompt.md",
+      "expected": "21acf3d8ad99f3893d811cb49c4eb194478368d08b63ba357247268a271e63b8",
+      "actual": "21acf3d8ad99f3893d811cb49c4eb194478368d08b63ba357247268a271e63b8"
+    },
+    {
+      "path": "priv/ontologies/common_predicates.pl",
+      "expected": "9bfb65f34ccf794408cf7f56bcc795430812a0c25abc5c722d7320ecdb68c123",
+      "actual": "9bfb65f34ccf794408cf7f56bcc795430812a0c25abc5c722d7320ecdb68c123"
+    },
+    {
+      "path": "priv/ontologies/gui_instance.pl",
+      "expected": "3ba66deb9d36308a783b61583b260b82783de36b1b9fd729d9b23d8ce95107c0",
+      "actual": "3ba66deb9d36308a783b61583b260b82783de36b1b9fd729d9b23d8ce95107c0"
+    },
+    {
+      "path": "priv/ontologies/gui_scene.pl",
+      "expected": "ff972d8136bc4355c985b232c6ee21ff7f44c3c1484a089aab976e4c7ccfa617",
+      "actual": "ff972d8136bc4355c985b232c6ee21ff7f44c3c1484a089aab976e4c7ccfa617"
+    },
+    {
+      "path": "priv/ontologies/lobby_instance.pl",
+      "expected": "57be0ddfc8d134da10e374bc493d8e4e6940c4f740ab3e4dc86861fe6a724a0a",
+      "actual": "57be0ddfc8d134da10e374bc493d8e4e6940c4f740ab3e4dc86861fe6a724a0a"
+    },
+    {
+      "path": "priv/ontologies/lobby_worlds.pl",
+      "expected": "9b8388b039bee05bc8a8464dfc6a729c2c8dfd9447cb9cf913c87374a628f66b",
+      "actual": "9b8388b039bee05bc8a8464dfc6a729c2c8dfd9447cb9cf913c87374a628f66b"
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "expected": "b24718fe4ee6f8c7aff9644dc3580d36cb2963e08cb936a3af0b119d0af7c439",
+      "actual": "b24718fe4ee6f8c7aff9644dc3580d36cb2963e08cb936a3af0b119d0af7c439"
+    },
+    {
+      "path": "priv/ontologies/quod_space.pl",
+      "expected": "ac3fcb0037edf7372cee133c81b5bbaca3a77311f3db3fea7b354d2005339024",
+      "actual": "ac3fcb0037edf7372cee133c81b5bbaca3a77311f3db3fea7b354d2005339024"
+    },
+    {
+      "path": "priv/ontologies/user_instance.pl",
+      "expected": "cf1bc315213bf679df3259ff8deaaeaca973dcaf65d25769ae2587c8ad7570ab",
+      "actual": "cf1bc315213bf679df3259ff8deaaeaca973dcaf65d25769ae2587c8ad7570ab"
+    },
+    {
+      "path": "priv/ontologies/voxel_world_view.pl",
+      "expected": "9b8a5505d68bf1399aced9b867acf88a39be2fefa3366a3a757a5e758c31cf8e",
+      "actual": "9b8a5505d68bf1399aced9b867acf88a39be2fefa3366a3a757a5e758c31cf8e"
+    },
+    {
+      "path": "src/predicates/quod_ask.erl",
+      "expected": "cb986454d5aa4f89277d015a23cc5800a5bf8fc2dbb16fd103fbd023ab7ddea0",
+      "actual": "cb986454d5aa4f89277d015a23cc5800a5bf8fc2dbb16fd103fbd023ab7ddea0"
+    },
+    {
+      "path": "src/quod_client_view.erl",
+      "expected": "ac8921585c51dc43dcc870bdeb35306a3f59022d0b57afa9fa77609126b8d0c9",
+      "actual": "ac8921585c51dc43dcc870bdeb35306a3f59022d0b57afa9fa77609126b8d0c9"
+    },
+    {
+      "path": "src/quod_committed_projection.erl",
+      "expected": "7bf344a53737254e18753379ed7b263601eea31447b55ad2b0a38df5dc188013",
+      "actual": "7bf344a53737254e18753379ed7b263601eea31447b55ad2b0a38df5dc188013"
+    },
+    {
+      "path": "src/quod_physics.erl",
+      "expected": "6d7c32892a3c61a213cf57543de849527de2a0d3db61878b40b3d52c55d43b44",
+      "actual": "6d7c32892a3c61a213cf57543de849527de2a0d3db61878b40b3d52c55d43b44"
+    },
+    {
+      "path": "src/quod_physics_coordinates.erl",
+      "expected": "93c98ac2f9c4d9f539260ca6f58b4658f71bb345b270267f78f850d5beef84c5",
+      "actual": "93c98ac2f9c4d9f539260ca6f58b4658f71bb345b270267f78f850d5beef84c5"
+    },
+    {
+      "path": "src/quod_predicates.erl",
+      "expected": "92de63bfb2d605a1255ed5f886a73b3e1ec972db135c6bf0bb9b158b25ed9e93",
+      "actual": "92de63bfb2d605a1255ed5f886a73b3e1ec972db135c6bf0bb9b158b25ed9e93"
+    },
+    {
+      "path": "src/quod_proof_scope.erl",
+      "expected": "652d45d4388a89af8f6323290be8d1fccb9c794a812eddaae758c6e644aacd91",
+      "actual": "652d45d4388a89af8f6323290be8d1fccb9c794a812eddaae758c6e644aacd91"
+    },
+    {
+      "path": "src/quod_runtime.erl",
+      "expected": "56abb27b82cedcdc63e9b21d75126a73cc6933beb2905e9384850b817801eed0",
+      "actual": "56abb27b82cedcdc63e9b21d75126a73cc6933beb2905e9384850b817801eed0"
+    },
+    {
+      "path": "test/quod_agent_predicates_tests.erl",
+      "expected": "569015a22ddb94c13a967fa4383292af48368971556871a4fff9474ae4b2412f",
+      "actual": "569015a22ddb94c13a967fa4383292af48368971556871a4fff9474ae4b2412f"
+    },
+    {
+      "path": "test/quod_ask_tests.erl",
+      "expected": "4f47563a5e8981dd957c80a15a5134b95535010bd876ba6b56c0e080496306a8",
+      "actual": "4f47563a5e8981dd957c80a15a5134b95535010bd876ba6b56c0e080496306a8"
+    },
+    {
+      "path": "test/quod_common_primitives_tests.erl",
+      "expected": "c26b933dbd89998468defd48fb6282fff1a97012890aa129ae7bcc8910e8dee7",
+      "actual": "c26b933dbd89998468defd48fb6282fff1a97012890aa129ae7bcc8910e8dee7"
+    },
+    {
+      "path": "test/quod_ct.erl",
+      "expected": "84f91e14936f2f979cabac5d57035ef446b01301696ff94c43aeefad2af692ac",
+      "actual": "84f91e14936f2f979cabac5d57035ef446b01301696ff94c43aeefad2af692ac"
+    },
+    {
+      "path": "test/quod_gui_examples_tests.erl",
+      "expected": "5637df5797acb3ad7770474fdb24f650d7442c84af9a5720a21a540e1238d2aa",
+      "actual": "5637df5797acb3ad7770474fdb24f650d7442c84af9a5720a21a540e1238d2aa"
+    },
+    {
+      "path": "test/quod_gui_operations_tests.erl",
+      "expected": "71cfb80ec3572bd30ba3e220f05f2a1a42f87661b13a6be808892961a8adb73f",
+      "actual": "71cfb80ec3572bd30ba3e220f05f2a1a42f87661b13a6be808892961a8adb73f"
+    },
+    {
+      "path": "test/quod_gui_question_tests.erl",
+      "expected": "d1a8ad6b58e2d26d9b3b57f6e4dc87213f92d9d90f045562b97d5bc86d8016eb",
+      "actual": "d1a8ad6b58e2d26d9b3b57f6e4dc87213f92d9d90f045562b97d5bc86d8016eb"
+    },
+    {
+      "path": "test/quod_gui_stage1_tests.erl",
+      "expected": "8f3b5b7832a6afe35050f4ba3a9b6b3e5e3447f94da860f4916761a6061ddc6f",
+      "actual": "8f3b5b7832a6afe35050f4ba3a9b6b3e5e3447f94da860f4916761a6061ddc6f"
+    },
+    {
+      "path": "test/quod_lifecycle_single_path_tests.erl",
+      "expected": "93fc89dfb16130d90038f3a3cf4e7f2e2c429954b5e203c14fdf37d8211524d9",
+      "actual": "93fc89dfb16130d90038f3a3cf4e7f2e2c429954b5e203c14fdf37d8211524d9"
+    },
+    {
+      "path": "test/quod_lobby_tests.erl",
+      "expected": "3bf6dacdddca35c13049dadfd35b3b551af38febd2d6acc454a94f5e3bfc48bb",
+      "actual": "3bf6dacdddca35c13049dadfd35b3b551af38febd2d6acc454a94f5e3bfc48bb"
+    },
+    {
+      "path": "test/quod_personal_agent_tests.erl",
+      "expected": "2190fd9294b2d56f21247871ef5cf9e572870d8619f00cf8470d22664ec9db9e",
+      "actual": "2190fd9294b2d56f21247871ef5cf9e572870d8619f00cf8470d22664ec9db9e"
+    },
+    {
+      "path": "test/quod_physics_coordinates_tests.erl",
+      "expected": "8a3f053cccaf8ad6f845192e1f5b7853de7ee610a454c245f598ec2ba0528038",
+      "actual": "8a3f053cccaf8ad6f845192e1f5b7853de7ee610a454c245f598ec2ba0528038"
+    },
+    {
+      "path": "test/quod_physics_tests.erl",
+      "expected": "89232954ce606b03dc4803009f60bbe6f1b699fb84d29b8fee7ff1897f5282b1",
+      "actual": "89232954ce606b03dc4803009f60bbe6f1b699fb84d29b8fee7ff1897f5282b1"
+    },
+    {
+      "path": "test/quod_proof_session_tests.erl",
+      "expected": "9708d2cf07d961b30694e89d008efba227ff97b08b24449b68f19da22a7cdeb7",
+      "actual": "9708d2cf07d961b30694e89d008efba227ff97b08b24449b68f19da22a7cdeb7"
+    },
+    {
+      "path": "test/quod_space_creation_tests.erl",
+      "expected": "abad63b64630bb3c5fa5c2e38d83376becbddf2d6e831d899a5d5f36ede32d55",
+      "actual": "abad63b64630bb3c5fa5c2e38d83376becbddf2d6e831d899a5d5f36ede32d55"
+    },
+    {
+      "path": "test/quod_space_tests.erl",
+      "expected": "e7a3c56ecc8deea87bbad407e13809d3e1b398679c7b89c9d349bd64735b36d3",
+      "actual": "e7a3c56ecc8deea87bbad407e13809d3e1b398679c7b89c9d349bd64735b36d3"
+    },
+    {
+      "path": "outdated/ontologies/prolog/m3a-space-entity-pose.pl",
+      "expected": "50b54a43c34fe3c2407307372de2d9e3c4cb9820a6cbce0ba629a84e6e487375",
+      "actual": "50b54a43c34fe3c2407307372de2d9e3c4cb9820a6cbce0ba629a84e6e487375"
+    },
+    {
+      "path": "priv/ontologies/geometry_schema.pl",
+      "expected": "90975d5382ebaaaeeb006ec0796207726a42201b590023eaf13cfc97c0329b54",
+      "actual": "90975d5382ebaaaeeb006ec0796207726a42201b590023eaf13cfc97c0329b54"
+    },
+    {
+      "path": "priv/ontologies/gui_forms.pl",
+      "expected": "6f4623cd25ced128b0813cfdb5356154726483f0992dbf83ee87e19bb1d3b9e2",
+      "actual": "6f4623cd25ced128b0813cfdb5356154726483f0992dbf83ee87e19bb1d3b9e2"
+    },
+    {
+      "path": "src/quod_physics_frames.erl",
+      "expected": "9fca5aa05c60b5ae11e49c595e3ebfe5151a2d5599566611e90fc64695be3332",
+      "actual": "9fca5aa05c60b5ae11e49c595e3ebfe5151a2d5599566611e90fc64695be3332"
+    }
+  ],
+  "supplemental_review_evidence": {
+    "checked-review.md": "f21b26746203c487c935e5cf0f5f4c7a30dfddcacda0408e8802806e7b645993",
+    "claude-review.md": "640799b4346b3777fe4c4f349a69a056a20d6373a054b6f8b63a5b5724bd187a"
+  },
+  "open_confirmed_code_findings": 1,
+  "conditional_findings_promoted_to_required_changes": 0,
+  "production_spec_test_edits": false,
+  "prior_snapshot_modified": false
+}

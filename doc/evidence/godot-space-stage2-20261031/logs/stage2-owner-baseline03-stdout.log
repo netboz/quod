@@ -1,0 +1,22 @@
+======================== EUnit ========================
+quod_client_auth_tests: self_scoped_request_materializes_and_charges_callable_test...*failed*
+in function quod_client_auth_tests:'-self_scoped_request_materializes_and_charges_callable_test/0-fun-5-'/5 (/stage/quod_client_auth_tests.erl, line 299)
+in call from quod_client_auth_tests:with_auth/2 (/stage/quod_client_auth_tests.erl, line 449)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{badmatch,{ok,{agent_instance_ref,<<"request:self">>,
+                                  <<0,0,0,0,0,0,0,0,0,0,0,0,...>>,
+                                  {person,self_symbol}},
+              {'::',<<"request:self">>,
+                    {assertz,{{'$quod_symbol',<<":-">>},
+                              {{'$quod_symbol',<<"self_scoped_head"...>>},
+                               {'$quod_symbol',<<"self_scoped_"...>>}},
+                              true}}}}}
+  output:<<"">>
+
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 0.

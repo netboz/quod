@@ -25,7 +25,7 @@ for a peer or connection that produces neither signal.
 
 -export([start_link/0,
          identify/3, ensure_scope/4, identity/3,
-         command/3, cancel/2, close/2, finalize/2, stats/0]).
+         command/3, cancel/2, close/2, finalize/2, stop/2, stats/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -export_type([remote_handle/0]).
 
@@ -244,6 +244,11 @@ finalize(Router, <<_:256>> = ProofId) ->
 finalize(_Router, _ProofId) ->
     {error, bad_proof_id}.
 
+%% Finalization retains its result until the proof context closes. A bounded
+%% caller can then start another proof without retaining the previous identity.
+stop(Router, <<_:256>> = ProofId) ->
+    gen_server:cast(Router, {stop_proof, self(), ProofId}).
+
 -doc "Acquire or reuse this proof's one origin-agent identity certificate.".
 -spec identity(quod_client_goal:evidence(), <<_:256>>, non_neg_integer()) ->
           {ok, quod_agent_identity:certificate()} |
@@ -429,6 +434,11 @@ handle_cast(
 handle_cast(
   {identity_result, Owner, ProofId, Ref, Result}, S0) ->
     {noreply, finish_identity(Owner, ProofId, Ref, Result, S0)};
+handle_cast({stop_proof, Owner, ProofId}, S0) ->
+    case maps:get(Owner, S0#s.owners, undefined) of
+        #owner{proof_id = ProofId} -> {noreply, drop_owner(Owner, S0)};
+        _ -> {noreply, S0}
+    end;
 handle_cast(_Message, S) ->
     {noreply, S}.
 
@@ -537,15 +547,7 @@ start_probe(_Owner, _Endpoint, _Namespace, _RemainingMs, _S0) ->
     {error, invalid_probe}.
 
 admit_probe(Owner, S) ->
-    case probe_owner_admission(maps:get(Owner, S#s.owners, undefined)) of
-        {error, _} = Error -> Error;
-        ok ->
-            case owner_entry_count(Owner, S) >=
-                 ?QUOD_MAX_ROUTER_SCOPES_PER_OWNER of
-                true -> {error, owner_scope_limit};
-                false -> ok
-            end
-    end.
+    probe_owner_admission(maps:get(Owner, S#s.owners, undefined)).
 
 probe_owner_admission(undefined) -> ok;
 probe_owner_admission(#owner{finalization = {sealed, _}}) ->
@@ -1195,15 +1197,7 @@ reusable_binding(_, _) -> false.
 
 admit_scope(Owner, ProofId, _TargetKey, S) ->
     OwnerState = maps:get(Owner, S#s.owners, undefined),
-    case owner_admission(OwnerState, ProofId) of
-        {error, _} = Error -> Error;
-        ok ->
-            case owner_entry_count(Owner, S) >=
-                 ?QUOD_MAX_ROUTER_SCOPES_PER_OWNER of
-                true -> {error, owner_scope_limit};
-                false -> ok
-            end
-    end.
+    owner_admission(OwnerState, ProofId).
 
 owner_admission(undefined, _ProofId) -> ok;
 owner_admission(#owner{finalization = {sealed, _}}, _ProofId) ->
@@ -1243,13 +1237,6 @@ insert_opening_scope(Owner, Endpoint, Fields, OpenFrame, S0) ->
 router_entry_count(#s{scopes = Scopes, probes = Probes,
                       retained_owners = RetainedOwners}) ->
     map_size(Scopes) + map_size(Probes) + RetainedOwners.
-
-owner_entry_count(Owner, #s{owners = Owners}) ->
-    case maps:get(Owner, Owners, undefined) of
-        #owner{scopes = Scopes, probes = Probes} ->
-            map_size(Scopes) + map_size(Probes);
-        undefined -> 0
-    end.
 
 add_owner_scope(OwnerPid, ScopeKey,
                 S = #s{owners = Owners, owner_refs = OwnerRefs}) ->
@@ -1308,19 +1295,11 @@ build_active_command(
   {scope_open, _Authentication, _TraceCarrier}) ->
     {error, {protocol_error, unexpected_scope_command}};
 build_active_command(
-  Scope = #scope{status = active, next_command_seq = CommandSeq,
-                 pending = Pending},
+  Scope = #scope{status = active, next_command_seq = CommandSeq},
   RemainingMs, Operation)
   when CommandSeq =< ?QUOD_SCOPE_WIRE_MAX_UINT64 ->
     ExpectsEvent = command_expects_event(Operation),
-    case ExpectsEvent andalso
-         map_size(Pending) >= ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE of
-        true ->
-            {error, pending_request_limit};
-        false ->
-            build_bounded_command(
-              Scope, RemainingMs, Operation, ExpectsEvent)
-    end;
+    build_bounded_command(Scope, RemainingMs, Operation, ExpectsEvent);
 build_active_command(#scope{status = active}, _RemainingMs, _Operation) ->
     {error, command_sequence_exhausted}.
 
@@ -1353,6 +1332,7 @@ build_bounded_command(
 %% optional fast scope_closed event may remove the scope first.
 command_expects_event(scope_close) -> false;
 command_expects_event(scope_seal) -> true;
+command_expects_event(scope_read_set) -> true;
 command_expects_event({scope_attest, _}) -> true;
 command_expects_event(certify_reads) -> true;
 command_expects_event({bind_group_effects, _, _}) -> true;

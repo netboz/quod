@@ -1,0 +1,210 @@
+{
+  "passed": false,
+  "true_exit": 1,
+  "command": [
+    "/usr/bin/node",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/space-browser01/browser-check.mjs",
+    "client/src/world.js"
+  ],
+  "cwd": "/data/quod-m4-vr-ca84d4f8-20261029/private/space-browser01",
+  "source_inputs": {
+    "client/src/simulation.js": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/space-browser01/client/src/simulation.js",
+      "sha256": "acf145eb7e5541cb780ef54bbcb3282621c1383f017cac2919a36249c68a5bb0",
+      "original_stat_key": [
+        66305,
+        23226191,
+        17372,
+        1793546502592066500,
+        1793546502592066500
+      ],
+      "mode": 33188
+    },
+    "client/src/locomotion.js": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/space-browser01/client/src/locomotion.js",
+      "sha256": "f5e785e0117cfabacaf591e02ef1fd171d1e6bbc4d36f2f0d9fb7995ed5a79c2",
+      "original_stat_key": [
+        66305,
+        23226129,
+        5904,
+        1793106895528359365,
+        1793106895528359365
+      ],
+      "mode": 33188
+    },
+    "client/src/key-provider.js": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/space-browser01/client/src/key-provider.js",
+      "sha256": "8bc429aebdce6691db49dac33fc7a1d7cdfa96558f9ff23c27f4d12b384e346b",
+      "original_stat_key": [
+        66305,
+        23226051,
+        11310,
+        1793106895528359365,
+        1793106895528359365
+      ],
+      "mode": 33188
+    },
+    "client/src/agent-references.js": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/space-browser01/client/src/agent-references.js",
+      "sha256": "c2df0674a475fa8575a1f9453257fbcfd7ca3657aa21c38c2b09567fadabe7f7",
+      "original_stat_key": [
+        66305,
+        23225687,
+        3385,
+        1793106895524724382,
+        1793106895524724382
+      ],
+      "mode": 33188
+    },
+    "client/src/protocol-limits.js": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/space-browser01/client/src/protocol-limits.js",
+      "sha256": "f4c4c18ab84df48f27c7e4a2f95716e0dae8cef3d7fc39909e546240f0ae55c5",
+      "original_stat_key": [
+        66305,
+        23226180,
+        1315,
+        1793106895529359390,
+        1793106895529359390
+      ],
+      "mode": 33188
+    },
+    "client/src/world.js": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/space-browser01/client/src/world.js",
+      "sha256": "e7ed5edaa93cac0f9ebee65e82361b6c565e7eed6e3d38bc84785d3a555ddcf5",
+      "original_stat_key": [
+        66305,
+        23226203,
+        24760,
+        1793535658020286211,
+        1793535658020286211
+      ],
+      "mode": 33188
+    },
+    "client/src/marks.js": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/space-browser01/client/src/marks.js",
+      "sha256": "5875005f8ae052f00dd0a1989c20473a329c91c240d231f0d55777fcaa7c9283",
+      "original_stat_key": [
+        66305,
+        23226156,
+        11344,
+        1793141013242076975,
+        1793141013242076975
+      ],
+      "mode": 33188
+    },
+    "client/src/prolog-read.js": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/space-browser01/client/src/prolog-read.js",
+      "sha256": "060aa24ad49f93029d47b8ef68b31cb962650bf0ace0ec9070ef6eb0f313fae8",
+      "original_stat_key": [
+        66305,
+        23226176,
+        6761,
+        1793106895529359390,
+        1793106895529359390
+      ],
+      "mode": 33188
+    },
+    "client/src/prolog-term.js": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/space-browser01/client/src/prolog-term.js",
+      "sha256": "44ddca00277c27de2401f71ac2b31744b12623eaf4185d4bc9eafc126ce39a56",
+      "original_stat_key": [
+        66305,
+        23226178,
+        9592,
+        1793106895529359390,
+        1793106895529359390
+      ],
+      "mode": 33188
+    },
+    "client/src/gui-values.js": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/space-browser01/client/src/gui-values.js",
+      "sha256": "79b0e180384fba74d3a586f3301368613ca7acf41a1fde80cd0e4f0d0fab5559",
+      "original_stat_key": [
+        66305,
+        23225999,
+        2688,
+        1793106895527359340,
+        1793106895527359340
+      ],
+      "mode": 33188
+    },
+    "client/src/signed-client.js": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/space-browser01/client/src/signed-client.js",
+      "sha256": "99ae6a09009e00afa2440171814c3cb5d3cee92a98cbcb4f08350581286ea3dd",
+      "original_stat_key": [
+        66305,
+        23226187,
+        17809,
+        1793106895530359415,
+        1793106895530359415
+      ],
+      "mode": 33188
+    },
+    "client/src/operation-journal.js": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/space-browser01/client/src/operation-journal.js",
+      "sha256": "01b3e7635c3ec7a1e2ece811cda17696112587df001c382bb7d101f9f7dd468a",
+      "original_stat_key": [
+        66305,
+        23226169,
+        4807,
+        1793106895529359390,
+        1793106895529359390
+      ],
+      "mode": 33188
+    },
+    "client/src/signed-view.js": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/space-browser01/client/src/signed-view.js",
+      "sha256": "d7e3a045478f866c9a12e372404bcc929b34057cd3d9de912d06df0072bc280b",
+      "original_stat_key": [
+        66305,
+        23226188,
+        5391,
+        1793106895530359415,
+        1793106895530359415
+      ],
+      "mode": 33188
+    },
+    "browser-check.mjs": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/space-browser01/browser-check.mjs",
+      "sha256": "bb0d00891550d737db792f493637575465be108db49f622f7ade27a2b3f2412b",
+      "original_stat_key": [
+        66305,
+        28315379,
+        1932,
+        1793546658090636366,
+        1793546658090636366
+      ],
+      "mode": 33188
+    },
+    "client/package.json": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/space-browser01/client/package.json",
+      "sha256": "c79de91842950c2e5032d7983a39abd10cb31ff4639c253606caa9ea583c4c31",
+      "original_stat_key": [
+        66305,
+        23225671,
+        544,
+        1793106895523359241,
+        1793106895523359241
+      ],
+      "mode": 33188
+    },
+    "browser.py": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/space-browser01/browser.py",
+      "sha256": "429e95dab2432cada87786e601058acac515d630ed7b90ee1fddc9cb5fc08a61",
+      "original_stat_key": [
+        66305,
+        28315377,
+        2054,
+        1793546657695755933,
+        1793546657695755933
+      ],
+      "mode": 33188
+    }
+  },
+  "only_retained_sources_executed": true,
+  "network_or_browser_runtime": false,
+  "digest_cache": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/space-browser01/computed-hashes.json",
+    "sha256": "079eb03f1d33149576fb9e778e021aac86ce31544a59175e44c87b6297f5da03"
+  }
+}

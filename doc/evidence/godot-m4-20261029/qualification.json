@@ -1,0 +1,449 @@
+{
+  "checkpoint": "QUO-65 / M4",
+  "worker_session": "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
+  "model": "openai-codex:gpt-6.1-sol",
+  "launcher_requested_effort": "max",
+  "launcher_returned_effort": "max",
+  "effective_backend_effort": "Not exposed by installed API",
+  "head": "293cf6115c0a6b18315eccdbb42cbca396f443d3",
+  "branch": "worktree/pearl-stone",
+  "committed": false,
+  "client": "candidate09",
+  "final_campaign": "final06",
+  "software_campaign_passed": true,
+  "full_m4_accepted": false,
+  "checks": {
+    "core": 189,
+    "injected_engine_and_desktop": 43,
+    "scene": 14,
+    "signed_preferences": 21,
+    "native_physics": 39,
+    "additional_normal_close_cycles": 5
+  },
+  "command_receipts": {
+    "input-final07": {
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/input-campaign.py",
+        "input-final07",
+        "--engine",
+        "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-candidate09/source/client/godot/dist/quod.x86_64",
+        "--desktop"
+      ],
+      "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+      "start_utc": "2026-10-29T05:03:35Z",
+      "elapsed_seconds": 1.668123722076416,
+      "child_exit": 0,
+      "timed_out": false,
+      "private_raw_log": "/tmp/quod-m4-ca84d4f8/private/logs/input-final07.log",
+      "raw_sha256": "436a8ec2fd9b2837934e0ec9a0edaf2cdb6b969902c72263e751f2b2cd33a05f",
+      "sanitized_sha256": "436a8ec2fd9b2837934e0ec9a0edaf2cdb6b969902c72263e751f2b2cd33a05f",
+      "redactions": 0,
+      "error_diagnostics": 0
+    },
+    "scene-final07": {
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/input-campaign.py",
+        "scene-final07",
+        "--engine",
+        "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-candidate09/source/client/godot/dist/quod.x86_64",
+        "--desktop",
+        "--phase",
+        "scene"
+      ],
+      "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+      "start_utc": "2026-10-29T05:03:36Z",
+      "elapsed_seconds": 1.518730640411377,
+      "child_exit": 0,
+      "timed_out": false,
+      "private_raw_log": "/tmp/quod-m4-ca84d4f8/private/logs/scene-final07.log",
+      "raw_sha256": "f812f94e4f47855f480b2044804d2ebd0cb692a72ec24dad2332725189ebb1cd",
+      "sanitized_sha256": "f812f94e4f47855f480b2044804d2ebd0cb692a72ec24dad2332725189ebb1cd",
+      "redactions": 0,
+      "error_diagnostics": 0
+    },
+    "gui-final06": {
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/campaign.py",
+        "gui-final06",
+        "--client",
+        "candidate09",
+        "--stage",
+        "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+        "--profile",
+        "prod",
+        "--journey",
+        "gui",
+        "--desktop",
+        "--controllers"
+      ],
+      "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+      "start_utc": "2026-10-29T05:03:38Z",
+      "elapsed_seconds": 152.62560772895813,
+      "child_exit": 0,
+      "timed_out": false,
+      "private_raw_log": "/tmp/quod-m4-ca84d4f8/private/logs/gui-final06.log",
+      "raw_sha256": "a98d2b8b6a2c3d47f11ce0ca66c2fd9639dc81504bd6c45a5b4a7d7a1be3a05c",
+      "sanitized_sha256": "a98d2b8b6a2c3d47f11ce0ca66c2fd9639dc81504bd6c45a5b4a7d7a1be3a05c",
+      "redactions": 0,
+      "error_diagnostics": 0
+    },
+    "spaces-final06": {
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/campaign.py",
+        "spaces-final06",
+        "--client",
+        "candidate09",
+        "--stage",
+        "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+        "--profile",
+        "prod",
+        "--journey",
+        "spaces",
+        "--desktop"
+      ],
+      "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+      "start_utc": "2026-10-29T05:06:11Z",
+      "elapsed_seconds": 94.78380012512207,
+      "child_exit": 0,
+      "timed_out": false,
+      "private_raw_log": "/tmp/quod-m4-ca84d4f8/private/logs/spaces-final06.log",
+      "raw_sha256": "3bcb9de652b68e3d86a139feab5f3642e1545e4901ca1fd7bb707c4567a0127d",
+      "sanitized_sha256": "3bcb9de652b68e3d86a139feab5f3642e1545e4901ca1fd7bb707c4567a0127d",
+      "redactions": 0,
+      "error_diagnostics": 0
+    },
+    "navigation-final06": {
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/campaign.py",
+        "navigation-final06",
+        "--client",
+        "candidate09",
+        "--stage",
+        "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+        "--profile",
+        "prod",
+        "--journey",
+        "navigation",
+        "--desktop"
+      ],
+      "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+      "start_utc": "2026-10-29T05:07:45Z",
+      "elapsed_seconds": 181.57713413238525,
+      "child_exit": 0,
+      "timed_out": false,
+      "private_raw_log": "/tmp/quod-m4-ca84d4f8/private/logs/navigation-final06.log",
+      "raw_sha256": "cf46122abeed4c24263262773d86c3b7904378ea0f1f00d900086c9d703f47dd",
+      "sanitized_sha256": "cf46122abeed4c24263262773d86c3b7904378ea0f1f00d900086c9d703f47dd",
+      "redactions": 0,
+      "error_diagnostics": 0
+    },
+    "physics-final08": {
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/physics-campaign.py",
+        "physics-final08",
+        "--client",
+        "candidate09",
+        "--stage",
+        "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+        "--profile",
+        "prod"
+      ],
+      "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+      "start_utc": "2026-10-29T05:10:47Z",
+      "elapsed_seconds": 20.370991468429565,
+      "child_exit": 0,
+      "timed_out": false,
+      "private_raw_log": "/tmp/quod-m4-ca84d4f8/private/logs/physics-final08.log",
+      "raw_sha256": "915e114cc39a6525df74384e5b1a8e659eb7cfd0b47d50d76d95338a434ec4ca",
+      "sanitized_sha256": "915e114cc39a6525df74384e5b1a8e659eb7cfd0b47d50d76d95338a434ec4ca",
+      "redactions": 0,
+      "error_diagnostics": 0
+    },
+    "shutdown-final06-1": {
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/inputs/final06-local.py",
+        "--phase",
+        "crypto",
+        "--export",
+        "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-candidate09/source/client/godot/dist/quod.x86_64",
+        "--evidence",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/shutdown-final06-1",
+        "--private",
+        "/tmp/quod-m4-ca84d4f8/artifacts/private/shutdown-final06-1",
+        "--desktop"
+      ],
+      "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+      "start_utc": "2026-10-29T05:11:08Z",
+      "elapsed_seconds": 2.969442129135132,
+      "child_exit": 0,
+      "timed_out": false,
+      "private_raw_log": "/tmp/quod-m4-ca84d4f8/private/logs/shutdown-final06-1.log",
+      "raw_sha256": "fdb49754fffe9135e91468ee36fccb237f346a30bc2226a723d7292b73ea2559",
+      "sanitized_sha256": "fdb49754fffe9135e91468ee36fccb237f346a30bc2226a723d7292b73ea2559",
+      "redactions": 0,
+      "error_diagnostics": 0
+    },
+    "shutdown-final06-2": {
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/inputs/final06-local.py",
+        "--phase",
+        "crypto",
+        "--export",
+        "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-candidate09/source/client/godot/dist/quod.x86_64",
+        "--evidence",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/shutdown-final06-2",
+        "--private",
+        "/tmp/quod-m4-ca84d4f8/artifacts/private/shutdown-final06-2",
+        "--desktop"
+      ],
+      "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+      "start_utc": "2026-10-29T05:11:11Z",
+      "elapsed_seconds": 3.022490978240967,
+      "child_exit": 0,
+      "timed_out": false,
+      "private_raw_log": "/tmp/quod-m4-ca84d4f8/private/logs/shutdown-final06-2.log",
+      "raw_sha256": "fdb49754fffe9135e91468ee36fccb237f346a30bc2226a723d7292b73ea2559",
+      "sanitized_sha256": "fdb49754fffe9135e91468ee36fccb237f346a30bc2226a723d7292b73ea2559",
+      "redactions": 0,
+      "error_diagnostics": 0
+    },
+    "shutdown-final06-3": {
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/inputs/final06-local.py",
+        "--phase",
+        "crypto",
+        "--export",
+        "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-candidate09/source/client/godot/dist/quod.x86_64",
+        "--evidence",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/shutdown-final06-3",
+        "--private",
+        "/tmp/quod-m4-ca84d4f8/artifacts/private/shutdown-final06-3",
+        "--desktop"
+      ],
+      "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+      "start_utc": "2026-10-29T05:11:14Z",
+      "elapsed_seconds": 2.9190781116485596,
+      "child_exit": 0,
+      "timed_out": false,
+      "private_raw_log": "/tmp/quod-m4-ca84d4f8/private/logs/shutdown-final06-3.log",
+      "raw_sha256": "fdb49754fffe9135e91468ee36fccb237f346a30bc2226a723d7292b73ea2559",
+      "sanitized_sha256": "fdb49754fffe9135e91468ee36fccb237f346a30bc2226a723d7292b73ea2559",
+      "redactions": 0,
+      "error_diagnostics": 0
+    },
+    "shutdown-final06-4": {
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/inputs/final06-local.py",
+        "--phase",
+        "crypto",
+        "--export",
+        "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-candidate09/source/client/godot/dist/quod.x86_64",
+        "--evidence",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/shutdown-final06-4",
+        "--private",
+        "/tmp/quod-m4-ca84d4f8/artifacts/private/shutdown-final06-4",
+        "--desktop"
+      ],
+      "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+      "start_utc": "2026-10-29T05:11:17Z",
+      "elapsed_seconds": 3.0716912746429443,
+      "child_exit": 0,
+      "timed_out": false,
+      "private_raw_log": "/tmp/quod-m4-ca84d4f8/private/logs/shutdown-final06-4.log",
+      "raw_sha256": "fdb49754fffe9135e91468ee36fccb237f346a30bc2226a723d7292b73ea2559",
+      "sanitized_sha256": "fdb49754fffe9135e91468ee36fccb237f346a30bc2226a723d7292b73ea2559",
+      "redactions": 0,
+      "error_diagnostics": 0
+    },
+    "shutdown-final06-5": {
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/inputs/final06-local.py",
+        "--phase",
+        "crypto",
+        "--export",
+        "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-candidate09/source/client/godot/dist/quod.x86_64",
+        "--evidence",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/shutdown-final06-5",
+        "--private",
+        "/tmp/quod-m4-ca84d4f8/artifacts/private/shutdown-final06-5",
+        "--desktop"
+      ],
+      "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+      "start_utc": "2026-10-29T05:11:20Z",
+      "elapsed_seconds": 3.0740342140197754,
+      "child_exit": 0,
+      "timed_out": false,
+      "private_raw_log": "/tmp/quod-m4-ca84d4f8/private/logs/shutdown-final06-5.log",
+      "raw_sha256": "fdb49754fffe9135e91468ee36fccb237f346a30bc2226a723d7292b73ea2559",
+      "sanitized_sha256": "fdb49754fffe9135e91468ee36fccb237f346a30bc2226a723d7292b73ea2559",
+      "redactions": 0,
+      "error_diagnostics": 0
+    }
+  },
+  "client_inputs": 91,
+  "input_classes": {
+    "client_source": 53,
+    "generated_uid_seeds": 30,
+    "protocol_model_provider_fixtures": 8
+  },
+  "client_exports": 196,
+  "dependency_archives": {
+    "bouncycastle.cryptography.2.7.0.nupkg": {
+      "sha256": "f091ffccab4d03993e660bace277659a79dee0972f54d7f1f4bd46d680966241",
+      "bytes": 8730569
+    },
+    "godot.net.sdk.4.7.2.nupkg": {
+      "sha256": "679fe9c6736ca1943b06732ac5113f50c248ea0280593ff7db08814b72057acb",
+      "bytes": 19976
+    },
+    "godot.sourcegenerators.4.7.2.nupkg": {
+      "sha256": "4170a0666ce2d1137a8b2c9f7aab72a6782256c8c824a35e8a249f72b4445a42",
+      "bytes": 45681
+    },
+    "godotsharp.4.7.2.nupkg": {
+      "sha256": "3dfcc5c7a452d56e9ce103cac92bc46f25f23828b886064bf363474af287fad3",
+      "bytes": 3222070
+    },
+    "godotsharpeditor.4.7.2.nupkg": {
+      "sha256": "faf33a701fbb99d27b93bee3a999613829a5cdadafc99f32a8125bffc0c38718",
+      "bytes": 177772
+    },
+    "microsoft.aspnetcore.app.ref.10.0.12.nupkg": {
+      "sha256": "b2cb6e55804cc8cc82ab750b07562866088f667994dbc09e9e46df6ee44aa060",
+      "bytes": 7209462
+    },
+    "microsoft.aspnetcore.app.runtime.linux-x64.10.0.12.nupkg": {
+      "sha256": "5e3883d280dac567a4bc19a52a75669bf96e24bd41e29ec9ea1baafbd1a6a800",
+      "bytes": 12929687
+    },
+    "microsoft.netcore.app.runtime.linux-x64.10.0.12.nupkg": {
+      "sha256": "8869e2fb974bc810ffe40b8fb8e18b7ffb1d1a03e52a094c804668c4d793b1ae",
+      "bytes": 40083503
+    }
+  },
+  "engine_archives": [
+    {
+      "name": "Godot_v4.7.2-stable_mono_linux_x86_64.zip",
+      "sha256": "129f82db7bafd54ae14bb5bb284041c73860e8c7a009a3a026ca5e946cbff247",
+      "size": 107698034,
+      "url": "https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_mono_linux_x86_64.zip"
+    },
+    {
+      "name": "Godot_v4.7.2-stable_mono_export_templates.tpz",
+      "sha256": "92f8681e349ef1f90891b792da95e3b2b0bd1ed610b78018c58feb2d87e15a9d",
+      "size": 1202598411,
+      "url": "https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_mono_export_templates.tpz"
+    }
+  ],
+  "resource_metrics": {
+    "Running": false,
+    "Subscriptions": 0,
+    "sources": 0,
+    "appearances": 0,
+    "MenuRedraws": 2,
+    "LateCallbacks": 0,
+    "captures": 0,
+    "DriveRequests": 3,
+    "StopRequests": 2,
+    "SnapRequests": 0,
+    "TeleportRequests": 0,
+    "resources": {
+      "Acquisitions": 2,
+      "Releases": 2,
+      "Decodes": 1,
+      "InstancesCreated": 2,
+      "InstancesReleased": 2,
+      "NodesBuilt": 114,
+      "TexturesDecoded": 1,
+      "LiveTemplates": 0,
+      "LiveLeases": 0
+    }
+  },
+  "unchanged_signed_preference_work": {
+    "work": {
+      "calls": [],
+      "watched": [
+        [
+          "quod_foreign_projection",
+          "start_monitor",
+          4
+        ],
+        [
+          "quod_committed_projection",
+          "apply_entry",
+          3
+        ],
+        [
+          "quod_physics_native",
+          "install",
+          3
+        ],
+        [
+          "quod_physics_native",
+          "install_hinges",
+          2
+        ],
+        [
+          "quod_physics_native",
+          "new_world",
+          3
+        ],
+        [
+          "quod_ledger_store",
+          "fold",
+          5
+        ],
+        [
+          "quod_ledger_store",
+          "open",
+          3
+        ],
+        [
+          "file",
+          "write",
+          2
+        ],
+        [
+          "file",
+          "pwrite",
+          3
+        ],
+        [
+          "file",
+          "sync",
+          1
+        ],
+        [
+          "file",
+          "datasync",
+          1
+        ]
+      ]
+    }
+  },
+  "production_test_doc_deltas": {
+    "docs": 37,
+    "generated-uid": 16,
+    "production": 1247,
+    "test": 326
+  },
+  "server_inputs_unchanged": 1432,
+  "unchanged_server_gates_reused": "M3b committed gates01: native56 EUnit4266 CT149 xref Dialyzer local release",
+  "native_runtime": "Blocked before client launch: installed Monado exits127 for absent OpenCV4.13 ABI libraries",
+  "physical_vive": "Unrun: headset pixels, real tracking, two-wand gestures, comfort and platform exit require observations",
+  "quest": "Outside M4 / unrun",
+  "retained_exit_limitation": "gui-final03-backup-import and physics-final06 hung after assertions and were killed by unchanged watchdogs. Fresh unchanged-binary reproductions passed, without resolving their native cause. Do not infer a teardown fix.",
+  "body_publication": false,
+  "parent_m4_credit": false
+}

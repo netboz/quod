@@ -1,0 +1,2 @@
+Verified actual local link targets: 229
+PASS scope consistency: branch/base; unchanged production/common inputs; separately frozen 4-line test cache fix; 50 sources; target24+7; inherited lines; link targets; export and crypto/storage/TLS. Remote policy passes; separate gateway outcome failure remains retained and open.

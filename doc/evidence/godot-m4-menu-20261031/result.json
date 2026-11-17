@@ -1,0 +1,378 @@
+{
+  "passed": true,
+  "selected": "menu-final02",
+  "candidates": {
+    "menu-baseline02": {
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/inputs/client-menu-baseline02-manifest.json",
+      "sha256": "ee8bca45896cc2a0d4ae8415e07da9a9b04a9ae34f3a5281cd0bc79fc7125f65",
+      "inputs": 93,
+      "exports": 196,
+      "export_bytes": 193335688,
+      "commands": [
+        {
+          "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/client-menu-baseline02-toolchain/result.json",
+          "sha256": "4378190deb1e23a4234cfa2e91c6c1abff65dcb5e1252397c447ba4cd5c19075",
+          "log_sha256": "33f3aa3ec5ffb3f6c3d9b31c4e45c4b969882a8f3a5292aebc6925cccc49796c",
+          "true_exit": 0
+        },
+        {
+          "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/client-menu-baseline02-bootstrap/result.json",
+          "sha256": "8cb4a5f7224783c2484aadcea3eb420b3d3897ce74878e76bdb88ebf560597c5",
+          "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "true_exit": 0
+        },
+        {
+          "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/client-menu-baseline02-restore-debug/result.json",
+          "sha256": "ab995cf63c2b7534546a086d2583f3c0cfa4cba1cf196f2979b93d85c2b243db",
+          "log_sha256": "419030d5413b3674099309ec8906255b3edcb80f53f39bc48b196402f859711a",
+          "true_exit": 0
+        },
+        {
+          "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/client-menu-baseline02-restore-exportrelease/result.json",
+          "sha256": "87c1b9e963f034f635229378e6d6fbc273fb00908c5433a25714b17230f924a0",
+          "log_sha256": "dc146e71bb8c7acafad1560628e4c35bd1579f7f4f0992d3b836d5af32a45778",
+          "true_exit": 0
+        },
+        {
+          "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/client-menu-baseline02-export/result.json",
+          "sha256": "47b67115ead0de3fb657ff0ab54e2bf07eb37032a61eb0b3b4c43f6c84f48431",
+          "log_sha256": "71096060e3bdc40d2646f9d822c5dc9a3821169ba4bfd121d7ed8b26e6870b4b",
+          "true_exit": 0
+        }
+      ],
+      "outer_exit": 0
+    },
+    "menu-final01": {
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/inputs/client-menu-final01-manifest.json",
+      "sha256": "7808d2a0c09cffc28c9feeb2a1be1d1908aa88c21c2ee06745d6fdce3b85d410",
+      "inputs": 93,
+      "exports": 196,
+      "export_bytes": 193343564,
+      "commands": [
+        {
+          "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/client-menu-final01-toolchain/result.json",
+          "sha256": "4fdb1ee4003a35aa30c4683b2cffc9341f80d2a1e38313c8d955e8b8296baa73",
+          "log_sha256": "5ceba6b77c15ad51bee26d644d4bba9eecf4a9e5055e530eebc362478d27ae1b",
+          "true_exit": 0
+        },
+        {
+          "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/client-menu-final01-bootstrap/result.json",
+          "sha256": "d2c10b1f56a6ec933159fa5e9fd08b85a3caa71831f40e2f0243831fb35dfa23",
+          "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "true_exit": 0
+        },
+        {
+          "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/client-menu-final01-restore-debug/result.json",
+          "sha256": "390fe2009d97420acad2d4831cac7cc6b3cb94a4829bc60c091b887550845be1",
+          "log_sha256": "b6d5dd6936fbe6a785bfecd3cdfc6452aa00e5910a8e74d01fdd35ada91c0aa3",
+          "true_exit": 0
+        },
+        {
+          "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/client-menu-final01-restore-exportrelease/result.json",
+          "sha256": "1eb74f5022a968b42cdb49baa0422d346b6835f3a1e57bb291abf2f31dcf5018",
+          "log_sha256": "15338a5eb86f9c990aef42e13e4d74dfa52a3106ce5b109de991d406db43372c",
+          "true_exit": 0
+        },
+        {
+          "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/client-menu-final01-export/result.json",
+          "sha256": "18f2e574614538ee980f8195fd291e5bd71f74d78e3964b42e1417445c6c76fd",
+          "log_sha256": "6ed70504d7041e8d4b899152c466c71952cc068c6f1c928291d7ed13cf1c938e",
+          "true_exit": 0
+        }
+      ],
+      "outer_exit": 0
+    },
+    "menu-geometry01": {
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/inputs/client-menu-geometry01-manifest.json",
+      "sha256": "a10a579f9de717f3d2a3975b64e2809fe90139ae8c5ecdaa582db0a67fba0cba",
+      "inputs": 93,
+      "exports": 196,
+      "export_bytes": 193346872,
+      "commands": [
+        {
+          "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/client-menu-geometry01-toolchain/result.json",
+          "sha256": "1fc640e6b7225bf6f025dd49751da8b48cb3ddf3807a5ec575663231f1df0411",
+          "log_sha256": "d3ee3c4d12bdac71375fa9b9a3013b092303a19a413f7a2b01481f29996c6c6a",
+          "true_exit": 0
+        },
+        {
+          "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/client-menu-geometry01-bootstrap/result.json",
+          "sha256": "68363be9c8534b005fd2d31c3937d7bf3c9fbedb250303dc596e945b14461278",
+          "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "true_exit": 0
+        },
+        {
+          "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/client-menu-geometry01-restore-debug/result.json",
+          "sha256": "c103e42263b2dfa7c88f43f9a95bec908058002fd522c8d24efcc547fd2d8108",
+          "log_sha256": "6b2488f28c3e49ca3d8a60d78c024699e0d5e601964bbc74d1174c2dde164da1",
+          "true_exit": 0
+        },
+        {
+          "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/client-menu-geometry01-restore-exportrelease/result.json",
+          "sha256": "202c9e3e15c2ba6b1a809d2d989373f88072b17f79fcfffb422030db8449ca1b",
+          "log_sha256": "3701218fc32ae6ea519e4c25532956b77233cbeb836555ab7f326bc512c8cf77",
+          "true_exit": 0
+        },
+        {
+          "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/client-menu-geometry01-export/result.json",
+          "sha256": "17897d952b039705b7c8c4237932f6cc8f49eb7b21c112ab98741d9abf75760b",
+          "log_sha256": "656c5647a4f17db6180b4528568305d852e29846cde264232dad010f8bd690ab",
+          "true_exit": 0
+        }
+      ],
+      "outer_exit": 0
+    },
+    "menu-final02": {
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/inputs/client-menu-final02-manifest.json",
+      "sha256": "5f8bafc8ad6e1c149ff4f52927594ab52606614d545494b3c07f1dbc22f92e85",
+      "inputs": 93,
+      "exports": 196,
+      "export_bytes": 193346456,
+      "commands": [
+        {
+          "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/client-menu-final02-toolchain/result.json",
+          "sha256": "e6b8c0f54e8b3e23ddeea0eb3e6fc7b68a51c73ed9e002546853dfcd3bf8bc7a",
+          "log_sha256": "69e4051eaefad8e9dfb7880e2a3e2569a037a27ca30df18660b70d322124ba2e",
+          "true_exit": 0
+        },
+        {
+          "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/client-menu-final02-bootstrap/result.json",
+          "sha256": "7135af7ac368c0ff12b1e8702e118d01ff97daff8a14b2c5f0aa32ad6b295d86",
+          "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "true_exit": 0
+        },
+        {
+          "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/client-menu-final02-restore-debug/result.json",
+          "sha256": "798aefc4ab0a5727617deea059f1b157b1eff66314e7dee27ae1e207c650e076",
+          "log_sha256": "1328278cd0a7602fbe71951973119b94a7dd4820d56a47736a2565a60fe85757",
+          "true_exit": 0
+        },
+        {
+          "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/client-menu-final02-restore-exportrelease/result.json",
+          "sha256": "951f54989c849f01b92971e2fe0f001a87750125a66afb232da08e9f440fa7c7",
+          "log_sha256": "0a1a755a5c1170ed27fd308418fa2297657aee039d1dd3370cc54871b2f3b5d2",
+          "true_exit": 0
+        },
+        {
+          "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/client-menu-final02-export/result.json",
+          "sha256": "d5dfd079e4d40eb68680ea6ecfb778e5c8908fbd4f78969dd7aeb13663702280",
+          "log_sha256": "4a59b3f9f2de12f8687bd7bbd8c60ca36d6d6339669ad41abf5a5cb65be42d59",
+          "true_exit": 0
+        }
+      ],
+      "outer_exit": 0
+    }
+  },
+  "failed_before_correction": {
+    "menu-baseline02-render01": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/menu-baseline02-render01/result.json",
+      "sha256": "f2a601651af47221312306b7e94237fbd8402b9e51507a47196618a26b2ad516",
+      "client_exit": 1,
+      "wrapper_exit": 1,
+      "eof": {
+        "stdout": true,
+        "stderr": true
+      },
+      "reader_errors": [],
+      "native_desktop_deliveries": 0,
+      "stored_checks": 34,
+      "pass_lines": 41,
+      "fail_lines": [
+        "FAIL actual right-pad selection has matching visible direction, selected native entry and release instruction"
+      ],
+      "coverage": null
+    },
+    "menu-final01-render01": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/menu-final01-render01/result.json",
+      "sha256": "c7845d6bfb4a3f23f5f6e7457df875af8c7765f65731b9b2484908cc3376c17f",
+      "client_exit": 1,
+      "wrapper_exit": 1,
+      "eof": {
+        "stdout": true,
+        "stderr": true
+      },
+      "reader_errors": [],
+      "native_desktop_deliveries": 0,
+      "stored_checks": 34,
+      "pass_lines": 43,
+      "fail_lines": [
+        "FAIL all actual angular direction labels remain enclosed and distinct at maximum text size"
+      ],
+      "coverage": null
+    },
+    "menu-geometry01-render01": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/menu-geometry01-render01/result.json",
+      "sha256": "62e48deb7b437c4a18e1faeb8de46cfcdf89610bc1ef4387763f0ceccb9499b9",
+      "client_exit": 1,
+      "wrapper_exit": 1,
+      "eof": {
+        "stdout": true,
+        "stderr": true
+      },
+      "reader_errors": [],
+      "native_desktop_deliveries": 0,
+      "stored_checks": 34,
+      "pass_lines": 43,
+      "fail_lines": [
+        "FAIL all actual angular direction labels remain enclosed and distinct at maximum text size"
+      ],
+      "coverage": null
+    }
+  },
+  "passed_runs": {
+    "menu-final01-controller01": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/menu-final01-controller01/result.json",
+      "sha256": "06a594e99a198d19eb8bb7953a0faa1e392a501f9a40a6c73bf82b83baf597aa",
+      "client_exit": 0,
+      "wrapper_exit": 0,
+      "eof": {
+        "stdout": true,
+        "stderr": true
+      },
+      "reader_errors": [],
+      "native_desktop_deliveries": 0,
+      "stored_checks": 82,
+      "pass_lines": 82,
+      "fail_lines": [],
+      "coverage": "injected real XRServer/native GUI/render consumers; no physical headset claim"
+    },
+    "menu-final02-render01": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/menu-final02-render01/result.json",
+      "sha256": "f0062c1c99b4b935e20087c4c3679088ee81aa1fe6d6de31b020f8930822fc1b",
+      "client_exit": 0,
+      "wrapper_exit": 0,
+      "eof": {
+        "stdout": true,
+        "stderr": true
+      },
+      "reader_errors": [],
+      "native_desktop_deliveries": 0,
+      "stored_checks": 47,
+      "pass_lines": 57,
+      "fail_lines": [],
+      "coverage": "real Main/native GUI layout and injected XRServer consumers; no native runtime or physical readability claim"
+    },
+    "menu-final02-controller01": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/menu-final02-controller01/result.json",
+      "sha256": "c3ffbd736a98834d8e762f6791dbaf31006ffe14494fbc339e2b13346e134209",
+      "client_exit": 0,
+      "wrapper_exit": 0,
+      "eof": {
+        "stdout": true,
+        "stderr": true
+      },
+      "reader_errors": [],
+      "native_desktop_deliveries": 0,
+      "stored_checks": 82,
+      "pass_lines": 82,
+      "fail_lines": [],
+      "coverage": "injected real XRServer/native GUI/render consumers; no physical headset claim"
+    }
+  },
+  "initial_helper_failure": {
+    "label": "menu-baseline01-build01",
+    "exit": 1,
+    "before_stage": true,
+    "reason": "new cache loader assumed records list; authenticated root143 cache uses dictionary; source/receipt retained"
+  },
+  "source_delta": {
+    "client/godot/OpenXRInput.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/inputs/OpenXRInput.cs.before",
+      "before_sha256": "d3fc51482e09c8387345761ceaa39cbf223a48aad802db1399c0a6ba64b9d954",
+      "after_sha256": "5700bc8df32c5e96cd49e9a704376fd8c50e233e6d2bf54cafd8049f82a96aef",
+      "added": 39,
+      "removed": 8,
+      "mode": 33188
+    },
+    "client/godot/README.md": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/inputs/README.md.before",
+      "before_sha256": "20a2918b028739950d3d385645a20a9fd1f42a78e068f89389103736752f9ac8",
+      "after_sha256": "e317b464d053388140fc7e91325c22cbbcecbf1ce82a5d8449bcd43f69a13980",
+      "added": 8,
+      "removed": 2,
+      "mode": 33188
+    },
+    "client/godot/tests/WorkspaceChecks.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/inputs/WorkspaceChecks.cs.before",
+      "before_sha256": "32faae6b9e999d9acd97a0cd2eb5764524f5f54b0a38399cc0a7a7f3eacd058a",
+      "after_sha256": "96ea3c9c4e53ff1162a2501b1947cd3e019a95bc7089a64c6dbc19c2a259910b",
+      "added": 24,
+      "removed": 0,
+      "mode": 33188
+    },
+    "client/godot/tests/ControllerChecks.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/inputs/ControllerChecks.cs.before",
+      "before_sha256": "39342251e90dc7cbd4abcae938a585f2770ed5f672fa0907cb0bde2522951832",
+      "after_sha256": "9cfa54e93a31e2666d9fe53bfb1238055deeb6507fb00e64c89acd950a3e403d",
+      "added": 22,
+      "removed": 3,
+      "mode": 33188
+    },
+    "client/godot/SpatialGui.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/inputs/SpatialGui.cs.before",
+      "before_sha256": "84a3f6085f1e6b2ad91106785595701c3a14fb56988f87f4383689c77fd791bc",
+      "after_sha256": "2df2472c470723a5f59d1744736f5a0aed2b842eccd0ed9644c68ca188930cd0",
+      "added": 2,
+      "removed": 0,
+      "mode": 33188
+    }
+  },
+  "production_paths": [
+    "client/godot/OpenXRInput.cs",
+    "client/godot/SpatialGui.cs"
+  ],
+  "authored_mapping_and_router_changed": false,
+  "same_native_callbacks": true,
+  "approved_runtime_focus_policy_changed": false,
+  "current_inputs_match_selected": 93,
+  "resources_after_controller_retirement": {
+    "Running": false,
+    "Subscriptions": 0,
+    "sources": 0,
+    "appearances": 0,
+    "MenuRedraws": 20,
+    "LateCallbacks": 0,
+    "captures": 0,
+    "DriveRequests": 4,
+    "StopRequests": 3,
+    "SnapRequests": 0,
+    "TeleportRequests": 0,
+    "resources": {
+      "Acquisitions": 2,
+      "Releases": 2,
+      "Decodes": 1,
+      "InstancesCreated": 2,
+      "InstancesReleased": 2,
+      "NodesBuilt": 114,
+      "TexturesDecoded": 1,
+      "LiveTemplates": 0,
+      "LiveLeases": 0
+    }
+  },
+  "digest_cache": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/cache/menu146-qualification01-hashes.json",
+    "sha256": "f8e472e8bbb54425318214acdf270ef5cadee6760e3f3afca7e08f14617f4086",
+    "hits": 1259,
+    "new_files": 122,
+    "new_bytes": 1036049
+  },
+  "raster_inspection": {
+    "baseline": "menu-baseline02-render01/menu-selection.png",
+    "selected": "menu-final02-render01/menu-selection.png",
+    "viewed_by_worker": true,
+    "maximum_font": 48,
+    "conclusion": "matching numbered angular map/native list, selected mark and release caption; opaque background; distinct enclosed native label rectangles"
+  },
+  "stage2_map": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/stage2-seams.md",
+  "tracker": {
+    "own_uuid": "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
+    "read_only_calls": 8,
+    "receipts": "/data/quod-m4-vr-ca84d4f8-20261029/private/menu146-tracker01/result.json",
+    "body_publication": "BLOCKED; no retry or write"
+  },
+  "scope": "source-only software/native Control and injected XRServer qualification; controller gate headless; no compositor/device query, physical/native runtime, mouse delivery or domain operation",
+  "physical_menu_usability": "UNRUN; case23 human failure preserved",
+  "full_M4": false,
+  "Stage2_implementation_started": false,
+  "commit_or_M5": false
+}

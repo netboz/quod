@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m0-20261027/storage-check.py", line 39, in <module>
+    run('storage-crash-after-01','crash-after-rename',87,M0_VALUE='updated-account',trace=True)
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m0-20261027/storage-check.py", line 27, in run
+    assert r.returncode==expected,(label,r.returncode,text)
+           ^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ('storage-crash-after-01', -11, "Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org\n\nERROR: BUG: Unreferenced static string to 0: _initialize\n   at: unref (core/string/string_name.cpp:118)\nERROR: BUG: Unreferenced static string to 0: _exists\n   at: unref (core/string/string_name.cpp:118)\nERROR: BUG: Unreferenced static string to 0: _recognize_path\n   at: unref (core/string/string_name.cpp:118)\nERROR: 7 RID allocations of type '23NavMeshGeometryParser2D' were leaked at exit.\nERROR: 6 RID allocations of type '23NavMeshGeometryParser3D' were leaked at exit.\nERROR: Pages in use exist at exit in PagedAllocator: N12VariantPools11BucketLargeE\n   at: ~PagedAllocator (./core/templates/paged_allocator.h:170)\nERROR: Pages in use exist at exit in PagedAllocator: N12VariantPools12BucketMediumE\n   at: ~PagedAllocator (./core/templates/paged_allocator.h:170)\nERROR: Pages in use exist at exit in PagedAllocator: N12VariantPools11BucketSmallE\n   at: ~PagedAllocator (./core/templates/paged_allocator.h:170)\n")

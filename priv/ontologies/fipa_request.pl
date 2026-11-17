@@ -12,7 +12,7 @@ fipa_local_agent(Instance, agent_instance_ref(Namespace, Anchor, Instance)) :-
 %% alone. The authenticated principal crosses :: unchanged.
 fipa_request(Instance, Id, Receiver, Action) :-
     term_variables(request(Instance, Id, Receiver, Action), []),
-    agent_identifier(Id),
+    quod:agent::agent_identifier(Id),
     fipa_local_agent(Instance, Sender),
     current_principal(Sender),
     Receiver = agent_instance_ref(Namespace, Anchor, ReceiverInstance),
@@ -27,7 +27,7 @@ fipa_request(Instance, Id, Receiver, Action) :-
 %% execute arbitrary message content as a Prolog goal.
 fipa_receive_request(Instance, Id, Action) :-
     term_variables(request(Instance, Id, Action), []),
-    agent_identifier(Id),
+    quod:agent::agent_identifier(Id),
     current_principal(Sender),
     fipa_request_allowed(Instance, Sender, Action),
     \+ fipa_conversation(Instance, Id, _, _, _, _),
@@ -74,5 +74,5 @@ agent_work_goal(Instance, Cursor, Key, Goal, Budget) :-
 
 fipa_pending_step(Instance, Cursor, Id, fipa_fulfil_request(Instance, Id)) :-
     findall(Key, (fipa_conversation(Instance, Key, participant, _, _, pending),
-                  agent_work_after(Cursor, Key)), Keys),
+                  (Cursor = start ; Cursor = after(Previous), Key @> Previous)), Keys),
     sort(Keys, [Id|_]).

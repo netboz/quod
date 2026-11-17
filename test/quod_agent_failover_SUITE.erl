@@ -40,8 +40,11 @@ init_per_testcase(TestCase, Config0) ->
                   || {I, Pair} <- lists:zip(lists:seq(1, 4), Pairs)],
         learn_peers(Nodes0),
         [_Old0, Administrator0 | _] = Nodes0,
-        RootAnchor = start_root(Administrator0, Nodes0),
-        Nodes = [start_node_ontology(N) || N <- Nodes0],
+        RootAnchor = start_shared_ontology(Administrator0, Nodes0, ?ROOT,
+            "quod_root.pl", [quod_directory_predicates,quod_ontology_predicates]),
+        OwnerAnchor = start_shared_ontology(Administrator0, Nodes0, <<"quod:agent">>,
+            "quod_agent.pl", [quod_agent_predicates]),
+        Nodes = [start_node_ontology(N#{agent_owner_anchor => OwnerAnchor}) || N <- Nodes0],
         [Old, Administrator | _] = Nodes,
         Observers = tl(Nodes),
         Eligible = lists:sublist(Observers, 2),
@@ -55,7 +58,7 @@ init_per_testcase(TestCase, Config0) ->
         OldRef = maps:get(reference, Old),
         committed(call(Administrator, ?MODULE, submit_node,
             [{node_authorized_goal, ?NS, AgentAnchor,
-              {goal, {agent_hosted, actor, OldRef, 1, OldKey}}}])),
+              agent({goal, {agent_hosted, AgentRef, OldRef, 1, OldKey}})}])),
         {_InitialBinding, InitialHeight} = call(Old, ?MODULE, await_goal,
             [?NS, {agent_hosted, actor, OldRef, 1, OldKey}, 30000]),
         {OldRuntime, OldChild, _} = call(Old, ?MODULE, await_agent, [AgentRef, 1, 10000]),
@@ -323,6 +326,8 @@ exercise_recovery(Config, Fault) ->
 resume_host(Returned, Survivors = [Administrator | _], RootAnchor, AgentAnchor) ->
     Seeds = [maps:get(endpoint, N) || N <- Survivors],
     resume_namespace(Returned, ?ROOT, RootAnchor, [maps:get(endpoint, Administrator)]),
+    resume_namespace(Returned, <<"quod:agent">>, maps:get(agent_owner_anchor,Returned),
+                     [maps:get(endpoint, Administrator)]),
     learn_peers([Returned | Survivors]),
     %% The persisted pointer restores the own node actor; do not bind it again.
     ok = call(Returned, ?MODULE, await_node_principal,
@@ -469,21 +474,20 @@ learn_peers(Nodes) ->
         end, Nodes -- [N])
     end, Nodes).
 
-start_root(Founder, Nodes) ->
-    Source = filename:join(code:priv_dir(quod), "ontologies/quod_root.pl"),
-    start_namespace(Founder, ?ROOT,
-        #{mode => create, genesis_file => Source,
-          external_predicate_modules => [quod_directory_predicates, quod_ontology_predicates]}),
-    Anchor = call(Founder, quod_simplex, genesis_hash, [?ROOT]),
+start_shared_ontology(Founder, Nodes, Ns, File, Modules) ->
+    Source = filename:join([code:priv_dir(quod), "ontologies", File]),
+    start_namespace(Founder, Ns,
+        #{mode => create, genesis_file => Source, external_predicate_modules => Modules}),
+    Anchor = call(Founder, quod_simplex, genesis_hash, [Ns]),
     lists:foreach(fun(N) ->
-        start_namespace(N, ?ROOT, join_config(Founder, Anchor))
+        start_namespace(N, Ns, join_config(Founder, Anchor))
     end, Nodes -- [Founder]),
-    lists:foreach(fun(N) -> ok = call(N, quod_ct, await_applied, [?ROOT, 1, 30000]) end, Nodes),
+    lists:foreach(fun(N) -> ok = call(N, quod_ct, await_applied, [Ns, 1, 30000]) end, Nodes),
     Anchor.
 
 start_node_ontology(N = #{node_namespace := Ns, public_key := Pub}) ->
     {ok, Execution} = erlog_io:read_file(filename:join(code:priv_dir(quod),
-                                                     "ontologies/node_execution.pl")),
+                                                     "ontologies/node_instance.pl")),
     Principal = {agent_instance_ref, Ns, {'_'}, physical_node},
     SigningPrincipal = {agent_instance_ref, Ns, {'NodeAnchor'}, physical_node},
     SigningRead = {'::', ?NS,
@@ -541,23 +545,29 @@ agent_policy(Old, Observers, Eligible, Administrator) ->
          {eligible_agent_host, actor, Principal}}
     end || V <- work_values()],
     ObservationRights ++ Placement ++ SigningRights ++ [
+        {instance_of,{':',quod,{':',agent,agent}},actor},
+        {':-',{can_invoke,{'_'},Principal,[<<"quod:agent">>|{'_'}],?NS},
+              {agent_recovery_observer,actor,Principal}},
         {agent_recovery_threshold, actor, 2}, {agent_domain_state, actor, before_loss},
         {can_assign_agent_host, AdminRef, actor, none, 0, OldRef, {'_'}},
         {':-', {can_invoke, Guarded, Principal, {'_'}, ?NS},
          {',', {agent_recovery_observer, actor, Principal}, {failover_entry, Goal}}},
-        {failover_entry, {report_agent_observation, actor, OldRef, 1,
-                          {'_'}, {'_'}, {'_'}, {'_'}}},
-        {failover_entry, {report_agent_observation_with_custody, actor, OldRef, 1,
-                          {'_'}, {'_'}, {'_'}, {'_'}, {'_'}}},
-        {failover_entry, {goal, {agent_hosted, actor, OldRef, 1, {'_'}}}},
+        {failover_entry, agent({report_agent_observation,
+                          {agent_instance_ref,?NS,{'_'},actor},OldRef,1,
+                          {'_'},{'_'},{'_'},{'_'}})},
+        {failover_entry, agent({report_agent_observation_with_custody,
+                          {agent_instance_ref,?NS,{'_'},actor},OldRef,1,
+                          {'_'},{'_'},{'_'},{'_'},{'_'}})},
+        {failover_entry, agent({goal,{agent_hosted,
+                          {agent_instance_ref,?NS,{'_'},actor},OldRef,1,{'_'}}})},
         {failover_entry, {trigger_event, {resume_work, Value}}},
         {failover_entry, {record_delivery, durable_delivery}},
         {':-', {record_delivery, Value}, {assertz, {delivered, Value}}},
         {':-', {can_invoke, Signing, Principal, {'_'}, ?NS},
          {agent_hosted, actor, Principal, {'Epoch'}, {'Key'}}},
         {':-', {can_invoke, {record_recovered_work, Value},
-                 {agent_instance_ref, ?NS, {'Anchor'}, actor}, {'_'}, ?NS},
-         {current_ontology_identity, ?NS, {'Anchor'}}},
+                 {agent_instance_ref, ?NS, {'_'}, actor}, {'_'}, ?NS},
+         {instance_of, {':',quod,{':',agent,agent}}, actor}},
         {':-', {react_on, {resume_work, Value}, {record_recovered_work, Value}},
          {me, {agent_instance_ref, ?NS, {'_'}, actor}}},
         {':-', {record_recovered_work, Value}, conjunction([
@@ -568,11 +578,12 @@ install_grants(Observers, Old, Anchor) ->
     OldRef = maps:get(reference, Old),
     [Administrator | _] = Observers,
     lists:foreach(fun(N) ->
-        Reports = [{report_agent_observation, actor, OldRef, 1, {'_'}, {'_'}, {'_'}, {'_'}},
-                   {report_agent_observation_with_custody, actor, OldRef, 1,
-                    {'_'}, {'_'}, {'_'}, {'_'}, {'_'}}],
+        Ref = {agent_instance_ref,?NS,Anchor,actor},
+        Reports = [agent({report_agent_observation,Ref,OldRef,1,{'_'},{'_'},{'_'},{'_'}}),
+                   agent({report_agent_observation_with_custody,Ref,OldRef,1,
+                          {'_'},{'_'},{'_'},{'_'},{'_' }})],
         Initial = case N =:= Administrator of
-            true -> [{goal, {agent_hosted, actor, OldRef, 1, {'_'}}}]; false -> []
+            true -> [agent({goal,{agent_hosted,Ref,OldRef,1,{'_'}}})]; false -> []
         end,
         Work = [{record_delivery, durable_delivery} |
                 [{trigger_event, {resume_work, V}} || V <- work_values()]],
@@ -599,6 +610,7 @@ install_contacts(Recipients, Advertisers, RootAnchor, AgentAnchor, RootFounder) 
             {ok, Blob} = quod_wire_term:encode_canonical(Ref),
             RootRole = case Advertiser =:= RootFounder of true -> validator; false -> observer end,
             Hosted = [{?NS, AgentAnchor, validator, node}, {?ROOT, RootAnchor, RootRole, system},
+                      {<<"quod:agent">>,maps:get(agent_owner_anchor,Advertiser),RootRole,system},
                       {maps:get(node_namespace, Advertiser), maps:get(node_anchor, Advertiser),
                        validator, node}],
             {ok, _} = call(N, quod_directory, install_generation,
@@ -805,3 +817,5 @@ call(#{peer := Peer}, Module, Function, Args) ->
     peer:call(Peer, Module, Function, Args, 120000).
 
 stop_peers(Peers) -> lists:foreach(fun(Peer) -> catch peer:stop(Peer) end, Peers).
+
+agent(Goal) -> {'::',{':',quod,agent},Goal}.

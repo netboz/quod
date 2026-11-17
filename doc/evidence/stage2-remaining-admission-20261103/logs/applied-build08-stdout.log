@@ -1,0 +1,2 @@
+[{"test/quod_simplex_tests.erl",{ok,quod_simplex_tests}},
+ {"test/quod_predicate_failure_tests.erl",{ok,quod_predicate_failure_tests}}]

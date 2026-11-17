@@ -1,5 +1,6 @@
 -module(quod_agent_trace_tests).
 -include_lib("eunit/include/eunit.hrl").
+-import(quod_agent_hosting_tests, [agent/1, agent_ref/2]).
 -include_lib("opentelemetry/include/otel_span.hrl").
 
 -define(SECRET, <<"agent-trace-private-payload">>).
@@ -88,7 +89,7 @@ custody_trace_uses_existing_node_worker_without_exporting_key_test_() ->
           node := {agent_instance_ref, NodeNs, NodeAnchor, _} = Node,
           identity := #{pubkey := Pub}, key := Key} = Ctx,
         Anchor = element(3, AgentRef),
-        commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+        commit(Ns, agent({goal, {agent_hosted, agent_ref(Ns, actor), Node, 1, Key}})),
         commit(Ns, {assertz, {can_prepare_agent_key, Node, actor, Node, 1, Node}}),
         commit(element(2, Node), {assertz, {can_execute_for, Ns, Anchor,
                                           {record_preparation, {'_'}}}}),
@@ -122,7 +123,7 @@ owned_reaction(Event, Goal, Guard) ->
      {',', {me, {agent_instance_ref, {'_'}, {'_'}, actor}}, Guard}}.
 
 install(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
-    commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+    commit(Ns, agent({goal, {agent_hosted, agent_ref(Ns, actor), Node, 1, Key}})),
     receive {agent_installed, Owner, Child, #{reference := Ref, epoch := 1}, _} -> {Owner, Child}
     after 5000 -> error(agent_not_installed) end.
 

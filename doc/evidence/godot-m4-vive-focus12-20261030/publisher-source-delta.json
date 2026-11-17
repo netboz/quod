@@ -1,0 +1,15 @@
+{
+  "existing_changed_sources": {
+    "doc/evidence/godot-m4-vive-retest-20261030/physical09.py": {
+      "before_sha256": "f413eee667160b1fe6594c52fda01e73fa4ad81178a816172d512fa50c6fa153",
+      "after_sha256": "360b166bacb988cb972f53f1d78df15bca70baf95e4a7354c29094fc5cb053c0"
+    },
+    "doc/evidence/godot-m4-vive-physical-20261029/manual_run.py": {
+      "before_sha256": "08df30b590f09ffdc24f8aa4fc7b1a0a61637adb14d0f1c653c565c9e08dc89f",
+      "after_sha256": "2620ffe864b19135f1557e19280cec34fe18c19ac51f940379573da56b0e9639"
+    }
+  },
+  "new_owner": "doc/evidence/godot-m4-vive-physical-20261029/publication.py",
+  "existing_raw_or_published_history_modified": false,
+  "scope": "Diagnostic identifier publication only. No stdin, owner, budget, focus, product or runtime change."
+}

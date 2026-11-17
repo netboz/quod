@@ -1,0 +1,10 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-vr-reliability-20261103/check_live.py"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 0.0910578160037403
+}

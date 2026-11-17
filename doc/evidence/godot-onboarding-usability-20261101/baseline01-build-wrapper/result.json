@@ -1,0 +1,11 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-onboarding-usability-20261101/build.py",
+    "onboarding-baseline01"
+  ],
+  "exit": 1,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 23.37100620000274
+}

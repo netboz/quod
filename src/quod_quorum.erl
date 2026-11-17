@@ -1,13 +1,11 @@
 -module(quod_quorum).
 -moduledoc """
-Shared bounded verification for signatures made by a certified validator set.
+Shared verification for signatures made by a certified validator set.
 
 This module knows only committee membership, quorum arithmetic, and Ed25519
 signatures. Consensus, exact `f + 1` read/application certificates and
 proof-scoped agent identity share these rules, not their statement formats.
 """.
-
--include("quod_ingress_limits.hrl").
 
 -export([threshold/1, honest_threshold/1, verify_honest/3,
          committee_size/1, valid_signature_list/2, canonical_signatures/1,
@@ -43,13 +41,12 @@ committee_size(Committee) ->
     committee_size(Committee, 0, #{}).
 
 committee_size([], Count, _Seen) -> {ok, Count};
-committee_size([<<_:256>> = Key | Rest], Count, Seen)
-  when Count < ?MAX_VALIDATORS ->
+committee_size([<<_:256>> = Key | Rest], Count, Seen) ->
     case maps:is_key(Key, Seen) of
         false -> committee_size(Rest, Count + 1, Seen#{Key => true});
         true -> error
     end;
-committee_size(_MalformedDuplicateOrTooLarge, _Count, _Seen) ->
+committee_size(_MalformedOrDuplicate, _Count, _Seen) ->
     error.
 
 -doc "Return the sorted, distinct, valid current-member signatures.".
@@ -86,14 +83,16 @@ sanitize_at_least(Committee, Bytes, Signatures, Needed) when is_binary(Bytes) ->
 sanitize_at_least(_Committee, _Bytes, _Signatures, _Needed) ->
     error.
 
--doc "Check a nonempty bounded certificate signature list, sorted by distinct signer.".
+-doc "Check a nonempty certificate signature list, sorted by distinct signer.".
 -spec canonical_signatures(term()) -> boolean().
 canonical_signatures([_ | _] = Signatures) ->
-    valid_signature_list(Signatures, ?MAX_VALIDATORS) andalso
+    valid_signature_list(Signatures, unlimited) andalso
         Signatures =:= lists:ukeysort(1, Signatures);
 canonical_signatures(_) -> false.
 
--spec valid_signature_list(term(), non_neg_integer()) -> boolean().
+-spec valid_signature_list(term(), non_neg_integer() | unlimited) -> boolean().
+valid_signature_list(Signatures, unlimited) ->
+    signature_rows(Signatures);
 valid_signature_list(Signatures, Maximum) when is_integer(Maximum), Maximum >= 0 ->
     bounded_signatures(Signatures, Maximum);
 valid_signature_list(_Signatures, _Maximum) ->
@@ -105,6 +104,10 @@ verify(Committee, Bytes, Signatures) ->
         {ok, _} -> true;
         error -> false
     end.
+
+signature_rows([]) -> true;
+signature_rows([{<<_:256>>, <<_:512>>} | Rest]) -> signature_rows(Rest);
+signature_rows(_) -> false.
 
 bounded_signatures([], _Remaining) -> true;
 bounded_signatures(

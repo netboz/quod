@@ -1,0 +1,22 @@
+PASS enabled action create-key
+PASS enabled action connect
+PASS enabled action register
+PASS enabled action prepare
+PASS enabled action setup
+PASS current native target is enabled and enclosed: @Button@79
+PASS native pointer releases the actual capture
+PASS one native release activates its displayed button exactly once
+PASS current native target is enabled and enclosed: control0
+PASS native pointer releases the actual capture
+PASS one native release activates its displayed button exactly once
+PASS opened native catalogue fits the actual surface
+PASS native pointer releases the actual capture
+PASS native catalogue selects the exact item once
+PASS current native target is enabled and enclosed: control1
+PASS native pointer releases the actual capture
+PASS one native release activates its displayed button exactly once
+PASS opened native catalogue fits the actual surface
+PASS native pointer releases the actual capture
+PASS native catalogue selects the exact item once
+PASS actual native raster retained: inspection-baseline
+{"passed": false, "failure": "AssertionError: ", "children": {"server": 0, "client-workbench-ux": 1}, "native_inputs": 0}

@@ -37,7 +37,7 @@ portable snapshots and compaction remain deferred.
          staging_path/1, with_proof_stage/2, stage_proof/2, staged_proof_source/1, reset_proof_stage/1,
          read_at/2, read_at/3, read_range/4, fold/5, fold_groups/3, last/1,
          committed_boundary/2]).
--export([default_data_dir/0, data_dir/1, ns_dir/2]).
+-export([default_data_dir/0, data_dir/1, ns_dir/2, namespace_key/1, check_namespace_layout/2, preflight_namespace/2]).
 
 -export_type([handle/0, session/0, append_batch/0, proof_source/0, proof_cursor/0, transfer_cursor/0,
               proof_stage/0]).
@@ -56,8 +56,6 @@ portable snapshots and compaction remain deferred.
 -define(HDR_BYTES, 12).      %% Magic:32 ++ Len:32 ++ CRC:32
 -define(CP_INTERVAL, 256).   %% one checkpointed offset per this many entries (sparse index)
 -define(READ_CHUNK, 262144). %% bytes per pread when streaming sequential frames (the read cursor)
--define(MAX_FRAME_BYTES, (64 * 1024 * 1024)).  %% sanity cap on a frame's length field — a corrupted
-                                               %% Len must never drive a giant pread allocation
 
 -record(store, {dir         :: file:filename_all(),
                 ns          :: binary(),
@@ -165,6 +163,7 @@ open(Ns, DataDir) ->
           {ok, handle()}.
 open(Ns, DataDir, SymbolMode)
   when SymbolMode =:= materialized; SymbolMode =:= wrapped ->
+    ok = require_namespace_layout(DataDir, Ns),
     Dir = ns_dir(DataDir, Ns),
     ok = filelib:ensure_path(Dir),
     LogPath = filename:join(Dir, "log.0001"),
@@ -197,6 +196,7 @@ open_ro(Ns, DataDir) ->
           {ok, handle()} | {error, no_log | term()}.
 open_ro(Ns, DataDir, SymbolMode)
   when SymbolMode =:= materialized; SymbolMode =:= wrapped ->
+    ok = require_namespace_layout(DataDir, Ns),
     Dir = ns_dir(DataDir, Ns),
     case traced_file_open(
            filename:join(Dir, "log.0001"), [read, raw, binary], read_only,
@@ -685,13 +685,47 @@ last(#store{last_index = LI}) -> LI.
 
 -doc "The shared on-disk directory for one namespace's ledger and consensus metadata.".
 -spec ns_dir(file:filename_all(), binary()) -> file:filename_all().
-ns_dir(DataDir, Ns) -> filename:join(DataDir, base64url(Ns)).
+ns_dir(DataDir, Ns) -> filename:join(DataDir, binary_to_list(namespace_key(Ns))).
+
+require_namespace_layout(Root, Ns) ->
+    case check_namespace_layout(Root, Ns) of
+        ok -> ok;
+        {error, Reason} -> error(Reason)
+    end.
+
+-spec namespace_key(binary()) -> binary().
+namespace_key(Ns) when is_binary(Ns) ->
+    <<"ns.", (binary:encode_hex(crypto:hash(sha256, Ns)))/binary>>.
+
+%% Read-only preflight before opening any store or reporting a stopped outcome
+%% absent. Never operate two layouts or silently replace retained signing duties.
+-spec check_namespace_layout(file:filename_all(), binary()) -> ok | {error, term()}.
+check_namespace_layout(Root, Ns) ->
+    Legacy = filename:join(Root, base64url(Ns)),
+    case file:read_link_info(Legacy) of
+        {ok, _} -> {error, {unsupported_namespace_layout, Legacy}};
+        {error, enoent} -> ok;
+        %% This filesystem cannot represent the old raw-name component. No
+        %% arbitrary byte allowance or directory-wide scan is substituted.
+        {error, enametoolong} -> ok;
+        {error, Reason} -> {error, {namespace_layout_io, Root, Reason}}
+    end.
+
+%% Both roots must pass before ledger creation, even when the only retained
+%% old-format material is the signing journal on the separate durable volume.
+-spec preflight_namespace(binary(), map()) -> ok | {error, term()}.
+preflight_namespace(Ns, Config) ->
+    lists:foldl(fun(Root, ok) -> check_namespace_layout(Root, Ns);
+                  (_, Error) -> Error end,
+                ok, lists:usort([ledger_dir(Config), data_dir(Config)])).
+
 
 base64url(Bin) ->
     binary_to_list(base64:encode(Bin, #{mode => urlsafe, padding => false})).
 
-frame(Payload) ->
-    <<?MAGIC:32, (byte_size(Payload)):32, (erlang:crc32(Payload)):32, Payload/binary>>.
+frame(Payload) when byte_size(Payload) =< (1 bsl 32) - 1 ->
+    <<?MAGIC:32, (byte_size(Payload)):32, (erlang:crc32(Payload)):32, Payload/binary>>;
+frame(_Payload) -> error(frame_too_large).
 
 %% Material seeking skips each proof extent in one step, regardless of its
 %% number of carriers. At most 255 material headers follow the checkpoint.
@@ -710,7 +744,7 @@ skip_material(Fd, Off, #group{entries_end = Off, finish = NextGroup}, N) ->
 skip_material(Fd, Off, G, N) ->
     case file:pread(Fd, Off, ?HDR_BYTES + 1) of
         {ok, <<?MAGIC:32, Len:32, _CRC:32, 2>>}
-          when Len > 1, Len =< ?MAX_FRAME_BYTES,
+          when Len > 1,
                Off + ?HDR_BYTES + Len =< G#group.entries_end ->
             Next = Off + ?HDR_BYTES + Len,
             case Next =:= G#group.entries_end of
@@ -842,8 +876,6 @@ next_frame(Fd, {Off, Buf0}) ->
                     {stop, {unsupported_format, 7}, Off};
                 <<?V8_MAGIC:32, _/binary>> ->
                     {stop, {unsupported_format, 8}, Off};
-                <<?MAGIC:32, Len:32, _:32, _/binary>> when Len > ?MAX_FRAME_BYTES ->
-                    {stop, {frame_too_big, Len}, Off};
                 <<?MAGIC:32, Len:32, CRC:32, _/binary>> ->
                     case fill(Fd, Off, Buf1, ?HDR_BYTES + Len) of
                         {short, <<?V8_MAGIC:32, _/binary>>} ->
@@ -861,11 +893,22 @@ next_frame(Fd, {Off, Buf0}) ->
             end
     end.
 
-%% Grow `Buf` (the bytes at `Off`) to at least `Need` bytes with one ?READ_CHUNK-or-bigger
-%% pread. `{short, Buf'}` = the file ends before `Need` bytes (pread returns short only at EOF).
+%% Read from the actual file extent, never allocate an advertised missing tail.
+%% Existing chunked reads preserve the cursor; a short frame remains a short frame.
 fill(_Fd, _Off, Buf, Need) when byte_size(Buf) >= Need -> {ok, Buf};
 fill(Fd, Off, Buf, Need) ->
-    case file:pread(Fd, Off + byte_size(Buf), max(?READ_CHUNK, Need - byte_size(Buf))) of
+    case file:position(Fd, eof) of
+        {ok, End} ->
+            At = Off + byte_size(Buf),
+            Available = max(0, End - At),
+            Read = min(Available, max(?READ_CHUNK, Need - byte_size(Buf))),
+            fill_available(Fd, At, Buf, Need, Read);
+        {error, Reason} -> {io_error, Reason}
+    end.
+
+fill_available(_Fd, _At, Buf, _Need, 0) -> {short, Buf};
+fill_available(Fd, At, Buf, Need, Read) ->
+    case file:pread(Fd, At, Read) of
         {ok, More} ->
             Buf1 = <<Buf/binary, More/binary>>,
             case byte_size(Buf1) >= Need of

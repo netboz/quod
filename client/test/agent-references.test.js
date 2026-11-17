@@ -95,10 +95,10 @@ test('malformed storage input is rejected before signing', () => {
   })
 })
 
-test('agent-reference namespaces use the shared 255-byte protocol limit', () => {
+test('agent-reference namespaces preserve UTF-8 through the signed length field', () => {
   withStorage(() => {
-    const namespace255 = `${'é'.repeat(127)}a`
-    assert.equal(new TextEncoder().encode(namespace255).length, 255)
+    const namespace255 = `${'é'.repeat(32767)}a`
+    assert.equal(new TextEncoder().encode(namespace255).length, 65535)
     assert.equal(saveAgentReference({
       network: 'n'.repeat(43),
       namespace: namespace255,

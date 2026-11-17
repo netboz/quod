@@ -1,0 +1,10 @@
+{
+  "verified": true,
+  "dependency_entries": 1095,
+  "compiled_input_candidates": [],
+  "checks": [
+    "beam/native/object/archive suffixes",
+    "ELF and ar magic"
+  ],
+  "note": "Read-only check against exact frozen dependency paths; generated parser sources are source inputs, not compiled objects."
+}

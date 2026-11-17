@@ -1,5 +1,6 @@
 -module(quod_atomic_projection_tests).
 -include_lib("eunit/include/eunit.hrl").
+-include("retired_remaining_sizes.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
 -include("quod_ledger.hrl").
 -include("quod_dtx_owner.hrl").
@@ -1179,7 +1180,7 @@ presentation_receipt_retains_work_without_an_rpc_worker_or_readiness_test() ->
         setelement(3, Request, <<0:256>>), [], 1, From, S)),
     ?assertEqual(error, quod_atomic:decode_presentation(foreign(F), Id, quod_atomic:encode_group(G))).
 
-presentation_capacity_returns_busy_without_losing_existing_work_test_() ->
+presentation_retains_all_work_and_one_engine_monitor_test_() ->
     {timeout, 30, {spawn, fun() ->
         {ok, _} = application:ensure_all_started(gproc),
         F = fixture(), {Ns, Anchor} = maps:get(origin, F),
@@ -1201,13 +1202,13 @@ presentation_capacity_returns_busy_without_losing_existing_work_test_() ->
         end,
         Full = lists:foldl(fun(_, S) ->
             Enroll(Request(fixture(#{node_identity => Node})), S)
-        end, Enroll(First, S0), lists:seq(2, ?MAX_INGRESS_TXS)),
-        ?assertMatch(#{active := ?MAX_INGRESS_TXS, reserved := 0},
+        end, Enroll(First, S0), lists:seq(2, ?LEGACY_MAX_INGRESS_TXS)),
+        ?assertMatch(#{active := ?LEGACY_MAX_INGRESS_TXS, reserved := 0},
                      quod_simplex:test_dtx_admission_state(Full)),
         Extra = Request(fixture(#{node_identity => Node})),
         ?assertEqual(Full, Enroll(First, Full)),
-        %% A newly registered engine must not leak a monitor through a rejected
-        %% callback's discarded tentative state. This stand-in performs no proof.
+        %% A newly registered engine is retained exactly once by the real callback.
+        %% This stand-in performs no proof.
         Caller = self(),
         Engine = spawn(fun() ->
             true = quod_reg:reg({quod_prolog, Ns}),
@@ -1218,9 +1219,14 @@ presentation_capacity_returns_busy_without_losing_existing_work_test_() ->
             receive {Engine, registered} -> ok
             after 1000 -> error(capacity_engine_missing) end,
             Before = process_info(self(), monitors),
-            ?assertEqual({error, busy},
-                quod_simplex:test_start_local_dtx_endpoint_request(Extra, [], 1, From, Full)),
-            ?assertEqual(Before, process_info(self(), monitors))
+            Expanded = Enroll(Extra, Full),
+            ?assertMatch(#{active := 513, reserved := 0},
+                         quod_simplex:test_dtx_admission_state(Expanded)),
+            {monitors, Prior} = Before,
+            {monitors, After} = process_info(self(), monitors),
+            ?assertEqual([{process, Engine}], After -- Prior),
+            ?assertEqual(Expanded, Enroll(Extra, Expanded)),
+            ?assertEqual({monitors, After}, process_info(self(), monitors))
         after
             Monitor = monitor(process, Engine), Engine ! stop,
             receive {'DOWN', Monitor, process, Engine, normal} -> ok
@@ -1777,7 +1783,7 @@ absent_local_group_preserves_outcome_uncertainty_test() ->
         %% Only the genesis directory entry is a fixture; effect resolution
         %% itself uses both real production owner lookups. Absence must not
         %% release/cancel a privately prepared effect.
-        TableName = binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
+        TableName = binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
         Table = ets:new(TableName, [named_table, public, set]),
         try
             true = ets:insert(Table, {anchor, <<0:256>>}),

@@ -1,0 +1,22 @@
+[
+  {
+    "patch": "remaining-owners.patch",
+    "sha256": "fd61120652828da27da4d3b0861ba8711293b73b8095d9a0bcad8772af47f19c",
+    "true_exit": 0,
+    "stdout_eof": true,
+    "stderr_eof": true,
+    "stdout": "",
+    "stderr": "",
+    "applied": false
+  },
+  {
+    "patch": "erlog-diagnostics.patch",
+    "sha256": "19c3f7462ba7a5103df6acd8920f30423f6fe4feaadea804c7199dba3172b5a7",
+    "true_exit": 0,
+    "stdout_eof": true,
+    "stderr_eof": true,
+    "stdout": "",
+    "stderr": "",
+    "applied": false
+  }
+]

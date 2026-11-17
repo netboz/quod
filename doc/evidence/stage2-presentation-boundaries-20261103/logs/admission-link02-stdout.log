@@ -1,0 +1,61 @@
+======================== EUnit ========================
+module 'quod_link_tests'
+  quod_link_tests: peer_key_normalizes_transport_identity_test...[0.002 s] ok
+  quod_link_tests: header_roundtrip_test...[0.002 s] ok
+  quod_link_tests: header_keeps_remainder_test...ok
+  quod_link_tests: header_split_buffers_test...ok
+  quod_link_tests: header_bad_nodeid_rejected_test...ok
+  quod_link_tests: header_bad_learn_policy_rejected_test...ok
+  quod_link_tests: compressed_header_identity_rejected_before_expansion_test...ok
+  quod_link_tests: frame_layout_test...ok
+  quod_link_tests: frame_roundtrip_test...ok
+  quod_link_tests: coalesced_frames_test...ok
+  quod_link_tests: split_frame_reassembles_test...ok
+  quod_link_tests: partial_header_buffers_test...ok
+  quod_link_tests: whole_then_partial_test...ok
+  quod_link_tests: large_frame_waits_for_complete_declared_payload_test...[0.020 s] ok
+  quod_link_tests: unrepresentable_iodata_refuses_before_allocation_or_enqueue_test...[0.009 s] ok
+  quod_link_tests: catchup_bootstrap_and_opaque_page_test...[0.062 s] ok
+  quod_link_tests: -catchup_bootstrap_uses_one_absolute_deadline_test_/0-fun-1-...[5.001 s] ok
+  quod_link_tests: catchup_bootstrap_atomic_ordered_send_test...[0.027 s] ok
+  quod_link_tests: catchup_server_send_acceptance_precedes_next_admission_test...[0.023 s] ok
+  quod_link_tests: catchup_batch_violation_stops_publication_test...[0.021 s] ok
+  quod_link_tests: catchup_missing_owner_returns_credit_test...ok
+  quod_link_tests: catchup_source_owner_death_resets_exact_link_test...ok
+  quod_link_tests: catchup_changed_binding_retires_link_test...ok
+  quod_link_tests: catchup_producer_death_retires_link_test...ok
+  quod_link_tests: catchup_failed_terminal_send_never_returns_credit_test...[0.002 s] ok
+  [done in 5.244 s]
+module 'quod_client_goal_router_tests'
+  quod_client_goal_router_tests: production_owner_publishes_each_router_incarnation_test...[0.004 s] ok
+  quod_client_goal_router_tests: cursor_target_states_are_named_before_the_shared_renderer_test...ok
+  quod_client_goal_router_tests: submit_target_documented_outcomes_select_one_reply_test...ok
+  quod_client_goal_router_tests: result_is_correlated_and_fully_cleaned_test...[0.010 s] ok
+  quod_client_goal_router_tests: failed_cursor_open_releases_lease_test...ok
+  quod_client_goal_router_tests: local_process_uses_the_existing_wire_and_correlation_test...ok
+  quod_client_goal_router_tests: wrong_peer_never_satisfies_an_exact_correlation_test...ok
+  quod_client_goal_router_tests:131: -preexecution_refusals_remain_route_eligible_test_/0-fun-1-...ok
+  quod_client_goal_router_tests:131: -preexecution_refusals_remain_route_eligible_test_/0-fun-1-...ok
+  quod_client_goal_router_tests:131: -preexecution_refusals_remain_route_eligible_test_/0-fun-1-...ok
+  quod_client_goal_router_tests: link_failure_before_send_is_the_only_pre_send_result_test...ok
+  quod_client_goal_router_tests: missing_router_is_provably_pre_send_test...ok
+  quod_client_goal_router_tests: post_send_timeout_is_uncertain_and_leaves_nothing_test...[0.031 s] ok
+  quod_client_goal_router_tests: invalid_response_counts_the_exact_gateway_boundary_test...=WARNING REPORT==== 3-Nov-2026::15:25:49.955426 ===
+quod: client-visible outcome_unknown producer=gateway_execute_transport cause=invalid_response kind=operation namespace=<<"quod:test">> id=00000000000000000000000000000000000000000000000000000000000000cb
+[0.190 s] ok
+  quod_client_goal_router_tests: normalized_target_pending_is_not_counted_again_at_gateway_test...=WARNING REPORT==== 3-Nov-2026::15:25:49.960451 ===
+quod: client-visible outcome_unknown producer=target_execute cause=engine_result kind=operation namespace=<<"quod:test">> id=00000000000000000000000000000000000000000000000000000000000000cb
+[0.002 s] ok
+  quod_client_goal_router_tests: caller_death_cleans_the_exact_outbound_correlation_test...ok
+  quod_client_goal_router_tests: cursor_route_reuses_one_link_and_drops_after_stop_test...ok
+  quod_client_goal_router_tests: expired_idle_route_returns_reason_once_to_its_owner_test...[0.304 s] ok
+  quod_client_goal_router_tests: route_expiry_does_not_replace_an_inflight_accept_outcome_test...[0.304 s] ok
+  quod_client_goal_router_tests: cursor_target_link_death_drops_the_exact_route_test...[0.002 s] ok
+  quod_client_goal_router_tests: owner_stats_keep_peaks_after_cursor_cleanup_test...[0.002 s] ok
+  quod_client_goal_router_tests: router_death_after_send_preserves_request_uncertainty_test...ok
+  quod_client_goal_router_tests: remote_large_result_preserves_exact_correlation_test...[0.027 s] ok
+  quod_client_goal_router_tests: target_encoding_keeps_outcome_and_distinguishes_invalid_from_size_test...[0.001 s] ok
+  quod_client_goal_router_tests: late_large_reply_cannot_restore_cancelled_correlation_test...[0.012 s] ok
+  [done in 0.966 s]
+=======================================================
+  All 50 tests passed.

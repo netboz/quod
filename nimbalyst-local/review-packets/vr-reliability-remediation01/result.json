@@ -1,0 +1,37 @@
+{
+  "passed": true,
+  "commands": [
+    {
+      "name": "archive",
+      "argv": [
+        "tar",
+        "-czf",
+        "/home/yan/src/quod_worktrees/pearl-stone/nimbalyst-local/review-packets/vr-reliability-remediation01/tree.tar.gz",
+        "-C",
+        "/home/yan/src/quod_worktrees/pearl-stone/nimbalyst-local/review-packets/vr-reliability-remediation01/tree",
+        "."
+      ],
+      "true_exit": 0,
+      "elapsed_seconds": 0.035874834999958694
+    },
+    {
+      "name": "reconstruct",
+      "argv": [
+        "tar",
+        "-xzf",
+        "/home/yan/src/quod_worktrees/pearl-stone/nimbalyst-local/review-packets/vr-reliability-remediation01/tree.tar.gz",
+        "-C",
+        "/home/yan/src/quod_worktrees/pearl-stone/_build/vr-reliability/remediation-reconstruction01"
+      ],
+      "true_exit": 0,
+      "elapsed_seconds": 0.007999157999847739
+    }
+  ],
+  "reconstruction": "/home/yan/src/quod_worktrees/pearl-stone/_build/vr-reliability/remediation-reconstruction01",
+  "manifest_sha256": "37d7461f439f01d2988206a81650d94aeba8425313898eb8d583ce4283e58c32",
+  "archive_sha256": "f30c40722820cec74f9098a7a8872d27948824afad5bdffca8e7cd213e9467a2",
+  "files": 57,
+  "directories": 35,
+  "archive_bytes": 170411,
+  "content_types_modes_verified": true
+}

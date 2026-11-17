@@ -1,0 +1,913 @@
+{
+  "original_m4_entries_verified": 23554,
+  "errors": [],
+  "tracked_patch_sha256": "8d759963b1100714e6f1301175324168bab40bdb3125a02f8b5604cefeab4370",
+  "production_delta_vs_candidate09": 0,
+  "test_delta_vs_candidate09": 0,
+  "spec_delta_vs_candidate09": 0,
+  "inherited_delta_vs_HEAD": {
+    "production": 1247,
+    "test": 326,
+    "docs": 37,
+    "generated_uid": 16
+  },
+  "erlang_prolog_production_delta": 0,
+  "relocations": 0,
+  "subsequent_additions_before_final_packaging": {
+    "subsequent-coordination": [
+      {
+        "path": "doc/evidence/godot-m4-coordinator-20261029/README.md",
+        "bytes": 2020,
+        "lines": 31,
+        "sha256": "3e741fd9ff3d3af7686250b8645d53ae41467fdf7c2e9a82026982d08daec801",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-coordinator-20261029/boundary-verification-attempt01.json",
+        "bytes": 1472,
+        "lines": 6,
+        "sha256": "e9a6a30278fda0636289eb1e68640e0db5f48650385d6cc961074671d19da8f1",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-coordinator-20261029/boundary-verification-attempt02.json",
+        "bytes": 887,
+        "lines": 6,
+        "sha256": "83c1aa052eb74a161d3a599bf5e07ce7c954a67980d84e2c22fc541e20979578",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-coordinator-20261029/boundary-verification.json",
+        "bytes": 2702,
+        "lines": 81,
+        "sha256": "397cde7aa670f334a7f01b47d8da630170773c98b717d9652ff060084ca561eb",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-coordinator-20261029/campaign-verification.json",
+        "bytes": 4538,
+        "lines": 105,
+        "sha256": "16d9069521ddeb6424b1fe042716b068939479cae4f7423596f282e3180297af",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-coordinator-20261029/own-reconstruction.json",
+        "bytes": 455,
+        "lines": 11,
+        "sha256": "c3e9c6f8d63ef52ad430fdab215a8693cb19232ddded0e108eba3b75467216df",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-coordinator-20261029/preservation-command-syntax-error.json",
+        "bytes": 275,
+        "lines": 3,
+        "sha256": "cbeba6dad95f3cd9e5bb261d510eea32bd9f247b99bba380624833f9e814af08",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-coordinator-20261029/session-boundary.json",
+        "bytes": 2299,
+        "lines": 43,
+        "sha256": "c4ae9e0d3614e14ecc9f306957db673020f8662cb1fe2b50cc2c3cc5a19f5309",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-coordinator-20261029/source-audit.json",
+        "bytes": 441,
+        "lines": 16,
+        "sha256": "40b038ace9472f98ddb98e48b731c00b3b5b4d3f6b80af9653c936699de0950c",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-coordinator-20261029/verification-file-index.json",
+        "bytes": 1661,
+        "lines": 50,
+        "sha256": "45e7bd2a83581025bd6da70bc0e47440bf00394c285f894b96d95165f205237b",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-coordinator-20261029/verify_boundary.py",
+        "bytes": 8053,
+        "lines": 157,
+        "sha256": "52b55cf701b9310932150f4b9dadfa95ca79ae23d8e9f4b4f2fa1a2f4df7c43b",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-coordinator-20261029/verify_boundary_attempt01.py",
+        "bytes": 7494,
+        "lines": 151,
+        "sha256": "3a83d51eb9dfa21dcbf8a1379f15b0fef0c4ecb4cf1921a2b961c92eba04e5a9",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-coordinator-20261029/verify_boundary_attempt02.py",
+        "bytes": 8024,
+        "lines": 157,
+        "sha256": "8fe3a25c7a4d1b4756cd98c0ef2d69516906517771918b2bd9eb890c87fed39c",
+        "mode": 420
+      },
+      {
+        "path": "nimbalyst-local/handoffs/godot-m4-coordinator-verification.md",
+        "bytes": 6630,
+        "lines": 106,
+        "sha256": "bdd0c2279a0cf0799489e5eb10a059a84f1521a50781724571fd2d9cba9b516b",
+        "mode": 420
+      },
+      {
+        "path": "nimbalyst-local/handoffs/godot-m4-r1-prompt.md",
+        "bytes": 10217,
+        "lines": 153,
+        "sha256": "ba797358f6e2247da9bfc1729b4fc5f41aeb2f3588f4c28aaa7ff16631ac1efe",
+        "mode": 420
+      }
+    ],
+    "r1-evidence": [
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/README.md",
+        "bytes": 5451,
+        "lines": 93,
+        "sha256": "fc86f52371cd2db062f9e5488dba1027f8b8c376cfec89f21880286b89d049da",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/client-diagnostic01-bootstrap/output.log",
+        "bytes": 0,
+        "lines": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/client-diagnostic01-bootstrap/result.json",
+        "bytes": 173,
+        "lines": 10,
+        "sha256": "f8f0277e41e40cb226d2662709cd17488feb7018612ff73c4b95a9d2a52d89e8",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/client-diagnostic01-core-restore/output.log",
+        "bytes": 188,
+        "lines": 2,
+        "sha256": "b925c2bb0cf0193fbc63f5fe180e51e85869381949ed9bf6e595b8c41b8c2ab3",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/client-diagnostic01-core-restore/result.json",
+        "bytes": 304,
+        "lines": 13,
+        "sha256": "67801e00f500c546ad73f35cb9245143305d7630a1e1e87da3e769718f849c0b",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/client-diagnostic01-core/output.log",
+        "bytes": 8662,
+        "lines": 190,
+        "sha256": "64d220e3ce59b79f1c4ab4de2343780298358529ddd968ea2e5034c36e8d17c3",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/client-diagnostic01-core/result.json",
+        "bytes": 419,
+        "lines": 15,
+        "sha256": "588f2eabddf6b7f4586b60c6d42498d1de2e475a5ae842564d94baea3a618fed",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/client-diagnostic01-export/output.log",
+        "bytes": 43122,
+        "lines": 203,
+        "sha256": "9036e7651932ebb4ca657c9ed39b9f144e745c7953411966f9d30b3664b51410",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/client-diagnostic01-export/result.json",
+        "bytes": 171,
+        "lines": 10,
+        "sha256": "4aba54b79bf29f9c8b5b10d11f42fb575af4557761107466a908302a6f4b7061",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/client-diagnostic01-restore-debug/output.log",
+        "bytes": 169,
+        "lines": 2,
+        "sha256": "93fc05208172ed69f855ee069f509d1abacdb220fcd9b2cd5818ddb52f3c6c7e",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/client-diagnostic01-restore-debug/result.json",
+        "bytes": 350,
+        "lines": 15,
+        "sha256": "f7fb353e910bef5f42c06c0319877e48e6c95592ec157d268de1cf3d26e9f582",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/client-diagnostic01-restore-exportrelease/output.log",
+        "bytes": 169,
+        "lines": 2,
+        "sha256": "107f9c3f855e440e8811325e4055c22584b01c22087120d346e634e5d9ac82a8",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/client-diagnostic01-restore-exportrelease/result.json",
+        "bytes": 358,
+        "lines": 15,
+        "sha256": "89078057591e6a3953e41d5b43d430e703292dc206b21ebc436d55a0d4fd8532",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/client-diagnostic01-toolchain/output.log",
+        "bytes": 1046,
+        "lines": 43,
+        "sha256": "8cc6378a93cf96e18db0636fa4afd824cd46329635fd390e673d6e3ae17218a2",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/client-diagnostic01-toolchain/result.json",
+        "bytes": 136,
+        "lines": 9,
+        "sha256": "7ed8e251f626b5e4c4e197263ee8d6c509da02d9bad9a3014f44fade5ae194ba",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/desktop_input.py",
+        "bytes": 2962,
+        "lines": 51,
+        "sha256": "8ae06b2a0f0e6c30b76636b5a0590f48370c66ba7f256c70e15426d279f18d26",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/diagnostic-plan.md",
+        "bytes": 3745,
+        "lines": 60,
+        "sha256": "e8914d092c60a195b89981cc22b7ba32ce5adda9012dda70cc621de07253259b",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/failure-dispositions.md",
+        "bytes": 2870,
+        "lines": 45,
+        "sha256": "80fc8b2d9fba0be68e848d7c078ab1086886a803fc3405824797cbf4b09c6c46",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/freeze-client.py",
+        "bytes": 7719,
+        "lines": 112,
+        "sha256": "f1a1b31033f33391d0dba7ff7f2133c2fb077f7cd4d20935c750cab084155f0f",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/godot_m3b_fixture.erl",
+        "bytes": 10595,
+        "lines": 153,
+        "sha256": "c895246b8d4df73560cc042b0ff459b4f33bb46a8870aa52bc4330c3817db769",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/godot_m3b_physics_fixture.erl",
+        "bytes": 7475,
+        "lines": 112,
+        "sha256": "06b764596bf6aaa4e58549a21d56ae10b56f60f9891d38e4ef8c74601da7392d",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/QUO-60-decoded.json",
+        "bytes": 56377,
+        "lines": 39,
+        "sha256": "b3f61d90e412b6986c1cadfd627e27307fbed0706d7d108c80417635e1a6c299",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/QUO-60-receipt.json",
+        "bytes": 228,
+        "lines": 11,
+        "sha256": "68a0861dbfd406024049332b5bec8b2e79ae9f039befaa4cb769d614b2ab886d",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/QUO-60.json",
+        "bytes": 56505,
+        "lines": 1,
+        "sha256": "ceeba171ab06c0208f06cabf79ac1270ba57510b40a6edb4f8e311732dff7fb8",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/QUO-60.md",
+        "bytes": 55067,
+        "lines": 332,
+        "sha256": "caf8ad8c46e1c2f3f397032813ac2825c373a2283676a78bf4f8b9f40f3b3888",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/QUO-60.stderr",
+        "bytes": 0,
+        "lines": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/QUO-65-decoded.json",
+        "bytes": 7343,
+        "lines": 52,
+        "sha256": "cf1650234d1331a6e5457eabc69f29b2525b55b87cb011605eaedde34b184205",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/QUO-65-receipt.json",
+        "bytes": 228,
+        "lines": 11,
+        "sha256": "6a8477cee1de78abf175f98ccae7312f5e7c9832a0a224df94e3b69cf4e3551d",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/QUO-65.json",
+        "bytes": 7167,
+        "lines": 1,
+        "sha256": "22f964d29151a6cf7e670be1b2bfc059937618a260105e9eb7ff95c5bae2683e",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/QUO-65.md",
+        "bytes": 5960,
+        "lines": 66,
+        "sha256": "5c93945de66aaec4039e5f579f18c3838a6c21ab902222034d2ec06c51651724",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/QUO-65.stderr",
+        "bytes": 0,
+        "lines": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/candidate09-Main.cs",
+        "bytes": 34312,
+        "lines": 503,
+        "sha256": "b524475ade779eeffb5723858df4662529ab63199bb4d68b710987cc3acaa0ce",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/candidate09-SignedView.cs",
+        "bytes": 7119,
+        "lines": 125,
+        "sha256": "1317281c87bdcb725ab0bec34951ee676529793e6c68f96480dddbf5f08a0629",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/client-diagnostic01-manifest.json",
+        "bytes": 58987,
+        "lines": 1141,
+        "sha256": "f8cdf2c4d8c7a40af8136f29692edde6379bf9d072dc91300945bb201323eab0",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/current-worker-summary.txt",
+        "bytes": 82964,
+        "lines": 1164,
+        "sha256": "47c8b1ed117cf23720d1e48f58b25ea9395d6e996c658bc08420465eccec2b29",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/diagnostic01-Main.cs",
+        "bytes": 35509,
+        "lines": 516,
+        "sha256": "acf50954f98ef5e95694050f627232393a612970284bf6c93c3f347c1dcfd086",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/diagnostic01-SignedView.cs",
+        "bytes": 7226,
+        "lines": 125,
+        "sha256": "93fcbeccbc2ed1ab9188ff28585b2172aa153131602b86a9e9581252af0bcadc",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/diagnostic01-vs-HEAD.patch",
+        "bytes": 19524,
+        "lines": 280,
+        "sha256": "873d4965c5c9aab19fd1aaa9340dfe86c7c92c1b03558e1c5cef31d773f55ad9",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/inbox-before-freeze.json",
+        "bytes": 34408,
+        "lines": 14,
+        "sha256": "b7981ecd76517ed3158dde2a10108b1f860d0c6accfd4af43e54f4ecb128250a",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/initial-git-diff.receipt.json",
+        "bytes": 166,
+        "lines": 10,
+        "sha256": "af957b93bde8dc10498207c1d1116586741adc992ed89005f39101507f712566",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/initial-git-diff.txt",
+        "bytes": 73636,
+        "lines": 1000,
+        "sha256": "8d759963b1100714e6f1301175324168bab40bdb3125a02f8b5604cefeab4370",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/initial-git-status.receipt.json",
+        "bytes": 175,
+        "lines": 10,
+        "sha256": "b7457cf3c6f8fa3df3dd3e440506b306a829e38b022ae632039689bc0ace43cb",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/initial-git-status.txt",
+        "bytes": 92698,
+        "lines": 1320,
+        "sha256": "e78052d462d49828a5c8a2f15d9968b91e84e61e42061cd7e5212fe0a5541340",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/initial-preservation.json",
+        "bytes": 139,
+        "lines": 8,
+        "sha256": "32d9221e0dbf5978a282aa6f8b9489ed2eb7f4426c08cfbf3648689bb03fbef6",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/link-receipt.json",
+        "bytes": 244,
+        "lines": 11,
+        "sha256": "95b1ae9b3e38465fb9302dc854232729d5b83f6f2e70a5fb7b8e6fbd2de0ccaf",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/link.json",
+        "bytes": 503,
+        "lines": 1,
+        "sha256": "97ff28950cea38656db16f3d43f7a3148025e2ddc9975de03f8377dcf4176b07",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/link.stderr",
+        "bytes": 0,
+        "lines": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/local-diagnostic01-drivers/desktop_input.py",
+        "bytes": 2962,
+        "lines": 51,
+        "sha256": "8ae06b2a0f0e6c30b76636b5a0590f48370c66ba7f256c70e15426d279f18d26",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/local-diagnostic01-drivers/local-diagnostic.py",
+        "bytes": 7508,
+        "lines": 111,
+        "sha256": "b789342b158f14a4d834d2d3b358c46ef558926ea48b5de3815fffe02da9c178",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/physics-baseline03-drivers/desktop_input.py",
+        "bytes": 2962,
+        "lines": 51,
+        "sha256": "8ae06b2a0f0e6c30b76636b5a0590f48370c66ba7f256c70e15426d279f18d26",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/physics-baseline03-drivers/physics-campaign.py",
+        "bytes": 7098,
+        "lines": 94,
+        "sha256": "bb4510a1cc88479841c8d5e4a6b68a8f4530f831bad48daa503225772474cfe1",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/physics-baseline03-server-godot_m3b_fixture.erl",
+        "bytes": 10595,
+        "lines": 153,
+        "sha256": "c895246b8d4df73560cc042b0ff459b4f33bb46a8870aa52bc4330c3817db769",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/physics-baseline03-server-godot_m3b_physics_fixture.erl",
+        "bytes": 7475,
+        "lines": 112,
+        "sha256": "06b764596bf6aaa4e58549a21d56ae10b56f60f9891d38e4ef8c74601da7392d",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/physics-baseline03-server-serve.py",
+        "bytes": 7120,
+        "lines": 109,
+        "sha256": "ab6fdbf910f6cec480daacfa1da38ae61ca792b85b35e32ddddb8975be08b5ca",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/physics-diagnostic01-drivers/desktop_input.py",
+        "bytes": 2962,
+        "lines": 51,
+        "sha256": "8ae06b2a0f0e6c30b76636b5a0590f48370c66ba7f256c70e15426d279f18d26",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/physics-diagnostic01-drivers/physics-campaign.py",
+        "bytes": 7137,
+        "lines": 94,
+        "sha256": "e4627451ca59f2fa79adde1a46f4717b7d222c002289e96bbcbe8a45e1a0de51",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/physics-diagnostic01-server-godot_m3b_fixture.erl",
+        "bytes": 10595,
+        "lines": 153,
+        "sha256": "c895246b8d4df73560cc042b0ff459b4f33bb46a8870aa52bc4330c3817db769",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/physics-diagnostic01-server-godot_m3b_physics_fixture.erl",
+        "bytes": 7475,
+        "lines": 112,
+        "sha256": "06b764596bf6aaa4e58549a21d56ae10b56f60f9891d38e4ef8c74601da7392d",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/physics-diagnostic01-server-serve.py",
+        "bytes": 7120,
+        "lines": 109,
+        "sha256": "ab6fdbf910f6cec480daacfa1da38ae61ca792b85b35e32ddddb8975be08b5ca",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/physics-diagnostic02-drivers/desktop_input.py",
+        "bytes": 2962,
+        "lines": 51,
+        "sha256": "8ae06b2a0f0e6c30b76636b5a0590f48370c66ba7f256c70e15426d279f18d26",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/physics-diagnostic02-drivers/physics-campaign.py",
+        "bytes": 7137,
+        "lines": 94,
+        "sha256": "e4627451ca59f2fa79adde1a46f4717b7d222c002289e96bbcbe8a45e1a0de51",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/physics-diagnostic02-server-godot_m3b_fixture.erl",
+        "bytes": 10595,
+        "lines": 153,
+        "sha256": "c895246b8d4df73560cc042b0ff459b4f33bb46a8870aa52bc4330c3817db769",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/physics-diagnostic02-server-godot_m3b_physics_fixture.erl",
+        "bytes": 7475,
+        "lines": 112,
+        "sha256": "06b764596bf6aaa4e58549a21d56ae10b56f60f9891d38e4ef8c74601da7392d",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/physics-diagnostic02-server-serve.py",
+        "bytes": 7120,
+        "lines": 109,
+        "sha256": "ab6fdbf910f6cec480daacfa1da38ae61ca792b85b35e32ddddb8975be08b5ca",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/radar-receipt.json",
+        "bytes": 233,
+        "lines": 11,
+        "sha256": "879e8a26aa4abc00a93827a16876cce09ea92206c58c0facfb269d187a9ed63c",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/radar-sandbox-failure.json",
+        "bytes": 715,
+        "lines": 6,
+        "sha256": "9dde3112cef7de75baac84cb028e15846ed8116f2e9175951abd8b28f0fbfb6b",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/radar.json",
+        "bytes": 539,
+        "lines": 1,
+        "sha256": "79ba24d7d2df8c8a782921916857da6ddad52919519f51afda02f3e0144c5485",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/radar.stderr",
+        "bytes": 0,
+        "lines": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/server-physics-baseline03-server.json",
+        "bytes": 17711,
+        "lines": 224,
+        "sha256": "72f9f14acdfa4eb0a13370423330b5855a3e0d908e958d83ffd8040bf8b5f3dd",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/server-physics-diagnostic01-server.json",
+        "bytes": 17725,
+        "lines": 224,
+        "sha256": "1218e25197d23224c425ff126fd49c0a42db0654ce61c7f9a3cc2cecda6b27ae",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/server-physics-diagnostic02-server.json",
+        "bytes": 17723,
+        "lines": 224,
+        "sha256": "eb90e93dd27c64352a1bde35f949bd62a98e0a84c9fc33d76775db2f1fcd92b3",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/inputs/session-identity.json",
+        "bytes": 583,
+        "lines": 13,
+        "sha256": "0c9ed80237d75225cf700f5e0888449817da40229b87b6b97f3816ff48bbb0b0",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/local-diagnostic.py",
+        "bytes": 7508,
+        "lines": 111,
+        "sha256": "b789342b158f14a4d834d2d3b358c46ef558926ea48b5de3815fffe02da9c178",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/local-diagnostic01/backup-cancel.log",
+        "bytes": 8437,
+        "lines": 35,
+        "sha256": "6f29794e9ea030cb0a576fb9e5dcfdd4992c4faf091689238c9d95bd46f07cff",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/local-diagnostic01/native-input.json",
+        "bytes": 468,
+        "lines": 28,
+        "sha256": "5cdbc5433d174d685b18ae535d26de9b8c39d5a8f2c25a1450ac069d0e559b01",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/local-diagnostic01/result.json",
+        "bytes": 569,
+        "lines": 22,
+        "sha256": "7e63d73f0432a414b85b2cfd2b917b304e2d5aead91a90f7d7aa212d68919348",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/logs/local-diagnostic01.json",
+        "bytes": 989,
+        "lines": 25,
+        "sha256": "2f7f82c6b7af980f67961a12f5dd440b801448d1adaca407ac2e459b0bd30b50",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/logs/local-diagnostic01.log",
+        "bytes": 8437,
+        "lines": 35,
+        "sha256": "6f29794e9ea030cb0a576fb9e5dcfdd4992c4faf091689238c9d95bd46f07cff",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/logs/physics-baseline03-server-log.json",
+        "bytes": 655,
+        "lines": 16,
+        "sha256": "1ee8d67071183218128f7bf2e22081dfce4d4a3f9015e7fb6d6c2ae421a57d27",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/logs/physics-baseline03-server-log.log",
+        "bytes": 117,
+        "lines": 1,
+        "sha256": "7b87f95c99f002932197210a3c5cf5078a8740bda759c15ee8b101d7347dca2a",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/logs/physics-baseline03.json",
+        "bytes": 823,
+        "lines": 23,
+        "sha256": "41e3ee4897558b66cc467917c50e2d1558eba46f68d39de34337d9bc8795c370",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/logs/physics-baseline03.log",
+        "bytes": 8437,
+        "lines": 52,
+        "sha256": "c5e26f01f08e5bf540d955488191198acef641eec9f44b55001d4375866aeacb",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/logs/physics-diagnostic01-server-log.json",
+        "bytes": 659,
+        "lines": 16,
+        "sha256": "3024afddcd0d08d1b49e56cebd086689cf5ec0305d159b68103733ac62f5da36",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/logs/physics-diagnostic01-server-log.log",
+        "bytes": 117,
+        "lines": 1,
+        "sha256": "04f37a9275599ce5abf70c493ad9dce70f8ad82d806efff5b978a4ee3b666b28",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/logs/physics-diagnostic01.json",
+        "bytes": 747,
+        "lines": 23,
+        "sha256": "96fc098cee47056b08ac83695dc04603a24155bf74158cbe840190daa463ba81",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/logs/physics-diagnostic01.log",
+        "bytes": 18964,
+        "lines": 209,
+        "sha256": "ec565cab0e75546e6018a380087c5b6b15a591873d6a4f5bbbb48f989db49c28",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/logs/physics-diagnostic02-server-log.json",
+        "bytes": 658,
+        "lines": 16,
+        "sha256": "88496cc22f36745f0baeb521969942d8a03020311beb8dfe43d75cf9d69bbcca",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/logs/physics-diagnostic02-server-log.log",
+        "bytes": 117,
+        "lines": 1,
+        "sha256": "2ea10c84087c49ae41566e8afc616d22544fdbe03410ce736e2b32c315588bd4",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/logs/physics-diagnostic02.json",
+        "bytes": 748,
+        "lines": 23,
+        "sha256": "ece3361a6c754bc875b61445208ed380c15ab014b4fbd49fc69aad93d2ef561b",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/logs/physics-diagnostic02.log",
+        "bytes": 18963,
+        "lines": 209,
+        "sha256": "4f23e7fc969059dfee549cbcb5ae04a2e3664bc9bd0b0b2c7721df32ed9774b8",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/logs/r1-client-diagnostic02.json",
+        "bytes": 609,
+        "lines": 17,
+        "sha256": "44a334b7349a942c99f29d9404250891f3d65d77b173144c14d1785976a92460",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/logs/r1-client-diagnostic02.log",
+        "bytes": 1838,
+        "lines": 8,
+        "sha256": "9a0d1198c8bbaed7ff8b5a6ba9b8cf0beccfc6a970e4a809dc0c593f3184dfd9",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/physics-baseline03/campaign.json",
+        "bytes": 2101,
+        "lines": 75,
+        "sha256": "798b6d6b585f75b8907ce28513a4066e6415d452668c3e6e829c9bf14bccb48f",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/physics-baseline03/client-result.json",
+        "bytes": 17226,
+        "lines": 1,
+        "sha256": "5d2f60034cab9cbfd226e60fb0de156b07a878164a6b6c1ac4c702dd98d61ca3",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/physics-baseline03/client-result.json.renewals.json",
+        "bytes": 466,
+        "lines": 1,
+        "sha256": "7e7a4a4e7acd143f228518cf23b557b6b65b1013513256061050d8644c85c7a0",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/physics-baseline03/client.log",
+        "bytes": 5944,
+        "lines": 49,
+        "sha256": "37fa2fd2483b79bd3a19b906835b6a8a96e1dcc0d163e658f6a3af2027718e3f",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/physics-baseline03/physics.png",
+        "bytes": 5492,
+        "lines": 32,
+        "sha256": "3d9f9913746fe3618fe068dfe83ed9df4e49259117cb34e858f3931fdc03eefc",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/physics-campaign.py",
+        "bytes": 7098,
+        "lines": 94,
+        "sha256": "bb4510a1cc88479841c8d5e4a6b68a8f4530f831bad48daa503225772474cfe1",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/physics-diagnostic01/campaign.json",
+        "bytes": 2058,
+        "lines": 75,
+        "sha256": "8f321bfe203ef9c1c28c8f1db65c9c582c8e8ba8c583928c638ddcd3621b7e52",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/physics-diagnostic01/client-result.json",
+        "bytes": 17275,
+        "lines": 1,
+        "sha256": "012dee182ed09221ca409978f1a3b542cc576d6e46d4ab741366585984f8ef87",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/physics-diagnostic01/client-result.json.renewals.json",
+        "bytes": 466,
+        "lines": 1,
+        "sha256": "7e7a4a4e7acd143f228518cf23b557b6b65b1013513256061050d8644c85c7a0",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/physics-diagnostic01/client.log",
+        "bytes": 16512,
+        "lines": 206,
+        "sha256": "948008ff133d47105bac25cb4f08345732c8890419251ffeab31249aeca0f02a",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/physics-diagnostic01/physics.png",
+        "bytes": 5102,
+        "lines": 26,
+        "sha256": "f95ba67382365115ac48e6cd4fcf210fde6d5059ac3cd977a6ad8c61ff6163a6",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/physics-diagnostic02/campaign.json",
+        "bytes": 2058,
+        "lines": 75,
+        "sha256": "9bc6344c0156093b481c916ea3f127ea3462e765646ff02e9d91428ac9758ecb",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/physics-diagnostic02/client-result.json",
+        "bytes": 17098,
+        "lines": 1,
+        "sha256": "454fa0508fa4e1cd8abce211e7d166051ea83d408852505236b4aa4b007b4488",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/physics-diagnostic02/client-result.json.renewals.json",
+        "bytes": 466,
+        "lines": 1,
+        "sha256": "7e7a4a4e7acd143f228518cf23b557b6b65b1013513256061050d8644c85c7a0",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/physics-diagnostic02/client.log",
+        "bytes": 16512,
+        "lines": 206,
+        "sha256": "e9e152a2e2fdf5893d97a9ff48af4faa08443d4a17726a23960dc14eb371b4fa",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/physics-diagnostic02/physics.png",
+        "bytes": 5102,
+        "lines": 26,
+        "sha256": "f95ba67382365115ac48e6cd4fcf210fde6d5059ac3cd977a6ad8c61ff6163a6",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/qualification.json",
+        "bytes": 18931,
+        "lines": 700,
+        "sha256": "25b1417e7647510344a66d7e339e9c6fc3d9094b9b8a4daef520708e5bbd8185",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/run.py",
+        "bytes": 2715,
+        "lines": 62,
+        "sha256": "c73397dfb75d9ebe141246e86f773e0918cd3ca83893a1c3bfd4e0f938f944af",
+        "mode": 420
+      },
+      {
+        "path": "doc/evidence/godot-m4-r1-20261029/serve.py",
+        "bytes": 7120,
+        "lines": 109,
+        "sha256": "ab6fdbf910f6cec480daacfa1da38ae61ca792b85b35e32ddddb8975be08b5ca",
+        "mode": 420
+      }
+    ],
+    "r1-handoff": [
+      {
+        "path": "nimbalyst-local/handoffs/godot-m4-r1-result.md",
+        "bytes": 8952,
+        "lines": 143,
+        "sha256": "c2c9c449a2d88018a9b1500f1e3eca0fd4cac4b219aa35ce8f4aa5c2953ea009",
+        "mode": 420
+      }
+    ]
+  }
+}

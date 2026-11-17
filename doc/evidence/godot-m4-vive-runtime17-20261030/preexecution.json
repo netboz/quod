@@ -1,0 +1,25 @@
+{
+  "passed": true,
+  "case_label": "native-vive-product17",
+  "runtime_started": false,
+  "lease_requested": false,
+  "payload_manifest_sha256": "9073b314599bd64531792acd63cbcd2e21ef54b73a41b25cd041260a4433fb08",
+  "payload_outputs": 196,
+  "payload_strict_cache_reused": true,
+  "qualified_server_stage": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/server-runtime-restoration05",
+  "qualified_closure_reused": "accepted73:34apps/944modules/250priv; not rerun",
+  "other_runtime_app_conflicts": false,
+  "provider_command": [
+    "/data/quod-m4-vr-ca84d4f8-20261029/builds/display-inventory02/display-inventory",
+    "/dev/dri/card1"
+  ],
+  "provider_true_child_exit": 0,
+  "provider_complete": true,
+  "hdmi_offer": true,
+  "connector828_offered": true,
+  "provider_stdout_sha256": "b55252c9e08c72af18b107abf136be8e0dbe7ca9e4bc89473d1c228f1eacf3f4",
+  "provider_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "hdmi_restored_disabled": true,
+  "other_displays_unchanged": true,
+  "config_unchanged": true
+}

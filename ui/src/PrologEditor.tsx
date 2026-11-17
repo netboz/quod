@@ -33,10 +33,12 @@ export function PrologEditor(props: EditorProps) {
   const { identity, agent } = useSignedSession()
   const scope = JSON.stringify([identity && b64url(identity.networkId), identity && b64url(identity.provider.publicKey),
     agent?.namespace, String(agent?.anchor ?? ''), agent?.instanceText, props.workspace.target, props.workspace.tools])
-  return <ScopedEditor key={scope} storageKey={`quod.prolog-draft.v1:${scope}`} {...props} />
+  return <ScopedEditor key={`${scope}:${props.workspace.selection ? formatTerm(props.workspace.selection) : 'all'}`} storageKey={`quod.prolog-draft.v1:${scope}`} {...props} />
 }
 
 function ScopedEditor({ workspace, onClose, onRefresh, scene, visible, storageKey }: EditorProps & { storageKey: string }) {
+  const binding = workspace.selection && formatTerm(workspace.selection) !== 'all' ? formatTerm(workspace.selection) : ''
+  const [bindingAvailable, setBindingAvailable] = useState(!binding)
   const [savedLocal] = useState(() => {
     try {
       const raw = localStorage.getItem(storageKey)
@@ -51,10 +53,10 @@ function ScopedEditor({ workspace, onClose, onRefresh, scene, visible, storageKe
   const { identity, agent } = useSignedSession()
   const view = codeForm(workspace.view)
   const [refreshFailed, setRefreshFailed] = useState(false)
-  const editable = view.editable && !refreshFailed
+  const editable = view.editable && !refreshFailed && bindingAvailable
   const proof = useProofCursor(agent?.namespace ?? '', String(agent?.anchor ?? ''), JSON.stringify(['prolog', workspace.target]))
   const [predicates, setPredicates] = useState<PrologTerm[]>([])
-  const [selected, setSelected] = useState(savedLocal.selected)
+  const [selected, setSelected] = useState(binding || savedLocal.selected)
   const [newPredicate, setNewPredicate] = useState('')
   const [layout, setLayout] = useState<'text' | 'cards'>('text')
   const [cardIndex, setCardIndex] = useState(0)
@@ -68,7 +70,7 @@ function ScopedEditor({ workspace, onClose, onRefresh, scene, visible, storageKe
   const pending = useRef(false)
   const submitted = useRef<{ indicator: string; source: string } | null>(null)
   const indicator = predicates.find(predicate => formatTerm(predicate) === selected)
-  const draft = drafts[selected]
+  const draft = bindingAvailable ? drafts[selected] : undefined
   const selection = selected ? indicator : null
   const locked = loading || refreshing || proof.busy || proof.cursor !== null || proof.pendingOperation !== null
 
@@ -105,15 +107,18 @@ function ScopedEditor({ workspace, onClose, onRefresh, scene, visible, storageKe
     refreshSavedDrafts()
     if (identity && agent) {
       void readCodePredicates(identity, agent, workspace).then(items => {
-        if (current) setPredicates(previous => mergePredicates(items, previous))
-      }).catch(reason => { if (current) setError(editError(reason)) })
+        if (current) {
+          setBindingAvailable(true)
+          setPredicates(previous => mergePredicates(items, previous))
+        }
+      }).catch(reason => { if (current) { setBindingAvailable(false); setError(editError(reason)) } })
     }
     return () => { current = false; live.current = false }
   }, [identity, agent, workspace])
 
   useEffect(() => {
     const controller = new AbortController()
-    if (identity && agent && !draft && (!selected || indicator)) {
+    if (identity && agent && bindingAvailable && !draft && (!selected || indicator)) {
       setLoading(true)
       const read = indicator ? readCodeSource(identity, agent, workspace, indicator)
         : readCodeState(identity, agent, workspace, controller.signal)
@@ -123,7 +128,7 @@ function ScopedEditor({ workspace, onClose, onRefresh, scene, visible, storageKe
         .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     }
     return () => controller.abort()
-  }, [identity, agent, workspace, indicator, selected, draft])
+  }, [identity, agent, workspace, indicator, selected, draft, bindingAvailable])
 
   const refresh = async () => {
     if (locked || refreshingNow.current || pending.current || !proof.canEdit()) return
@@ -161,7 +166,7 @@ function ScopedEditor({ workspace, onClose, onRefresh, scene, visible, storageKe
       const indicator = saved.indicator
       const source = saved.source
       const baseline = saved.baseline
-      setSelected(indicator)
+      if (!binding || binding === indicator) setSelected(indicator)
       if (indicator) setPredicates(previous => mergePredicates(previous, [predicateIndicator(indicator)]))
       setDrafts(previous => ({ ...previous, [indicator]: { source, baseline } }))
       submitted.current = { indicator, source }
@@ -232,6 +237,7 @@ function ScopedEditor({ workspace, onClose, onRefresh, scene, visible, storageKe
     if (action === 'move_down') setCardIndex(Math.min(draft.cards.length - 1, cardIndex + 1))
   }
   const createPredicate = () => {
+    if (binding) return;
     if (!editable || locked || !proof.canEdit()) return
     try {
       const indicator = predicateIndicator(newPredicate)
@@ -248,12 +254,12 @@ function ScopedEditor({ workspace, onClose, onRefresh, scene, visible, storageKe
   }
   const edit = (role: string, value: string) => {
     if (pending.current || !proof.canEdit() || loading) return
-    if (role === 'predicate') { setSelected(value); setLayout('text'); setCardIndex(0); return }
+    if (role === 'predicate') { if (binding) return; setSelected(value); setLayout('text'); setCardIndex(0); return }
     if (!editable) return
     if (role === 'layout') void changeLayout(value)
     if (role === 'clause') setCardIndex(Number(value))
     if (role === 'head' || role === 'body') changeCards(role, value)
-    if (role === 'new_predicate') setNewPredicate(value)
+    if (role === 'new_predicate' && !binding) setNewPredicate(value)
     if (role === 'source' && draft) setDrafts(previous => ({ ...previous, [selected]: { baseline: draft.baseline, source: value } }))
   }
   const cards = draft?.cards ?? []
@@ -285,7 +291,7 @@ function ScopedEditor({ workspace, onClose, onRefresh, scene, visible, storageKe
       locked,
       enabled: { run: editable && !locked && !!draft, accept: editable && !proof.busy && !!proof.cursor,
         stop: editable && !proof.busy && !!proof.cursor,
-        create: editable && !locked && !!newPredicate.trim(), resolve: editable && !proof.busy && !!proof.pendingOperation,
+        create: editable && !binding && !locked && !!newPredicate.trim(), resolve: editable && !proof.busy && !!proof.pendingOperation,
         add_clause: editable && !locked, remove_clause: editable && !locked && !!card,
         move_up: editable && !locked && cardIndex > 0,
         move_down: editable && !locked && cardIndex + 1 < cards.length },
@@ -308,13 +314,13 @@ function ScopedEditor({ workspace, onClose, onRefresh, scene, visible, storageKe
     <button disabled={locked} onClick={() => void refresh()}>{refreshing ? 'Refreshing…' : 'Refresh current state'}</button>
     <p className="text-sm">Refresh reloads saved contents and access. Unsaved edits keep their original baseline.</p>
     {draft && draft.source !== draft.baseline && <button disabled={locked} onClick={() => void discardDraft()}>Discard draft and reload</button>}
-    <label>{view.predicate} <select value={selected} disabled={locked} onChange={event => edit('predicate', event.target.value)}>
+    <label>{view.predicate} <select value={selected} disabled={locked || !!binding} onChange={event => edit('predicate', event.target.value)}>
       <option value="">Complete current state</option>
       {predicates.map(predicate => { const name = formatTerm(predicate); return <option key={name} value={name}>{name}</option> })}
     </select></label>
     {editable && <><label>{view.new_predicate} <input aria-label={view.new_predicate} value={newPredicate} disabled={locked}
       onChange={event => edit('new_predicate', event.target.value)} />
-      <button disabled={locked || !newPredicate.trim()} onClick={createPredicate}>{view.create}</button></label>
+      <button disabled={locked || !!binding || !newPredicate.trim()} onClick={createPredicate}>{view.create}</button></label>
     <label>Code layout <select aria-label="Code layout" value={layout} disabled={locked || !draft || !selected}
       onChange={event => void changeLayout(event.target.value)}><option value="text">Text</option><option value="cards">Clause cards</option></select></label></>}
     {layout === 'text' ? <PrologText label={view.source} value={draft?.source ?? ''}

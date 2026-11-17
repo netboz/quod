@@ -103,7 +103,6 @@ function validRow(row) {
     typeof row.network === 'string' && row.network.length === 43 &&
     validAgent(row.agent) &&
     typeof row.request === 'string' &&
-    row.request.length <= SIGNED_GOAL_LIMITS.requestBase64urlChars &&
     typeof row.signature === 'string' && row.signature.length === 86 &&
     Number.isSafeInteger(row.created_at_ms) && row.created_at_ms > 0 &&
     (row.instruction === undefined ||
@@ -122,6 +121,5 @@ function validAgent(agent) {
   return agent && typeof agent.namespace === 'string' && agent.namespace.length > 0 &&
     utf8ByteLength(agent.namespace) <= SIGNED_GOAL_LIMITS.namespaceBytes &&
     typeof agent.anchor === 'string' && agent.anchor.length === 43 &&
-    typeof agent.instance_text === 'string' && agent.instance_text.length > 0 &&
-    utf8ByteLength(agent.instance_text) <= SIGNED_GOAL_LIMITS.agentInstanceTextBytes
+    typeof agent.instance_text === 'string' && agent.instance_text.length > 0
 }

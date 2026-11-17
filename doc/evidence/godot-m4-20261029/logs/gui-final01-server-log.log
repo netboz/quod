@@ -1,0 +1,5 @@
+M1B_READY {"port":39729,"network":"nfv7lxCNZPnkXGsH5hAqdz64ZzOPp4Y4jN7rAr-6fcM","control_port":38331,"ca":"/m1b/backend-ca.pem"}
+=WARNING REPORT==== 29-Oct-2026::04:15:00.845130 ===
+quod_prolog[human:9KrS2GnlQiymShpDu1s7QZ18LHoGI8TpiSVJf_3kMmg]: can_invoke refused a top-level goal at pinned height 36
+=WARNING REPORT==== 29-Oct-2026::04:15:10.357655 ===
+quod_prolog[human:9KrS2GnlQiymShpDu1s7QZ18LHoGI8TpiSVJf_3kMmg]: can_invoke refused a top-level goal at pinned height 36

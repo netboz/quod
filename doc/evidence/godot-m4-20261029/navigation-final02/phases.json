@@ -1,0 +1,134 @@
+[
+  {
+    "phase": "m3-fresh",
+    "command": [
+      "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-final02/source/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/navigation-final02/identity",
+      "--node",
+      "https://127.0.0.1:38151",
+      "--ca",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/navigation-final02/proxy-ca.pem"
+    ],
+    "child_exit": -9,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "elapsed_seconds": 23.717716733997804,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "m3-created",
+    "command": [
+      "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-final02/source/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/navigation-final02/identity",
+      "--node",
+      "https://127.0.0.1:38151",
+      "--ca",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/navigation-final02/proxy-ca.pem"
+    ],
+    "child_exit": -9,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "elapsed_seconds": 19.934196339003392,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "m3-entered",
+    "command": [
+      "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-final02/source/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/navigation-final02/identity",
+      "--node",
+      "https://127.0.0.1:38151",
+      "--ca",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/navigation-final02/proxy-ca.pem"
+    ],
+    "child_exit": -9,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "elapsed_seconds": 36.88643068900274,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "m3-left",
+    "command": [
+      "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-final02/source/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/navigation-final02/identity",
+      "--node",
+      "https://127.0.0.1:38151",
+      "--ca",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/navigation-final02/proxy-ca.pem"
+    ],
+    "child_exit": 0,
+    "expected_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "elapsed_seconds": 24.641135459998623,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "m3-final",
+    "command": [
+      "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-final02/source/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/navigation-final02/identity",
+      "--node",
+      "https://127.0.0.1:38151",
+      "--ca",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/navigation-final02/proxy-ca.pem"
+    ],
+    "child_exit": 0,
+    "expected_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "elapsed_seconds": 23.923652340003173,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "m3-negative-recovered",
+    "command": [
+      "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-final02/source/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/navigation-final02/identity",
+      "--node",
+      "https://127.0.0.1:38151",
+      "--ca",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/navigation-final02/proxy-ca.pem"
+    ],
+    "child_exit": 0,
+    "expected_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "elapsed_seconds": 19.815731311995478,
+    "godot_error_diagnostics": false,
+    "passed": true
+  }
+]

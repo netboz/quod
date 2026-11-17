@@ -1,0 +1,18 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-m4-r2-20261029/retain-runtime-inputs.py",
+    "--owned-client-pid",
+    "845550"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T11:02:19Z",
+  "elapsed_seconds": 17.890624284744263,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m4-r2-artifacts/private/logs/runtime-retain-observed-inputs.log",
+  "raw_sha256": "2f7492fcae505ac483516e821694bd016393cf7373612f70c1a8ded579b4c668",
+  "sanitized_sha256": "2f7492fcae505ac483516e821694bd016393cf7373612f70c1a8ded579b4c668",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

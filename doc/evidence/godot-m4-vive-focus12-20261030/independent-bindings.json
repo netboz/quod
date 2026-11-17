@@ -1,0 +1,14 @@
+{
+  "case12": {
+    "path": "_build/godot-m4-r2-coordinator-20261029/case12-closure-check-89-corrected.json",
+    "sha256": "ac1739c2fa948aefbfbee6f2b10efb7621684cc314fc98d03b5256ee6c163530",
+    "scope": "Independent completed new case/observer/privacy/resource/actual-cancel evidence; no product rerun or full M4."
+  },
+  "cache": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/cache/coordinator-case12-89-corrected-hashes.json",
+    "sha256": "b47627c3d3bd664b2776ff6eeac8a29d8580bf77d7bcc0e31b0db077f2573993",
+    "actual_records": 175,
+    "not_required_for_another_api_read": true
+  },
+  "consultation": "Coordinator reports a separate explicitly authorized read-only Fable consultation. This worker did not launch a review/model/session or await its advice; no case13 authority or product change supplied here."
+}

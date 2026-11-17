@@ -1,0 +1,182 @@
+include/quod_proof_limits.hrl:29:-define(QUOD_MAX_DTX_BODY_BYTES, (?MAX_BLOCK_BYTES - (32 * 1024))).
+include/quod_proof_limits.hrl:35:        (?MAX_BLOCK_BYTES - ?QUOD_DTX_BATCH_PAYLOAD_OVERHEAD_BYTES)).
+include/quod_proof_limits.hrl:48:        ?QUOD_MAX_FOREIGN_PAGE_BYTES).
+include/quod_proof_limits.hrl:61:         ?QUOD_MAX_TOPLEVEL_GOAL_BYTES +
+include/quod_client_goal_limits.hrl:9:-define(QUOD_CLIENT_GOAL_TEXT_BYTES, ?QUOD_MAX_TOPLEVEL_GOAL_BYTES).
+include/quod_client_goal_limits.hrl:10:-define(QUOD_CLIENT_AGENT_INSTANCE_TEXT_BYTES, ?QUOD_MAX_TOPLEVEL_GOAL_BYTES).
+include/quod_client_goal_limits.hrl:11:-define(QUOD_CLIENT_GOAL_MAX_TOKENS, 2048).
+include/quod_client_goal_limits.hrl:12:-define(QUOD_CLIENT_GOAL_MAX_NUMBER_CHARS, 1024).
+include/quod_client_goal_limits.hrl:13:-define(QUOD_CLIENT_GOAL_MAX_SYMBOL_BYTES, 1024).
+include/quod_client_goal_limits.hrl:26:-define(QUOD_CLIENT_GOAL_REQUEST_BYTES,
+include/quod_ingress_limits.hrl:11:-define(QUOD_MAX_TOPLEVEL_GOAL_BYTES, (128 * 1024)).
+include/quod_ingress_limits.hrl:13:-define(MAX_VALIDATORS, 64).
+include/quod_ingress_limits.hrl:16:-define(QUOD_COMPACT_HISTORY_OVERHEAD_BYTES, (?MAX_VALIDATORS * 108 + 1024)).
+include/quod_ingress_limits.hrl:17:-define(MAX_BLOCK_BYTES,
+include/quod_ingress_limits.hrl:18:        min((?QUOD_TRANSPORT_MAX_FRAME_BYTES - ?QUOD_MAX_TOPLEVEL_GOAL_BYTES -
+include/quod_ingress_limits.hrl:20:            (?QUOD_MAX_FOREIGN_PAGE_BYTES - ?QUOD_COMPACT_HISTORY_OVERHEAD_BYTES) div 2)).
+include/quod_ingress_limits.hrl:23:-define(MAX_INGRESS_TXS, 512).
+include/quod_ingress_limits.hrl:28:        (?MAX_BLOCK_BYTES + 128 + 3 * (5 + 32) + 2)).
+include/quod_ingress_limits.hrl:34:        (?MAX_BLOCK_BYTES - 128 - ?BATCH_ENVELOPE_BYTES)).
+include/quod_transport_limits.hrl:6:-define(QUOD_TRANSPORT_MAX_FRAME_BYTES, (1 bsl 20)).
+include/quod_transport_limits.hrl:8:-define(QUOD_MAX_FOREIGN_PAGE_BYTES, (900 * 1024)).
+src/quod_durable_term.erl:27:    encode(goal, Goal, ?QUOD_MAX_TOPLEVEL_GOAL_BYTES).
+src/quod_durable_term.erl:32:    decode(goal, Blob, ?QUOD_MAX_TOPLEVEL_GOAL_BYTES).
+src/quod_client_http.erl:25:        ((((?QUOD_CLIENT_GOAL_REQUEST_BYTES + 2) div 3) * 4) + 1024 +
+src/quod_client_http.erl:274:    case {decode_b64url_bounded(Request64, ?QUOD_CLIENT_GOAL_REQUEST_BYTES),
+src/quod_dtx.erl:736:    case {byte_size(Goal) =< ?QUOD_MAX_TOPLEVEL_GOAL_BYTES,
+src/quod_dtx.erl:1157:       is_binary(Goal), byte_size(Goal) =< ?QUOD_MAX_TOPLEVEL_GOAL_BYTES,
+src/quod_scope_wire.erl:43:-if(?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES >= ?QUOD_TRANSPORT_MAX_FRAME_BYTES).
+src/quod_scope_wire.erl:150:       byte_size(RequestBytes) =< ?QUOD_CLIENT_GOAL_REQUEST_BYTES ->
+src/quod_signing_journal.erl:63:             ?PENDING_WRAPPER_BYTES), (?MAX_BLOCK_BYTES + 4096))).
+src/quod_signing_journal.erl:531:       is_binary(Body), byte_size(Body) =< ?MAX_BLOCK_BYTES ->
+src/quod_signing_journal.erl:545:       is_binary(Body), byte_size(Body) =< ?MAX_BLOCK_BYTES,
+src/quod_signing_journal.erl:546:       is_binary(Envelope), byte_size(Envelope) =< (?MAX_BLOCK_BYTES + 1024) ->
+src/quod_signing_journal.erl:952:       is_map(Live), map_size(Live) =< ?MAX_VALIDATORS,
+src/quod_signing_journal.erl:953:       is_map(Admissions), map_size(Admissions) =< ?MAX_VALIDATORS,
+src/quod_link.erl:750:parse_one(<<PLen:32, _/binary>>) when PLen > ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
+src/quod_link.erl:758:  when PLen > ?QUOD_TRANSPORT_MAX_FRAME_BYTES -> {error, oversized};
+src/quod_simplex.erl:7067:       length(Committee) =< ?MAX_VALIDATORS ->
+src/quod_simplex.erl:9418:            byte_size(encode(Ns, {propose, Block, Required})) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES
+src/quod_simplex.erl:9550:        {error, _} -> ?MAX_BLOCK_BYTES + 1
+src/quod_simplex.erl:10632:        {ok, Bytes} -> Bytes =< ?MAX_BLOCK_BYTES;
+src/quod_simplex.erl:12765:        andalso length(Adds) =< ?MAX_VALIDATORS
+src/quod_simplex.erl:12926:            Next =/= [] andalso length(Next) =< ?MAX_VALIDATORS
+src/quod_simplex.erl:13384:    case byte_size(Frame) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES of
+src/quod_simplex.erl:15417:                    case Count =< ?MAX_VALIDATORS of
+src/quod_dtx_coordinator.erl:2673:                                length(Committee) =< ?MAX_VALIDATORS ->
+src/quod_dtx_coordinator.erl:2682:  when is_map(Routes), map_size(Routes) =< ?MAX_VALIDATORS ->
+src/quod_ingress_state.erl:50:-define(MAX_INGRESS_BYTES, (2 * ?MAX_BLOCK_BYTES)).
+src/quod_ingress_state.erl:169:            {error, _} -> ?MAX_BLOCK_BYTES + 1
+src/quod_ingress_state.erl:242:    case Count >= ?MAX_INGRESS_TXS
+src/quod_ingress_state.erl:556:                        Bytes + SignedBytes =< ?MAX_BLOCK_BYTES
+src/quod_ingress_state.erl:560:    Bytes > ?MAX_BLOCK_BYTES.
+src/quod_client_goal_parser.erl:378:  when Count >= ?QUOD_CLIENT_GOAL_MAX_TOKENS ->
+src/quod_client_goal_parser.erl:421:    case byte_size(Name) =< ?QUOD_CLIENT_GOAL_MAX_SYMBOL_BYTES of
+src/quod_client_goal_parser.erl:437:            case byte_size(Name) =< ?QUOD_CLIENT_GOAL_MAX_SYMBOL_BYTES of
+src/quod_client_goal_parser.erl:490:            case byte_size(Name) =< ?QUOD_CLIENT_GOAL_MAX_SYMBOL_BYTES of
+src/quod_client_goal_parser.erl:559:            case length(Digits) =< ?QUOD_CLIENT_GOAL_MAX_NUMBER_CHARS of
+src/quod_client_goal_parser.erl:606:         length(Digits) =< ?QUOD_CLIENT_GOAL_MAX_NUMBER_CHARS of
+src/quod_client_goal_parser.erl:650:  when length(Chars) > ?QUOD_CLIENT_GOAL_MAX_NUMBER_CHARS ->
+test/quod_foreign_log_tests.erl:3392:    Limit = 2 * ?MAX_VALIDATORS,
+test/quod_foreign_log_tests.erl:3410:        ?assert(length(Selected) =< ?MAX_VALIDATORS),
+test/quod_foreign_log_tests.erl:3544:    ?assert(filelib:file_size(CacheLog) > ?QUOD_MAX_FOREIGN_PAGE_BYTES),
+test/quod_foreign_log_tests.erl:3794:          end, lists:seq(1, 2 * ?MAX_VALIDATORS)),
+test/quod_foreign_log_tests.erl:3806:        ?assertEqual(2 * ?MAX_VALIDATORS,
+test/quod_foreign_log_tests.erl:7332:    ?assert(PayloadBytes =< ?MAX_BLOCK_BYTES),
+test/quod_foreign_log_tests.erl:7333:    Signatures = lists:sort([{key(I), <<I:512>>} || I <- lists:seq(1, ?MAX_VALIDATORS)]),
+test/quod_foreign_log_tests.erl:7346:    ?assert(byte_size(Frame) < ?QUOD_MAX_FOREIGN_PAGE_BYTES),
+test/quod_foreign_log_tests.erl:7786:    {ok, Encoded} = quod_safe_term:encode_canonical(Part, ?QUOD_MAX_FOREIGN_PAGE_BYTES),
+test/quod_foreign_log_tests.erl:7789:         Bytes + Size =< ?QUOD_MAX_FOREIGN_PAGE_BYTES of
+test/quod_foreign_log_tests.erl:8160:    largest_payload(Ns, 0, ?MAX_BLOCK_BYTES).
+test/quod_foreign_log_tests.erl:8172:        {ok, Size} when Size =< ?MAX_BLOCK_BYTES ->
+src/quod_ledger.erl:136:                    case {quod_safe_term:encode_canonical(PayloadWire, ?MAX_BLOCK_BYTES),
+src/quod_ledger.erl:190:                   PayloadWire, ?MAX_BLOCK_BYTES) of
+src/quod_ledger.erl:416:           Term, ?QUOD_TRANSPORT_MAX_FRAME_BYTES) of
+src/quod_ledger.erl:464:                       byte_size(Bytes) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
+src/quod_ledger.erl:465:    case {quod_safe_term:validate_canonical(Bytes, ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
+src/quod_ledger.erl:466:          quod_safe_term:decode(Bytes, ?QUOD_TRANSPORT_MAX_FRAME_BYTES)} of
+src/quod_dtx_current_view.erl:979:                                    length(Routes) =< ?MAX_VALIDATORS ->
+src/quod_dtx_current_view.erl:1035:       length(Committee) =< ?MAX_VALIDATORS,
+src/quod_dtx_current_view.erl:1036:       is_map(RouteMap), map_size(RouteMap) =< ?MAX_VALIDATORS ->
+src/quod_dtx_current_view.erl:1070:       length(Committee) =< ?MAX_VALIDATORS,
+src/quod_dtx_current_view.erl:1071:       is_list(Routes), length(Routes) =< ?MAX_VALIDATORS ->
+src/quod_feed.erl:120:       byte_size(Payload) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
+src/quod_feed.erl:139:       byte_size(Payload) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
+src/quod_feed.erl:196:       byte_size(Payload) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
+src/quod_feed.erl:357:  when byte_size(Payload) > ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
+src/quod_feed.erl:851:    case byte_size(Frame) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES of
+src/quod_catchup.erl:52:-define(RESP_BUDGET,     ?QUOD_MAX_FOREIGN_PAGE_BYTES).
+src/quod_catchup.erl:206:                    Term, ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
+src/quod_catchup.erl:209:      ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
+src/quod_catchup.erl:217:       byte_size(Payload) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
+src/quod_catchup.erl:218:    case quod_safe_term:decode_wrapped(Payload, ?QUOD_TRANSPORT_MAX_FRAME_BYTES) of
+src/quod_catchup.erl:221:               byte_size(Bin) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
+src/quod_catchup.erl:223:                   Bin, ?QUOD_TRANSPORT_MAX_FRAME_BYTES) of
+src/quod_client_view.erl:44:     #{max_frame_size => 2 * ?QUOD_CLIENT_GOAL_REQUEST_BYTES + 4096}}.
+src/quod_atomic_admission.erl:53:        false when map_size(ById) >= ?MAX_INGRESS_TXS -> {error, busy};
+src/quod_atomic_admission.erl:245:has_capacity(Id, {ById, _}) -> maps:is_key(Id, ById) orelse map_size(ById) < ?MAX_INGRESS_TXS.
+test/quod_committee_predicates_tests.erl:78:    Members = [<<I:256>> || I <- lists:seq(0, ?MAX_VALIDATORS - 1)],
+test/quod_committee_predicates_tests.erl:91:    Extra = <<?MAX_VALIDATORS:256>>,
+src/quod_agent_ref.erl:52:    case quod_wire_term:decode_canonical(Blob, ?QUOD_MAX_TOPLEVEL_GOAL_BYTES) of
+src/quod_agent_ref.erl:115:                {ok, Blob} when byte_size(Blob) =< ?QUOD_MAX_TOPLEVEL_GOAL_BYTES ->
+test/quod_ledger_artifact_tests.erl:53:        {Tx, Wire, Size} = Make(?MAX_BLOCK_BYTES - Overhead + Extra),
+test/quod_ledger_artifact_tests.erl:54:        ?assertEqual(?MAX_BLOCK_BYTES + Extra, Size),
+src/quod_agent_vault.erl:446:    2 * ?QUOD_CLIENT_GOAL_REQUEST_BYTES + 3 * ?QUOD_MAX_TOPLEVEL_GOAL_BYTES.
+src/quod_client_goal_endpoint.erl:62:                 ?QUOD_TRANSPORT_MAX_FRAME_BYTES of
+src/quod_client_goal_endpoint.erl:83:       byte_size(Envelope) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
+src/quod_client_goal_endpoint.erl:85:           Envelope, ?QUOD_TRANSPORT_MAX_FRAME_BYTES) of
+src/quod_client_goal_endpoint.erl:109:           InnerBlob, ?QUOD_TRANSPORT_MAX_FRAME_BYTES) of
+src/quod_client_goal_endpoint.erl:225:       byte_size(RequestBytes) =< ?QUOD_CLIENT_GOAL_REQUEST_BYTES ->
+src/quod_client_goal_endpoint.erl:234:        byte_size(RequestBytes) =< ?QUOD_CLIENT_GOAL_REQUEST_BYTES.
+test/quod_catchup_verify_tests.erl:55:    Founding = lists:sublist(Pubs, ?MAX_VALIDATORS),
+test/quod_catchup_verify_tests.erl:56:    Extra = lists:nth(?MAX_VALIDATORS + 1, Pubs),
+test/quod_catchup_verify_tests.erl:170:    N = ?MAX_VALIDATORS, C = committee(N), G = genesis(pubs(C)),
+src/quod_foreign_log.erl:99:-define(MAX_CURRENT_ROUTE_HINTS, (2 * ?MAX_VALIDATORS)).
+src/quod_foreign_log.erl:2369:        {ok, Bytes} when byte_size(Bytes) =< ?QUOD_MAX_FOREIGN_PAGE_BYTES -> Entry;
+src/quod_foreign_log.erl:2477:  when is_list(Endpoints0), Count < ?MAX_VALIDATORS ->
+src/quod_foreign_log.erl:2526:               ?MAX_VALIDATORS),
+src/quod_foreign_log.erl:6060:    Reservation = StoredBytes + ?QUOD_MAX_FOREIGN_PAGE_BYTES,
+src/quod_foreign_log.erl:6716:    case byte_size(Blob) =< ?QUOD_MAX_FOREIGN_PAGE_BYTES of
+src/quod_foreign_log.erl:6741:        {ok, Info} when element(2, Info) =< ?QUOD_MAX_FOREIGN_PAGE_BYTES ->
+src/quod_foreign_log.erl:6748:                           Bin, ?QUOD_MAX_FOREIGN_PAGE_BYTES) of
+src/quod_foreign_log.erl:6924:       map_size(Routes) =< ?MAX_VALIDATORS,
+src/quod_foreign_log.erl:6925:       map_size(Admissions) =< ?MAX_VALIDATORS,
+src/quod_foreign_log.erl:6926:       map_size(Sequences) =< ?MAX_VALIDATORS,
+src/quod_foreign_log.erl:6927:       map_size(DtxLanes) =< ?MAX_VALIDATORS ->
+src/quod_foreign_log.erl:7009:bounded_committee([<<_:256>> | Rest], Count) when Count < ?MAX_VALIDATORS ->
+test/quod_client_http_tests.erl:352:                       <<"A">>, ?QUOD_CLIENT_GOAL_REQUEST_BYTES * 2),
+test/quod_ingress_state_tests.erl:232:          goal = binary:copy(<<0>>, ?MAX_BLOCK_BYTES)},
+src/quod_quorum.erl:47:  when Count < ?MAX_VALIDATORS ->
+src/quod_quorum.erl:92:    valid_signature_list(Signatures, ?MAX_VALIDATORS) andalso
+test/quod_quorum_tests.erl:11:    Members = [<<N:256>> || N <- lists:seq(1, ?MAX_VALIDATORS)],
+test/quod_quorum_tests.erl:12:    ?assertEqual({ok, ?MAX_VALIDATORS},
+test/quod_quorum_tests.erl:21:    ?assert(quod_quorum:valid_signature_list(Rows, ?MAX_VALIDATORS)),
+test/quod_quorum_tests.erl:24:         Rows ++ [{<<0:256>>, <<0:512>>}], ?MAX_VALIDATORS)).
+test/quod_quorum_tests.erl:31:    Rows = [{<<N:256>>, <<N:512>>} || N <- lists:seq(1, ?MAX_VALIDATORS)],
+test/quod_atomic_projection_tests.erl:1204:        end, Enroll(First, S0), lists:seq(2, ?MAX_INGRESS_TXS)),
+test/quod_atomic_projection_tests.erl:1205:        ?assertMatch(#{active := ?MAX_INGRESS_TXS, reserved := 0},
+src/quod_agent_identity.erl:29:-define(MAX_WIRE_BYTES, (?QUOD_CLIENT_GOAL_REQUEST_BYTES + 32768)).
+src/quod_agent_identity.erl:102:        quod_quorum:valid_signature_list(Signatures, ?MAX_VALIDATORS) andalso
+src/quod_agent_identity.erl:153:       byte_size(RequestBytes) =< ?QUOD_CLIENT_GOAL_REQUEST_BYTES,
+test/quod_simplex_tests.erl:6124:               [{assert, {{blob, binary:copy(<<1>>, ?MAX_BLOCK_BYTES * 4 div 5)}, true}}],
+test/quod_simplex_tests.erl:6128:           [{assert, {{blob, binary:copy(<<2>>, ?MAX_BLOCK_BYTES div 2)}, true}}],
+test/quod_simplex_tests.erl:6181:               [{assert, {{blob, binary:copy(<<1>>, ?MAX_BLOCK_BYTES * 4 div 5)}, true}}],
+test/quod_simplex_tests.erl:6185:           [{assert, {{blob, binary:copy(<<2>>, ?MAX_BLOCK_BYTES div 2)}, true}}],
+test/quod_simplex_tests.erl:7170:                 {{blob, binary:copy(<<1>>, ?MAX_BLOCK_BYTES div 2)}, true}}]}),
+test/quod_simplex_tests.erl:7174:          [{assert, {{blob, binary:copy(<<2>>, ?MAX_BLOCK_BYTES * 4 div 5)}, true}}],
+test/quod_simplex_tests.erl:8971:    N = ?MAX_VALIDATORS,
+test/quod_simplex_tests.erl:9587:    Current = [<<I:256>> || I <- lists:seq(1, ?MAX_VALIDATORS)],
+test/quod_simplex_tests.erl:9588:    Candidate = <<(?MAX_VALIDATORS + 1):256>>,
+test/quod_simplex_tests.erl:9591:              lists:sublist(Current, ?MAX_VALIDATORS - 1))),
+test/quod_client_goal_endpoint_tests.erl:84:    Oversized = <<0:(?QUOD_TRANSPORT_MAX_FRAME_BYTES + 1)/unit:8>>,
+test/quod_client_goal_endpoint_tests.erl:96:    {ok,HugePayload}=quod_wire_term:encode_bindings(#{<<"X">>=>binary:copy(<<$x>>,?QUOD_TRANSPORT_MAX_FRAME_BYTES)},unlimited),
+test/quod_receiver_decode_tests.erl:131:    ?assert(lists:sum([byte_size(B) || {entry, B} <- Parts]) =< ?QUOD_MAX_FOREIGN_PAGE_BYTES),
+test/quod_durable_term_tests.erl:77:         <<0:(?QUOD_MAX_TOPLEVEL_GOAL_BYTES + 1)/unit:8>>)),
+src/quod_dtx_endpoint.erl:68:-if(?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES >= ?QUOD_TRANSPORT_MAX_FRAME_BYTES).
+src/quod_dtx_endpoint.erl:391:                    {ok, Bytes} -> byte_size(Bytes) =< ?QUOD_MAX_FOREIGN_PAGE_BYTES;
+test/quod_catchup_tests.erl:549:    {ok, Wire} = quod_safe_term:encode_canonical(Parts, ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
+test/quod_catchup_tests.erl:550:    {ok, Decoded} = quod_safe_term:decode_wrapped(Wire, ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
+test/quod_catchup_tests.erl:641:        {ok, Inner} = quod_safe_term:encode_canonical(Term, ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
+test/quod_catchup_tests.erl:642:        {ok, Wire} = quod_safe_term:encode_canonical({catchup, 3, Ns, Inner}, ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
+test/quod_catchup_tests.erl:860:    Limit = ?QUOD_MAX_FOREIGN_PAGE_BYTES - byte_size(EmptyPart),
+test/quod_catchup_tests.erl:863:    ?assert(byte_size(Frame) < ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
+test/quod_catchup_tests.erl:868:      Ns, binary:copy(<<0>>, ?QUOD_TRANSPORT_MAX_FRAME_BYTES + 1))).
+src/predicates/quod_committee_predicates.erl:79:            case {self_ns(St), committee_size(St) < ?MAX_VALIDATORS} of
+test/quod_client_goal_parser_tests.erl:285:             [lists:duplicate(?QUOD_CLIENT_GOAL_MAX_TOKENS + 1, "1,"),
+test/quod_dtx_endpoint_tests.erl:51:    ?assertEqual(?QUOD_MAX_FOREIGN_PAGE_BYTES,
+test/quod_dtx_endpoint_tests.erl:54:            ?QUOD_TRANSPORT_MAX_FRAME_BYTES).
+src/quod_client_goal.erl:111:  when is_binary(Bytes), byte_size(Bytes) =< ?QUOD_CLIENT_GOAL_REQUEST_BYTES ->
+test/quod_predicate_failure_tests.erl:94:             || I <- lists:seq(1,?MAX_VALIDATORS)],
+test/quod_client_goal_tests.erl:242:         <<0:(?QUOD_CLIENT_GOAL_REQUEST_BYTES + 1)/unit:8>>)),
+test/quod_genesis_tests.erl:49:    Members = [<<I:256>> || I <- lists:seq(1, ?MAX_VALIDATORS)],
+test/quod_genesis_tests.erl:52:                                                  ?MAX_VALIDATORS - 1)},
+test/quod_genesis_tests.erl:56:       {error, {committee_too_large, ?MAX_VALIDATORS + 1}},
+test/quod_genesis_tests.erl:64:    AboveEnvelope = sized_diff(?MAX_BLOCK_BYTES + 1),
+test/quod_genesis_tests.erl:132:    InitialDiff = sized_diff(?MAX_BLOCK_BYTES - 64 * 1024),
+test/quod_atomic_admission_tests.erl:228:        Materials = [material() || _ <- lists:seq(1, ?MAX_INGRESS_TXS + 1)],
+test/quod_atomic_admission_tests.erl:233:        ?assertEqual({0, ?MAX_INGRESS_TXS}, quod_atomic_admission:counts(Full)),
+test/quod_atomic_admission_tests.erl:243:        ?assertEqual({1, ?MAX_INGRESS_TXS}, quod_atomic_admission:counts(Restored)),
+test/quod_atomic_tests.erl:211:                =< ?MAX_BLOCK_BYTES),
+test/quod_atomic_tests.erl:221:    ?assertEqual(?MAX_BLOCK_BYTES - ?QUOD_DTX_BATCH_PAYLOAD_OVERHEAD_BYTES,
+test/quod_client_goal_router_tests.erl:619:        #{<<"X">> => binary:copy(<<$x>>, ?QUOD_TRANSPORT_MAX_FRAME_BYTES)}, unlimited),
+test/quod_client_goal_router_tests.erl:671:            #{<<"X">> => binary:copy(<<$x>>, ?QUOD_TRANSPORT_MAX_FRAME_BYTES)}, unlimited),

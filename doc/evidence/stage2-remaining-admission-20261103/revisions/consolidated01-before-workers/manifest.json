@@ -1,0 +1,443 @@
+{
+  "applied": false,
+  "runtime_verified": false,
+  "files": {
+    "_build/default/lib/erlog/src/erlog_int.erl": {
+      "before": "40793ec49ceb9baf29d5889a93ce9f2b494228168ed83d9da5c4d65b67ad35f6",
+      "after": "3d24510c60da34323a9bc02ed2fea8fbee4bf9e2c1426fd35b8c233069b8ed0c",
+      "added": 22,
+      "removed": 41
+    },
+    "_build/default/lib/erlog/src/erlog_int.hrl": {
+      "before": "fc2290033440d71447bb0b19eac04e81de1998438cfc225082e9200ac9595f20",
+      "after": "833233fb56b7d28f19251484354e870b1aca9458c4ee7a9ac45ed53ba4fee707",
+      "added": 1,
+      "removed": 10
+    },
+    "_build/default/lib/erlog/test/erlog_failure_reasons_tests.erl": {
+      "before": "7cbcf3533e4788d81f5792bd136937576d87f89716bc9221af21ff8880701ef7",
+      "after": "b7070200ca0ba93f3ab50d56c7cb4417bae203dd17ca267d69001e20f177cb19",
+      "added": 16,
+      "removed": 23
+    },
+    "doc/consensus-signatures.md": {
+      "before": "0008f88cef6a781208339aba830ca3ed649ab672179dd4512355d5614f4be29c",
+      "after": "4005eebc3a05c887fbc358d0cfb3adbeace8173ea0297b6fde56c4c6740db4a9",
+      "added": 3,
+      "removed": 2
+    },
+    "doc/multiwrite-architecture.md": {
+      "before": "5c0c5cff94bdf6acf76cfc0f57eb1363553c34592959373a0c7904da6b6e324f",
+      "after": "86f11288e7bf1d69d2e17967e79f17a99f2dc871b11809ed0a81882ae4c48d1a",
+      "added": 10,
+      "removed": 7
+    },
+    "include/quod_client_goal_limits.hrl": {
+      "before": "0fa6aac12385626349f98e40cad6189fa16478fea8a46503fe38dbbe63ee2aec",
+      "after": "c601a22226e1998c8b774fb3c0509154bfa4774631111af3723e729b095b2731",
+      "added": 4,
+      "removed": 9
+    },
+    "include/quod_ingress_limits.hrl": {
+      "before": "23f7f7ed40410f7b68c108fb64af98d42583d7356ca97492ac869ede0cecec98",
+      "after": "ce8c502b9b1445d1b084926aa78d85689e69b17e6b32e6665cc4afbadaaee963",
+      "added": 1,
+      "removed": 30
+    },
+    "include/quod_proof_limits.hrl": {
+      "before": "922e8e39a4a83eca34b175f2ef05e521cf92439da98b3160fed52174742dfdca",
+      "after": "e5efb1c564f3c846e3d66bb8e999d91c8d20cb5ce8006a06a6747c451369aa18",
+      "added": 2,
+      "removed": 9
+    },
+    "include/quod_transport_limits.hrl": {
+      "before": "39d3d6788bae9c1443a68ef16d1debaa1ef6613877fed9654e2fa2ff96e2a969",
+      "after": "f2db98a754ce37235cc5bba632a32511aab7ac3546d04b0560ac8b45867cf0ea",
+      "added": 0,
+      "removed": 2
+    },
+    "include/quod_vm_limits.hrl": {
+      "before": "032443e83f6157be144f774d01764dfe2059d6134ed7164f801d78c452a11bd0",
+      "after": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "added": 0,
+      "removed": 13
+    },
+    "src/predicates/quod_committee_predicates.erl": {
+      "before": "fc762b2d0b00ba48af0d5568cb3824a0815d9c4bb8e203c77fdfbcc9729ae7e6",
+      "after": "6d182b51ab5ac16fb6c21f45776b57bdc44c3f079f11f359e7145f5a8389c1e2",
+      "added": 3,
+      "removed": 4
+    },
+    "src/quod_agent_identity.erl": {
+      "before": "d3b192cae4c88bfa48edc385e5a6fc4b1e0963aac13b0b52ae3365a055e6364b",
+      "after": "684b2057128608cf70657f3a608295d9f6cb2f128e05b90577c83d148b91fa63",
+      "added": 1,
+      "removed": 1
+    },
+    "src/quod_agent_ref.erl": {
+      "before": "f88ffae3976ae9e1c46be7776356d0bc7806a3e66677250bf70c801c56bf35e1",
+      "after": "4b061bced25ad90bf8566cf47087c345742165259adfe938541e6a90bccc927c",
+      "added": 0,
+      "removed": 1
+    },
+    "src/quod_atomic_admission.erl": {
+      "before": "039dec0cc5b9fae34b542f695f58a8a290fcfd61534f20adf89fe00b9a8fe9ed",
+      "after": "a46c053770e451a95843864e05f714cf85b2c56499d71ef0e24bf985b46b7d22",
+      "added": 2,
+      "removed": 7
+    },
+    "src/quod_catchup.erl": {
+      "before": "dd6510f42caeb1ac8ef3796003a391f1e467a7957d2a5a237aae370542fa98f0",
+      "after": "f6b95751b5d525b09c41d8d266623673f0575546e67f633e18ca70b67941da4d",
+      "added": 129,
+      "removed": 76
+    },
+    "src/quod_client_auth.erl": {
+      "before": "919c55738448d003810ecd59eb4f7f8ac9ce8d396ef9d57a1c3cceb1499d9ad5",
+      "after": "4c0f6698212aaa238d6a4686ea68a65a7c907824f76e0e42f8d37eb13cb3936d",
+      "added": 11,
+      "removed": 13
+    },
+    "src/quod_dtx.erl": {
+      "before": "60f6052f4779752f8ac64fbc4a72a600a647232fcd27f720894d041f1a421d4a",
+      "after": "9505188131fc76ae94bb67a47b7e83d8c9ffb86f5a4185dd484ede82181dce9b",
+      "added": 2,
+      "removed": 7
+    },
+    "src/quod_dtx_coordinator.erl": {
+      "before": "3dd0889f65a0a7ec93943261dc20acd074b8d690abf81fbf88c57ec06e2beef9",
+      "after": "2d111b6d5d3b9eaa78fd3169c8203d1379561e448802c43983a300c8e4e99683",
+      "added": 2,
+      "removed": 3
+    },
+    "src/quod_dtx_current_view.erl": {
+      "before": "792da0f1b597203c7d3db3979d156ae34e647e84c36ee7204e3fffff96b66dec",
+      "after": "af3dfa41eddd9a0869afa9e7f94812468931d968f15782396896387deecae546",
+      "added": 3,
+      "removed": 6
+    },
+    "src/quod_dtx_endpoint.erl": {
+      "before": "a475ebec7798d6733143f8088b1bdcee8815b26bf2c2ca32a5c57f5d6babdc82",
+      "after": "bae8583989e3ffb99edb8d57755515f919740ce9ad3882313a8ddfa3eded985c",
+      "added": 7,
+      "removed": 12
+    },
+    "src/quod_erlog_db_local_prove.erl": {
+      "before": "92ee874fd43324ae379449cf6aff4da8870eade457ab55df5eafcb50a88e1dc0",
+      "after": "795b5b57960d6584a43fd2858b6e1e99927b8228b4641f4aeba0340f97ee5684",
+      "added": 4,
+      "removed": 4
+    },
+    "src/quod_feed.erl": {
+      "before": "a357a223bade45ae246daaec3dc5c60e473bc45ec18164481409cea06127674b",
+      "after": "369be56a782e9799374a51b9961e86a98e21f3fb1b1dc5cd3bad061e3fbea9e7",
+      "added": 1,
+      "removed": 3
+    },
+    "src/quod_foreign_log.erl": {
+      "before": "2449caababf8195433295044e43c8f0f3d0c4a184edef6757a403512e016dabb",
+      "after": "bb29f0721431336df35a06a7349faecce5f069a69780ddc692102ac865d9628a",
+      "added": 46,
+      "removed": 118
+    },
+    "src/quod_foreign_projection.erl": {
+      "before": "c28ce574d7df74c3e55f2913b4a195a8d27cedc2901f6307afc8f338ba49deed",
+      "after": "c934cef9a2ba9c3b927c63d45bbb145355aa0e4b68be1fa236332343164dc204",
+      "added": 2,
+      "removed": 3
+    },
+    "src/quod_ingress_state.erl": {
+      "before": "418d75a7361de55ccf6300f483ad6b5ab3787a6c9982e00016bc09e98b6bb474",
+      "after": "cc4b06da647f6badbbe71332e999c80aceea4f7e5f3774ad6dc77d79b14e4dd1",
+      "added": 39,
+      "removed": 64
+    },
+    "src/quod_ledger_store.erl": {
+      "before": "463b29b6a0be9e607f4e71e229166b585d80bfab887685e207cfc88cef00ac3b",
+      "after": "c6cb32737ed59230bec94d1a9b0c7db97c275c4252880a615cf1f6664d327d6a",
+      "added": 18,
+      "removed": 10
+    },
+    "src/quod_link.erl": {
+      "before": "fed5d33d8d0a91187c3301f97ba596a27f83e16e7a963315f36bb6a71a0e23a0",
+      "after": "e507ef004a849775ea4d5a0cf3ac90e2ff341f5a8ca42336d14269112e348cc2",
+      "added": 16,
+      "removed": 7
+    },
+    "src/quod_metrics.erl": {
+      "before": "13fb9fc786f71b4a652fc2bfdd032b0075af9d4a73e2d7e4d5dcccb605480f36",
+      "after": "7b26abbbec00c3a3c740e2f20862caaba714aeb89c6817ba1b2ee301a5a1f40f",
+      "added": 2,
+      "removed": 9
+    },
+    "src/quod_ontology.erl": {
+      "before": "17b7cacbff570fcc2de6b5af30f9814545feeb3cb45028c9412189dc2dc22693",
+      "after": "3f1a7c0d3dcab82a69355a1e5c4169879bbc3d8cd681e27e75c1d789fb340355",
+      "added": 1,
+      "removed": 3
+    },
+    "src/quod_quorum.erl": {
+      "before": "70c42ec81aaceae4f1a4dd96cd3e86c906b038338b0ab22d5129bf4a70d13b36",
+      "after": "2632d4dedbcbb0a43d02e7f7fcf9ecfb7beabbb3e5e08d6cf6924ab57f0c6537",
+      "added": 12,
+      "removed": 9
+    },
+    "src/quod_scope_wire.erl": {
+      "before": "657989940184d5164b8532cdf599df14f74be78673b0488d1db9a0f709b7b6ec",
+      "after": "e707a898fe8f9c6bf03203b937530347137f7d408840fae803566e8b9e229022",
+      "added": 2,
+      "removed": 3
+    },
+    "src/quod_signing_journal.erl": {
+      "before": "aefc3b1c01f088810d54c894f178be4c31e656fdc481f800920d379ff49a27fa",
+      "after": "cf73f1c1f1656305a5d081c218c9420d3745f8691b90bec1085dd188380de696",
+      "added": 2,
+      "removed": 2
+    },
+    "src/quod_simplex.erl": {
+      "before": "afae9aceeadbfdae3322c68f3c4172089d5e834f78c4304051b53e44d0549a4b",
+      "after": "f75d897051fc4756b2f73c2fa6d23b0940f544b58693aaf10f470d84decd236d",
+      "added": 23,
+      "removed": 50
+    },
+    "src/quod_transaction.erl": {
+      "before": "95040fc1ddadfdc2b7a1593ef831272a91e4f8cf1b25cfeb79ebd16c7e02ca8b",
+      "after": "e3ca3267675ca96e36a0edd5414d2530eff51360a0447a0b7f0f4ea68586408f",
+      "added": 9,
+      "removed": 12
+    },
+    "src/quod_wire_term.erl": {
+      "before": "00352f26e3e61420b02f9609df7926b0655d4685fc70e59d81aca50fe5990da2",
+      "after": "6802ef3237ffda341f5221dc0e0d7783a402aa598a1fce766e6c6e4ca911cb8d",
+      "added": 26,
+      "removed": 52
+    },
+    "test/quod_agent_ref_tests.erl": {
+      "before": "607a5d956b04804efd68f97c50d7d457a0bcf44e7f1eebf6c7d55f3d3adfd772",
+      "after": "be2e805acf3732fffdabdbdcc55fbf75221fad050a70116a58d03146d4b0db96",
+      "added": 4,
+      "removed": 6
+    },
+    "test/quod_atomic_admission_tests.erl": {
+      "before": "138b5ca8aca0c93a14c727f93cf00b36c0472e8709b18f6ce70f7291c687639a",
+      "after": "61098b725b71d0935c728b25b75293a9a79c9157330326cc535e390dda26f525",
+      "added": 10,
+      "removed": 8
+    },
+    "test/quod_atomic_projection_tests.erl": {
+      "before": "5bf382ee802d578f720b32b30d155109ca99d357fd25446c17e3640c4ad5147b",
+      "after": "12b13be40704ebfcefce4329ab6085717eb678dc169ed973705422ad37b30b11",
+      "added": 14,
+      "removed": 8
+    },
+    "test/quod_atomic_tests.erl": {
+      "before": "7808703f43b60f80fbead319675fdbf97a1e76f32f9ca34a62823d9e3db33e85",
+      "after": "b84e685f256b4113912af6f014402dfe4becf2bd2148bdcf542b7397110d6316",
+      "added": 3,
+      "removed": 2
+    },
+    "test/quod_catchup_tests.erl": {
+      "before": "31a0b20337c7adb9a267fcee46ea84c83fa65b59ee167d667bf5c34b661c41d4",
+      "after": "7b89bbe0e7674eb52b501353b5f1629805ab581dffd974915809baab47b1ea37",
+      "added": 63,
+      "removed": 37
+    },
+    "test/quod_catchup_verify_tests.erl": {
+      "before": "fb89eaedccefeadbca70030086667087f13d87d71c1fa4e57bd817eeb1f4cb09",
+      "after": "424df2adcec87472f06c764c7893d92d835d308c4a28ce2e5168ff284917803d",
+      "added": 6,
+      "removed": 18
+    },
+    "test/quod_client_auth_tests.erl": {
+      "before": "c8883f2c3621df1eb854ae7904981766aad0627f4d1cb2d92a1b51bcec766ed2",
+      "after": "fe21d5b7e4bc5980afe23295d29ad4d1c80cc2c00b9491cb0cfa4eb2c7ed362d",
+      "added": 14,
+      "removed": 0
+    },
+    "test/quod_committee_predicates_tests.erl": {
+      "before": "b6ea11721c7e3352e8e58a4e9de2e07ee383739b2464c3fb3ba6731b8c99a32c",
+      "after": "b9295276a72c9176eb1eb004ca43f82189bfc5f29a9b12fdc80167ae94f8755b",
+      "added": 7,
+      "removed": 8
+    },
+    "test/quod_common_primitives_tests.erl": {
+      "before": "c26b933dbd89998468defd48fb6282fff1a97012890aa129ae7bcc8910e8dee7",
+      "after": "01b0bee2c2d2361e628ca321f04db91ca4b42c05ab0b590c078b491cc7b05dd4",
+      "added": 2,
+      "removed": 2
+    },
+    "test/quod_dtx_endpoint_tests.erl": {
+      "before": "ff3431d4802c41aa02de31715ccc01251719dee3487bc609fc01fa36e5df14a9",
+      "after": "aa1a0828613978c2006c471fe5450b58e198aed8c35d671a8e87958e668928bd",
+      "added": 4,
+      "removed": 6
+    },
+    "test/quod_dtx_tests.erl": {
+      "before": "23ac6d50f61046fc6528fc3bc13b7f021c261fa5285beea630e4d18f307e1dfe",
+      "after": "57000bb7499e76f92589df1cd75a38683470b5619707259d669ecb0314f3257c",
+      "added": 0,
+      "removed": 1
+    },
+    "test/quod_entry_selection_tests.erl": {
+      "before": "f0e3356d465022219c82a015374cdad026afe7021c7fd6556f7ba4bcffe1cdf4",
+      "after": "f7a1217289d6c07c7c870dc36408eae12be1c82d040479501f1d2e01197494cc",
+      "added": 1,
+      "removed": 1
+    },
+    "test/quod_foreign_log_tests.erl": {
+      "before": "ff5c88f2d19d27c3ff436879a19e050ea7a41a11109d4cbd54ea1518ce17c27c",
+      "after": "b35c62307fa395adad552319dfd6301cc3bd026c66d02199e64bd83c83762302",
+      "added": 29,
+      "removed": 23
+    },
+    "test/quod_foreign_residency_tests.erl": {
+      "before": "e7213a3635ed93709ec65daffefdfd5a768340d98727e2d8891dd81173e318be",
+      "after": "fd7e16f1378e84c34cd4c1d76777e79db774a65828d9cf3a503aae558ab0655c",
+      "added": 4,
+      "removed": 4
+    },
+    "test/quod_genesis_tests.erl": {
+      "before": "e280cc7af76799c878ef0926ce6100688c3a7ec9db07e1d7aeaf0585f69104f6",
+      "after": "bfd40c56868c8a4b17e83e8425383ac584bfae79123724b8d03dafd4fa2abd17",
+      "added": 13,
+      "removed": 13
+    },
+    "test/quod_ingress_state_tests.erl": {
+      "before": "a92b4b0defdb08c085af017acc617f2b874123f5b04771f8ed5a3c065b4b944c",
+      "after": "8dbe13b21744dc54a35c888d615da0734123dc8a6478099da74653640388d0b9",
+      "added": 11,
+      "removed": 12
+    },
+    "test/quod_ledger_artifact_tests.erl": {
+      "before": "b32b9fe3994c346420b94fba003c1ae68b487b9de1f59580c2378c0217c812ca",
+      "after": "be807163b32de8c11a007e187b5c76269ed29baef5e0d4868692dd25cfd5c924",
+      "added": 7,
+      "removed": 7
+    },
+    "test/quod_lens_tests.erl": {
+      "before": "c589a2004da2a3c1a81825bfe4bb8b97091b6b96879dc81af77ac2c143f64ef3",
+      "after": "38885fbd5715e9d153b693eb90d5271a51ce1faee84353e21f01d1e82d011a89",
+      "added": 0,
+      "removed": 1
+    },
+    "test/quod_licence_tests.erl": {
+      "before": "2789d3cfc8af3ca24e2678f8684abc62d99cd72c102721c90eb825d0f4778ec4",
+      "after": "58fc5eb01d74ba47f084b08d2f67a429710419f69ae10dbc0e915c8a2d8eab64",
+      "added": 0,
+      "removed": 1
+    },
+    "test/quod_lifecycle_single_path_tests.erl": {
+      "before": "749de71b7c5278fd2924854d5104528e2b038904a9744255abfadcff4d15d8a9",
+      "after": "9e2a93ffa7d04f4f013d41b8aaaa904268f3e6ccde7f475c1a5e0b264c73e59d",
+      "added": 0,
+      "removed": 1
+    },
+    "test/quod_link_tests.erl": {
+      "before": "14514183fe7d26a792b757462bbb1dae11c8f953ecf3b71069b20207780adcd3",
+      "after": "78cd348ebeb3359f366621da1b06563f89d8b7767dfcdd1d526dead589a9ab09",
+      "added": 10,
+      "removed": 6
+    },
+    "test/quod_measure_tests.erl": {
+      "before": "a5cb86c10b3d22991d56cc1ff49429c433270dd98eebdd5fa3e544146ee32f8a",
+      "after": "941d9e7c2a1c4f466dfe511c129047f0d151e36f06b64930825c686336af0d93",
+      "added": 0,
+      "removed": 1
+    },
+    "test/quod_names_tests.erl": {
+      "before": "1aab8aa296055ea9c5b65cb4adfeb84c7c8f5b51f184fc9ef9d4031a8e272abe",
+      "after": "e3595837aa6d2478db6f374f05816e64256554f33375260f1da6fa162fe1d3b1",
+      "added": 0,
+      "removed": 1
+    },
+    "test/quod_predicate_failure_tests.erl": {
+      "before": "79487b323d518227c5cbef56b62c70c54dce737c5bd5a253687c67b55bdcef3b",
+      "after": "25d72f13388f84c50fe263c89d05ce3cd67744374ace58fe78da28c8268a3682",
+      "added": 2,
+      "removed": 1
+    },
+    "test/quod_quorum_tests.erl": {
+      "before": "b25178c506823249971c1a837bffea0e0b9660103a0c4ae1c1672bda3a6ccea4",
+      "after": "9704e26bc81e6c4d70052a2fd7e78d69a4f289070ccd69a24b015458f848e83f",
+      "added": 9,
+      "removed": 8
+    },
+    "test/quod_receiver_decode_tests.erl": {
+      "before": "6a6bafb50d9bb00ce198f005f7ffcb08ecba747d612d5c464d9fbb7ce2adf9d8",
+      "after": "dcc29bb66d062969cca1441de5211ce4fc95d85e01e7a25062951c3360a69057",
+      "added": 3,
+      "removed": 2
+    },
+    "test/quod_relay_tests.erl": {
+      "before": "5ca3098ee3007756f7e197d2fa84708336e98c3056ed91882ca4edbe4f447bab",
+      "after": "a97278ce048d0f2f0f60d592c9e081d118b6266d7f40a6ef5e247b3173effc35",
+      "added": 2,
+      "removed": 1
+    },
+    "test/quod_remaining_admission_tests.erl": {
+      "before": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "after": "ee61da6f88ced428f8e451c0a8c6ee6021ee4d50a655ea75071c2faf2429fe16",
+      "added": 69,
+      "removed": 0
+    },
+    "test/quod_rendering_tests.erl": {
+      "before": "717d9a433018f83b258f1a2bd629c0375a03aaab08b70f168875375d909e1d1c",
+      "after": "5673f1be6b47b6adc8336d3f74a439855ec6edc311560e1727545fe7de1daeef",
+      "added": 0,
+      "removed": 1
+    },
+    "test/quod_runtime_tests.erl": {
+      "before": "0cc16fc3215938d426663daab24a73c758069106f0bb04b6405d9b48e3f47026",
+      "after": "75e9da73a35a4d13129907a2345d1aebcd1c4ba4a78e3dcd0db7c9d349dd3b18",
+      "added": 0,
+      "removed": 1
+    },
+    "test/quod_scope_wire_tests.erl": {
+      "before": "d0ea592b81828f240cc73c89147965b78cb39df4c3631a0eda1caa3fcab38ec1",
+      "after": "9647d5e12adb1b8804052a1bd035c015289ccc9647d1203f7107d5121a63ad09",
+      "added": 14,
+      "removed": 17
+    },
+    "test/quod_simplex_tests.erl": {
+      "before": "1e076400c696b99b50910933b065a7fa36e925797a93257525f9e9bb37f7f59d",
+      "after": "fc022dd0071920509f00af010922c98f2af36c4e5f24c9ff6d9f5d480aae9991",
+      "added": 66,
+      "removed": 43
+    },
+    "test/quod_transaction_tests.erl": {
+      "before": "2e3dc8391b9643f431d75c19569bc0c70289d44d492612d5092696dc2eb66213",
+      "after": "f45990b725533f612213f1c91933d49047ba0543b70e98bf05a52fc79204d677",
+      "added": 0,
+      "removed": 1
+    },
+    "test/quod_wire_term_tests.erl": {
+      "before": "6a0b5c417da4713cfa55d555d2e18e2a8bd68db457368fae6f55db55916ee024",
+      "after": "087de5a3109505e79c094573e18a726e69842bc14ae36c78772905ef6d6c4017",
+      "added": 22,
+      "removed": 22
+    },
+    "test/retired_remaining_sizes.hrl": {
+      "before": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "after": "4766c118bcd165cd379716454207e73fc9012385d9f1eac67c8a9b94ba278d6d",
+      "added": 19,
+      "removed": 0
+    }
+  },
+  "added": 830,
+  "removed": 889,
+  "dependency": {
+    "pin": "535395c60b2133703308bbe529a63309672cb7a0",
+    "patch": "erlog-diagnostics.patch",
+    "installed": false,
+    "pin_changed": false,
+    "requires_reviewed_dependency_revision": true
+  },
+  "production_applied_delta": {
+    "added": 0,
+    "removed": 0
+  },
+  "revision": "consolidated01",
+  "deleted": [
+    "include/quod_vm_limits.hrl"
+  ]
+}

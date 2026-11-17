@@ -1,0 +1,12 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-vr-text-input-20261101/signed.py",
+    "keyboard-source13",
+    "doc/evidence/godot-vr-text-input-20261101/inputs/client-keyboard-final13-manifest.json",
+    "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 49.243335200008005
+}

@@ -1,0 +1,365 @@
+{
+  "kind": "source-and-retained-evidence-audit-not-runtime-qualification",
+  "head": "293cf6115c0a6b18315eccdbb42cbca396f443d3",
+  "inherited_source_paths_unchanged": 848,
+  "production_delta": {
+    "added": 0,
+    "removed": 0
+  },
+  "navigation_child_exits": [
+    -9,
+    -9,
+    -9,
+    0,
+    0,
+    0
+  ],
+  "historical_stage2_results": {
+    "stage2-final03-contents": {
+      "children": {
+        "server": 0,
+        "client": 0
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 8,
+      "prior_checks": 0
+    },
+    "stage2-final01-headless": {
+      "children": {
+        "server": 0,
+        "client": 0,
+        "client-reconnect": 0
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true,
+        "client-reconnect-stdout": true,
+        "client-reconnect-stderr": true
+      },
+      "checks": 9,
+      "prior_checks": 162
+    }
+  },
+  "historical_physical_checks": 29,
+  "historical_unchanged_work": {
+    "doc/evidence/godot-m3b-20261029/final-navigation-final03/recursive-scene.png.work.json": {
+      "work": {
+        "calls": [],
+        "watched": [
+          [
+            "quod_foreign_projection",
+            "start_monitor",
+            4
+          ],
+          [
+            "quod_committed_projection",
+            "apply_entry",
+            3
+          ],
+          [
+            "quod_physics_native",
+            "install",
+            3
+          ],
+          [
+            "quod_physics_native",
+            "install_hinges",
+            2
+          ],
+          [
+            "quod_physics_native",
+            "new_world",
+            3
+          ],
+          [
+            "quod_ledger_store",
+            "fold",
+            5
+          ],
+          [
+            "quod_ledger_store",
+            "open",
+            3
+          ],
+          [
+            "file",
+            "write",
+            2
+          ],
+          [
+            "file",
+            "pwrite",
+            3
+          ],
+          [
+            "file",
+            "sync",
+            1
+          ],
+          [
+            "file",
+            "datasync",
+            1
+          ]
+        ]
+      }
+    },
+    "doc/evidence/godot-m3b-20261029/physics-final03/client-result.json.renewals.json": {
+      "work": {
+        "calls": [],
+        "watched": [
+          [
+            "quod_foreign_projection",
+            "start_monitor",
+            4
+          ],
+          [
+            "quod_committed_projection",
+            "apply_entry",
+            3
+          ],
+          [
+            "quod_physics_native",
+            "install",
+            3
+          ],
+          [
+            "quod_physics_native",
+            "install_hinges",
+            2
+          ],
+          [
+            "quod_physics_native",
+            "new_world",
+            3
+          ],
+          [
+            "quod_ledger_store",
+            "fold",
+            5
+          ],
+          [
+            "quod_ledger_store",
+            "open",
+            3
+          ],
+          [
+            "file",
+            "write",
+            2
+          ],
+          [
+            "file",
+            "pwrite",
+            3
+          ],
+          [
+            "file",
+            "sync",
+            1
+          ],
+          [
+            "file",
+            "datasync",
+            1
+          ]
+        ]
+      },
+      "engine_rebuilt_before": 25,
+      "engine_rebuilt_after": 25,
+      "registration_retained": false
+    }
+  },
+  "current_owner_sources": {
+    "priv/ontologies/quod_space.pl": {
+      "sha256": "1253476fcfbe135bb92d2c3266b6a4d62e59849e969c5ed96fd02dba6b9abff2",
+      "equals_committed_m3": false
+    },
+    "priv/ontologies/common_predicates.pl": {
+      "sha256": "65a0d8dc83009939603d7875249d0826d1540652303773df9f970623a9a6dba2",
+      "equals_committed_m3": false
+    },
+    "priv/ontologies/quod_physics.pl": {
+      "sha256": "b24718fe4ee6f8c7aff9644dc3580d36cb2963e08cb936a3af0b119d0af7c439",
+      "equals_committed_m3": true
+    },
+    "priv/ontologies/gui_scene.pl": {
+      "sha256": "ff972d8136bc4355c985b232c6ee21ff7f44c3c1484a089aab976e4c7ccfa617",
+      "equals_committed_m3": true
+    },
+    "src/quod_client_view.erl": {
+      "sha256": "1126cf38dc14600a2fc3736c5fb20715af233e5450febe7839857984242ed5ec",
+      "equals_committed_m3": false
+    },
+    "src/quod_runtime.erl": {
+      "sha256": "2c55f13ef0171ad3a6b998ffb8f666b24cf905d34c6c3b2725b162e8d965d779",
+      "equals_committed_m3": true
+    },
+    "src/quod_physics.erl": {
+      "sha256": "6d7c32892a3c61a213cf57543de849527de2a0d3db61878b40b3d52c55d43b44",
+      "equals_committed_m3": true
+    },
+    "src/quod_physics_frames.erl": {
+      "sha256": "9fca5aa05c60b5ae11e49c595e3ebfe5151a2d5599566611e90fc64695be3332",
+      "equals_committed_m3": true
+    },
+    "client/godot/Core/Scene.cs": {
+      "sha256": "51854d7c4229f1854286e0c05a8bc421803b0ba1e607c75c726d7a44cfc3f008",
+      "equals_committed_m3": false
+    },
+    "client/godot/Core/World.cs": {
+      "sha256": "7e49eeb8a694f534aaf4edb14e996890f1971ea18f00f47545e6518f66c23f57",
+      "equals_committed_m3": false
+    },
+    "client/godot/Core/SignedView.cs": {
+      "sha256": "db5588da9961b6ff5630d31379cd806c496a1cc8289d50f531ad45bced22c39f",
+      "equals_committed_m3": false
+    },
+    "client/godot/Core/Eidolons.cs": {
+      "sha256": "32d9962d715d4fbcf79e271730822df72a298d8340161f71a39f87b956be835b",
+      "equals_committed_m3": false
+    },
+    "client/godot/ScenePanel.cs": {
+      "sha256": "6b27234967e1ced1fed31a76afca1b6b37ecbfe088fa4b987669de39c8a059b2",
+      "equals_committed_m3": false
+    },
+    "client/godot/Main.cs": {
+      "sha256": "a635f30437c8a89be912185d542b4f1ce95f2b7cba651e864ed0a36642e18502",
+      "equals_committed_m3": false
+    },
+    "test/quod_physics_tests.erl": {
+      "sha256": "2d1edb8aef277e4a2d2b233ad73f6e310e504ea9355a833f81b7f93c4ab4d282",
+      "equals_committed_m3": true
+    },
+    "client/godot/tests/NavigationChecks.cs": {
+      "sha256": "fb84f3758c386373d46c016fbbed5174785d0aa6188d887390edbda4ea56b3e1",
+      "equals_committed_m3": false
+    },
+    "client/godot/tests/PhysicsChecks.cs": {
+      "sha256": "76102f6c4682398805e3aef2f0e64d5bfb6897e7c425c543c8ed7cafb0789d28",
+      "equals_committed_m3": false
+    }
+  },
+  "recursive_traversal_equals_committed_m3": true,
+  "stage2_product01_current_source_comparison": {
+    "client/godot-tests/.gitignore": true,
+    "client/godot-tests/Program.cs": false,
+    "client/godot-tests/Quod.Client.Tests.csproj": true,
+    "client/godot-tests/backup-interop.mjs": true,
+    "client/godot-tests/desktop_input.py": true,
+    "client/godot-tests/global.json": true,
+    "client/godot-tests/journey.py": true,
+    "client/godot-tests/local.py": true,
+    "client/godot-tests/packages.lock.json": true,
+    "client/godot-tests/tls.py": true,
+    "client/godot-tools/run.py": true,
+    "client/godot/.gitignore": true,
+    "client/godot/Core/Accounts.cs": true,
+    "client/godot/Core/Accounts.cs.uid": true,
+    "client/godot/Core/Controllers.cs": true,
+    "client/godot/Core/Controllers.cs.uid": true,
+    "client/godot/Core/Forms.cs": false,
+    "client/godot/Core/Forms.cs.uid": true,
+    "client/godot/Core/Identity.cs": true,
+    "client/godot/Core/Identity.cs.uid": true,
+    "client/godot/Core/LocalStore.cs": true,
+    "client/godot/Core/LocalStore.cs.uid": true,
+    "client/godot/Core/PhysicsInput.cs": true,
+    "client/godot/Core/PhysicsInput.cs.uid": true,
+    "client/godot/Core/Scene.cs": false,
+    "client/godot/Core/Scene.cs.uid": true,
+    "client/godot/Core/SignedView.cs": false,
+    "client/godot/Core/SignedView.cs.uid": true,
+    "client/godot/Core/StaticGlb.cs": true,
+    "client/godot/Core/StaticGlb.cs.uid": true,
+    "client/godot/Core/Term.cs": true,
+    "client/godot/Core/Term.cs.uid": true,
+    "client/godot/Core/Transport.cs": false,
+    "client/godot/Core/Transport.cs.uid": true,
+    "client/godot/Core/World.cs": false,
+    "client/godot/Core/World.cs.uid": true,
+    "client/godot/FormPanel.cs": false,
+    "client/godot/FormPanel.cs.uid": true,
+    "client/godot/Main.cs": false,
+    "client/godot/Main.cs.uid": true,
+    "client/godot/OpenXRInput.cs": false,
+    "client/godot/OpenXRInput.cs.uid": true,
+    "client/godot/OperationsPanel.cs": false,
+    "client/godot/OperationsPanel.cs.uid": true,
+    "client/godot/QuestionHub.cs": false,
+    "client/godot/QuestionHub.cs.uid": true,
+    "client/godot/Quod.csproj": true,
+    "client/godot/Quod.sln": true,
+    "client/godot/README.md": false,
+    "client/godot/RenderModels.cs": true,
+    "client/godot/RenderModels.cs.uid": true,
+    "client/godot/ScenePanel.cs": false,
+    "client/godot/ScenePanel.cs.uid": true,
+    "client/godot/SourcePanel.cs": false,
+    "client/godot/SourcePanel.cs.uid": true,
+    "client/godot/SpatialGui.cs": false,
+    "client/godot/SpatialGui.cs.uid": true,
+    "client/godot/assets/vive-LICENSE.txt": true,
+    "client/godot/export_presets.cfg": true,
+    "client/godot/global.json": true,
+    "client/godot/main.tscn": true,
+    "client/godot/packages.Debug.linux-x64.lock.json": true,
+    "client/godot/packages.ExportRelease.linux-x64.lock.json": true,
+    "client/godot/project.godot": true,
+    "client/godot/tests/ControllerChecks.cs": true,
+    "client/godot/tests/ControllerChecks.cs.uid": true,
+    "client/godot/tests/ControllerLiveChecks.cs": true,
+    "client/godot/tests/ControllerLiveChecks.cs.uid": true,
+    "client/godot/tests/ExportChecks.cs": true,
+    "client/godot/tests/ExportChecks.cs.uid": true,
+    "client/godot/tests/ExportLifecycle.cs": true,
+    "client/godot/tests/ExportLifecycle.cs.uid": true,
+    "client/godot/tests/NavigationChecks.cs": false,
+    "client/godot/tests/NavigationChecks.cs.uid": true,
+    "client/godot/tests/OpenXRChecks.cs": true,
+    "client/godot/tests/OpenXRChecks.cs.uid": true,
+    "client/godot/tests/PhysicsChecks.cs": true,
+    "client/godot/tests/PhysicsChecks.cs.uid": true,
+    "client/godot/tests/SceneChecks.cs": false,
+    "client/godot/tests/SceneChecks.cs.uid": true,
+    "client/godot/tests/SpaceChecks.cs": false,
+    "client/godot/tests/SpaceChecks.cs.uid": true,
+    "client/godot/xr_actions.tres": true,
+    "client/native/tools/check.py": true,
+    "client/src/key-provider.js": true,
+    "client/test/fixtures/native-contract/contracts.json": true,
+    "doc/evidence/godot-m0-20261027/inputs/godot-artifacts.json": true,
+    "doc/evidence/godot-m0-20261027/production-controller-reset-fixtures.json": true,
+    "doc/evidence/godot-m0-20261027/production-protocol-fixtures.json": true,
+    "doc/evidence/godot-m4-20261029/inputs/injected-mapping.term": true,
+    "priv/explorer/assets/models/bd201855c8114b9b0e9cdd465d6f08413d18604894c839fb78d54d890c2adc94.glb": true,
+    "client/godot/tests/PresentationChecks.cs": true,
+    "client/godot/tests/WorkspaceChecks.cs": false,
+    "client/godot/Core/Eidolons.cs": true,
+    "client/godot/EidolonPanel.cs": false
+  },
+  "historical_evidence_hashes": {
+    "doc/evidence/godot-m3b-20261029/qualification.json": "961489ea91527e06b828ed393603ac2132eb7d68a68a4089422ab3619bea912c",
+    "doc/evidence/godot-m3b-20261029/failure-dispositions.md": "883b9b49432cf38ef90b7d3ef8015bf28e591b3cf52810e4c8344cb2a4400de2",
+    "doc/evidence/godot-m3b-20261029/final-navigation-final03/phases.json": "0ec92e45cfa0248c5e1e09d82630d14d2ac7f7ac3cee1283a4ab79b972f94384",
+    "doc/evidence/godot-m3b-20261029/final-navigation-final03/m3-left-result.json": "05af2d9309e8bbf24885063c98b8b2309d5e9bee5f0251dff4e9d073d551d987",
+    "doc/evidence/godot-m3b-20261029/final-navigation-final03/m3-final-result.json": "457305c787e3e7860b791519a18c979bda24af08215337ceff00563766719720",
+    "doc/evidence/godot-m3b-20261029/physics-final03/client-result.json": "6b5445579810cadf8f540cb3994f9151bfb6c047837f04777260e368f82de640",
+    "doc/evidence/godot-m3b-20261029/final-navigation-final03/recursive-scene.png.work.json": "c2ad30c2440140cbf01a3b8352fd5923e05f218cbdaa04bce60ad4e15a5600ea",
+    "doc/evidence/godot-m3b-20261029/physics-final03/client-result.json.renewals.json": "7e7a4a4e7acd143f228518cf23b557b6b65b1013513256061050d8644c85c7a0",
+    "doc/evidence/godot-space-stage2-20261031/result.json": "48b12f1cb9153937182a2a6104b89aa4e153c9eaf2f2b6d03d78cc3cca7bc48b",
+    "doc/evidence/godot-space-stage2-20261031/failure-disposition.md": "b2b7a7c1b6b5e522acdc16dd4efec7d022aa8b8309ad0addcf137b6d1807eee1",
+    "doc/evidence/godot-space-stage2-20261031/stage2-final03-contents/result.json": "6ae16b8999611d5d06fcb40e985814d24b56d0c9f210839692e43b2f5dee27bb",
+    "doc/evidence/godot-space-stage2-20261031/stage2-final01-headless/result.json": "2cb951d6ebec08e65a013d83a61580725f33d020390764e0b94234d61ad8f14a"
+  },
+  "new_runtime_runs": 0,
+  "new_failing_baseline": null,
+  "limit": "Later inherited sources differ from historical qualified trees. No fresh whole-tree acceptance or new runtime defect is claimed."
+}

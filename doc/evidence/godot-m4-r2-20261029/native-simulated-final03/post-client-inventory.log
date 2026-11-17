@@ -1,0 +1,7 @@
+Clients:
+	id: 2	act: 0	disp: 0	foc: 0	poses: 1	hands: 1	inputs: 1	outputs: 1	ovly: 0	z: 0	pid: 943410	monado-ctl
+
+Devices:
+	id: 0	name: 1	"Simulated HMD"
+	id: 1	name: 10	"Simple Controller (Simulated)"
+	id: 2	name: 10	"Simple Controller (Simulated)"

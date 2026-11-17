@@ -1,0 +1,8 @@
+PASS enabled action create-key
+PASS enabled action connect
+PASS enabled action register
+PASS enabled action prepare
+PASS enabled action setup
+PASS ordinary native source editing creates its existing durable local draft
+PASS ordinary signed administrator source edit changes the fresh fixture workspace appearance
+{"passed": false, "failure": "AssertionError: ", "children": {"server": 0, "client-appearance-workspaces": 1}, "native_inputs": 0}

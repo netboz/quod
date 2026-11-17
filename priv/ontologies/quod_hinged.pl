@@ -47,7 +47,7 @@ physics_hinged_custody(W,D,Custody) :-
     (Rows = [] -> Custody = none ; Rows = [Custody]).
 
 physics_close_hinged(W,D,Sequence,Id) :-
-    term_variables([W,D,Sequence,Id], []), agent_identifier(Id),
+    term_variables([W,D,Sequence,Id], []), quod:agent::agent_identifier(Id),
     transaction((current_principal(P), can_close_physics_hinged(W,D,P),
         physics_hinged(W,D,Sequence,Before), Before \= closing(_), physics_enabled(W,_),
         physics_hinged_references(W,D,_,References), physics_hinged_custody(W,D,Prior),

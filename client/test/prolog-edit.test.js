@@ -110,3 +110,19 @@ test('a lost or exhausted source cursor never publishes a partial ontology', asy
     finally { globalThis.fetch = previousFetch }
   }
 })
+
+
+test('fixed authored source lenses reject other selections before I/O and refuse absent catalogue bindings', async () => {
+  const workspace = { target, tools, selection: indicator }
+  const other = compound('/', [atom('other'), number(1)])
+  const previousFetch = globalThis.fetch
+  let calls = 0
+  globalThis.fetch = async () => { calls++; return { ok: true, json: async () => ({ result: 'ok', bindings: [{ Predicates: '[]' }] }) } }
+  try {
+    await assert.rejects(readCodeSource(identity, agent, workspace, other), /authored workspace binding/)
+    await assert.rejects(prepareCodeEdit(identity, agent, workspace, null, '', ''), /authored workspace binding/)
+    assert.equal(calls, 0)
+    await assert.rejects(readCodePredicates(identity, agent, workspace), /no longer available/)
+    assert.equal(calls, 1)
+  } finally { globalThis.fetch = previousFetch }
+})

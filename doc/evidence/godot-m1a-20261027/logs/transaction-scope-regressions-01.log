@@ -1,0 +1,171 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.07s
+===> Analyzing applications...
+===> Compiling quod
+      \x{250C}\x{2500} src/quod_physics.erl:
+      \x{2502}
+ 1192 \x{2502}      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      \x{2502}                                                               \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} src/quod_physics.erl:
+      \x{2502}
+ 1192 \x{2502}      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      \x{2502}                                                                   \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} src/quod_physics.erl:
+      \x{2502}
+ 1192 \x{2502}      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      \x{2502}                                                                       \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+    \x{250C}\x{2500} test/quod_physics_coordinates_tests.erl:
+    \x{2502}
+ 28 \x{2502}      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    \x{2502}                               \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    \x{250C}\x{2500} test/quod_physics_coordinates_tests.erl:
+    \x{2502}
+ 28 \x{2502}      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    \x{2502}                                   \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    \x{250C}\x{2500} test/quod_physics_coordinates_tests.erl:
+    \x{2502}
+ 28 \x{2502}      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    \x{2502}                                       \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+      \x{250C}\x{2500} test/quod_physics_tests.erl:
+      \x{2502}
+ 1048 \x{2502}              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+      \x{2502}                                                \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} test/quod_physics_tests.erl:
+      \x{2502}
+ 1673 \x{2502}          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      \x{2502}                                   \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} test/quod_physics_tests.erl:
+      \x{2502}
+ 1673 \x{2502}          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      \x{2502}                                         \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m=WARNING REPORT==== 28-Oct-2026::01:30:17.721358 ===
+quod_scope_session[quod:broken-scope]: start failed: error:function_clause [{quod_proof_session,
+                                                                             start,
+                                                                             [{not_an_erlog_state},
+                                                                              #{scope_id =>
+                                                                                 <<155,99,
+                                                                                   157,176,
+                                                                                   103,20,
+                                                                                   223,60,
+                                                                                   73,174,
+                                                                                   239,183,
+                                                                                   157,90,
+                                                                                   181,162>>,
+                                                                                request_binding =>
+                                                                                 none,
+                                                                                read_set =>
+                                                                                 true,
+                                                                                deadline_ms =>
+                                                                                 -576460715273,
+                                                                                principal =>
+                                                                                 {node,
+                                                                                  <<REDACTED_DISPOSABLE_BINARY_32>>},
+                                                                                proof_context =>
+                                                                                 {scope,
+                                                                                  <<REDACTED_DISPOSABLE_BINARY_32>>,
+                                                                                  <0.8293.0>,
+                                                                                  #Ref<0.2679822982.4151050241.168227>,
+                                                                                  <<155,99,
+                                                                                    157,176,
+                                                                                    103,20,
+                                                                                    223,60,
+                                                                                    73,174,
+                                                                                    239,183,
+                                                                                    157,90,
+                                                                                    181,162>>}}],
+                                                                             [{file,
+                                                                               "/work/src/quod_proof_session.erl"},
+                                                                              {line,
+                                                                               99}]},
+                                                                            {quod_scope_session,
+                                                                             start_session,
+                                                                             2,
+                                                                             [{file,
+                                                                               "/work/src/quod_scope_session.erl"},
+                                                                              {line,
+                                                                               1294}]},
+                                                                            {quod_scope_session,
+                                                                             init,
+                                                                             10,
+                                                                             [{file,
+                                                                               "/work/src/quod_scope_session.erl"},
+                                                                              {line,
+                                                                               1265}]},
+                                                                            {quod_trace,
+                                                                             with_context,
+                                                                             2,
+                                                                             [{file,
+                                                                               "/work/src/quod_trace.erl"},
+                                                                              {line,
+                                                                               59}]}]
+[0;32m.[0m[0;32m.[0m=ERROR REPORT==== 28-Oct-2026::01:30:17.796801 ===
+     Process:            <0.8415.0> 
+     Context:            maximum heap size reached
+     Max Heap Size:      1048576
+     Total Heap Size:    1202143
+     Kill:               true
+     Error Logger:       true
+     Message Queue Len:  0
+     GC Info:            [{old_heap_block_size,2586},
+                          {heap_block_size,2199188},
+                          {mbuf_size,0},
+                          {recent_size,0},
+                          {stack_size,999630},
+                          {old_heap_size,1145},
+                          {heap_size,0},
+                          {bin_vheap_size,0},
+                          {bin_vheap_block_size,46422},
+                          {bin_old_vheap_size,16},
+                          {bin_old_vheap_block_size,46422}]
+     Stacktrace:         [{erlog_int,make_var_list,2,
+                              [{file,
+                                   "/work/_build/default/lib/erlog/src/erlog_int.erl"},
+                               {line,1111}]},
+                          {erlog_int,make_var_list,2,
+                              [{file,
+                                   "/work/_build/default/lib/erlog/src/erlog_int.erl"},
+                               {line,1113}]},
+                          {erlog_lib_lists,make_list,4,
+                              [{file,
+                                   "/work/_build/default/lib/erlog/src/erlog_lib_lists.erl"},
+                               {line,127}]},
+                          {quod_proof_scope,guarded,1,
+                              [{file,"/work/src/quod_proof_scope.erl"},
+                               {line,102}]},
+                          {quod_trace,'-with_span/6-fun-0-',3,
+                              [{file,"/work/src/quod_trace.erl"},{line,81}]},
+                          {quod_trace,with_context,2,
+                              [{file,"/work/src/quod_trace.erl"},{line,59}]},
+                          {quod_proof_scope,next,1,
+                              [{file,"/work/src/quod_proof_scope.erl"},
+                               {line,55}]},
+                          {quod_transaction_scope,with_invocation,4,
+                              [{file,"/work/src/quod_transaction_scope.erl"},
+                               {line,88}]}]
+
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m
+Finished in 2.566 seconds
+[0;32m75 tests, 0 failures
+[0m

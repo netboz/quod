@@ -1,6 +1,6 @@
 -module(quod_safe_term).
 -moduledoc """
-Decode bounded untrusted Erlang external terms without atom creation,
+Decode untrusted Erlang external terms without atom creation,
 compressed-term expansion, or ignored trailing bytes.
 
 `decode_wrapped/2` retains already-loaded atoms and represents every unknown
@@ -11,22 +11,20 @@ for that shape across fresh VMs. Callers remain responsible for validating the
 decoded term's protocol shape.
 """.
 
--include("quod_term_limits.hrl").
-
 -export([encode_canonical/2, decode/2, decode_wrapped/2,
          validate_canonical/2]).
 
 -type decode_error() :: bad_term | compressed | too_large | trailing_data.
 
--doc "Encode one bounded term in the canonical ETF subset accepted by decode_wrapped/2.".
--spec encode_canonical(term(), non_neg_integer()) ->
+-doc "Encode one term in the canonical ETF subset accepted by decode_wrapped/2.".
+-spec encode_canonical(term(), non_neg_integer() | unlimited) ->
           {ok, binary()} | {error, bad_term | too_large}.
 encode_canonical(Term, MaxBytes)
-  when is_integer(MaxBytes), MaxBytes >= 0 ->
+  when MaxBytes =:= unlimited; is_integer(MaxBytes), MaxBytes >= 0 ->
     case stable_term(Term) of
         true ->
             try term_to_binary(Term, [deterministic]) of
-                Bytes when byte_size(Bytes) =< MaxBytes -> {ok, Bytes};
+                Bytes when MaxBytes =:= unlimited; byte_size(Bytes) =< MaxBytes -> {ok, Bytes};
                 _Bytes -> {error, too_large}
             catch
                 _:_ -> {error, bad_term}
@@ -37,34 +35,37 @@ encode_canonical(Term, MaxBytes)
 encode_canonical(_Term, _MaxBytes) ->
     {error, bad_term}.
 
--spec decode(binary(), non_neg_integer()) ->
+-spec decode(binary(), non_neg_integer() | unlimited) ->
           {ok, term()} |
           {error, decode_error()}.
 decode(Binary, MaxBytes)
-  when is_binary(Binary), is_integer(MaxBytes), MaxBytes >= 0 ->
-    case byte_size(Binary) =< MaxBytes of
+  when is_binary(Binary),
+       (MaxBytes =:= unlimited orelse (is_integer(MaxBytes) andalso MaxBytes >= 0)) ->
+    case MaxBytes =:= unlimited orelse byte_size(Binary) =< MaxBytes of
         true -> decode_bounded(Binary);
         false -> {error, too_large}
     end;
 decode(_, _) ->
     {error, bad_term}.
 
--spec decode_wrapped(binary(), non_neg_integer()) ->
+-spec decode_wrapped(binary(), non_neg_integer() | unlimited) ->
           {ok, term()} | {error, decode_error()}.
 decode_wrapped(Binary, MaxBytes)
-  when is_binary(Binary), is_integer(MaxBytes), MaxBytes >= 0 ->
-    case byte_size(Binary) =< MaxBytes of
+  when is_binary(Binary),
+       (MaxBytes =:= unlimited orelse (is_integer(MaxBytes) andalso MaxBytes >= 0)) ->
+    case MaxBytes =:= unlimited orelse byte_size(Binary) =< MaxBytes of
         true -> decode_wrapped_bounded(Binary);
         false -> {error, too_large}
     end;
 decode_wrapped(_, _) ->
     {error, bad_term}.
 
--doc "Validate bounded canonical ETF without materializing atoms.".
--spec validate_canonical(binary(), non_neg_integer()) ->
+-doc "Validate canonical ETF without materializing atoms.".
+-spec validate_canonical(binary(), non_neg_integer() | unlimited) ->
           ok | {error, decode_error()}.
 validate_canonical(Binary, MaxBytes)
-  when is_binary(Binary), is_integer(MaxBytes), MaxBytes >= 0 ->
+  when is_binary(Binary),
+       (MaxBytes =:= unlimited orelse (is_integer(MaxBytes) andalso MaxBytes >= 0)) ->
     case decode_wrapped(Binary, MaxBytes) of
         {ok, _Term} -> ok;
         {error, _} = Error -> Error
@@ -86,7 +87,7 @@ decode_wrapped_bounded(<<131, 80, _/binary>>) ->
     {error, compressed};
 decode_wrapped_bounded(<<131, Body/binary>> = Binary) ->
     try
-        case parse(Body, 0) of
+        case parse(Body) of
             {Term, Ast, <<>>} ->
                 Reencoded = iolist_to_binary([131, encode(Ast)]),
                 case Reencoded =:= Binary of
@@ -104,38 +105,37 @@ decode_wrapped_bounded(_) ->
 
 %% Protocol values are immutable data. Runtime identities and executable ETF
 %% values (pids, ports, refs, funs and exports) are deliberately rejected.
-parse(_Bytes, Depth) when Depth > ?QUOD_MAX_TERM_DEPTH -> throw(bad_etf);
-parse(<<97, N:8, Rest/binary>>, _Depth) -> {N, {integer, N}, Rest};
-parse(<<98, N:32/signed-big, Rest/binary>>, _Depth) -> {N, {integer, N}, Rest};
-parse(<<70, F:64/float-big, Rest/binary>>, _Depth) -> {F, {float, F}, Rest};
-parse(<<100, N:16/big, Name:N/binary, Rest/binary>>, _Depth) ->
+parse(<<97, N:8, Rest/binary>>) -> {N, {integer, N}, Rest};
+parse(<<98, N:32/signed-big, Rest/binary>>) -> {N, {integer, N}, Rest};
+parse(<<70, F:64/float-big, Rest/binary>>) -> {F, {float, F}, Rest};
+parse(<<100, N:16/big, Name:N/binary, Rest/binary>>) ->
     atom_term(Name, latin1, Rest);
-parse(<<115, N:8, Name:N/binary, Rest/binary>>, _Depth) ->
+parse(<<115, N:8, Name:N/binary, Rest/binary>>) ->
     atom_term(Name, latin1, Rest);
-parse(<<118, N:16/big, Name:N/binary, Rest/binary>>, _Depth) ->
+parse(<<118, N:16/big, Name:N/binary, Rest/binary>>) ->
     atom_term(Name, utf8, Rest);
-parse(<<119, N:8, Name:N/binary, Rest/binary>>, _Depth) ->
+parse(<<119, N:8, Name:N/binary, Rest/binary>>) ->
     atom_term(Name, utf8, Rest);
-parse(<<104, N:8, Rest/binary>>, Depth) ->
-    {Terms, Asts, Tail} = parse_n(N, Rest, [], [], Depth + 1),
+parse(<<104, N:8, Rest/binary>>) ->
+    {Terms, Asts, Tail} = parse_n(N, Rest, [], []),
     {list_to_tuple(Terms), {tuple, Asts}, Tail};
-parse(<<105, N:32/big, Rest/binary>>, Depth) ->
-    {Terms, Asts, Tail} = parse_n(N, Rest, [], [], Depth + 1),
+parse(<<105, N:32/big, Rest/binary>>) ->
+    {Terms, Asts, Tail} = parse_n(N, Rest, [], []),
     {list_to_tuple(Terms), {tuple, Asts}, Tail};
-parse(<<106, Rest/binary>>, _Depth) -> {[], nil, Rest};
-parse(<<107, N:16/big, Bytes:N/binary, Rest/binary>>, _Depth) when N > 0 ->
+parse(<<106, Rest/binary>>) -> {[], nil, Rest};
+parse(<<107, N:16/big, Bytes:N/binary, Rest/binary>>) when N > 0 ->
     Values = binary_to_list(Bytes),
     {Values, {list, [{integer, V} || V <- Values], nil}, Rest};
-parse(<<108, N:32/big, Rest/binary>>, Depth) when N > 0 ->
-    {Terms, Asts, Tail0} = parse_n(N, Rest, [], [], Depth + 1),
-    {TailTerm, TailAst, Tail} = parse(Tail0, Depth + 1),
+parse(<<108, N:32/big, Rest/binary>>) when N > 0 ->
+    {Terms, Asts, Tail0} = parse_n(N, Rest, [], []),
+    {TailTerm, TailAst, Tail} = parse(Tail0),
     case TailAst of
         {list, _, _} -> throw(bad_etf);
         _ -> {make_list(Terms, TailTerm), {list, Asts, TailAst}, Tail}
     end;
-parse(<<109, N:32/big, Bytes:N/binary, Rest/binary>>, _Depth) ->
+parse(<<109, N:32/big, Bytes:N/binary, Rest/binary>>) ->
     {Bytes, {binary, Bytes}, Rest};
-parse(<<77, N:32/big, Bits:8, Bytes:N/binary, Rest/binary>>, _Depth)
+parse(<<77, N:32/big, Bits:8, Bytes:N/binary, Rest/binary>>)
   when N > 0, Bits >= 1, Bits =< 7 ->
     <<Prefix:(N - 1)/binary, LastByte:8>> = Bytes,
     Pad = 8 - Bits,
@@ -146,14 +146,14 @@ parse(<<77, N:32/big, Bits:8, Bytes:N/binary, Rest/binary>>, _Depth)
             {Value, {bit_binary, Value}, Rest};
         _ -> throw(bad_etf)
     end;
-parse(<<110, N:8, Sign:8, Digits:N/binary, Rest/binary>>, _Depth)
+parse(<<110, N:8, Sign:8, Digits:N/binary, Rest/binary>>)
   when Sign =< 1 ->
     big_term(Sign, Digits, Rest);
-parse(<<111, N:32/big, Sign:8, Digits:N/binary, Rest/binary>>, _Depth)
+parse(<<111, N:32/big, Sign:8, Digits:N/binary, Rest/binary>>)
   when Sign =< 1 ->
     big_term(Sign, Digits, Rest);
-parse(<<116, N:32/big, Rest/binary>>, Depth) ->
-    {Pairs, Tail} = parse_pairs(N, Rest, [], Depth + 1),
+parse(<<116, N:32/big, Rest/binary>>) ->
+    {Pairs, Tail} = parse_pairs(N, Rest, []),
     Material = maps:from_list([{K, V} || {K, _KA, V, _VA} <- Pairs]),
     case map_size(Material) =:= N andalso
          lists:all(fun({_K, KA, _V, _VA}) -> stable_map_key(KA) end, Pairs) of
@@ -161,7 +161,7 @@ parse(<<116, N:32/big, Rest/binary>>, Depth) ->
             {Material, {map, [{KA, VA} || {_K, KA, _V, VA} <- Pairs]}, Tail};
         false -> throw(bad_etf)
     end;
-parse(_, _Depth) -> throw(bad_etf).
+parse(_) -> throw(bad_etf).
 
 atom_term(Name, Encoding, Rest) ->
     case canonical_atom_name(Name, Encoding) of
@@ -182,17 +182,17 @@ canonical_atom_name(Name, Encoding) ->
         _ -> error
     end.
 
-parse_n(0, Rest, Terms, Asts, _Depth) ->
+parse_n(0, Rest, Terms, Asts) ->
     {lists:reverse(Terms), lists:reverse(Asts), Rest};
-parse_n(N, Bytes, Terms, Asts, Depth) when N > 0 ->
-    {Term, Ast, Rest} = parse(Bytes, Depth),
-    parse_n(N - 1, Rest, [Term | Terms], [Ast | Asts], Depth).
+parse_n(N, Bytes, Terms, Asts) when N > 0 ->
+    {Term, Ast, Rest} = parse(Bytes),
+    parse_n(N - 1, Rest, [Term | Terms], [Ast | Asts]).
 
-parse_pairs(0, Rest, Acc, _Depth) -> {lists:reverse(Acc), Rest};
-parse_pairs(N, Bytes, Acc, Depth) when N > 0 ->
-    {K, KA, Rest1} = parse(Bytes, Depth),
-    {V, VA, Rest2} = parse(Rest1, Depth),
-    parse_pairs(N - 1, Rest2, [{K, KA, V, VA} | Acc], Depth).
+parse_pairs(0, Rest, Acc) -> {lists:reverse(Acc), Rest};
+parse_pairs(N, Bytes, Acc) when N > 0 ->
+    {K, KA, Rest1} = parse(Bytes),
+    {V, VA, Rest2} = parse(Rest1),
+    parse_pairs(N - 1, Rest2, [{K, KA, V, VA} | Acc]).
 
 make_list([], Tail) -> Tail;
 make_list([Head | Rest], Tail) -> [Head | make_list(Rest, Tail)].

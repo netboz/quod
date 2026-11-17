@@ -1,0 +1,123 @@
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS native term decoder refuses the earlier fixture's literal non-UTF8 binary separator
+PASS enabled action create-key
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action connect
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action register
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action prepare
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action setup
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS authorized same-ontology fixture offers a non-space instance form and two visual occurrences
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS actual two-occurrence native raster retained
+PASS both real native picks resolve the same exact anchored subject
+PASS native selection retains each chosen visual occurrence and pose alongside the same subject
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS same authored non-space instance form retains its exact selected occurrence
+PASS actual rendered desktop-before-selection-layout retained
+<private fixture/client diagnostic>
+PASS spatial composition uses production placement without starting native XR
+PASS actual rendered near-occlusion retained
+PASS current software scene camera and actual draw observed without XR
+PASS actual near panel clears the selected model's full near extent in the retained selection basis
+<private fixture/client diagnostic>
+PASS actual rendered hierarchy-False-1200-26 retained
+PASS native scroll exposes the complete editor at (False, 1200, 26)
+PASS native scroll exposes the complete authored section with its editor at (False, 1200, 26)
+PASS authored title section and native field have distinct accessible scale at (False, 1200, 26)
+<private fixture/client diagnostic>
+PASS actual rendered hierarchy-False-1200-48 retained
+PASS native scroll exposes the complete editor at (False, 1200, 48)
+PASS native scroll exposes the complete authored section with its editor at (False, 1200, 48)
+PASS authored title section and native field have distinct accessible scale at (False, 1200, 48)
+<private fixture/client diagnostic>
+PASS actual rendered hierarchy-False-560-26 retained
+PASS native scroll exposes the complete editor at (False, 560, 26)
+PASS native scroll exposes the complete authored section with its editor at (False, 560, 26)
+PASS authored title section and native field have distinct accessible scale at (False, 560, 26)
+<private fixture/client diagnostic>
+PASS actual rendered hierarchy-True-1200-26 retained
+PASS native scroll exposes the complete editor at (True, 1200, 26)
+PASS native scroll exposes the complete authored section with its editor at (True, 1200, 26)
+PASS authored title section and native field have distinct accessible scale at (True, 1200, 26)
+<private fixture/client diagnostic>
+PASS actual rendered hierarchy-True-1200-48 retained
+PASS native scroll exposes the complete editor at (True, 1200, 48)
+PASS native scroll exposes the complete authored section with its editor at (True, 1200, 48)
+PASS authored title section and native field have distinct accessible scale at (True, 1200, 48)
+PASS authored task title stays visible outside the field/task scroll at 26 48 narrow and spatial sizes
+PASS near form target is not hidden behind the selected solid along the retained software viewing ray
+PASS layout retains the same native field draft and semantic revision
+PASS enabled action disconnect
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS signed occurrence consumers retire through the existing owner
+OCCURRENCE_PASS
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>

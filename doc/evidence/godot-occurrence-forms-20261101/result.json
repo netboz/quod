@@ -1,0 +1,3100 @@
+{
+  "passed": true,
+  "evidence_verified": true,
+  "selected": {
+    "material-final17": {
+      "checks": 15,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/material-final17.json",
+      "sha256": "fe7f19ee8a751d372e0e95fefa2100dfee770f77a9822598e6ae0d3931184803",
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/client-occurrence-candidate17-manifest.json",
+      "manifest_sha256": "522b80dfee0cc3a9b8f1c5b211c42f84cbc49e278d59c39a9523a937d70c97db",
+      "current_input_reuse": {
+        "material_owner": "Exact Core/Scene, ScenePanel _Ready and Apply bodies and diagnostic unchanged; later selected preview-surface code is separately qualified."
+      },
+      "cost": {},
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-alignment-material-full-stdout": true,
+        "client-alignment-material-full-stderr": true
+      },
+      "all_children_and_wrapper_zero": true
+    },
+    "occurrence-input-final25": {
+      "checks": 14,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/occurrence-input-final25.json",
+      "sha256": "9c9d70e6966ae82a162897221b555dfb07d1bacc67b3a8ff6ccd8f4d917efa40",
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/client-occurrence-candidate25-manifest.json",
+      "manifest_sha256": "8d8e2337b4554fb66baf79795ae47d196c04f52a2a984eab915fb40df0f4e501",
+      "current_input_reuse": {
+        "client/godot/Main.cs": {
+          "tested_sha256": "937a505e21f37f979247bea4d861f5eee09acdcfd8818a2032feb3a9ec40ff28",
+          "current_sha256": "b2288b63f555677850666a2a002681842469e12cd74d447ac3b4d5835c35c0c7",
+          "disposition": "Removed obsolete body-child exception; the form is constructed once under FormSurface. Current signed and workspace gates qualify disposal."
+        },
+        "client/godot/README.md": {
+          "tested_sha256": "101f814d9d47665e42e08aa975a6d5e4d28f7db56259c3cd813c064413bf25d2",
+          "current_sha256": "b98e9f90a9058abf9fc3cdb893f65863940c553fc1c430a2798965d31e01b7a6",
+          "disposition": "Documentation only; exact current product README is bound separately."
+        },
+        "client/godot/SpatialGui.cs": {
+          "tested_sha256": "2e2df1b38f9bde26b97feddd0087a004317df6b501b8863bddc81d2b93f5ed11",
+          "current_sha256": "c4545a220e18290848eb51751bc2e81599d117676b4bfe4a0f500b6dd47bcdd1",
+          "disposition": "Only native minimum-size notification and root relative-motion fixes intervene; current preview/world/workspace gates exercise these exact corrections."
+        },
+        "client/godot/tests/WorkspaceChecks.cs": {
+          "tested_sha256": "34d567070e967e1a5f1afecd48c8547b718d38b317636457dc7f4d4f5908cd58",
+          "current_sha256": "8124de3a9028d841680468c849ba007a9cc1eb6e7943c9e77877d9be28828c7e",
+          "disposition": "Replaced stale test ancestor cast with actual clipping ancestors; this phase did not execute WorkspaceAdapter."
+        }
+      },
+      "cost": {},
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-input-stdout": true,
+        "client-occurrence-input-stderr": true
+      },
+      "all_children_and_wrapper_zero": true
+    },
+    "occurrence-interaction-final27": {
+      "checks": 91,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/occurrence-interaction-final27.json",
+      "sha256": "411306b1cd5c993e174af177c267eb63a20c8bf60dcea42c19c821a189c5ddc1",
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/client-occurrence-candidate27-manifest.json",
+      "manifest_sha256": "07d5404696f9f04448e25260a26fe5954e4658118359c5bff92878c9f00f9b08",
+      "current_input_reuse": {},
+      "cost": {
+        "unchanged-work.json": {
+          "work": {
+            "calls": [],
+            "watched": [
+              [
+                "quod_foreign_projection",
+                "start_monitor",
+                4
+              ],
+              [
+                "quod_committed_projection",
+                "apply_entry",
+                3
+              ],
+              [
+                "quod_physics_native",
+                "install",
+                3
+              ],
+              [
+                "quod_physics_native",
+                "install_hinges",
+                2
+              ],
+              [
+                "quod_physics_native",
+                "new_world",
+                3
+              ],
+              [
+                "quod_ledger_store",
+                "fold",
+                5
+              ],
+              [
+                "quod_ledger_store",
+                "open",
+                3
+              ],
+              [
+                "file",
+                "write",
+                2
+              ],
+              [
+                "file",
+                "pwrite",
+                3
+              ],
+              [
+                "file",
+                "sync",
+                1
+              ],
+              [
+                "file",
+                "datasync",
+                1
+              ]
+            ]
+          }
+        }
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-full-stdout": true,
+        "client-occurrence-full-stderr": true
+      },
+      "all_children_and_wrapper_zero": true
+    },
+    "occurrence-lifetime-final24": {
+      "checks": 29,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/occurrence-lifetime-final24.json",
+      "sha256": "e19690d23ee4dd57f64fc053cabfaaec8910018b9b623a7e2e3b61792584db3a",
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/client-occurrence-candidate24-manifest.json",
+      "manifest_sha256": "a1a2eee4ef1bc45ecd9b36c1dfa94adc3c04d5366b8da8f7c3990074f8ed8c25",
+      "current_input_reuse": {
+        "client/godot/Main.cs": {
+          "tested_sha256": "937a505e21f37f979247bea4d861f5eee09acdcfd8818a2032feb3a9ec40ff28",
+          "current_sha256": "b2288b63f555677850666a2a002681842469e12cd74d447ac3b4d5835c35c0c7",
+          "disposition": "Removed obsolete body-child exception; the form is constructed once under FormSurface. Current signed and workspace gates qualify disposal."
+        },
+        "client/godot/README.md": {
+          "tested_sha256": "101f814d9d47665e42e08aa975a6d5e4d28f7db56259c3cd813c064413bf25d2",
+          "current_sha256": "b98e9f90a9058abf9fc3cdb893f65863940c553fc1c430a2798965d31e01b7a6",
+          "disposition": "Documentation only; exact current product README is bound separately."
+        },
+        "client/godot/SpatialGui.cs": {
+          "tested_sha256": "2e2df1b38f9bde26b97feddd0087a004317df6b501b8863bddc81d2b93f5ed11",
+          "current_sha256": "c4545a220e18290848eb51751bc2e81599d117676b4bfe4a0f500b6dd47bcdd1",
+          "disposition": "Only native minimum-size notification and root relative-motion fixes intervene; current preview/world/workspace gates exercise these exact corrections."
+        },
+        "client/godot/tests/WorkspaceChecks.cs": {
+          "tested_sha256": "34d567070e967e1a5f1afecd48c8547b718d38b317636457dc7f4d4f5908cd58",
+          "current_sha256": "8124de3a9028d841680468c849ba007a9cc1eb6e7943c9e77877d9be28828c7e",
+          "disposition": "Replaced stale test ancestor cast with actual clipping ancestors; this phase did not execute WorkspaceAdapter."
+        }
+      },
+      "cost": {},
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-lifetime-stdout": true,
+        "client-occurrence-lifetime-stderr": true
+      },
+      "all_children_and_wrapper_zero": true
+    },
+    "occurrence-preview-final27": {
+      "checks": 117,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/occurrence-preview-final27.json",
+      "sha256": "a66d3ad4d683d5a66a513afc634cb48c88e435350629122266fa72458031f0c7",
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/client-occurrence-candidate27-manifest.json",
+      "manifest_sha256": "07d5404696f9f04448e25260a26fe5954e4658118359c5bff92878c9f00f9b08",
+      "current_input_reuse": {},
+      "cost": {
+        "preview-work.json": {
+          "work": {
+            "calls": [],
+            "watched": [
+              [
+                "quod_foreign_projection",
+                "start_monitor",
+                4
+              ],
+              [
+                "quod_committed_projection",
+                "apply_entry",
+                3
+              ],
+              [
+                "quod_physics_native",
+                "install",
+                3
+              ],
+              [
+                "quod_physics_native",
+                "install_hinges",
+                2
+              ],
+              [
+                "quod_physics_native",
+                "new_world",
+                3
+              ],
+              [
+                "quod_ledger_store",
+                "fold",
+                5
+              ],
+              [
+                "quod_ledger_store",
+                "open",
+                3
+              ],
+              [
+                "file",
+                "write",
+                2
+              ],
+              [
+                "file",
+                "pwrite",
+                3
+              ],
+              [
+                "file",
+                "sync",
+                1
+              ],
+              [
+                "file",
+                "datasync",
+                1
+              ]
+            ]
+          }
+        }
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-preview-stdout": true,
+        "client-occurrence-preview-stderr": true
+      },
+      "all_children_and_wrapper_zero": true
+    },
+    "occurrence-space-final24": {
+      "checks": 40,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/occurrence-space-final24.json",
+      "sha256": "b5540ade96280418e8cf9e22f36b7b1edb8dd5f2291d26bead29442b941137e8",
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/client-occurrence-candidate24-manifest.json",
+      "manifest_sha256": "a1a2eee4ef1bc45ecd9b36c1dfa94adc3c04d5366b8da8f7c3990074f8ed8c25",
+      "current_input_reuse": {
+        "client/godot/Main.cs": {
+          "tested_sha256": "937a505e21f37f979247bea4d861f5eee09acdcfd8818a2032feb3a9ec40ff28",
+          "current_sha256": "b2288b63f555677850666a2a002681842469e12cd74d447ac3b4d5835c35c0c7",
+          "disposition": "Removed obsolete body-child exception; the form is constructed once under FormSurface. Current signed and workspace gates qualify disposal."
+        },
+        "client/godot/README.md": {
+          "tested_sha256": "101f814d9d47665e42e08aa975a6d5e4d28f7db56259c3cd813c064413bf25d2",
+          "current_sha256": "b98e9f90a9058abf9fc3cdb893f65863940c553fc1c430a2798965d31e01b7a6",
+          "disposition": "Documentation only; exact current product README is bound separately."
+        },
+        "client/godot/SpatialGui.cs": {
+          "tested_sha256": "2e2df1b38f9bde26b97feddd0087a004317df6b501b8863bddc81d2b93f5ed11",
+          "current_sha256": "c4545a220e18290848eb51751bc2e81599d117676b4bfe4a0f500b6dd47bcdd1",
+          "disposition": "Only native minimum-size notification and root relative-motion fixes intervene; current preview/world/workspace gates exercise these exact corrections."
+        },
+        "client/godot/tests/WorkspaceChecks.cs": {
+          "tested_sha256": "34d567070e967e1a5f1afecd48c8547b718d38b317636457dc7f4d4f5908cd58",
+          "current_sha256": "8124de3a9028d841680468c849ba007a9cc1eb6e7943c9e77877d9be28828c7e",
+          "disposition": "Replaced stale test ancestor cast with actual clipping ancestors; this phase did not execute WorkspaceAdapter."
+        }
+      },
+      "cost": {},
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-space-stdout": true,
+        "client-occurrence-space-stderr": true
+      },
+      "all_children_and_wrapper_zero": true
+    },
+    "occurrence-controller21": {
+      "checks": 86,
+      "additional_native_probes": 0,
+      "actual_pass_lines": 86,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-controller21/result.json",
+      "sha256": "14766477cb5e71e6643a64e8ae79c3469c077477d85760930efab60d4b4db016",
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/client-occurrence-candidate21-manifest.json",
+      "manifest_sha256": "748f79ee41092ae1dafd34093b952d7f60c64998e5b0d2f4a5d1d013dbd13a0e",
+      "current_input_reuse": {
+        "client/godot/Main.cs": {
+          "tested_sha256": "937a505e21f37f979247bea4d861f5eee09acdcfd8818a2032feb3a9ec40ff28",
+          "current_sha256": "b2288b63f555677850666a2a002681842469e12cd74d447ac3b4d5835c35c0c7",
+          "disposition": "Removed obsolete body-child exception; the form is constructed once under FormSurface. Current signed and workspace gates qualify disposal."
+        },
+        "client/godot/README.md": {
+          "tested_sha256": "101f814d9d47665e42e08aa975a6d5e4d28f7db56259c3cd813c064413bf25d2",
+          "current_sha256": "b98e9f90a9058abf9fc3cdb893f65863940c553fc1c430a2798965d31e01b7a6",
+          "disposition": "Documentation only; exact current product README is bound separately."
+        },
+        "client/godot/SpatialGui.cs": {
+          "tested_sha256": "1ddcc909eb9d0876cde9310d184a7e8dceaa5c31b7c30b7b83be6ab84cbdb9f0",
+          "current_sha256": "c4545a220e18290848eb51751bc2e81599d117676b4bfe4a0f500b6dd47bcdd1",
+          "disposition": "Only native minimum-size notification and root relative-motion fixes intervene; current preview/world/workspace gates exercise these exact corrections."
+        },
+        "client/godot/tests/WorkspaceChecks.cs": {
+          "tested_sha256": "34d567070e967e1a5f1afecd48c8547b718d38b317636457dc7f4d4f5908cd58",
+          "current_sha256": "8124de3a9028d841680468c849ba007a9cc1eb6e7943c9e77877d9be28828c7e",
+          "disposition": "Replaced stale test ancestor cast with actual clipping ancestors; this phase did not execute WorkspaceAdapter."
+        }
+      },
+      "eof": {
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "all_children_and_wrapper_zero": true
+    },
+    "occurrence-form-ray22": {
+      "checks": 16,
+      "additional_native_probes": 0,
+      "actual_pass_lines": 16,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-form-ray22/result.json",
+      "sha256": "5a86b00a656d3f9f961ba6d595fc4cb12f510651b1c2500ded18d4e1213cfe38",
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/client-occurrence-candidate22-manifest.json",
+      "manifest_sha256": "c718b97e5d1728451c8b471b9cb1154ef60d4c92e5a6f68eb48c952116855d04",
+      "current_input_reuse": {
+        "client/godot/Main.cs": {
+          "tested_sha256": "937a505e21f37f979247bea4d861f5eee09acdcfd8818a2032feb3a9ec40ff28",
+          "current_sha256": "b2288b63f555677850666a2a002681842469e12cd74d447ac3b4d5835c35c0c7",
+          "disposition": "Removed obsolete body-child exception; the form is constructed once under FormSurface. Current signed and workspace gates qualify disposal."
+        },
+        "client/godot/README.md": {
+          "tested_sha256": "101f814d9d47665e42e08aa975a6d5e4d28f7db56259c3cd813c064413bf25d2",
+          "current_sha256": "b98e9f90a9058abf9fc3cdb893f65863940c553fc1c430a2798965d31e01b7a6",
+          "disposition": "Documentation only; exact current product README is bound separately."
+        },
+        "client/godot/SpatialGui.cs": {
+          "tested_sha256": "1ddcc909eb9d0876cde9310d184a7e8dceaa5c31b7c30b7b83be6ab84cbdb9f0",
+          "current_sha256": "c4545a220e18290848eb51751bc2e81599d117676b4bfe4a0f500b6dd47bcdd1",
+          "disposition": "Only native minimum-size notification and root relative-motion fixes intervene; current preview/world/workspace gates exercise these exact corrections."
+        },
+        "client/godot/tests/WorkspaceChecks.cs": {
+          "tested_sha256": "34d567070e967e1a5f1afecd48c8547b718d38b317636457dc7f4d4f5908cd58",
+          "current_sha256": "8124de3a9028d841680468c849ba007a9cc1eb6e7943c9e77877d9be28828c7e",
+          "disposition": "Replaced stale test ancestor cast with actual clipping ancestors; this phase did not execute WorkspaceAdapter."
+        }
+      },
+      "eof": {
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "all_children_and_wrapper_zero": true
+    },
+    "occurrence-keyboard-ray21": {
+      "checks": 16,
+      "additional_native_probes": 0,
+      "actual_pass_lines": 16,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-keyboard-ray21/result.json",
+      "sha256": "8119df0436bfce4e06be0479c52e24e0c8f1274e5e6ff4c2859164fcbbe2dc2c",
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/client-occurrence-candidate21-manifest.json",
+      "manifest_sha256": "748f79ee41092ae1dafd34093b952d7f60c64998e5b0d2f4a5d1d013dbd13a0e",
+      "current_input_reuse": {
+        "client/godot/Main.cs": {
+          "tested_sha256": "937a505e21f37f979247bea4d861f5eee09acdcfd8818a2032feb3a9ec40ff28",
+          "current_sha256": "b2288b63f555677850666a2a002681842469e12cd74d447ac3b4d5835c35c0c7",
+          "disposition": "Removed obsolete body-child exception; the form is constructed once under FormSurface. Current signed and workspace gates qualify disposal."
+        },
+        "client/godot/README.md": {
+          "tested_sha256": "101f814d9d47665e42e08aa975a6d5e4d28f7db56259c3cd813c064413bf25d2",
+          "current_sha256": "b98e9f90a9058abf9fc3cdb893f65863940c553fc1c430a2798965d31e01b7a6",
+          "disposition": "Documentation only; exact current product README is bound separately."
+        },
+        "client/godot/SpatialGui.cs": {
+          "tested_sha256": "1ddcc909eb9d0876cde9310d184a7e8dceaa5c31b7c30b7b83be6ab84cbdb9f0",
+          "current_sha256": "c4545a220e18290848eb51751bc2e81599d117676b4bfe4a0f500b6dd47bcdd1",
+          "disposition": "Only native minimum-size notification and root relative-motion fixes intervene; current preview/world/workspace gates exercise these exact corrections."
+        },
+        "client/godot/tests/WorkspaceChecks.cs": {
+          "tested_sha256": "34d567070e967e1a5f1afecd48c8547b718d38b317636457dc7f4d4f5908cd58",
+          "current_sha256": "8124de3a9028d841680468c849ba007a9cc1eb6e7943c9e77877d9be28828c7e",
+          "disposition": "Replaced stale test ancestor cast with actual clipping ancestors; this phase did not execute WorkspaceAdapter."
+        }
+      },
+      "eof": {
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "all_children_and_wrapper_zero": true
+    },
+    "occurrence-keyboard21": {
+      "checks": 169,
+      "additional_native_probes": 0,
+      "actual_pass_lines": 169,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-keyboard21/result.json",
+      "sha256": "697e3dd37dd323210d9d3eaf67114390dc774292fb3183da341f842e63b9e4ee",
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/client-occurrence-candidate21-manifest.json",
+      "manifest_sha256": "748f79ee41092ae1dafd34093b952d7f60c64998e5b0d2f4a5d1d013dbd13a0e",
+      "current_input_reuse": {
+        "client/godot/Main.cs": {
+          "tested_sha256": "937a505e21f37f979247bea4d861f5eee09acdcfd8818a2032feb3a9ec40ff28",
+          "current_sha256": "b2288b63f555677850666a2a002681842469e12cd74d447ac3b4d5835c35c0c7",
+          "disposition": "Removed obsolete body-child exception; the form is constructed once under FormSurface. Current signed and workspace gates qualify disposal."
+        },
+        "client/godot/README.md": {
+          "tested_sha256": "101f814d9d47665e42e08aa975a6d5e4d28f7db56259c3cd813c064413bf25d2",
+          "current_sha256": "b98e9f90a9058abf9fc3cdb893f65863940c553fc1c430a2798965d31e01b7a6",
+          "disposition": "Documentation only; exact current product README is bound separately."
+        },
+        "client/godot/SpatialGui.cs": {
+          "tested_sha256": "1ddcc909eb9d0876cde9310d184a7e8dceaa5c31b7c30b7b83be6ab84cbdb9f0",
+          "current_sha256": "c4545a220e18290848eb51751bc2e81599d117676b4bfe4a0f500b6dd47bcdd1",
+          "disposition": "Only native minimum-size notification and root relative-motion fixes intervene; current preview/world/workspace gates exercise these exact corrections."
+        },
+        "client/godot/tests/WorkspaceChecks.cs": {
+          "tested_sha256": "34d567070e967e1a5f1afecd48c8547b718d38b317636457dc7f4d4f5908cd58",
+          "current_sha256": "8124de3a9028d841680468c849ba007a9cc1eb6e7943c9e77877d9be28828c7e",
+          "disposition": "Replaced stale test ancestor cast with actual clipping ancestors; this phase did not execute WorkspaceAdapter."
+        }
+      },
+      "eof": {
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "all_children_and_wrapper_zero": true
+    },
+    "occurrence-scene23": {
+      "checks": 12,
+      "additional_native_probes": 0,
+      "actual_pass_lines": 12,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-scene23/result.json",
+      "sha256": "098215db51729c9c50681a5dc5af30dbeddce28cc0fcbad40ee2451850a18246",
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/client-occurrence-candidate23-manifest.json",
+      "manifest_sha256": "349548997327b42e9c4a7cf5016b5d2ace4c9af96ee91e45a9b461fa6359e693",
+      "current_input_reuse": {
+        "client/godot/Main.cs": {
+          "tested_sha256": "937a505e21f37f979247bea4d861f5eee09acdcfd8818a2032feb3a9ec40ff28",
+          "current_sha256": "b2288b63f555677850666a2a002681842469e12cd74d447ac3b4d5835c35c0c7",
+          "disposition": "Removed obsolete body-child exception; the form is constructed once under FormSurface. Current signed and workspace gates qualify disposal."
+        },
+        "client/godot/README.md": {
+          "tested_sha256": "101f814d9d47665e42e08aa975a6d5e4d28f7db56259c3cd813c064413bf25d2",
+          "current_sha256": "b98e9f90a9058abf9fc3cdb893f65863940c553fc1c430a2798965d31e01b7a6",
+          "disposition": "Documentation only; exact current product README is bound separately."
+        },
+        "client/godot/SpatialGui.cs": {
+          "tested_sha256": "2e2df1b38f9bde26b97feddd0087a004317df6b501b8863bddc81d2b93f5ed11",
+          "current_sha256": "c4545a220e18290848eb51751bc2e81599d117676b4bfe4a0f500b6dd47bcdd1",
+          "disposition": "Only native minimum-size notification and root relative-motion fixes intervene; current preview/world/workspace gates exercise these exact corrections."
+        },
+        "client/godot/tests/WorkspaceChecks.cs": {
+          "tested_sha256": "34d567070e967e1a5f1afecd48c8547b718d38b317636457dc7f4d4f5908cd58",
+          "current_sha256": "8124de3a9028d841680468c849ba007a9cc1eb6e7943c9e77877d9be28828c7e",
+          "disposition": "Replaced stale test ancestor cast with actual clipping ancestors; this phase did not execute WorkspaceAdapter."
+        }
+      },
+      "eof": {
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "all_children_and_wrapper_zero": true
+    },
+    "occurrence-workspace27": {
+      "checks": 36,
+      "additional_native_probes": 9,
+      "actual_pass_lines": 45,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-workspace27/result.json",
+      "sha256": "a36e7a5334f1ee50e6fd59522f063a1b4001ece9521042fc6fc44dc97415ed95",
+      "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/client-occurrence-candidate27-manifest.json",
+      "manifest_sha256": "07d5404696f9f04448e25260a26fe5954e4658118359c5bff92878c9f00f9b08",
+      "current_input_reuse": {},
+      "eof": {
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "all_children_and_wrapper_zero": true
+    }
+  },
+  "all_cases": {
+    "material-final17": {
+      "passed": true,
+      "children": {
+        "server": 0,
+        "client-alignment-material-full": 0
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-alignment-material-full-stdout": true,
+        "client-alignment-material-full-stderr": true
+      },
+      "failure": null,
+      "passing_prefix": 15,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-baseline02": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-occurrence-baseline": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-baseline-stdout": true,
+        "client-occurrence-baseline-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 8,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-input-final25": {
+      "passed": true,
+      "children": {
+        "server": 0,
+        "client-occurrence-input": 0
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-input-stdout": true,
+        "client-occurrence-input-stderr": true
+      },
+      "failure": null,
+      "passing_prefix": 14,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-input17": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-occurrence-input": -15
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-input-stdout": true,
+        "client-occurrence-input-stderr": true
+      },
+      "failure": "Empty: ",
+      "passing_prefix": 14,
+      "unretired_failure": true,
+      "cleanup_timeout": false
+    },
+    "occurrence-interaction-final13": {
+      "passed": true,
+      "children": {
+        "server": 0,
+        "client-occurrence-full": 0
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-full-stdout": true,
+        "client-occurrence-full-stderr": true
+      },
+      "failure": null,
+      "passing_prefix": 91,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-interaction-final24": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-occurrence-full": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-full-stdout": true,
+        "client-occurrence-full-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 86,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-interaction-final25": {
+      "passed": true,
+      "children": {
+        "server": 0,
+        "client-occurrence-full": 0
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-full-stdout": true,
+        "client-occurrence-full-stderr": true
+      },
+      "failure": null,
+      "passing_prefix": 91,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-interaction-final27": {
+      "passed": true,
+      "children": {
+        "server": 0,
+        "client-occurrence-full": 0
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-full-stdout": true,
+        "client-occurrence-full-stderr": true
+      },
+      "failure": null,
+      "passing_prefix": 91,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-interaction04": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-occurrence-full": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-full-stdout": true,
+        "client-occurrence-full-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 13,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-interaction05": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-occurrence-full": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-full-stdout": true,
+        "client-occurrence-full-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 38,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-interaction07": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-occurrence-full": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-full-stdout": true,
+        "client-occurrence-full-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 38,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-interaction08": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-occurrence-full": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-full-stdout": true,
+        "client-occurrence-full-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 82,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-lifetime-baseline10": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-occurrence-lifetime": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-lifetime-stdout": true,
+        "client-occurrence-lifetime-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 9,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-lifetime-baseline11": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-occurrence-lifetime": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-lifetime-stdout": true,
+        "client-occurrence-lifetime-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 12,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-lifetime-final12": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-occurrence-lifetime": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-lifetime-stdout": true,
+        "client-occurrence-lifetime-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 22,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-lifetime-final13": {
+      "passed": true,
+      "children": {
+        "server": 0,
+        "client-occurrence-lifetime": 0
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-lifetime-stdout": true,
+        "client-occurrence-lifetime-stderr": true
+      },
+      "failure": null,
+      "passing_prefix": 29,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-lifetime-final24": {
+      "passed": true,
+      "children": {
+        "server": 0,
+        "client-occurrence-lifetime": 0
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-lifetime-stdout": true,
+        "client-occurrence-lifetime-stderr": true
+      },
+      "failure": null,
+      "passing_prefix": 29,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-preview-baseline14": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-occurrence-preview": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-preview-stdout": true,
+        "client-occurrence-preview-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 10,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-preview-baseline16": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-occurrence-preview": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-preview-stdout": true,
+        "client-occurrence-preview-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 10,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-preview-baseline17": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-occurrence-preview": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-preview-stdout": true,
+        "client-occurrence-preview-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 11,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-preview-final18": {
+      "passed": true,
+      "children": {
+        "server": 0,
+        "client-occurrence-preview": 0
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-preview-stdout": true,
+        "client-occurrence-preview-stderr": true
+      },
+      "failure": null,
+      "passing_prefix": 14,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-preview-final19": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-occurrence-preview": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-preview-stdout": true,
+        "client-occurrence-preview-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 25,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-preview-final20": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-occurrence-preview": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-preview-stdout": true,
+        "client-occurrence-preview-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 49,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-preview-final21": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-occurrence-preview": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-preview-stdout": true,
+        "client-occurrence-preview-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 92,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-preview-final23": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-occurrence-preview": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-preview-stdout": true,
+        "client-occurrence-preview-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 110,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-preview-final24": {
+      "passed": true,
+      "children": {
+        "server": 0,
+        "client-occurrence-preview": 0
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-preview-stdout": true,
+        "client-occurrence-preview-stderr": true
+      },
+      "failure": null,
+      "passing_prefix": 117,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-preview-final27": {
+      "passed": true,
+      "children": {
+        "server": 0,
+        "client-occurrence-preview": 0
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-preview-stdout": true,
+        "client-occurrence-preview-stderr": true
+      },
+      "failure": null,
+      "passing_prefix": 117,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-preview-observation22": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-occurrence-preview": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-preview-stdout": true,
+        "client-occurrence-preview-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 93,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-selection03": {
+      "passed": true,
+      "children": {
+        "server": 0,
+        "client-occurrence-baseline": 0
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-baseline-stdout": true,
+        "client-occurrence-baseline-stderr": true
+      },
+      "failure": null,
+      "passing_prefix": 11,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-space-final24": {
+      "passed": true,
+      "children": {
+        "server": 0,
+        "client-occurrence-space": 0
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-space-stdout": true,
+        "client-occurrence-space-stderr": true
+      },
+      "failure": null,
+      "passing_prefix": 40,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-space13": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-occurrence-space": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-space-stdout": true,
+        "client-occurrence-space-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 17,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-space14": {
+      "passed": false,
+      "children": {
+        "server": 0,
+        "client-occurrence-space": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-space-stdout": true,
+        "client-occurrence-space-stderr": true
+      },
+      "failure": "AssertionError: ",
+      "passing_prefix": 31,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-space16": {
+      "passed": true,
+      "children": {
+        "server": 0,
+        "client-occurrence-space": 0
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-occurrence-space-stdout": true,
+        "client-occurrence-space-stderr": true
+      },
+      "failure": null,
+      "passing_prefix": 40,
+      "unretired_failure": false,
+      "cleanup_timeout": false
+    },
+    "occurrence-controller21": {
+      "passed": true,
+      "children": {
+        "client": 0
+      },
+      "eof": {
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "failure": null,
+      "explicit_completion": true,
+      "diagnostics": []
+    },
+    "occurrence-form-ray22": {
+      "passed": true,
+      "children": {
+        "client": 0
+      },
+      "eof": {
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "failure": null,
+      "explicit_completion": true,
+      "diagnostics": []
+    },
+    "occurrence-keyboard-ray21": {
+      "passed": true,
+      "children": {
+        "client": 0
+      },
+      "eof": {
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "failure": null,
+      "explicit_completion": true,
+      "diagnostics": []
+    },
+    "occurrence-keyboard20": {
+      "passed": false,
+      "children": {
+        "client": 0
+      },
+      "eof": {
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "failure": null,
+      "explicit_completion": true,
+      "diagnostics": [
+        {
+          "stream": "client-stdout.raw",
+          "line": 179,
+          "sha256": "8739bdaed3de88a0a4069e5a24a6108a1b03b621c0e70b9dc61bb9b582989540"
+        },
+        {
+          "stream": "client-stderr.raw",
+          "line": 1,
+          "sha256": "0a8527f3c48116942061529e5f6ae3e06446bd50f9842994fb66b779cb4847f3"
+        },
+        {
+          "stream": "client-stderr.raw",
+          "line": 3,
+          "sha256": "c1a99b7352e9124a61d23d1f767641fb5762279371fc0300df530ffe8204f301"
+        }
+      ]
+    },
+    "occurrence-keyboard21": {
+      "passed": true,
+      "children": {
+        "client": 0
+      },
+      "eof": {
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "failure": null,
+      "explicit_completion": true,
+      "diagnostics": []
+    },
+    "occurrence-ray-baseline13": {
+      "passed": true,
+      "children": {
+        "client": 0
+      },
+      "eof": {
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "failure": null,
+      "explicit_completion": true,
+      "diagnostics": []
+    },
+    "occurrence-ray-movement-baseline15": {
+      "passed": true,
+      "children": {
+        "client": 0
+      },
+      "eof": {
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "failure": null,
+      "explicit_completion": true,
+      "diagnostics": []
+    },
+    "occurrence-scene23": {
+      "passed": true,
+      "children": {
+        "client": 0
+      },
+      "eof": {
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "failure": null,
+      "explicit_completion": true,
+      "diagnostics": []
+    },
+    "occurrence-workspace25": {
+      "passed": false,
+      "children": {
+        "client": 1
+      },
+      "eof": {
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "failure": null,
+      "explicit_completion": false,
+      "diagnostics": []
+    },
+    "occurrence-workspace26": {
+      "passed": false,
+      "children": {
+        "client": 1
+      },
+      "eof": {
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "failure": null,
+      "explicit_completion": false,
+      "diagnostics": []
+    },
+    "occurrence-workspace27": {
+      "passed": true,
+      "children": {
+        "client": 0
+      },
+      "eof": {
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "failure": null,
+      "explicit_completion": true,
+      "diagnostics": []
+    }
+  },
+  "builds": {
+    "client-occurrence-baseline01": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "ffc9dba715282fd0d1e8ce240e9a06bce4322f63bb82ace51a15fdfcd95c69cf",
+      "supplied": 99,
+      "live": 98
+    },
+    "client-occurrence-candidate03": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "106607ab6e2a121b508a8ae463f20baf38b83535b71dfff00097a65cfe64026d",
+      "supplied": 99,
+      "live": 98
+    },
+    "client-occurrence-candidate04": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "b67bd978656030cb6e85f2ee540147a8fec1fbf2248542e092767d7a4590fc56",
+      "supplied": 100,
+      "live": 98
+    },
+    "client-occurrence-candidate05": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "2f4817af05ba02986f8ebdf893da29236d0dfe8f7af84b5c5bfc878949102af2",
+      "supplied": 100,
+      "live": 98
+    },
+    "client-occurrence-candidate06": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "f4192a0c0ee7ee2dd088312f9ecd9bebafc23947000fa407fa802354c2a49bb9",
+      "supplied": 100,
+      "live": 98
+    },
+    "client-occurrence-candidate07": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "ba0f7f91e5f7b80fe97893fb9e55efd378b64cbfea11854edb3ae487d634c63e",
+      "supplied": 100,
+      "live": 98
+    },
+    "client-occurrence-candidate08": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "6a249d9bd6c3efb86b4ba4bf43cb322be17ab925f723b1e38d76381a5ebca09d",
+      "supplied": 100,
+      "live": 98
+    },
+    "client-occurrence-candidate09": {
+      "passed": false,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      "manifest_sha256": "4ec9453b23a1f6b873ed825f22f063acd8452b8728a0e658bda428c4bd8a94f4",
+      "supplied": 101,
+      "live": 98
+    },
+    "client-occurrence-candidate10": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "d7f2c6b9b7d8a85e47249da0aac8ab7c4f7cab7b21928f09db08795018880508",
+      "supplied": 101,
+      "live": 98
+    },
+    "client-occurrence-candidate11": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "966a4df821a20190ff3afea5622ac776314180e0e296f8634ca3326f1a5e4bb9",
+      "supplied": 102,
+      "live": 98
+    },
+    "client-occurrence-candidate12": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "90dcf041b31220761da60b3441f43dcbd7a5272d6cded34ee874f06e16d7200a",
+      "supplied": 102,
+      "live": 98
+    },
+    "client-occurrence-candidate13": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "9e4b3d7a136b700b35549105b5b40f94a62adf3d4e94de096d418db204ae5ba4",
+      "supplied": 103,
+      "live": 98
+    },
+    "client-occurrence-candidate14": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "444fc9a250a8f438289645aa4cf93512cb145f72b90ed8b6937260d5ad9818a7",
+      "supplied": 104,
+      "live": 98
+    },
+    "client-occurrence-candidate15": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "a1c2ae0484c989938ac0a32da4783c32cbd4f862ce78f322bcf36cf4cf4ede17",
+      "supplied": 104,
+      "live": 98
+    },
+    "client-occurrence-candidate16": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "01f16b0ab86ffa879df74d25f198c709253fac160c4984898fa20d3cb9b45e22",
+      "supplied": 104,
+      "live": 98
+    },
+    "client-occurrence-candidate17": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "522b80dfee0cc3a9b8f1c5b211c42f84cbc49e278d59c39a9523a937d70c97db",
+      "supplied": 105,
+      "live": 98
+    },
+    "client-occurrence-candidate18": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "691f3e05bfb5de2958582645ee2da827019dee3f3e77b993d80efe9e3a7dca30",
+      "supplied": 105,
+      "live": 98
+    },
+    "client-occurrence-candidate19": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "176409b14ce0828c05769f3e23acf328911d8943ba054982135dc4d8e1d2456d",
+      "supplied": 105,
+      "live": 98
+    },
+    "client-occurrence-candidate20": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "cc185542ab0ea3aab60b23e310c271c4014720ce1c9a42eca67d4ad98662592a",
+      "supplied": 106,
+      "live": 98
+    },
+    "client-occurrence-candidate21": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "748f79ee41092ae1dafd34093b952d7f60c64998e5b0d2f4a5d1d013dbd13a0e",
+      "supplied": 106,
+      "live": 98
+    },
+    "client-occurrence-candidate22": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "c718b97e5d1728451c8b471b9cb1154ef60d4c92e5a6f68eb48c952116855d04",
+      "supplied": 106,
+      "live": 98
+    },
+    "client-occurrence-candidate23": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "349548997327b42e9c4a7cf5016b5d2ace4c9af96ee91e45a9b461fa6359e693",
+      "supplied": 106,
+      "live": 98
+    },
+    "client-occurrence-candidate24": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "a1a2eee4ef1bc45ecd9b36c1dfa94adc3c04d5366b8da8f7c3990074f8ed8c25",
+      "supplied": 106,
+      "live": 98
+    },
+    "client-occurrence-candidate25": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "8d8e2337b4554fb66baf79795ae47d196c04f52a2a984eab915fb40df0f4e501",
+      "supplied": 106,
+      "live": 98
+    },
+    "client-occurrence-candidate26": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "82f7d3e1ed66b0d62721bccdbfb2b9f538b3254e7df5dfb1c45ef9533b6aef98",
+      "supplied": 106,
+      "live": 98
+    },
+    "client-occurrence-candidate27": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "07d5404696f9f04448e25260a26fe5954e4658118359c5bff92878c9f00f9b08",
+      "supplied": 106,
+      "live": 98
+    },
+    "client-occurrence-product01": {
+      "passed": true,
+      "phases": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "manifest_sha256": "d67294b8bfe7f7f2dfdba9b65f48815b66dfc4409dad73d966455c1f0eb7d406",
+      "supplied": 98,
+      "live": 98
+    }
+  },
+  "wrappers": {
+    "material-final17-run": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/material-final17-run/result.json",
+      "receipt_sha256": "52430321daa9068e76e3f2741c0b5e6e0b2eb91da5fed44cfcd11dbdd4a838a2",
+      "elapsed_seconds": 21.352742738003144
+    },
+    "occurrence-baseline01-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-baseline01-bootstrap/result.json",
+      "receipt_sha256": "806560bd08a62cf6ee8f4eefa199767f9aa190c5f382a3edebaff2ca1cae8b4a",
+      "elapsed_seconds": 5.289486815978307
+    },
+    "occurrence-baseline01-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-baseline01-export/result.json",
+      "receipt_sha256": "cd8d96b07648eec8bcc1cd0edced4e7dd361b01f58bda1c798e7330877642029",
+      "elapsed_seconds": 19.4473729399906
+    },
+    "occurrence-baseline01-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-baseline01-restore-debug/result.json",
+      "receipt_sha256": "a22529ce0995264070f10c9ef530dc944dc9a21c6c3edfb5ee885dd1e78c6cf9",
+      "elapsed_seconds": 4.169608862983296
+    },
+    "occurrence-baseline01-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-baseline01-restore-exportrelease/result.json",
+      "receipt_sha256": "b3562c0662f4d6f16e94a837c9b7a621f1be7018a2c0c8528c322ce0b8a6db1d",
+      "elapsed_seconds": 2.127075237018289
+    },
+    "occurrence-baseline01-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-baseline01-run/result.json",
+      "receipt_sha256": "3bcfeccf11e019d322f1737850e93463d90898435992410ec4a3652a55571ecd",
+      "elapsed_seconds": 0.5919294869818259
+    },
+    "occurrence-baseline01-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-baseline01-toolchain/result.json",
+      "receipt_sha256": "acf6c5e266de0c203edcb80be2ba7540af191029037851ba801f6837fa044091",
+      "elapsed_seconds": 0.4299056749732699
+    },
+    "occurrence-baseline02-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-baseline02-run/result.json",
+      "receipt_sha256": "564a2a3ff40687b125505b7c5733643ba0fefc4d6aa99e780fdd7eb0e8577387",
+      "elapsed_seconds": 24.451398046978284
+    },
+    "occurrence-candidate03-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate03-bootstrap/result.json",
+      "receipt_sha256": "fbf3d915ad350b38fa03a54560c63d95a46045117adc091e520416b380edd466",
+      "elapsed_seconds": 5.688374639983522
+    },
+    "occurrence-candidate03-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate03-export/result.json",
+      "receipt_sha256": "7737371ce8d10968f609a05be977bf6930541707ddaacfb8bd38b3f8cf591ac6",
+      "elapsed_seconds": 19.44424168000114
+    },
+    "occurrence-candidate03-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate03-restore-debug/result.json",
+      "receipt_sha256": "ed66b47d27e0d1a5afd57e55af3582f686e49a6b27bc7985ad47245e47f2f8b1",
+      "elapsed_seconds": 3.847603717003949
+    },
+    "occurrence-candidate03-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate03-restore-exportrelease/result.json",
+      "receipt_sha256": "5df61dd251b99e917ebe735f4915f51335d68ffddd6f67777ab6450df92a2147",
+      "elapsed_seconds": 2.105466573004378
+    },
+    "occurrence-candidate03-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate03-toolchain/result.json",
+      "receipt_sha256": "2b942b1cab353296c13249a2ab4375d2e9786b41006dbc1f214506a3fd26b980",
+      "elapsed_seconds": 0.25318937801057473
+    },
+    "occurrence-candidate04-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate04-bootstrap/result.json",
+      "receipt_sha256": "4e3ccafceb239f3a3b3c85ebc44f060e283d540ee07e50505226a823d3c1f946",
+      "elapsed_seconds": 5.500329906004481
+    },
+    "occurrence-candidate04-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate04-export/result.json",
+      "receipt_sha256": "883710ae856042819b17e6bb9756fd829a7b477950125aa3693380d921d3db4d",
+      "elapsed_seconds": 17.699387708009453
+    },
+    "occurrence-candidate04-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate04-restore-debug/result.json",
+      "receipt_sha256": "7448fb2297e0485dc8fd6b7d948eabca9a4606c28017d533744bf8fafa976cc7",
+      "elapsed_seconds": 3.1153189339966048
+    },
+    "occurrence-candidate04-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate04-restore-exportrelease/result.json",
+      "receipt_sha256": "57bb6237a99306488d98bf8a5dfe815ef81d3347f31b10cc9031eb5fc5d9189b",
+      "elapsed_seconds": 1.7648928230046295
+    },
+    "occurrence-candidate04-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate04-toolchain/result.json",
+      "receipt_sha256": "466079d413a86ac4be9ad33554a947a90d445e1ef9cca477e7991e0fee488339",
+      "elapsed_seconds": 0.2528565200045705
+    },
+    "occurrence-candidate05-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate05-bootstrap/result.json",
+      "receipt_sha256": "130b064d08e69926ca89ee6193983962e1b6d602fe60c7139f76a3b549dc7145",
+      "elapsed_seconds": 5.349603585986188
+    },
+    "occurrence-candidate05-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate05-export/result.json",
+      "receipt_sha256": "1b01d38eee65449cab0266136cbad2bf2002f229fd7068ee2e4ca5367adf2753",
+      "elapsed_seconds": 20.27377746498678
+    },
+    "occurrence-candidate05-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate05-restore-debug/result.json",
+      "receipt_sha256": "3f92425b495aea8358354532abeeae31e937d95d4f17ad55c926e5482659b1e8",
+      "elapsed_seconds": 3.5731105849845335
+    },
+    "occurrence-candidate05-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate05-restore-exportrelease/result.json",
+      "receipt_sha256": "bb298b1fb360d1e8389eea213845ac471a48670a138f84d2ae9842a49b147205",
+      "elapsed_seconds": 2.185365309996996
+    },
+    "occurrence-candidate05-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate05-toolchain/result.json",
+      "receipt_sha256": "8a6d9fc5ae48596092cff0f41f283b635a90d4d2ad1f178b69c4c2c8da820ca1",
+      "elapsed_seconds": 0.15233601001091301
+    },
+    "occurrence-candidate06-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate06-bootstrap/result.json",
+      "receipt_sha256": "ddfb3b538928a78575779bb4e012c144787f8b3f1d36d6d6571d1e32b41ee2ed",
+      "elapsed_seconds": 5.69792942199274
+    },
+    "occurrence-candidate06-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate06-export/result.json",
+      "receipt_sha256": "10ac6264e19db250fe0de1c8af5bc88174797dfbd42d6723a742d92f82660044",
+      "elapsed_seconds": 19.039966915996047
+    },
+    "occurrence-candidate06-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate06-restore-debug/result.json",
+      "receipt_sha256": "c891ef38c636d5f80466c61c2d354419d4e08ccb5ce35805e0fa3064e438a9ab",
+      "elapsed_seconds": 2.8456397489935625
+    },
+    "occurrence-candidate06-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate06-restore-exportrelease/result.json",
+      "receipt_sha256": "c0ccaba875e4dc3fd4d3f071a5ada7ee49a9acd9733b77f6aa2f54aa6e48d005",
+      "elapsed_seconds": 2.279912238009274
+    },
+    "occurrence-candidate06-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate06-toolchain/result.json",
+      "receipt_sha256": "fe0cf82b65d2624c860cc0f3667b4d980d31a3534efb5c559d9e1af9f5c663df",
+      "elapsed_seconds": 0.15895035499124788
+    },
+    "occurrence-candidate07-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate07-bootstrap/result.json",
+      "receipt_sha256": "3f007680a07fc01870f73abe3524fe6c8f4e49c650ec8737c0ae11d1d977b8c4",
+      "elapsed_seconds": 5.378884958976414
+    },
+    "occurrence-candidate07-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate07-export/result.json",
+      "receipt_sha256": "957798a0ce2c8067fa8e417fb622665834741b3c134756b822df1b3bafed6f38",
+      "elapsed_seconds": 20.35490542498883
+    },
+    "occurrence-candidate07-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate07-restore-debug/result.json",
+      "receipt_sha256": "fe309b810de7b0ffd623c8ca667dae4e5b9eef76667fa52c646771e6fcaeb44d",
+      "elapsed_seconds": 2.926793425984215
+    },
+    "occurrence-candidate07-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate07-restore-exportrelease/result.json",
+      "receipt_sha256": "ab6ad02c0e92051711a0fa902fbe1362c78312e4f6be6482fd4c9e50ae9a9cb2",
+      "elapsed_seconds": 2.0404258310154546
+    },
+    "occurrence-candidate07-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate07-toolchain/result.json",
+      "receipt_sha256": "dc326769ca45ded69418769e5dfaec27e9b0fd71303263069da03c97f09e208f",
+      "elapsed_seconds": 0.28319520299555734
+    },
+    "occurrence-candidate08-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate08-bootstrap/result.json",
+      "receipt_sha256": "16a54c78a64a6eff134bb2f88353d4e174dcdb7a11457fb8fe2d6bfd01f4eab3",
+      "elapsed_seconds": 5.380441103014164
+    },
+    "occurrence-candidate08-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate08-export/result.json",
+      "receipt_sha256": "0869a064dd00b586bd207fdae5889eaf8633f6d15e34b5fc672b42d88f0cd3b1",
+      "elapsed_seconds": 19.61855432399898
+    },
+    "occurrence-candidate08-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate08-restore-debug/result.json",
+      "receipt_sha256": "d0e0c871e537ce032e496216c78a41ad7e8c0717a4bfb52a598e8e8a0bf00682",
+      "elapsed_seconds": 3.1546061590197496
+    },
+    "occurrence-candidate08-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate08-restore-exportrelease/result.json",
+      "receipt_sha256": "de0babe8ff29ef714843659daa4ee2351e6ba160caa01534c703d52bd3e96259",
+      "elapsed_seconds": 2.185539833008079
+    },
+    "occurrence-candidate08-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate08-toolchain/result.json",
+      "receipt_sha256": "e8fae97e53bfe8fe616dc4f0a3054b2c354d9ab9b98c44d788026ebb78ffa06d",
+      "elapsed_seconds": 0.42567908301134594
+    },
+    "occurrence-candidate09-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate09-bootstrap/result.json",
+      "receipt_sha256": "b57b263900a6940564b3a003e63a050f499997dd358d429ba777a6a256eb0211",
+      "elapsed_seconds": 5.336934464983642
+    },
+    "occurrence-candidate09-export": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate09-export/result.json",
+      "receipt_sha256": "87b6fbb01e0a038a77189f10eb1b7ffe449a11dccfc8def677cc9e124174b86a",
+      "elapsed_seconds": 9.16130171099212
+    },
+    "occurrence-candidate09-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate09-restore-debug/result.json",
+      "receipt_sha256": "dc7ce725097d732df9b7f42e5103c37f6c5f1368d3c033d21ee66f28a761a34a",
+      "elapsed_seconds": 2.76665558500099
+    },
+    "occurrence-candidate09-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate09-restore-exportrelease/result.json",
+      "receipt_sha256": "8722f9e08abf5d09276164d0446cb4f79d3422b295170bc417411e1af675014a",
+      "elapsed_seconds": 2.5029967940063216
+    },
+    "occurrence-candidate09-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate09-toolchain/result.json",
+      "receipt_sha256": "c0dca7ce594f05919bf7e698c8ddf5600ff670528091f673e0b2fe577b4ce131",
+      "elapsed_seconds": 0.2502162549935747
+    },
+    "occurrence-candidate10-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate10-bootstrap/result.json",
+      "receipt_sha256": "e1b60492bc7c1da859c9ac20c7f64d4bd21e534c58057e7ab7a89f03866a3246",
+      "elapsed_seconds": 5.382882593985414
+    },
+    "occurrence-candidate10-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate10-export/result.json",
+      "receipt_sha256": "63439879e18b9ef41096230a7b14120bf875c0decc1c6df727b0e88333764142",
+      "elapsed_seconds": 19.78734399698442
+    },
+    "occurrence-candidate10-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate10-restore-debug/result.json",
+      "receipt_sha256": "a46e524a7f24f93ec93fbd534d1d5bcc49f1cf961caf15ad2e73ccaa31c85c61",
+      "elapsed_seconds": 3.3544271249847952
+    },
+    "occurrence-candidate10-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate10-restore-exportrelease/result.json",
+      "receipt_sha256": "0bb7bfed4a62f6c732983c8721b3dbec0b7016901918cb9f6fc80b87a6bee5ab",
+      "elapsed_seconds": 1.8534577840182465
+    },
+    "occurrence-candidate10-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate10-toolchain/result.json",
+      "receipt_sha256": "e4efb6c81eefd4897c910b61b1006b27fd202da37ccefcdaa4efdbb1968aef19",
+      "elapsed_seconds": 0.35977300599915907
+    },
+    "occurrence-candidate11-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate11-bootstrap/result.json",
+      "receipt_sha256": "02afc4fc9e7e2ecce49fdd4b92cc5ee04a5a2706aeb0b600ba2dd2854d8adf28",
+      "elapsed_seconds": 5.195820254011778
+    },
+    "occurrence-candidate11-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate11-export/result.json",
+      "receipt_sha256": "c0644ff8698270e2a5585686b52408d212109551c1cd981c99be50495f3f738d",
+      "elapsed_seconds": 20.474206637998577
+    },
+    "occurrence-candidate11-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate11-restore-debug/result.json",
+      "receipt_sha256": "50f674796798909405080a2f68cb827836e633c04b86214dd6d16a12cc333a30",
+      "elapsed_seconds": 2.9862700730154756
+    },
+    "occurrence-candidate11-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate11-restore-exportrelease/result.json",
+      "receipt_sha256": "5196f2f9cf4076fd75ccc21a15f65a52e1047ef499b924c84e4cf2e49feb0d98",
+      "elapsed_seconds": 1.5047014939773362
+    },
+    "occurrence-candidate11-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate11-toolchain/result.json",
+      "receipt_sha256": "bf11c0c4be4627be57da239191ab1d1f258bff7f32c6245b659a9b77e71fed5d",
+      "elapsed_seconds": 0.30331962200580165
+    },
+    "occurrence-candidate12-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate12-bootstrap/result.json",
+      "receipt_sha256": "f22b9ec5a898a8c3a5d6dd26b6c15304774dc52c507d8c9dc137635d78080cb0",
+      "elapsed_seconds": 5.39891827001702
+    },
+    "occurrence-candidate12-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate12-export/result.json",
+      "receipt_sha256": "fd6f16afa612ea2cf1d6ab445e25d1ffa3cb2297d184071f989361443613e560",
+      "elapsed_seconds": 20.39061627400224
+    },
+    "occurrence-candidate12-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate12-restore-debug/result.json",
+      "receipt_sha256": "d063a355087d5df9af03bd0cd810b2fb0bf47fca201d5f182c439acb6674df4b",
+      "elapsed_seconds": 3.193028310983209
+    },
+    "occurrence-candidate12-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate12-restore-exportrelease/result.json",
+      "receipt_sha256": "25e0f4f443cdbc5255c18125f95e9b4b0df391e4733bd5e4a8cad0a0f9689bf6",
+      "elapsed_seconds": 3.530468672979623
+    },
+    "occurrence-candidate12-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate12-toolchain/result.json",
+      "receipt_sha256": "6b2a4e5b97adacb9e0992f4d366b8450f05272d0d637ebecc9b1c5572654c9b3",
+      "elapsed_seconds": 0.1803906820132397
+    },
+    "occurrence-candidate13-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate13-bootstrap/result.json",
+      "receipt_sha256": "c24ee4dec41f542357d1dae184f5eeff40f9ee834c9b3c64d759fafa785cf8b6",
+      "elapsed_seconds": 5.298940831999062
+    },
+    "occurrence-candidate13-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate13-export/result.json",
+      "receipt_sha256": "2a93294274a11bdd8c23a042da714cb27f232a1dd5cd4536dcdb062792798e3f",
+      "elapsed_seconds": 23.04248664100305
+    },
+    "occurrence-candidate13-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate13-restore-debug/result.json",
+      "receipt_sha256": "bb34f61682d537b5698fcda99314a880e85e381b5e2373d2781e6390881c263e",
+      "elapsed_seconds": 4.575902598007815
+    },
+    "occurrence-candidate13-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate13-restore-exportrelease/result.json",
+      "receipt_sha256": "f3a351e6c9f40593f81de89b913e8401943894d8b09e2e1c556ebbdaf3566e27",
+      "elapsed_seconds": 1.9992913090100046
+    },
+    "occurrence-candidate13-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate13-toolchain/result.json",
+      "receipt_sha256": "825c6e94db5eda3d41dd30412c3e2580ecf1e504c7f21912f4d222ef542ff374",
+      "elapsed_seconds": 0.4221684320073109
+    },
+    "occurrence-candidate14-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate14-bootstrap/result.json",
+      "receipt_sha256": "8da3c6a53256741509fb2cfcf2169092467b1655ceab82104e073a716dfb9455",
+      "elapsed_seconds": 5.470645666995551
+    },
+    "occurrence-candidate14-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate14-export/result.json",
+      "receipt_sha256": "994a4201ef6907adb3b11639047c4fc6214db2456b02b1df12786a0405056839",
+      "elapsed_seconds": 16.109401146997698
+    },
+    "occurrence-candidate14-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate14-restore-debug/result.json",
+      "receipt_sha256": "12e3d545a7a30c2232018ced3cc2b50e354543c7cc4c516b7cc61e9abeea649b",
+      "elapsed_seconds": 3.343279660999542
+    },
+    "occurrence-candidate14-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate14-restore-exportrelease/result.json",
+      "receipt_sha256": "dbe8bd37f6a5f4ec3070ba33d2b0e7712e3b327763b36db6b77865784661041c",
+      "elapsed_seconds": 2.42828040101449
+    },
+    "occurrence-candidate14-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate14-toolchain/result.json",
+      "receipt_sha256": "02756c0376e6f7243d26379c5dc78c6232710754cb0b57bebbe4edbebe0d9dd0",
+      "elapsed_seconds": 0.39396744000259787
+    },
+    "occurrence-candidate15-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate15-bootstrap/result.json",
+      "receipt_sha256": "01e64817e5945760b1e0488d873232b35694c054a5f9034e06ebeb0beefe1a4f",
+      "elapsed_seconds": 5.4970033790159505
+    },
+    "occurrence-candidate15-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate15-export/result.json",
+      "receipt_sha256": "5083386536b464478b2a34653b9fe25fdd0535cb84cb643ef766b7a813865ac7",
+      "elapsed_seconds": 15.52060635300586
+    },
+    "occurrence-candidate15-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate15-restore-debug/result.json",
+      "receipt_sha256": "cebb2c0084ca7392ce8cc0836f1cb8974b4856552ecfc70c6873fe2da16e0c8d",
+      "elapsed_seconds": 2.8954165690229274
+    },
+    "occurrence-candidate15-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate15-restore-exportrelease/result.json",
+      "receipt_sha256": "2ad9eb1c567f7142cd517d6cd2507187490ea6d4a50d890453dc94905fc9abc4",
+      "elapsed_seconds": 1.9481856939964928
+    },
+    "occurrence-candidate15-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate15-toolchain/result.json",
+      "receipt_sha256": "615f774970890c7e741face45d979d9c615680f361953f54372c472ddcc64634",
+      "elapsed_seconds": 0.17558149399701506
+    },
+    "occurrence-candidate16-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate16-bootstrap/result.json",
+      "receipt_sha256": "35d9a508e202e1bb80d93fb8968f83a25c1f096cf1ccc12c335871c99614f287",
+      "elapsed_seconds": 5.268441261985572
+    },
+    "occurrence-candidate16-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate16-export/result.json",
+      "receipt_sha256": "bc4de4c00b498bfb37ea3342321f560a137b04f7049d4c3ce3f75db4599845ba",
+      "elapsed_seconds": 16.559234649990685
+    },
+    "occurrence-candidate16-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate16-restore-debug/result.json",
+      "receipt_sha256": "d374a6176fa4aa57c463e42f803fe1b7887a070a4fd478c9672a630b0d771389",
+      "elapsed_seconds": 4.147179276013048
+    },
+    "occurrence-candidate16-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate16-restore-exportrelease/result.json",
+      "receipt_sha256": "2d6c1955f95721e24ddec6e1e8d78de5226af41ca38d733c020357b930986c9e",
+      "elapsed_seconds": 1.600348842999665
+    },
+    "occurrence-candidate16-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate16-toolchain/result.json",
+      "receipt_sha256": "c3b31db78ba9e3340e325764b59f4b84508f64ee8d7880fd09a474a12b419ba7",
+      "elapsed_seconds": 0.3734159560117405
+    },
+    "occurrence-candidate17-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate17-bootstrap/result.json",
+      "receipt_sha256": "2d6a5c3dbcf5f7df3657aff845ce56f90f389e4d61122499a6186fcfa93da7b2",
+      "elapsed_seconds": 5.967970756988507
+    },
+    "occurrence-candidate17-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate17-export/result.json",
+      "receipt_sha256": "0e8996703d1d03f175c9ad828786acc698467a5c1d83469c61aaa5a65731aa8f",
+      "elapsed_seconds": 16.449276702012867
+    },
+    "occurrence-candidate17-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate17-restore-debug/result.json",
+      "receipt_sha256": "20fa7ec864361c0b34dd854c584250a22baa46caf6ddba2c42ab61487f8dcea4",
+      "elapsed_seconds": 2.5051346579857636
+    },
+    "occurrence-candidate17-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate17-restore-exportrelease/result.json",
+      "receipt_sha256": "c71d9e492bdadf53f57da9b30102b43ad5bad6a0d2d1d7093a88cf32d81eac36",
+      "elapsed_seconds": 1.492561481980374
+    },
+    "occurrence-candidate17-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate17-toolchain/result.json",
+      "receipt_sha256": "933f1a11a5d00fd152300e8f2d06073ed3bd1fa895cc0e2098d8ad83eb1938f6",
+      "elapsed_seconds": 0.18004430999280885
+    },
+    "occurrence-candidate18-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate18-bootstrap/result.json",
+      "receipt_sha256": "9c79fd1b469fe618a8be8918433eae2670696dbaa4552b0ec1b4d66a0ead0d7d",
+      "elapsed_seconds": 5.475902392005082
+    },
+    "occurrence-candidate18-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate18-export/result.json",
+      "receipt_sha256": "6c5d9341f465a3015618dbf99dab1d78ed742f3828b70ab257d3b47a233fd735",
+      "elapsed_seconds": 18.842216496006586
+    },
+    "occurrence-candidate18-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate18-restore-debug/result.json",
+      "receipt_sha256": "09457bf548e66de3b8112b6da5bf5c74439fe8c26018ff92711f266da69a5f34",
+      "elapsed_seconds": 3.48136763900402
+    },
+    "occurrence-candidate18-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate18-restore-exportrelease/result.json",
+      "receipt_sha256": "83b9d08235d593147d24f9fec53f0d6f90fbf4cf4283ed2c3d0bafe1a493db4f",
+      "elapsed_seconds": 1.8903798090177588
+    },
+    "occurrence-candidate18-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate18-toolchain/result.json",
+      "receipt_sha256": "51e533d701a3b5c5a120c906a329e24bcedef439a63dd58480c3bfd7658f799f",
+      "elapsed_seconds": 0.22170214500511065
+    },
+    "occurrence-candidate19-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate19-bootstrap/result.json",
+      "receipt_sha256": "121c68e281c90fceec03037a21f42203bfc1012655b6f3bf9f7b14d3e2b12a09",
+      "elapsed_seconds": 5.371064581995597
+    },
+    "occurrence-candidate19-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate19-export/result.json",
+      "receipt_sha256": "108bb75987a1a77c32fddf481a815e322de8523d73dc5e0f5171826a71ca5bb2",
+      "elapsed_seconds": 20.66728759201942
+    },
+    "occurrence-candidate19-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate19-restore-debug/result.json",
+      "receipt_sha256": "4ab0528dcc27ec1b489c80a399cea4e422b230b2d84cab7419ddd979b9ac5946",
+      "elapsed_seconds": 3.093611623015022
+    },
+    "occurrence-candidate19-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate19-restore-exportrelease/result.json",
+      "receipt_sha256": "805b9e7653b206ef6c99897646593122d4252e5b94c1bd05e2228ad786f9d110",
+      "elapsed_seconds": 2.3082743670092896
+    },
+    "occurrence-candidate19-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate19-toolchain/result.json",
+      "receipt_sha256": "91067d92aa921e30ab3377d6deb7a318ff316243a0407efb6824ebd07844b6b5",
+      "elapsed_seconds": 0.14796495300834067
+    },
+    "occurrence-candidate20-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate20-bootstrap/result.json",
+      "receipt_sha256": "5bce9ba697d5f5a86cfc7965af422ee21324d23f4ddd5d8ff40c4fe320603512",
+      "elapsed_seconds": 5.217415958002675
+    },
+    "occurrence-candidate20-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate20-export/result.json",
+      "receipt_sha256": "f0c4de2a527418761e176fa62a2797490b5bfe0b8c48ff1097652228c38ab3b4",
+      "elapsed_seconds": 19.83748264599126
+    },
+    "occurrence-candidate20-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate20-restore-debug/result.json",
+      "receipt_sha256": "25c037421100debbf31c812a9823f169d8801e640bb6babf9d93a4b7d31b7447",
+      "elapsed_seconds": 3.3365724299801514
+    },
+    "occurrence-candidate20-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate20-restore-exportrelease/result.json",
+      "receipt_sha256": "9e89f2a5a3d54de03234d19741003f0962468761772993e0bc947965951905c9",
+      "elapsed_seconds": 2.1335236390004866
+    },
+    "occurrence-candidate20-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate20-toolchain/result.json",
+      "receipt_sha256": "893be2848c563714b94d0371494a98d93294a4d5a1af1312caf6e520a3f8c6dc",
+      "elapsed_seconds": 0.5041236369870603
+    },
+    "occurrence-candidate21-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate21-bootstrap/result.json",
+      "receipt_sha256": "9107086d70e5f8faa6d3925bfee67e00051ab3c3103e479172a6bb61102a7212",
+      "elapsed_seconds": 5.171675200021127
+    },
+    "occurrence-candidate21-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate21-export/result.json",
+      "receipt_sha256": "d1e5bda13478d53167015bdf1ac9aa04e42176a91ba75c3b1e3da9deac513652",
+      "elapsed_seconds": 19.737559943983797
+    },
+    "occurrence-candidate21-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate21-restore-debug/result.json",
+      "receipt_sha256": "739d468d702277734c44bbfe2da821623f24e698f2b4cded2b48f38ab8366821",
+      "elapsed_seconds": 3.57685041098739
+    },
+    "occurrence-candidate21-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate21-restore-exportrelease/result.json",
+      "receipt_sha256": "b20619122d7856e58800928cdb974881db2ed7f8e88e21613c62f69a80a8431d",
+      "elapsed_seconds": 1.721024315978866
+    },
+    "occurrence-candidate21-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate21-toolchain/result.json",
+      "receipt_sha256": "9e99d23ddba3be70555bf8055dcbbcf333b96a1280d13d11e53a27a7a89e9086",
+      "elapsed_seconds": 0.4184839700174052
+    },
+    "occurrence-candidate22-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate22-bootstrap/result.json",
+      "receipt_sha256": "05ec81fa6bebbd87056b5e89431d3dece6f3401e45a9cf249625ba3016bc8944",
+      "elapsed_seconds": 5.358305981993908
+    },
+    "occurrence-candidate22-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate22-export/result.json",
+      "receipt_sha256": "003c3cbc39cd8fbae5ccbb9a209f9b9bc2cab94595be947788f786d4825ed993",
+      "elapsed_seconds": 21.04476429501665
+    },
+    "occurrence-candidate22-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate22-restore-debug/result.json",
+      "receipt_sha256": "524c34d90a481d2515bed43220fbfb9e683845f2b9a91d1c940d38420a3383b7",
+      "elapsed_seconds": 3.6793360490119085
+    },
+    "occurrence-candidate22-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate22-restore-exportrelease/result.json",
+      "receipt_sha256": "a1ba06278a4dd042d5e10d5af749842646103c5ad71dea8269643ce22638e3dc",
+      "elapsed_seconds": 1.6934249899932183
+    },
+    "occurrence-candidate22-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate22-toolchain/result.json",
+      "receipt_sha256": "4d464bf15e6394a263c0cb5a1a8abd36a943277c49af1eb9f0dc3225d2c075c2",
+      "elapsed_seconds": 0.19049533602083102
+    },
+    "occurrence-candidate23-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate23-bootstrap/result.json",
+      "receipt_sha256": "e666b7067a2b2eadf565419626f8fb1ac3381fcd9c138ac9a5b2b485837aee60",
+      "elapsed_seconds": 5.2648576899955515
+    },
+    "occurrence-candidate23-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate23-export/result.json",
+      "receipt_sha256": "0317b9fd98e1bccd81cf746d7543591f21a33ffed8bc7915ad6dbc17606f5a47",
+      "elapsed_seconds": 20.521024860994658
+    },
+    "occurrence-candidate23-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate23-restore-debug/result.json",
+      "receipt_sha256": "9c7d5a3c45f84b652065fb01b32a7181e099140b0583e2c72332513358f3f5da",
+      "elapsed_seconds": 3.4455949630064424
+    },
+    "occurrence-candidate23-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate23-restore-exportrelease/result.json",
+      "receipt_sha256": "c703d162ce478b80d36c65113a0e188c96edfefb90df75c9d44a2e3ad79d0e8d",
+      "elapsed_seconds": 1.7563504790014122
+    },
+    "occurrence-candidate23-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate23-toolchain/result.json",
+      "receipt_sha256": "0e6f585b1e373f7c494e763888b3f5b95b927f981aba9623d60989a545524ad7",
+      "elapsed_seconds": 0.36189940600888804
+    },
+    "occurrence-candidate24-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate24-bootstrap/result.json",
+      "receipt_sha256": "2d07c9ddde5f452e15c365e1c19d32fff7a5af0c292e15d83da59ba78e76030f",
+      "elapsed_seconds": 5.233272648998536
+    },
+    "occurrence-candidate24-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate24-export/result.json",
+      "receipt_sha256": "e34c18c6901a37c866acce92df213a381ccdaf82174bb9302926b32982be015f",
+      "elapsed_seconds": 19.25753325902042
+    },
+    "occurrence-candidate24-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate24-restore-debug/result.json",
+      "receipt_sha256": "33ffc497d29033c27b576b354a54d7fb3a98879a38fd12878daf77a9272b713d",
+      "elapsed_seconds": 2.999997317994712
+    },
+    "occurrence-candidate24-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate24-restore-exportrelease/result.json",
+      "receipt_sha256": "760fce9b964b0c164f8ec2c61806abc958ac77db89c180aa15a8f87df6558977",
+      "elapsed_seconds": 1.4565834179811645
+    },
+    "occurrence-candidate24-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate24-toolchain/result.json",
+      "receipt_sha256": "568274c66a475ddcaf7a1c3fe7cc175fed639c72145e9d3d0363e0ef5f6bff30",
+      "elapsed_seconds": 0.3502626489789691
+    },
+    "occurrence-candidate25-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate25-bootstrap/result.json",
+      "receipt_sha256": "669e2b82adda09d2d42365ee568820c0ffb640da92c141046ca5bf2d236ed5fd",
+      "elapsed_seconds": 5.300880444003269
+    },
+    "occurrence-candidate25-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate25-export/result.json",
+      "receipt_sha256": "410024fa1f424180d2cf41e8efc1f17dd3cce7fa77c2bd406331504026bce470",
+      "elapsed_seconds": 18.51625807202072
+    },
+    "occurrence-candidate25-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate25-restore-debug/result.json",
+      "receipt_sha256": "4d8d17884329f5b344b287f18d63832b3316f6378aea806fe4bb9bfe9ab2aded",
+      "elapsed_seconds": 2.766014317981899
+    },
+    "occurrence-candidate25-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate25-restore-exportrelease/result.json",
+      "receipt_sha256": "b0326b7d6975f914024a8a7ffb2048acb909cc6930bb92e1f7afa6d0ebb66fca",
+      "elapsed_seconds": 1.375194059975911
+    },
+    "occurrence-candidate25-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate25-toolchain/result.json",
+      "receipt_sha256": "39d3499931f2fb856fdec02dc72484df5afd07abdfa250357878e4859d068f6b",
+      "elapsed_seconds": 0.24369597199256532
+    },
+    "occurrence-candidate26-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate26-bootstrap/result.json",
+      "receipt_sha256": "78c72ab64161b063bccd279457374f1fad09d46057a5616b02b19032d1dbf37c",
+      "elapsed_seconds": 5.178823477996048
+    },
+    "occurrence-candidate26-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate26-export/result.json",
+      "receipt_sha256": "27838a6f0d96b05e94f1ed0b37864a7e0aa0bd03c264b07edcc0730125166c0f",
+      "elapsed_seconds": 19.148278845997993
+    },
+    "occurrence-candidate26-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate26-restore-debug/result.json",
+      "receipt_sha256": "8635631a63e2ebab30fb09a1898bd91b96cdafdb90584120c32b32e08a5875e1",
+      "elapsed_seconds": 2.7259124550037086
+    },
+    "occurrence-candidate26-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate26-restore-exportrelease/result.json",
+      "receipt_sha256": "fad24151d1552e7d74ed6fee5b225dcaa4c7b7b1b4c27cff73553ea35b66cba9",
+      "elapsed_seconds": 1.7116426940192468
+    },
+    "occurrence-candidate26-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate26-toolchain/result.json",
+      "receipt_sha256": "9423ed97382edbd4f2230b11648b7f03d6658b8a2c3e9a3476c963f23638b6e1",
+      "elapsed_seconds": 0.1675547539780382
+    },
+    "occurrence-candidate27-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate27-bootstrap/result.json",
+      "receipt_sha256": "50906f15b02ccad68349f73c766de7c8f114f63d8e6ad38679a6821322809bb4",
+      "elapsed_seconds": 5.174186116986675
+    },
+    "occurrence-candidate27-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate27-export/result.json",
+      "receipt_sha256": "3804693a7812cf3718cd7601255387d4b867c1a8e9cd024395cbbcc87dbe9152",
+      "elapsed_seconds": 20.357233550021192
+    },
+    "occurrence-candidate27-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate27-restore-debug/result.json",
+      "receipt_sha256": "d8e7b11be35cff085b1b1216997de1a4b6563012e71fb0e92aae53ab1cacaab5",
+      "elapsed_seconds": 3.952421026013326
+    },
+    "occurrence-candidate27-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate27-restore-exportrelease/result.json",
+      "receipt_sha256": "22df4625ae21becab36571366d35ae336e3e33adbce4a18730f85a3a67f983c3",
+      "elapsed_seconds": 2.1473917870025616
+    },
+    "occurrence-candidate27-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-candidate27-toolchain/result.json",
+      "receipt_sha256": "f5ab369e4448cf8074be0592918c74438cdfc8b6fa8e5066ca1dfce8f90c6a33",
+      "elapsed_seconds": 0.4080680650076829
+    },
+    "occurrence-controller21-run": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-controller21-run/result.json",
+      "receipt_sha256": "d11458bc4bc51ca71a7b2314edcc771e6b7499248339e8cd59f5e3f026f1505b",
+      "elapsed_seconds": 1.927012491010828
+    },
+    "occurrence-form-ray22-run": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-form-ray22-run/result.json",
+      "receipt_sha256": "03f218665738e779c1310899c44384079d75636f13112f1d98d5921870eaa01b",
+      "elapsed_seconds": 2.7530475789972115
+    },
+    "occurrence-input-final25-run": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-input-final25-run/result.json",
+      "receipt_sha256": "a29a332f4ec16ad047452564c31b1534b8344b2f31e978a70fa5b5a272409e2e",
+      "elapsed_seconds": 23.93707171099959
+    },
+    "occurrence-input17-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-input17-run/result.json",
+      "receipt_sha256": "751b93faac9b65d6ceed0cdde7b4329a6577de4fb0a3089b3e4f0243fd85fd06",
+      "elapsed_seconds": 85.47076472500339
+    },
+    "occurrence-interaction-final13-run": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-interaction-final13-run/result.json",
+      "receipt_sha256": "49745b6f46c226813ecb3fef8faa8b207c275ed221bd38149a186f0898e2bd25",
+      "elapsed_seconds": 36.9216636819765
+    },
+    "occurrence-interaction-final24-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-interaction-final24-run/result.json",
+      "receipt_sha256": "df0c17bb45917695b9333632e23b130cd0cf74a68e0b89ea3f7528a26b1be6fd",
+      "elapsed_seconds": 30.23466903399094
+    },
+    "occurrence-interaction-final25-run": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-interaction-final25-run/result.json",
+      "receipt_sha256": "d506c1530699c569640d40157e556e9b185155e32211ca8c60a2535b991d690e",
+      "elapsed_seconds": 72.98957419898943
+    },
+    "occurrence-interaction-final27-run": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-interaction-final27-run/result.json",
+      "receipt_sha256": "8e05b02acf9b8eaebd264a6f585d2c1f88ca52f13e85769fc2baea96112f3d2f",
+      "elapsed_seconds": 38.38194289698731
+    },
+    "occurrence-interaction04-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-interaction04-run/result.json",
+      "receipt_sha256": "61f714acd18c7987e0d0b2ccfc812d15875f0f08792bba1f286d9ee148ab316e",
+      "elapsed_seconds": 27.942260208015796
+    },
+    "occurrence-interaction05-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-interaction05-run/result.json",
+      "receipt_sha256": "e06456cb242ae5c0e6498228d2662a7ccfdc3eb6e8f13866d58fa712a6b46270",
+      "elapsed_seconds": 26.845187872007955
+    },
+    "occurrence-interaction07-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-interaction07-run/result.json",
+      "receipt_sha256": "755246f9e79be6ed9b79224a30bf8bf937b89241c6b804e29c63d698184cebb2",
+      "elapsed_seconds": 28.381372180010658
+    },
+    "occurrence-interaction08-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-interaction08-run/result.json",
+      "receipt_sha256": "f7557aff7b62bce874751eed7fda05e4a63a40d11ff2098fbd5b702dd2ab4ba2",
+      "elapsed_seconds": 90.75082682500943
+    },
+    "occurrence-keyboard-ray21-run": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-keyboard-ray21-run/result.json",
+      "receipt_sha256": "62b71755819a403db4f5465a6494ba1388a0627de90017872f3998919ce1beae",
+      "elapsed_seconds": 2.4224780590157025
+    },
+    "occurrence-keyboard20-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-keyboard20-run/result.json",
+      "receipt_sha256": "d4237195eecbaddc57420cc9c777e616161b0686dae8ddd2d4bc32d632e5ee91",
+      "elapsed_seconds": 3.5511228420073166
+    },
+    "occurrence-keyboard21-run": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-keyboard21-run/result.json",
+      "receipt_sha256": "3dd7048ccbaef5ff07bcb2efea07632ec48eb0e170589c254576f30acecd49cd",
+      "elapsed_seconds": 3.3351347770076245
+    },
+    "occurrence-lifetime-baseline10-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-lifetime-baseline10-run/result.json",
+      "receipt_sha256": "125f2bb95f80882404161989302ce9bd069aa694a5d35bf88be5db5af6410cee",
+      "elapsed_seconds": 24.739063960005296
+    },
+    "occurrence-lifetime-baseline11-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-lifetime-baseline11-run/result.json",
+      "receipt_sha256": "80a4c8a7cc77c477e6f9b38065fc4fe3ab920ac7dfb7ed6689eae765c3e845d9",
+      "elapsed_seconds": 28.28035835598712
+    },
+    "occurrence-lifetime-final12-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-lifetime-final12-run/result.json",
+      "receipt_sha256": "35abadce97fdc350fd7f830446d45ef5b671d850453cbebef42f3019570f9c4b",
+      "elapsed_seconds": 90.36228560199379
+    },
+    "occurrence-lifetime-final13-run": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-lifetime-final13-run/result.json",
+      "receipt_sha256": "73fa2495e34c912d381735b0d1f0a2dd1dd5b501d4a05cf13f4b1560bfe35bde",
+      "elapsed_seconds": 31.118932474026224
+    },
+    "occurrence-lifetime-final24-run": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-lifetime-final24-run/result.json",
+      "receipt_sha256": "275717d43dd8c10818f4acf7e044e8f685279c2da75110ab8e67a358f02ce351",
+      "elapsed_seconds": 28.312127188022714
+    },
+    "occurrence-preview-baseline14-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-preview-baseline14-run/result.json",
+      "receipt_sha256": "e452564fdb78875b4eca670bda9f2f24fa0232d8db6d7a1493b1cad247f09e5b",
+      "elapsed_seconds": 23.88368356198771
+    },
+    "occurrence-preview-baseline16-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-preview-baseline16-run/result.json",
+      "receipt_sha256": "191d03b401a2e4fcbe1f92dffd5d8179303102a8a990a0fbc625a17f0635a13a",
+      "elapsed_seconds": 90.71277788898442
+    },
+    "occurrence-preview-baseline17-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-preview-baseline17-run/result.json",
+      "receipt_sha256": "f907a5fa6494e7b3fd0b5140d46192242f1185af6a57a1e67f95d8885a086cce",
+      "elapsed_seconds": 23.88017042199499
+    },
+    "occurrence-preview-final18-run": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-preview-final18-run/result.json",
+      "receipt_sha256": "b8238fa815327054273133bdb4349c0d9b8e6e6da0183ffbec7be990c7702081",
+      "elapsed_seconds": 27.463322288997006
+    },
+    "occurrence-preview-final19-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-preview-final19-run/result.json",
+      "receipt_sha256": "18d74c55a1ab37b9b3d6882356625e063a965b075a3fec4ae5cbbfddeef47a32",
+      "elapsed_seconds": 25.816351899993606
+    },
+    "occurrence-preview-final20-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-preview-final20-run/result.json",
+      "receipt_sha256": "45a11b010c4229d1bffbc44634be12febb4348c6babe11c7aafd8c9ad95f9c79",
+      "elapsed_seconds": 30.184119080979144
+    },
+    "occurrence-preview-final21-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-preview-final21-run/result.json",
+      "receipt_sha256": "261fd2708ecd687fd12a90740462ab4639f46088b013002ed88e35e774d1ef6d",
+      "elapsed_seconds": 29.766221542988205
+    },
+    "occurrence-preview-final23-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-preview-final23-run/result.json",
+      "receipt_sha256": "cd416ffee09f704934771eb4af3ed2e38e68f97ea422811b46c7cf2100c5677d",
+      "elapsed_seconds": 36.63104323900188
+    },
+    "occurrence-preview-final24-run": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-preview-final24-run/result.json",
+      "receipt_sha256": "0c4f4de834a65dd7ce5c98a7f1b321826323d1c3c9667d0fd8527c736ec17e43",
+      "elapsed_seconds": 35.296272136009065
+    },
+    "occurrence-preview-final27-run": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-preview-final27-run/result.json",
+      "receipt_sha256": "85797c0f46fe2bf79578a6d72b394bb763e836fbd974dee04d613ce7d5ebf7f0",
+      "elapsed_seconds": 42.14627397499862
+    },
+    "occurrence-preview-observation22-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-preview-observation22-run/result.json",
+      "receipt_sha256": "399d25f115b5504fa9bc1b9b66cffe7d3d5713d76b67365cf1b6e969704495e9",
+      "elapsed_seconds": 34.22875061299419
+    },
+    "occurrence-product01-bootstrap": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-product01-bootstrap/result.json",
+      "receipt_sha256": "5160bdac79db3c7cb90ec19618dff2658b2374eced18edeff75c6655230199c8",
+      "elapsed_seconds": 5.604446691984776
+    },
+    "occurrence-product01-export": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-product01-export/result.json",
+      "receipt_sha256": "9ad4e164770e5ffbb3241257b20a8d509222b048dbe6fbf02405b7e35c5713eb",
+      "elapsed_seconds": 20.495430142997066
+    },
+    "occurrence-product01-restore-debug": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-product01-restore-debug/result.json",
+      "receipt_sha256": "158e6022563b93c8448ef8da4f8c6d755cc3c7c1eb8d073301625777c5c48e4e",
+      "elapsed_seconds": 3.719280863995664
+    },
+    "occurrence-product01-restore-exportrelease": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-product01-restore-exportrelease/result.json",
+      "receipt_sha256": "5f64f80851a2dda08d689af2dbc6a0defc0b1053fbc4902b8c6a1667e95705e7",
+      "elapsed_seconds": 1.6392967489955481
+    },
+    "occurrence-product01-toolchain": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-product01-toolchain/result.json",
+      "receipt_sha256": "8280f20c757cb33814b3f86b19137a728497bfc17046a59ea0b1d32f4f378ac7",
+      "elapsed_seconds": 0.29043148501659743
+    },
+    "occurrence-ray-baseline13-run": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-ray-baseline13-run/result.json",
+      "receipt_sha256": "4942c362beff2cee3d654b334446df89009c36ff21119a7956a36b8507f3e53a",
+      "elapsed_seconds": 2.250237811007537
+    },
+    "occurrence-ray-movement-baseline15-run": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-ray-movement-baseline15-run/result.json",
+      "receipt_sha256": "be8c6a08da3a4daa3d01afd10d3923e69fadbaa410e89763fa01021e1fc6e7b5",
+      "elapsed_seconds": 2.1711533530033194
+    },
+    "occurrence-scene23-run": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-scene23-run/result.json",
+      "receipt_sha256": "29ff17b28a0b4e7c3e5b1b5e6a714d5f88714ca61544e132391ce6cee777df0d",
+      "elapsed_seconds": 1.7399667520076036
+    },
+    "occurrence-selection03-run": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-selection03-run/result.json",
+      "receipt_sha256": "931cde0f1e52f454add96045cd68b110aa59012acab6d620e730285f70de6716",
+      "elapsed_seconds": 23.905334727984155
+    },
+    "occurrence-space-final24-run": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-space-final24-run/result.json",
+      "receipt_sha256": "818b83ddd501acba87c7b9fa754c2f439d358fa52e790e97a3e6bf54fa41290d",
+      "elapsed_seconds": 28.08806248800829
+    },
+    "occurrence-space13-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-space13-run/result.json",
+      "receipt_sha256": "9929345428f7b59af6f485f971ff06a1fac149c8f0b1d4a7f0d2fbce6d4da1d9",
+      "elapsed_seconds": 87.51074665898341
+    },
+    "occurrence-space14-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-space14-run/result.json",
+      "receipt_sha256": "5dcb9b43d1469793e6fd2dbbbd6f6b83fd874bcf3f8245b05f65ec3703e93323",
+      "elapsed_seconds": 29.769161538017215
+    },
+    "occurrence-space16-run": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-space16-run/result.json",
+      "receipt_sha256": "3b26b8e31a6f904186e3d0181987b48d6f5ba142ecaf0ab8acaa4bba6567f796",
+      "elapsed_seconds": 38.944603748997906
+    },
+    "occurrence-workspace25-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-workspace25-run/result.json",
+      "receipt_sha256": "5c8a4b07a1add03f35e5d8583f368997899b75f073395df5879ad4e5f8280fe8",
+      "elapsed_seconds": 1.6688888219941873
+    },
+    "occurrence-workspace26-run": {
+      "true_exit": 1,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-workspace26-run/result.json",
+      "receipt_sha256": "029c072f26ece3b4ee0f7cccf2173d911dcf1a08fc969cd1ecdb977b6690a1f6",
+      "elapsed_seconds": 3.3696021950163413
+    },
+    "occurrence-workspace27-run": {
+      "true_exit": 0,
+      "diagnostic_failure": false,
+      "receipt": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/occurrence-workspace27-run/result.json",
+      "receipt_sha256": "72de062095132f0a1fc10132c1fe2a7e33e966ed460145fb42205a15a0abc15b",
+      "elapsed_seconds": 3.2856778530112933
+    }
+  },
+  "server_bindings": {
+    "material-final17": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-material-final17-server.json",
+      "sha256": "43e20f318577c9c94f2f66bdd32ccec677cff7ec8bfb2af33191b3c1d6fb999a",
+      "source_count": 14,
+      "new_fixture_outputs": 4
+    },
+    "occurrence-input-final25": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-occurrence-input-final25-server.json",
+      "sha256": "8ba9198c16db347678b05d3b92c67f0532ebe1fb688635fc0150ad56c413444c",
+      "source_count": 14,
+      "new_fixture_outputs": 4
+    },
+    "occurrence-interaction-final27": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-occurrence-interaction-final27-server.json",
+      "sha256": "58310147f24da58206db8be4ad9ed454a259e89069c22838c0e5a6c658f1df19",
+      "source_count": 14,
+      "new_fixture_outputs": 4
+    },
+    "occurrence-lifetime-final24": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-occurrence-lifetime-final24-server.json",
+      "sha256": "29cad9e5d5827182de437206e26e584d976725f9593e015e14fd22338db9728c",
+      "source_count": 14,
+      "new_fixture_outputs": 4
+    },
+    "occurrence-preview-final27": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-occurrence-preview-final27-server.json",
+      "sha256": "ec2751100d13bad60c49fc2debc948bae8291fdca05cc9aee833f95157e13832",
+      "source_count": 14,
+      "new_fixture_outputs": 4
+    },
+    "occurrence-space-final24": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-experience-20261101/inputs/server-occurrence-space-final24-server.json",
+      "sha256": "5e6a4729592210bd9c44b70837861331f70d2cb1b9fa6ff1669e9394c37a1b39",
+      "source_count": 14,
+      "new_fixture_outputs": 4
+    }
+  },
+  "source_delta": {
+    "client/godot/ScenePanel.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-gui-alignment-20261101/inputs/before/client/godot/ScenePanel.cs",
+      "before_sha256": "c828b2fc972bef98ba059cd17c502f04d56b714440ab54c7eb386bbf05160cf7",
+      "after_sha256": "6b27234967e1ced1fed31a76afca1b6b37ecbfe088fa4b987669de39c8a059b2",
+      "added": 79,
+      "removed": 18,
+      "before_stat_key": [
+        66305,
+        28445899,
+        21018,
+        1793546502668068780,
+        1793562516713293530
+      ]
+    },
+    "client/godot/Main.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-gui-alignment-20261101/inputs/before/client/godot/Main.cs",
+      "before_sha256": "f29a35a0d8e7e6afcd0fa88ef3866a7ee15e1901a2884159de2d5997e85e30f4",
+      "after_sha256": "b2288b63f555677850666a2a002681842469e12cd74d447ac3b4d5835c35c0c7",
+      "added": 50,
+      "removed": 24,
+      "before_stat_key": [
+        66305,
+        28445902,
+        44451,
+        1793547456468356276,
+        1793562516713788665
+      ]
+    },
+    "client/godot/EidolonPanel.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/before/client/godot/EidolonPanel.cs",
+      "before_sha256": "69698ca43d1e356f50098c6c36229a0503bc2f3d74b2348cacf8c0bdc91f5545",
+      "after_sha256": "febfa7d1c7efff1be954986932498ac0b62356dd98dd70f652417b5298a8ced3",
+      "added": 80,
+      "removed": 28,
+      "before_stat_key": [
+        66305,
+        28447341,
+        15720,
+        1793547456610360000,
+        1793564410139134028
+      ]
+    },
+    "client/godot/SpatialGui.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/before/client/godot/SpatialGui.cs",
+      "before_sha256": "b0db9b88562f94d42b833f736121a96729e0ccbbbddbbe10e356878575e61152",
+      "after_sha256": "c4545a220e18290848eb51751bc2e81599d117676b4bfe4a0f500b6dd47bcdd1",
+      "added": 80,
+      "removed": 19,
+      "before_stat_key": [
+        66305,
+        28447343,
+        15457,
+        1793535370272274430,
+        1793564410140152016
+      ]
+    },
+    "client/godot/SpatialKeyboard.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/before/client/godot/SpatialKeyboard.cs",
+      "before_sha256": "41d1a04b3ad06eba46ee45e13c352eebb8703c1e932568d5e55d4f527daf6cc2",
+      "after_sha256": "5521d2be77641199f77e2a82154a285df232835af6f69d8bd1ea1ea122dfb5ef",
+      "added": 7,
+      "removed": 6,
+      "before_stat_key": [
+        66305,
+        28447344,
+        7559,
+        1793500771838551909,
+        1793564410140671046
+      ]
+    },
+    "client/godot/OpenXRInput.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/before/client/godot/OpenXRInput.cs",
+      "before_sha256": "b8685660484507e313365f93ada757883967fde945d3c5964289c1f760573162",
+      "after_sha256": "613d4d0025e7d2b0ff63b793712187cc609c16171ae51151ff0ad0a3be36c847",
+      "added": 61,
+      "removed": 18,
+      "before_stat_key": [
+        66305,
+        28447345,
+        29998,
+        1793501056878619701,
+        1793564410141128938
+      ]
+    },
+    "client/godot/OperationsPanel.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/before/client/godot/OperationsPanel.cs",
+      "before_sha256": "1c30abe37158b2c3cf347de47f98f8d63e742d1e698b8bc84ade7c643f06ad74",
+      "after_sha256": "e118ca402f14022cf30318edc554f1ffdb3729e7d12907b1f53a29928e1b44bc",
+      "added": 5,
+      "removed": 5,
+      "before_stat_key": [
+        66305,
+        28447346,
+        20871,
+        1793535332134345239,
+        1793564410141761576
+      ]
+    },
+    "client/godot/Core/Scene.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-gui-alignment-20261101/inputs/before/client/godot/Core/Scene.cs",
+      "before_sha256": "f95971b172b696ab5166c7daccaf60720072950fd42449f371825171b471a220",
+      "after_sha256": "51854d7c4229f1854286e0c05a8bc421803b0ba1e607c75c726d7a44cfc3f008",
+      "added": 4,
+      "removed": 2,
+      "before_stat_key": [
+        66305,
+        28445901,
+        5573,
+        1793468235121615653,
+        1793562516713594180
+      ]
+    },
+    "client/godot/tests/SceneChecks.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/before/client/godot/tests/SceneChecks.cs",
+      "before_sha256": "c4f3da19b921782881db15b3d7d838e100f58904bd3f63501d8c52e6106f38e2",
+      "after_sha256": "57cbd3059f806b219ba5d0c4920a2afc4cd465374e049fc81f4bf4f083cfefb8",
+      "added": 3,
+      "removed": 3,
+      "before_stat_key": [
+        66305,
+        28447351,
+        5642,
+        1793248938224035733,
+        1793564410143341785
+      ]
+    },
+    "client/godot/tests/SpaceChecks.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/before/client/godot/tests/SpaceChecks.cs",
+      "before_sha256": "a27a9a0c2c130225063a9c5d4e48878688efa5ca112f3136208caf7d1b654811",
+      "after_sha256": "b9466c3cd625a8e01198be713938c29a53b40d1d02553dc38fdda0af0d6ddc64",
+      "added": 3,
+      "removed": 3,
+      "before_stat_key": [
+        66305,
+        28447352,
+        30253,
+        1793505020212839606,
+        1793564410143797840
+      ]
+    },
+    "client/godot/README.md": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-gui-alignment-20261101/inputs/before/client/godot/README.md",
+      "before_sha256": "101f814d9d47665e42e08aa975a6d5e4d28f7db56259c3cd813c064413bf25d2",
+      "after_sha256": "b98e9f90a9058abf9fc3cdb893f65863940c553fc1c430a2798965d31e01b7a6",
+      "added": 23,
+      "removed": 1,
+      "before_stat_key": [
+        66305,
+        28445921,
+        21393,
+        1793547941127949680,
+        1793562516714430989
+      ]
+    },
+    "client/godot/Core/SignedView.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/before/client/godot/Core/SignedView.cs",
+      "before_sha256": "46fd9579ef524ea41815dead6ec0a7c0ff30f0e171f7bfd77edadc8dfcb67751",
+      "after_sha256": "db5588da9961b6ff5630d31379cd806c496a1cc8289d50f531ad45bced22c39f",
+      "added": 6,
+      "removed": 4,
+      "before_stat_key": [
+        66305,
+        28447428,
+        7383,
+        1793535903219262236,
+        1793565999442061119
+      ]
+    },
+    "client/godot/tests/WorkspaceChecks.cs": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/before/client/godot/tests/WorkspaceChecks.cs",
+      "before_sha256": "34d567070e967e1a5f1afecd48c8547b718d38b317636457dc7f4d4f5908cd58",
+      "after_sha256": "8124de3a9028d841680468c849ba007a9cc1eb6e7943c9e77877d9be28828c7e",
+      "added": 3,
+      "removed": 2,
+      "before_stat_key": [
+        66305,
+        28449726,
+        22865,
+        1793503215789806036,
+        1793568948467210974
+      ]
+    },
+    "AGENTS.md": {
+      "before_path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/before/AGENTS.md",
+      "before_sha256": "5637fdd0f67ffbdf271ad8c694f485dce9bf270929ddc3686e14a87bf1c7ff87",
+      "after_sha256": "d08fd7b55a0e89bda53ae67c6133d98b1023520442b985a264ce6593164c4ee5",
+      "added": 4,
+      "removed": 0,
+      "before_stat_key": [
+        66305,
+        28449909,
+        8636,
+        1793279815035473820,
+        1793569015249252750
+      ]
+    }
+  },
+  "production_line_delta": {
+    "added": 372,
+    "removed": 124
+  },
+  "test_line_delta": {
+    "added": 9,
+    "removed": 8
+  },
+  "product": {
+    "manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-occurrence-forms-20261101/inputs/client-occurrence-product01-manifest.json",
+    "sha256": "d67294b8bfe7f7f2dfdba9b65f48815b66dfc4409dad73d966455c1f0eb7d406",
+    "inputs": 98,
+    "exports": 196,
+    "export_bytes": 193578580,
+    "trace_free": true,
+    "distributable": false
+  },
+  "digest_cache": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/cache/occurrence-qualification01-hashes.json",
+    "sha256": "2e823f65e5827db725ef64d9d3bcfce588c4a89619b96ecf742c1369c18d3b07"
+  },
+  "qualification_private": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-qualification01",
+  "digest_work": {
+    "hits": 8081,
+    "new_objects": 797,
+    "new_bytes": 20643866
+  },
+  "shutdown_fixed": false,
+  "human_or_HMD_accepted": false,
+  "full_GUI_Stage2_M4_M5": false,
+  "packaged": false,
+  "limits": [
+    "Attention selection and exact question subject remain open.",
+    "Generic authored arbitrary surface geometry and broader assets/components are not delivered.",
+    "No current human/HMD legibility, ergonomics or comfort acceptance.",
+    "Historical and current failed labels, including noEOF failures, remain whole failures.",
+    "No package, deployment, retirement or commit.",
+    "Necessary computed-lens cursor reevaluation remains unchanged; no new target-version cache."
+  ]
+}

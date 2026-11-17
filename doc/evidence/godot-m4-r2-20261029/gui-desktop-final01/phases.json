@@ -1,0 +1,21 @@
+[
+  {
+    "phase": "fresh",
+    "command": [
+      "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final02/source/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/gui-desktop-final01/identity",
+      "--node",
+      "https://127.0.0.1:42837",
+      "--ca",
+      "/home/yan/.cache/quod-m4-r2-artifacts/private/gui-desktop-final01/proxy-ca.pem"
+    ],
+    "child_exit": -9,
+    "passed": false,
+    "native_activation_failed": true
+  }
+]

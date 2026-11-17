@@ -1,0 +1,62 @@
+{
+  "label": "native-vive-product10",
+  "scope": "Exact retained sources, no driver adaptation/build or application launched by this metadata helper.",
+  "sources": {
+    "doc/evidence/godot-m4-vive-retest-20261030/physical09.py": {
+      "sha256": "f413eee667160b1fe6594c52fda01e73fa4ad81178a816172d512fa50c6fa153",
+      "mode": 384,
+      "bytes": 18203,
+      "saved": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/native-vive-product10/doc/evidence/godot-m4-vive-retest-20261030/physical09.py"
+    },
+    "doc/evidence/godot-m4-vive-physical-20261029/manual_run.py": {
+      "sha256": "08df30b590f09ffdc24f8aa4fc7b1a0a61637adb14d0f1c653c565c9e08dc89f",
+      "mode": 420,
+      "bytes": 2769,
+      "saved": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/native-vive-product10/doc/evidence/godot-m4-vive-physical-20261029/manual_run.py"
+    },
+    "doc/evidence/godot-m4-vive-physical-20261029/serve.py": {
+      "sha256": "f4cebe56f7939c887333d2fa357dc5df1a2c79cd42f56a3b8cc9bc43305eb96c",
+      "mode": 420,
+      "bytes": 7118,
+      "saved": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/native-vive-product10/doc/evidence/godot-m4-vive-physical-20261029/serve.py"
+    },
+    "doc/evidence/godot-m4-vive-physical-20261029/environment.py": {
+      "sha256": "c3a54c8ce4d8360f8711e027d31f7a98f29cf3b9b4436c43a84984cf2c1f20f9",
+      "mode": 420,
+      "bytes": 1178,
+      "saved": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/native-vive-product10/doc/evidence/godot-m4-vive-physical-20261029/environment.py"
+    },
+    "doc/evidence/godot-m4-vive-physical-20261029/godot_m3b_fixture.erl": {
+      "sha256": "c895246b8d4df73560cc042b0ff459b4f33bb46a8870aa52bc4330c3817db769",
+      "mode": 420,
+      "bytes": 10595,
+      "saved": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/native-vive-product10/doc/evidence/godot-m4-vive-physical-20261029/godot_m3b_fixture.erl"
+    },
+    "doc/evidence/godot-m4-vive-physical-20261029/godot_m3b_physics_fixture.erl": {
+      "sha256": "06b764596bf6aaa4e58549a21d56ae10b56f60f9891d38e4ef8c74601da7392d",
+      "mode": 420,
+      "bytes": 7475,
+      "saved": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/native-vive-product10/doc/evidence/godot-m4-vive-physical-20261029/godot_m3b_physics_fixture.erl"
+    },
+    "doc/evidence/godot-m4-r2-20261029/private_vive.py": {
+      "sha256": "e85993e8196ffbf2f4d2e0cd318c36a158be4c0de54b11391c7bacdc9594593c",
+      "mode": 420,
+      "bytes": 2260,
+      "saved": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/native-vive-product10/doc/evidence/godot-m4-r2-20261029/private_vive.py"
+    },
+    "doc/evidence/godot-m4-vr-20261029/vive_display.py": {
+      "sha256": "987d616c5425003e74bd261c1a9de346c4d734ff69e72201c687eb59a79bed76",
+      "mode": 420,
+      "bytes": 2289,
+      "saved": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/native-vive-product10/doc/evidence/godot-m4-vr-20261029/vive_display.py"
+    },
+    "doc/evidence/godot-m4-vive-preparation-20261030/inputs/client-physical-preparation01-manifest.json": {
+      "sha256": "e34159ae24d5ec0ddf6f2324a93c3352203337d886f25b8aa0ff3e7074e01e53",
+      "mode": 384,
+      "bytes": 73348,
+      "saved": "/data/quod-m4-vr-ca84d4f8-20261029/private/build-inputs/native-vive-product10/doc/evidence/godot-m4-vive-preparation-20261030/inputs/client-physical-preparation01-manifest.json"
+    }
+  },
+  "driver_unchanged": true,
+  "product_changes": 0
+}

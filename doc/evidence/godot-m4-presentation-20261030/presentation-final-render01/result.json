@@ -1,0 +1,40 @@
+{
+  "command": [
+    "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-presentation-final01/source/client/godot/dist/quod.x86_64",
+    "--display-driver",
+    "wayland",
+    "--audio-driver",
+    "Dummy",
+    "--xr-mode",
+    "off",
+    "--rendering-method",
+    "mobile",
+    "--rendering-driver",
+    "vulkan",
+    "--",
+    "--qualification",
+    "--profile",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/presentation-final-render01/identity"
+  ],
+  "manifest": "doc/evidence/godot-m4-presentation-20261030/inputs/client-presentation-final01-manifest.json",
+  "manifest_sha256": "ad9bcdbd7d786a30f8c2a71882fb80670732aa9dc97b258163be250795ba400d",
+  "actual_exports_admitted": 196,
+  "stat_bound_digest_hits": 196,
+  "driver_hashes": {
+    "application.py": "b6ba8df50e9a963afbf84907f8a2b444d127b3a22eaafbcb52aa557d2306a8c5",
+    "digests.py": "78510fc431bb348b84fc579918defea7b67bed7df8a4b440bd9dec50a9630dac",
+    "desktop_input.py": "a632e4804a9226abab6aa4c00d7ead7d81cc58c4782987022cd7f4d9978f65cf"
+  },
+  "native_input": [],
+  "watchdog_seconds": 60,
+  "physical_acceptance": false,
+  "passed": true,
+  "reader_errors": [],
+  "client_exit": 0,
+  "eof": {
+    "stdout": true,
+    "stderr": true
+  },
+  "completion_marker": true,
+  "observation_marker": true
+}

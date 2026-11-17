@@ -1,0 +1,41 @@
+PASS enabled action create-key
+PASS enabled action connect
+PASS ordinary signed Connect uses the fresh fixture trust
+PASS enabled action register
+PASS enabled action prepare
+PASS enabled action setup
+PASS ordinary current interior is reachable before any helper selection or scroll
+PASS fresh ordinary space has no manufactured contents
+PASS authorized same-ontology fixture offers a non-space instance form and two visual occurrences
+PASS exact visible occurrence is reachable before native picking
+PASS one native pick selects the exact occurrence and semantic subject without travel
+PASS offered ontology action form binds to the selected visual and exact subject
+PASS current native target visible and enclosed: control0
+PASS one complete native gesture with no duplicate callback
+PASS actual native pointer focuses the existing editor
+PASS current native target visible and enclosed: form-personal-workspace
+PASS native action enabled: form-personal-workspace
+PASS one complete native gesture with no duplicate callback
+PASS explicit personal placement releases only the occurrence binding
+PASS current native target visible and enclosed: form-near-object
+PASS native action enabled: form-near-object
+PASS one complete native gesture with no duplicate callback
+PASS near and personal preserve the same native editor draft caret selection and semantic revision
+PASS local relocation writes no profile and recreates no scene or signed consumer
+PASS exact visible occurrence is reachable before native picking
+PASS one native pick selects the exact occurrence and semantic subject without travel
+PASS second same-subject visual keeps the same form and does not move the agent
+PASS current ordinary composition raster retained: associated-form
+PASS same form surface sits above the chosen occurrence with native XR disabled
+PASS actual software spatial occurrence raster retained
+PASS selection text editing and placement issue no domain action or replay
+PASS bounded native scrolling reaches the chosen form control
+PASS current native target visible and enclosed: control1
+PASS native action enabled: control1
+PASS one complete native gesture with no duplicate callback
+PASS one explicit offered native submission returns its original committed result
+PASS current native target visible and enclosed: form-personal-workspace
+PASS native action enabled: form-personal-workspace
+PASS one complete native gesture with no duplicate callback
+PASS current native target visible and enclosed: form-near-object
+{"passed": false, "failure": "AssertionError: ", "children": {"server": 0, "client-initial": 1}, "native_inputs": 0}

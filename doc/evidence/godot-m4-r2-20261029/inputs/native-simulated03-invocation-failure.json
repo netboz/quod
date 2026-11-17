@@ -1,0 +1,6 @@
+{
+  "attempt": "sandbox invocation before child launch",
+  "error": "OSError errno30 Read-only file system opening private/logs/native-simulated03.log",
+  "child_started": false,
+  "correction": "use authorized escalation for task cache and correct --export argument"
+}

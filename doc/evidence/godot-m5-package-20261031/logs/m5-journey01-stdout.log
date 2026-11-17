@@ -1,0 +1,10 @@
+PASS enabled ordinary action create-key
+PASS native action is visible inside the current ordinary desktop viewport
+PASS enabled ordinary action connect
+PASS native action is visible inside the current ordinary desktop viewport
+PASS real signed authentication uses the fresh fixture network
+PASS enabled ordinary action register
+PASS native action is visible inside the current ordinary desktop viewport
+PASS enabled ordinary action prepare
+PASS native action is visible inside the current ordinary desktop viewport
+{"passed": false, "failure": "RuntimeError: Native pointer did not remain inside its exact owned window", "children": {"server": 0, "client-initial": -15}, "native_inputs": 9}

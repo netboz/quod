@@ -1,0 +1,80 @@
+{
+  "basis": "saved current-turn inputs including the inherited +41/-7 slice; not git HEAD",
+  "paths": {
+    "client/godot/Core/Eidolons.cs": {
+      "added": 0,
+      "removed": 6,
+      "before_sha256": "9036b4ea127f6cbb9a78f89baf6db2292dee34945809d8abfe236d74026c2913",
+      "current_sha256": "32d9962d715d4fbcf79e271730822df72a298d8340161f71a39f87b956be835b"
+    },
+    "client/godot/Core/Scene.cs": {
+      "added": 1,
+      "removed": 1,
+      "before_sha256": "cd060f35cf6656e55f92888ebaeb5f419b266b5a3d23c17f62f62228c8013a58",
+      "current_sha256": "b2f5592cdcdfd4365a0b414a984a40b23a899adf553ba7d6168ac4179275a8a8"
+    },
+    "client/godot/EidolonPanel.cs": {
+      "added": 2,
+      "removed": 4,
+      "before_sha256": "c30bbeb6b23e1edc5f466bfe87d5b132238f6d1d137289927a511ebd92ecd537",
+      "current_sha256": "0657c3cf4cd978ee488daf17822f180ed2afcd2f2c6f3ac41ab64e75a099ccd1"
+    },
+    "client/godot/SourcePanel.cs": {
+      "added": 11,
+      "removed": 18,
+      "before_sha256": "8126a42d8c21815d6d09d8796ffe444d7cbef76d170d6658e0a37e7a13cf8e25",
+      "current_sha256": "4e97985d6936855bb2bcf7d0a6cd320c6f27dfc07abe4ae8552d75f108e491b0"
+    },
+    "client/src/prolog-edit.js": {
+      "added": 11,
+      "removed": 0,
+      "before_sha256": "cca039de0e093d3f2313e4dc92fe7504958057aee1093b3effa5f75a9e6c2a1a",
+      "current_sha256": "ed820aac74ec1693774109e57921cce05dd628b2aeff95bace6516ae8b7a8804"
+    },
+    "client/src/world.d.ts": {
+      "added": 1,
+      "removed": 1,
+      "before_sha256": "e38bcff417fbb4e0b00bce656819bf1268fe6df8e834075b1742ffbef087948e",
+      "current_sha256": "388262c78c0a6d3919c243f01ee770e2a1245e7eea6b0036f45731562eadf322"
+    },
+    "client/src/world.js": {
+      "added": 7,
+      "removed": 2,
+      "before_sha256": "e7ed5edaa93cac0f9ebee65e82361b6c565e7eed6e3d38bc84785d3a555ddcf5",
+      "current_sha256": "b0941dcd4ff1962ffcfbcf61371d15e6940d879f41be3ba9ec30704080dc39b2"
+    },
+    "priv/ontologies/common_predicates.pl": {
+      "added": 214,
+      "removed": 10,
+      "before_sha256": "a277245bf43e62d183a0fef0db494e9bf12ef9038237a826f0fe1d1bf28d42ee",
+      "current_sha256": "c259025ea150516913c57acd23f92d80a726812c8f9468862ce5da41df2636ef"
+    },
+    "priv/ontologies/gui_scene.pl": {
+      "added": 1,
+      "removed": 1,
+      "before_sha256": "ff972d8136bc4355c985b232c6ee21ff7f44c3c1484a089aab976e4c7ccfa617",
+      "current_sha256": "a83631a318f930b1253ccf1efd1808d51c994a1068dfcaaf4ff03b83ff528cf7"
+    },
+    "priv/ontologies/gui_tools.pl": {
+      "added": 6,
+      "removed": 15,
+      "before_sha256": "e23cb85e063ceb90542fbadfae300487ac8381b3e33951fd0410abad61bb4f73",
+      "current_sha256": "a7ff7b5e609bd051f3feb043256252d19929f354e9d975bc9bcd58cab6761b9e"
+    },
+    "priv/ontologies/quod_space.pl": {
+      "added": 0,
+      "removed": 140,
+      "before_sha256": "1253476fcfbe135bb92d2c3266b6a4d62e59849e969c5ed96fd02dba6b9abff2",
+      "current_sha256": "70e1c448750c06f487f3f45378a869f09ab3a3281dfc3cdc55700a40b0f1204a"
+    },
+    "ui/src/PrologEditor.tsx": {
+      "added": 20,
+      "removed": 14,
+      "before_sha256": "2fe3f603b7f5b1a1c7dfdc36dc77bc3d2b22387c4789c917f4ce6d0a8c5c398b",
+      "current_sha256": "6e7375d0e15bf30cae3258adb0b39055e6964eea6cf07e7c8b25edcfe68ebc28"
+    }
+  },
+  "added": 274,
+  "removed": 212,
+  "net": 62
+}

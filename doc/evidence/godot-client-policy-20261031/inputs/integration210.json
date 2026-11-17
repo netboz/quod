@@ -1,0 +1,10 @@
+{
+  "whole_actual_batch_read": true,
+  "count": 9,
+  "known_exact_bodies": 8,
+  "new_full_body": "meta-1793487216169-y051ry8",
+  "list_only_not_consumption": true,
+  "incorporation": "Exact targeted2/CT150 proof and staged-lock mismatch incorporated. Original campaign outer1 remains; separate offline reconciliation records the exact checkout-only generated metadata. No provider rerun.",
+  "cache": "targeted-ct-hashes-210.json",
+  "cache_sha256": "7a2324349b0375e8a12858d572e8160927da2acad79041a73c60cfce6bed8754"
+}

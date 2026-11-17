@@ -1,0 +1,16 @@
+{
+  "command": [
+    "env",
+    "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+    "dotnet",
+    "run",
+    "--project",
+    "client/godot-tests/Quod.Client.Tests.csproj",
+    "--",
+    "/home/yan/src/quod_worktrees/pearl-stone",
+    "/tmp/quod-m1b-public-backup.json"
+  ],
+  "exit": 1,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 6.984661571998004
+}

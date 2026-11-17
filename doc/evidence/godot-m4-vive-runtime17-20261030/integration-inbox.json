@@ -1,0 +1,31 @@
+{
+  "scope": "Entire actual pending/executing batch read once at this integration boundary; list-only NOT consumption, consume unavailable.",
+  "batch": {
+    "sessionId": "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
+    "count": 2,
+    "includeCompleted": false,
+    "prompts": [
+      {
+        "id": "meta-1793389540849-csb2sbs",
+        "status": "executing",
+        "createdAt": 1793389540850,
+        "claimedAt": 1793389540852,
+        "completedAt": null,
+        "errorMessage": null,
+        "promptPreview": "Yan now explicitly says \"so what are you waiting for?\" and \"move your fucking ass\": START the already prepared corrected headset test now. This is fresh coordinator authorization for ONE distinct next unused case17, superseding offline-only120 only for this run. SAME sole Sol ca84d4f8, same launcher...",
+        "prompt": "Yan now explicitly says \"so what are you waiting for?\" and \"move your fucking ass\": START the already prepared corrected headset test now. This is fresh coordinator authorization for ONE distinct next unused case17, superseding offline-only120 only for this run. SAME sole Sol ca84d4f8, same launcher/model; read AGENTS and runtime-cue preparation handoff. No review/rebuild/new writer. Full actual root1 user message/workerEMPTY batch read once before this dispatch; list-only not consumption.\n\nUse accepted client-runtime-cue01 at /data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-runtime-cue01/source/client/godot/dist: manifest9073b314599bd64531792acd63cbcd2e21ef54b73a41b25cd041260a4433fb08, DLL8b4399840627133bce6b8ff9adeaec8b2c944386fd21f678e9c1759bd89028c9/PCK1267200faae7edaf25bf22aa21165d4fc94a8caa1994c7d20bf45d8f923ca1b4/engine02310d903099bada10c86cedc90bbc11ef0bec8254d6e607d1a53f6150ab0268. Root120 independently accepted94inputs/196exports/5commands0/21cue+20binding/privacy and small seal9379b83ce94df3fbc6e5f30efab0ce9178e8aebc176fc447b31b3b942d48c039. No old source/API/output recount. Approved runtime-focus product policy118 unchanged.\n\nImmediately perform only necessary fresh ownership/provider/payload binding preflight, then existing fresh signed fixture/restoration05 and pinned Monado59be, one30s discovery-complete +one5s inventory admitting BOTHwands before app, then ordinary signed Main/Start/FIRST_DRAW. Retain explicit tty:true for interactive physical wrapper; use existing qualified control/driver with separately labelled invocation selecting this new payload, no source-policy changes. Existing HDMI-A-1-only temporary enable/restore consent1793290099639, no other display/config/global changes. Preserve existing1800s manual/60s close/2100s wrapper/capture/calibration/private profile bounds.\n\nNO focus listener/recipient investigation/card-to-focus roundtrip or desktop focus readiness veto. An existing one-time exact-owned launch focus is allowed only as necessary for ordinary startup; no ongoing refocus/loop/policy change. This new runtime cue uses native focus/running/window VISIBILITY/current head/both hands/model visibility/neutral, never Window.HasFocus as veto. Once the app has FIRST_DRAW and the cue is available to the headset, REPORT IMMEDIATELY with actual current cue/native head/hands/model state and remaining bound. Do not wait for resting headset/controllers to satisfy high tracking before reporting that the app can be put on; report WAITING honestly until actual cue gates hold. User's next action is only wear headset and hold both powered controllers with every control released, observe the cue/models and return here. ROOT is sole contact; open NO widget/question. No90sample, GUI/button/gesture/movement/domain operation.\n\nIf actual prerequisites fail, retain exact cause/true exits/EOF, normally retire owned processes and restore approved HDMI state; report concrete blocker promptly, no automatic18/identical retries/extended deadlines/weakened guards/forced success. On success keep owned live opportunity within original bound and report actual state; do not start long evidence sealing while Yan waits. All heavy bytes/private diagnostics on Data, small receipts only, preserve failures/archives. No old API parse/cleanup/global changes/commit/M5/fullM4."
+      },
+      {
+        "id": "meta-1793389795639-zak6wd1",
+        "status": "pending",
+        "createdAt": 1793389795639,
+        "claimedAt": null,
+        "completedAt": null,
+        "errorMessage": null,
+        "promptPreview": "Material live handoff: root independently read the new case17 client-stderr markers (bounded tail, no room/private data disclosed): PRODUCT_READY, FIRST_DRAW, head True:High, canonical left+right True:High/True:High, latest LOOK_CUE READY frame=2. Root delivered actual user-facing headset-only instr...",
+        "prompt": "Material live handoff: root independently read the new case17 client-stderr markers (bounded tail, no room/private data disclosed): PRODUCT_READY, FIRST_DRAW, head True:High, canonical left+right True:High/True:High, latest LOOK_CUE READY frame=2. Root delivered actual user-facing headset-only instruction immediately before the 19:49:43 UTC clock read: 'The test is running and the headset cue is READY. Put the headset on now and hold both powered controllers with every control released. Look for both controller models—don’t press anything.' No card/question/notifier/focus action was issued by root. This is actual instruction delivery, NOT a human answer or proof of continued cue state. Keep existing bounded opportunity and actual frame-owned cue; no 90sample/gesture/additional focus. Root has read whole current root1/worker1 full batch once (list-only not consumption). Await Yan's real answer here; retain exact cue/geometry time limits. No new task or launch."
+      }
+    ]
+  }
+}
+

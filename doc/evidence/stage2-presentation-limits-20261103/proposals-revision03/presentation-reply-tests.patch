@@ -1,0 +1,372 @@
+--- a/test/quod_client_goal_endpoint_tests.erl
++++ b/test/quod_client_goal_endpoint_tests.erl
+@@ -81,19 +81,23 @@
+          term_to_binary({quod_client_goal_endpoint, 1,
+                          term_to_binary({unknown, Id}, [deterministic])},
+                         [deterministic]))),
+-    Oversized = <<0:(?QUOD_CLIENT_GOAL_MAX_ENVELOPE_BYTES + 1)/unit:8>>,
++    Oversized = <<0:(?QUOD_TRANSPORT_MAX_FRAME_BYTES + 1)/unit:8>>,
+     ?assertEqual(
+        {error, {too_large, client_goal_endpoint}},
+        quod_client_goal_endpoint:decode_response(Oversized)).
+ 
+-limits_stay_below_transport_frame_test() ->
+-    ?assert(?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES <
+-                ?QUOD_CLIENT_GOAL_MAX_ENVELOPE_BYTES),
+-    ?assert(?QUOD_CLIENT_GOAL_MAX_ENVELOPE_BYTES <
+-                ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
+-    ?assertEqual(
+-       term_to_binary(quod_client_goal_v1, [deterministic]),
+-       quod_client_goal_endpoint:channel()).
++complete_envelope_uses_existing_transport_admission_test() ->
++    Id = <<7:128>>,
++    {ok,Payload}=quod_wire_term:encode_bindings(#{<<"X">>=>binary:copy(<<$x>>,600000)},unlimited),
++    {ok,Result}=quod_client_result:encode({answers,1,[Payload]}),
++    {ok,Envelope}=quod_client_goal_endpoint:encode_response({result,Id,Result}),
++    ?assertEqual({ok,{result,Id,Result}},quod_client_goal_endpoint:decode_response(Envelope)),
++    ?assertEqual({ok,{result,Id,Result}},quod_client_goal_endpoint:route_response(Envelope)),
++    {ok,HugePayload}=quod_wire_term:encode_bindings(#{<<"X">>=>binary:copy(<<$x>>,?QUOD_TRANSPORT_MAX_FRAME_BYTES)},unlimited),
++    {ok,Huge}=quod_client_result:encode({answers,1,[HugePayload]}),
++    ?assertEqual({error,{too_large,client_goal_endpoint}},
++        quod_client_goal_endpoint:encode_response({result,Id,Huge})),
++    ?assertEqual(term_to_binary(quod_client_goal_v1,[deterministic]),quod_client_goal_endpoint:channel()).
+ 
+ routing_decode_keeps_signed_and_result_payloads_opaque_test() ->
+     Id = <<8:128>>,
+--- a/test/quod_client_result_tests.erl
++++ b/test/quod_client_result_tests.erl
+@@ -196,36 +196,20 @@
+                  quod_client_goal_parser:value_text({transform, -150, 0, 0, 0, 0, 0})),
+     ?assertEqual(<<"[65,66,67]">>, quod_client_goal_parser:value_text("ABC")).
+ 
+-aggregate_result_bound_is_identical_before_transport_test() ->
+-    Evidence = maps:get(evidence, fixture()),
+-    Value = binary:copy(<<"x">>, 12000),
+-    Raw = {ok, lists:duplicate(50, #{0 => Value}), 7},
+-    Result = quod_client_result:normalize(Evidence, Raw),
+-    ?assertEqual({error, result_too_large}, Result),
+-    ?assertEqual({413, #{error => result_too_large}},
+-                 quod_client_result:http_normalized(Evidence, Result)).
+-
+-read_envelope_survives_payload_and_envelope_overflow_test() ->
+-    Evidence = maps:get(evidence,fixture()),
+-    Deps = [{<<"a">>,<<1:256>>,7}],
+-    Huge = binary:copy(<<"x">>,?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES),
+-    lists:foreach(fun({Raw,Reason}) ->
+-        Result = quod_client_result:normalize(Evidence,{read,Deps,Raw}),
+-        ?assertEqual({read,Deps,{error,Reason}},Result),
+-        {ok,Bytes} = quod_client_result:encode(Result),
++complete_results_and_dependencies_have_no_second_allocation_test() ->
++    Evidence=maps:get(evidence,fixture()),
++    Value=binary:copy(<<$x>>,600000),
++    Deps=[{<<"a">>,<<1:256>>,7}],
++    lists:foreach(fun(Raw) ->
++        Result=quod_client_result:normalize(Evidence,{read,Deps,Raw}),
++        ?assertMatch({read,Deps,{answers,7,_}},Result),
++        {ok,Bytes}=quod_client_result:encode(Result),
+         ?assertEqual({ok,Result},quod_client_result:decode(Bytes))
+-    end,[{{ok,[#{0 => Huge}],7},result_too_large},
+-          {{ok,[#{0 => self()}],7},proof_unavailable}]),
+-    %% An otherwise admissible answer can overflow only after dependencies
+-    %% are added; the complete envelope owns the byte limit.
+-    Payload = binary:part(Huge,0,?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES - 256),
+-    LargeDeps = [{<<I,(binary:copy(<<"n">>,254))/binary>>,<<I:256>>,7}
+-                 || I <- lists:seq(1,32)],
+-    ?assertMatch({answers,7,[_]},quod_client_result:normalize(Evidence,{ok,[#{0 => Payload}],7})),
+-    ?assertEqual({read,LargeDeps,{error,result_too_large}},
+-        quod_client_result:normalize(Evidence,{read,LargeDeps,{ok,[#{0 => Payload}],7}})),
++    end,[{ok,[#{0=>Value}],7},{ok,lists:duplicate(50,#{0=>binary:part(Value,0,12000)}),7}]),
++    ?assertEqual({read,Deps,{error,proof_unavailable}},
++        quod_client_result:normalize(Evidence,{read,Deps,{ok,[#{0=>self()}],7}})),
+     ?assertEqual({read,[],{error,proof_unavailable}},
+-        quod_client_result:normalize(Evidence,{read,[{Huge,<<1:256>>,7}],fail})),
++        quod_client_result:normalize(Evidence,{read,[{Value,<<1:256>>,7}],fail})),
+     ?assertEqual({read,[],{error,proof_unavailable}},
+         quod_client_result:normalize(Evidence,{read,[{<<"a">>,bad_anchor,7}],fail})).
+ 
+@@ -252,21 +236,12 @@
+         ?assertEqual(quod_client_goal_parser:value_text(Value), Text)
+     end, [Answers, Preview]).
+ 
+-single_and_aggregate_byte_overflow_remain_specific_errors_test() ->
+-    Evidence = maps:get(evidence, fixture()),
+-    Oversized = binary:copy(<<"x">>, ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES),
+-    lists:foreach(fun(Raw) ->
+-        Result = quod_client_result:normalize(Evidence, Raw),
+-        ?assertEqual({error, result_too_large}, Result),
+-        ?assertEqual({413, #{error => result_too_large}},
+-                     quod_client_result:http_normalized(Evidence, Result))
+-    end, [{ok, [#{0 => Oversized}], 7},
+-          {solution, <<7:256>>, #{0 => Oversized}, 7},
+-          {error, {too_large, result}}]),
+-    ?assertEqual({error, result_too_large},
+-                 quod_client_result:encode({answers, 7, [Oversized]})),
+-    ?assertEqual({error, proof_unavailable},
+-                 quod_client_result:normalize(Evidence, {ok, [#{0 => self()}], 7})).
++large_cursor_answers_preserve_invalid_result_refusal_test() ->
++    Evidence=maps:get(evidence,fixture()),Value=binary:copy(<<$x>>,600000),
++    ?assertMatch({solution,_,7,_},quod_client_result:normalize(Evidence,{solution,<<7:256>>,#{0=>Value},7})),
++    ?assertEqual({error,result_too_large},quod_client_result:normalize(Evidence,{error,{too_large,result}})),
++    ?assertEqual({error,invalid_result},quod_client_result:encode({answers,7,[Value]})),
++    ?assertEqual({error,proof_unavailable},quod_client_result:normalize(Evidence,{ok,[#{0=>self()}],7})).
+ 
+ client_binding_validation_retains_canonical_name_rules_test() ->
+     lists:foreach(fun(Pairs) ->
+@@ -300,8 +275,8 @@
+ malformed_and_noncanonical_results_are_rejected_test() ->
+     ?assertEqual({error, invalid_result},
+                  quod_client_result:decode(term_to_binary(arbitrary))),
+-    Oversized = <<0:(?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES + 1)/unit:8>>,
+-    ?assertEqual({error, result_too_large},
++    Oversized = <<0:600000/unit:8>>,
++    ?assertEqual({error, invalid_result},
+                  quod_client_result:decode(Oversized)),
+     ?assertEqual({error, invalid_result},
+                  quod_client_result:encode({answers, -1, []})),
+--- a/test/quod_client_goal_router_tests.erl
++++ b/test/quod_client_goal_router_tests.erl
+@@ -2,6 +2,7 @@
+ -moduledoc false.
+ 
+ -include_lib("eunit/include/eunit.hrl").
++-include("quod_transport_limits.hrl").
+ 
+ -define(PEER, <<16#41:256>>).
+ -define(ENDPOINT, {{127, 0, 0, 1}, 4567}).
+@@ -612,3 +613,67 @@
+         true -> gen_server:stop(Router);
+         false -> ok
+     end.
++
++remote_transport_overflow_delivers_correlated_public_refusal_test() ->
++    {ok, Payload} = quod_wire_term:encode_bindings(
++        #{<<"X">> => binary:copy(<<$x>>, ?QUOD_TRANSPORT_MAX_FRAME_BYTES)}, unlimited),
++    Ref = {transaction, <<"quod:test">>, <<1:256>>, <<2:256>>},
++    lists:foreach(fun({Cursor, Result}) ->
++        with_router(fun(Router, Link, Fixture) ->
++            Caller = submit_async(Router, Fixture, Cursor, 1000),
++            {Request, _} = sent_request(Link),
++            ok = quod_client_goal_router:test_send_result(Link, Request, Result),
++            Frame = target_frame(Link),
++            {ok, Response} = quod_client_goal_endpoint:decode_response(Frame),
++            Id = quod_client_goal_endpoint:request_id(Request),
++            {ok, Error} = quod_client_result:encode({error, result_too_large}),
++            Expected = case Cursor of none -> {result, Id, Error};
++                _ -> {cursor_result, Id, Cursor, Error} end,
++            ?assertEqual(Expected, Response),
++            Router ! {quod_message, {?PEER, Link}, quod_client_goal_endpoint:channel(), Frame},
++            receive {Caller, {ok, _, {normalized, {error, result_too_large}}}} -> ok
++            after 1000 -> error(overflow_refusal_missing) end,
++            await_stats(Router, #{correlations => 0, routes => 0}),
++            assert_released_lease(Link, Router)
++        end)
++    end, [{none, {answers, 7, [Payload]}},
++          {<<9:256>>, {solution, <<9:256>>, 7, Payload}},
++          {none, {committed, [Payload], Ref}}]).
++
++target_encoding_keeps_outcome_and_distinguishes_invalid_from_size_test() ->
++    Parent = self(), Link = spawn(fun() -> link_loop(Parent) end),
++    Ref = {transaction, <<"quod:test">>, <<1:256>>, <<2:256>>},
++    Request = {submit, <<8:128>>, <<>>, <<0:512>>, none, []},
++    try
++        lists:foreach(fun({Result, Expected}) ->
++            ok = quod_client_goal_router:test_send_result(Link, Request, Result),
++            {ok, {result, <<8:128>>, Blob}} = quod_client_goal_endpoint:decode_response(target_frame(Link)),
++            ?assertEqual({ok, Expected}, quod_client_result:decode(Blob))
++        end, [{{pending, Ref}, {pending, Ref}},
++              {{committed, [], Ref}, {committed, [], Ref}},
++              {{answers, 7, [<<"not canonical">>]}, {error, proof_unavailable}},
++              {{error, {material_limit, proof, answer_bytes, 10, 9}},
++               {error, {material_limit, proof, answer_bytes, 10, 9}}}]),
++        ok = quod_client_goal_router:test_send_response(Link, {error, <<8:128>>, invalid_signature}),
++        ?assertEqual({ok, {error, <<8:128>>, invalid_signature},
++                     quod_client_goal_endpoint:decode_response(target_frame(Link)))
++    after Link ! stop end.
++
++late_overflow_reply_cannot_restore_cancelled_correlation_test() ->
++    with_router(fun(Router, Link, Fixture) ->
++        Caller = submit_async(Router, Fixture, none, 1000),
++        {Request, _} = sent_request(Link),
++        Monitor = monitor(process, Caller), exit(Caller, kill),
++        receive {'DOWN', Monitor, process, Caller, killed} -> ok
++        after 1000 -> error(caller_not_cancelled) end,
++        await_stats(Router, #{correlations => 0, routes => 0}),
++        {ok, Payload} = quod_wire_term:encode_bindings(
++            #{<<"X">> => binary:copy(<<$x>>, ?QUOD_TRANSPORT_MAX_FRAME_BYTES)}, unlimited),
++        ok = quod_client_goal_router:test_send_result(Link, Request, {answers, 7, [Payload]}),
++        Router ! {quod_message, {?PEER, Link}, quod_client_goal_endpoint:channel(), target_frame(Link)},
++        ?assertMatch(#{correlations := 0, routes := 0}, quod_client_goal_router:test_stats(Router))
++    end).
++
++target_frame(Link) ->
++    receive {link_frame, Link, Frame} -> Frame
++    after 1000 -> error(target_response_missing) end.
+--- a/test/quod_terrain_wire_tests.erl
++++ b/test/quod_terrain_wire_tests.erl
+@@ -1,32 +1,17 @@
+ -module(quod_terrain_wire_tests).
+ -include_lib("eunit/include/eunit.hrl").
+--include("quod_client_goal_limits.hrl").
+ 
+-content_batches_fit_the_actual_json_frame_test() ->
++complete_content_and_manifest_keep_every_requested_row_test() ->
+     Token = <<42:256>>,
+     Chunks = [{I,binary:copy(<<I>>,N)} || {I,N} <- [{0,233488},{1,100000},{2,233488},{3,100000}]],
+-    ?assertEqual(ok,quod_terrain_wire:admit(Token,1,[row(I,B) || {I,B} <- Chunks])),
+-    ?assert(frame_size({terrain_chunks,Token,Chunks,true}) > ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES),
+-    ?assertEqual(2,check_batches(Token,Chunks,0)),
+-    ?assertEqual({[],[]},quod_terrain_wire:batch(Token,[])).
+-
+-individual_content_and_manifest_bounds_test() ->
+-    Token = <<42:256>>,Payload = binary:copy(<<255>>,400000),
+-    ?assertMatch({error,<<"Terrain chunk encoding:",_/binary>>},quod_terrain_wire:admit(Token,1,[row(0,Payload)])),
++    Content = quod_terrain_wire:message({terrain_chunks,Token,Chunks,true}),
++    ?assert(frame_size({terrain_chunks,Token,Chunks,true}) > 512*1024),
++    ?assertEqual(Chunks,[{maps:get(index,R),base64:decode(maps:get(payload,R),
++        #{mode => urlsafe,padding => false})} || R <- maps:get(chunks,Content)]),
+     Rows = [row(I,<<>>) || I <- lists:seq(0,3999)],
+-    ?assert(frame_size({terrain_manifest,Token,1,Rows}) > ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES),
+-    ?assertMatch({error,<<"Terrain manifest encoding:",_/binary>>},quod_terrain_wire:admit(Token,1,Rows)).
+-
+-check_batches(_,[],Count) -> Count;
+-check_batches(Token,Chunks,Count) ->
+-    {Batch,Rest} = quod_terrain_wire:batch(Token,Chunks),
+-    ?assertNotEqual([],Batch),?assertEqual(Chunks,Batch++Rest),
+-    ?assert(frame_size({terrain_chunks,Token,Batch,Rest =:= []}) =< ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES),
+-    case Rest of
+-        [Next|_] -> ?assert(frame_size({terrain_chunks,Token,Batch++[Next],false}) > ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES);
+-        [] -> ok
+-    end,
+-    check_batches(Token,Rest,Count+1).
++    ?assert(frame_size({terrain_manifest,Token,1,Rows}) > 512*1024),
++    ?assertEqual(4000,length(maps:get(chunks,quod_terrain_wire:message({terrain_manifest,Token,1,Rows})))),
++    ?assertMatch(#{chunks := [],complete := true},quod_terrain_wire:message({terrain_chunks,Token,[],true})).
+ 
+ frame_size(Resource) ->
+     Message = quod_terrain_wire:message(Resource),
+--- a/test/quod_physics_tests.erl
++++ b/test/quod_physics_tests.erl
+@@ -5801,7 +5801,7 @@
+             end)
+     end,{view_distance,4000,1000,2000},{resources,20000,60000,2000,1000,3},[]) end}.
+ 
+-voxel_signed_view_batches_large_resident_selection_test_() ->
++voxel_signed_view_delivers_complete_large_resident_selection_test_() ->
+     {timeout,90,fun() -> with_voxel_view(fun(#{physics := Pid,socket := Socket,projection := Projection}) ->
+         View = maps:get(<<"view">>,Projection), Frame = maps:get(<<"frame">>,Projection),
+         socket_command(Socket,#{type => terrain_interest,view => View,sequence => <<"1">>,
+@@ -5811,16 +5811,15 @@
+         Manifest = large_terrain_manifest(Socket,View),
+         Rows = maps:get(<<"chunks">>,Manifest),Token = maps:get(<<"token">>,Manifest),
+         ?assertEqual(27,length(Rows)),
+-        ?assert(lists:sum([hd(maps:get(<<"costs">>,R)) || R <- Rows]) > ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES),
++        ?assert(lists:sum([hd(maps:get(<<"costs">>,R)) || R <- Rows]) > (512*1024)),
+         socket_command(Socket,#{type => terrain_ack,view => View,token => Token,
+             want => [maps:get(<<"index">>,R) || R <- Rows]}),
+-        Batches = consume_large_terrain(Socket,Pid,View,Token,Rows,0),
+-        ?assert(Batches > 1),
++        consume_large_terrain(Socket,Pid,View,Token,Rows),
+         ?assertMatch(#{pid := Pid},simulation_state(Socket))
+     end,{view_distance,4000,1000,2000},{resources,2000000,4000000,100000,50000,64},[],
+     fun(#{namespace := Ns}) ->
+         %% This authored field exercises the ordinary resident-resource path
+-        %% with more content than a single view frame can encode.
++        %% with more content than the retired presentation subquota.
+         Before = {physics_allowances,room,{limits,64,64,256,1000000,{geometry,256,4096,4096}},16667,-9810,10000},
+         After = setelement(3,Before,{limits,64,64,256,1000000,{geometry,256,100000,100000}}),
+         commit(Ns,{',',{retract,Before},{assertz,After}}),
+@@ -5839,30 +5838,25 @@
+             large_terrain_manifest(Socket,View)
+     end.
+ 
+-consume_large_terrain(Socket,Pid,View,Token,Rows,Count) ->
++consume_large_terrain(Socket,Pid,View,Token,Rows) ->
+     Content = terrain_reply(Socket,View,<<"terrain_chunks">>),
+-    ?assert(iolist_size(json:encode(Content)) =< ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES),
++    ?assert(iolist_size(json:encode(Content)) > 512*1024),
+     ?assertEqual(Token,maps:get(<<"token">>,Content)),
+-    Chunks = maps:get(<<"chunks">>,Content),?assertNotEqual([],Chunks),
+-    {Selected,Rest} = lists:split(length(Chunks),Rows),
++    Chunks = maps:get(<<"chunks">>,Content),
++    ?assertEqual(length(Rows),length(Chunks)),
+     lists:foreach(fun({Row,Chunk}) ->
+         ?assertEqual(maps:get(<<"index">>,Row),maps:get(<<"index">>,Chunk)),
+         Bytes = base64:decode(maps:get(<<"payload">>,Chunk),#{mode => urlsafe,padding => false}),
+         ?assertEqual(hd(maps:get(<<"costs">>,Row)),byte_size(Bytes)),
+         ?assertEqual(maps:get(<<"digest">>,Row),binary:encode_hex(crypto:hash(sha256,Bytes),lowercase))
+-    end,lists:zip(Selected,Chunks)),
+-    ?assertEqual(Rest =:= [],maps:get(<<"complete">>,Content)),
+-    Ack = fun(Value) -> socket_command(Socket,Value#{type => terrain_ack,view => View,token => Token}) end,
+-    case Rest of
+-        [] -> Ack(#{complete => true}),Count+1;
+-        _ ->
+-            Last = maps:get(<<"index">>,lists:last(Chunks)),
+-            Ack(#{complete => true}),Ack(#{through => Last+1}),
+-            _ = simulation_state(Socket),_ = gen_server:call(Pid,status),
+-            receive {simulation,Socket,_} -> error(inexact_ack_released_delivery) after 0 -> ok end,
+-            Ack(#{through => Last}),
+-            consume_large_terrain(Socket,Pid,View,Token,Rest,Count+1)
+-    end.
++    end,lists:zip(Rows,Chunks)),
++    ?assertEqual(true,maps:get(<<"complete">>,Content)),
++    %% A completion for a different retained snapshot cannot release credit.
++    socket_command(Socket,#{type => terrain_ack,view => View,
++        token => base64:encode(<<0:256>>,#{mode => urlsafe,padding => false}),complete => true}),
++    _ = simulation_state(Socket),_ = gen_server:call(Pid,status),
++    receive {simulation,Socket,_} -> error(stale_ack_released_delivery) after 0 -> ok end,
++    socket_command(Socket,#{type => terrain_ack,view => View,token => Token,complete => true}).
+ 
+ with_voxel_view(Fun,Distance,Resources,ExtraBodies) ->
+     with_voxel_view(Fun,Distance,Resources,ExtraBodies,
+--- a/client/test/terrain-delivery.test.js
++++ b/client/test/terrain-delivery.test.js
+@@ -114,7 +114,7 @@
+   } finally { stream.close() }
+ })
+ 
+-test('content batches retain visible progress and acknowledge exact prefixes before final readiness', async () => {
++test('complete requested content installs atomically and releases its exact token', async () => {
+   const failures = []
+   let current
+   const { socket, stream, view } = await connection(value => { current = value }, failures)
+@@ -124,14 +124,9 @@
+     socket.receive({ type: 'terrain_manifest', view, token, interest_seq: '0', chunks: [row,
+       { ...row, index: 1, chunk: ['1', '0', '0'], origin_mm: ['4000', '0', '0'] }] })
+     assert.deepEqual((await socket.next()).want, [0, 1])
+-    socket.receive({ type: 'terrain_chunks', view, token, complete: false, chunks: [{ index: 0, payload: encoded }] })
+-    assert.deepEqual(await socket.next(), { type: 'terrain_ack', view, token, through: 0 })
+-    assert.equal(current.terrain.size, 1)
+-    assert.equal(current.terrainReady, false)
+-    socket.receive({ type: 'simulation_frame', view, frame: { ...frame, tick: '2' } })
+-    assert.equal((await socket.next()).tick, '2')
+-    assert.equal(current.terrain.size, 1)
+-    socket.receive({ type: 'terrain_chunks', view, token, complete: true, chunks: [{ index: 1, payload: encoded }] })
++    assert.equal(current.terrainReady, false)
++    socket.receive({ type: 'terrain_chunks', view, token, complete: true,
++      chunks: [{ index: 0, payload: encoded }, { index: 1, payload: encoded }] })
+     assert.deepEqual(await socket.next(), { type: 'terrain_ack', view, token, complete: true })
+     assert.equal(current.terrain.size, 2)
+     assert.equal(current.terrainReady, true)
+@@ -139,7 +134,7 @@
+   } finally { stream.close() }
+ })
+ 
+-test('a stale partial batch releases only its own ending without installing content', async () => {
++test('a stale completed set releases only its own token without installing content', async () => {
+   const failures = []
+   let current
+   const { socket, stream, view } = await connection(value => { current = value }, failures)
+@@ -149,9 +144,10 @@
+       { ...row, index: 1, chunk: ['1', '0', '0'], origin_mm: ['4000', '0', '0'] }] })
+     await socket.next()
+     current.interest([2, 0, 0]); await socket.next()
+-    socket.receive({ type: 'terrain_chunks', view, token, complete: false,
+-      chunks: [{ index: 0, payload: Buffer.from(payload).toString('base64url') }] })
+-    assert.deepEqual(await socket.next(), { type: 'terrain_ack', view, token, through: 0 })
++    socket.receive({ type: 'terrain_chunks', view, token, complete: true,
++      chunks: [{ index: 0, payload: Buffer.from(payload).toString('base64url') },
++        { index: 1, payload: Buffer.from(payload).toString('base64url') }] })
++    assert.deepEqual(await socket.next(), { type: 'terrain_ack', view, token, complete: true })
+     assert.equal(current.terrain.size, 0)
+     assert.equal(current.terrainReady, false)
+     assert.deepEqual(failures, [])

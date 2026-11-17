@@ -1,0 +1,534 @@
+Mon Nov 09 2026 17:34:01.482981 [Info] - //==============================================================================================
+Mon Nov 09 2026 17:34:01.483026 [Info] - ================================================================================================
+Mon Nov 09 2026 17:34:01.483042 [Info] - ================================================================================================
+Mon Nov 09 2026 17:34:01.483062 [Info] - vrmonitor 2.19.2 startup with PID=260723, config=/home/yan/.local/share/Steam/config, runtime=/home/yan/.local/share/Steam/steamapps/common/SteamVR, arch=linux64
+Mon Nov 09 2026 17:34:01.483104 [Info] - Tools Path: /home/yan/.local/share/Steam/steamapps/common/SteamVR/tools exists.
+Mon Nov 09 2026 17:34:01.483122 [Info] - Demo Path: /home/yan/.local/share/Steam/steamapps/common/SteamVR/demo not found.
+Mon Nov 09 2026 17:34:01.491941 [Error] - Failed to associate extension: icon registration failed for vrmanifest
+Mon Nov 09 2026 17:34:01.491991 [Info] - Default Playback Audio Devices: ,  (Comm)
+Mon Nov 09 2026 17:34:01.492009 [Info] - Default Record Audio Device: ,  (Comm)
+Mon Nov 09 2026 17:34:01.569704 [Info] - [System] Transition from 'SteamVRSystemState_Off' to 'SteamVRSystemState_Startup'.
+Mon Nov 09 2026 17:34:03.499199 [Info] - [System] Runtime: 1794004177 250820  STEAMVR
+Mon Nov 09 2026 17:34:03.655858 [Info] - VR_Init successful
+Mon Nov 09 2026 17:34:03.658827 [Info] - CIPCPipe::ConnectPipe(SteamVR_Namespace) attempting connect to /steamvr/SteamVR_Namespace
+Mon Nov 09 2026 17:34:03.658904 [Info] - [Steam] Attempt to connect to Steam
+Mon Nov 09 2026 17:34:03.658941 [Info] - CSharedResourceNamespaceClient::Init(): received namespace data 260569
+Mon Nov 09 2026 17:34:03.659393 [Info] - CheckHmdDriverName: ActualTrackingSystemName: lighthouse (0)
+Mon Nov 09 2026 17:34:03.659641 [Info] - Add Json firmware manifest from {htc}/firmware/manifest.vrfirmware
+Mon Nov 09 2026 17:34:03.659714 [Info] - Add Json firmware manifest from {indexcontroller}/firmware/manifest.vrfirmware
+Mon Nov 09 2026 17:34:03.659778 [Info] - Add Json firmware manifest from {indexhmd}/firmware/manifest.vrfirmware
+Mon Nov 09 2026 17:34:03.659887 [Info] - Add Json firmware manifest from {lighthouse}/firmware/manifest.vrfirmware
+Mon Nov 09 2026 17:34:03.659967 [Info] - Add Json firmware manifest from {tundra_labs}/firmware/manifest.vrfirmware
+Mon Nov 09 2026 17:34:03.660759 [Info] - [Audio] Audio init
+Mon Nov 09 2026 17:34:03.664205 [Info] - [Steam] Connected to Steam in 0.00 seconds.
+Mon Nov 09 2026 17:34:03.670087 [Info] - [System] Runtime: 1794004177 250820 beta STEAMVR beta
+Mon Nov 09 2026 17:34:03.670302 [Info] - [Steam] Connect to Steam finished: check for dismissable warnings
+Mon Nov 09 2026 17:34:03.674047 [Info] - [Chaperone] The universe id is invalid, but the system did not run long enough.
+Mon Nov 09 2026 17:34:03.675814 [Info] - Skipping OpenXR prompt because it's been dismissed
+Mon Nov 09 2026 17:34:03.686198 [Info] - [System] Transition from 'SteamVRSystemState_Startup' to 'SteamVRSystemState_Connecting'.
+Mon Nov 09 2026 17:34:09.680394 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Connecting' to 'SteamVRSystemState_Standby'.
+Mon Nov 09 2026 17:34:11.528903 [Info] - [System] System is running for 10 seconds.
+Mon Nov 09 2026 17:34:11.528990 [Info] - Checking for Vive wireless receivers. 2 detected.
+Mon Nov 09 2026 17:34:11.579729 [Info] - [Status Warning Added LHR-D006848D Casque(0)] Recherche...
+Mon Nov 09 2026 17:34:11.579803 [Info] - [Status Warning Added LHB-0FF8C23D Station de base(1)] Recherche...
+Mon Nov 09 2026 17:34:11.579821 [Info] - [Status Warning Added LHB-A47924B5 Station de base(2)] Recherche...
+Mon Nov 09 2026 17:45:24.528820 [Info] - [Dismissable Warning Added] Station de base : avertissement (0x0004)
+Mon Nov 09 2026 17:45:32.219912 [Info] - [Dismissable Warning Removed] Station de base : avertissement (0x0004)
+Mon Nov 09 2026 18:38:56.729445 [Info] - [Steam] Attempt to disconnect from Steam
+Mon Nov 09 2026 18:38:56.729778 [Info] - [Steam] Disconnected from Steam
+Mon Nov 09 2026 18:38:57.529539 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Standby' to 'SteamVRSystemState_Ready'.
+Mon Nov 09 2026 18:39:03.529044 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Ready' to 'SteamVRSystemState_Standby'.
+Mon Nov 09 2026 18:41:00.526735 [Info] - [System] Transition from 'SteamVRSystemState_Standby' to 'SteamVRSystemState_ShutdownRequested'.
+Mon Nov 09 2026 18:41:00.537804 [Info] - [System] Quit gracefully: Waiting for process quitting...
+Mon Nov 09 2026 18:41:01.758161 [Info] - [System] Transition from 'SteamVRSystemState_ShutdownRequested' to 'SteamVRSystemState_Shutdown'.
+Mon Nov 09 2026 18:41:01.758219 [Info] - [Audio] Audio shutdown!
+Mon Nov 09 2026 18:41:01.859388 [Info] - Drops over entire run:-  14 single frame-  1 2 frame-  1 3 frame-  0 4 or more- Total 1021 in 1040 frames
+Mon Nov 09 2026 18:59:23.831359 [Info] - //==============================================================================================
+Mon Nov 09 2026 18:59:23.831410 [Info] - ================================================================================================
+Mon Nov 09 2026 18:59:23.831426 [Info] - ================================================================================================
+Mon Nov 09 2026 18:59:23.831453 [Info] - vrmonitor 2.19.2 startup with PID=375176, config=/home/yan/.local/share/Steam/config, runtime=/home/yan/.local/share/Steam/steamapps/common/SteamVR, arch=linux64
+Mon Nov 09 2026 18:59:23.831499 [Info] - Tools Path: /home/yan/.local/share/Steam/steamapps/common/SteamVR/tools exists.
+Mon Nov 09 2026 18:59:23.831518 [Info] - Demo Path: /home/yan/.local/share/Steam/steamapps/common/SteamVR/demo not found.
+Mon Nov 09 2026 18:59:23.842836 [Error] - Failed to associate extension: icon registration failed for vrmanifest
+Mon Nov 09 2026 18:59:23.842899 [Info] - Default Playback Audio Devices: ,  (Comm)
+Mon Nov 09 2026 18:59:23.842919 [Info] - Default Record Audio Device: ,  (Comm)
+Mon Nov 09 2026 18:59:23.988405 [Info] - [System] Transition from 'SteamVRSystemState_Off' to 'SteamVRSystemState_Startup'.
+Mon Nov 09 2026 18:59:26.002380 [Info] - [System] Runtime: 1794004177 250820  STEAMVR
+Mon Nov 09 2026 18:59:26.161343 [Info] - VR_Init successful
+Mon Nov 09 2026 18:59:26.164398 [Info] - [Steam] Attempt to connect to Steam
+Mon Nov 09 2026 18:59:26.164480 [Info] - CIPCPipe::ConnectPipe(SteamVR_Namespace) attempting connect to /steamvr/SteamVR_Namespace
+Mon Nov 09 2026 18:59:26.164582 [Info] - CSharedResourceNamespaceClient::Init(): received namespace data 374772
+Mon Nov 09 2026 18:59:26.165016 [Info] - CheckHmdDriverName: ActualTrackingSystemName: lighthouse (0)
+Mon Nov 09 2026 18:59:26.165249 [Info] - Add Json firmware manifest from {htc}/firmware/manifest.vrfirmware
+Mon Nov 09 2026 18:59:26.165317 [Info] - Add Json firmware manifest from {indexcontroller}/firmware/manifest.vrfirmware
+Mon Nov 09 2026 18:59:26.165382 [Info] - Add Json firmware manifest from {indexhmd}/firmware/manifest.vrfirmware
+Mon Nov 09 2026 18:59:26.165497 [Info] - Add Json firmware manifest from {lighthouse}/firmware/manifest.vrfirmware
+Mon Nov 09 2026 18:59:26.165578 [Info] - Add Json firmware manifest from {tundra_labs}/firmware/manifest.vrfirmware
+Mon Nov 09 2026 18:59:26.166222 [Info] - [Audio] Audio init
+Mon Nov 09 2026 18:59:26.169956 [Info] - [Steam] Connected to Steam in 0.00 seconds.
+Mon Nov 09 2026 18:59:26.175824 [Info] - [System] Runtime: 1794004177 250820 beta STEAMVR beta
+Mon Nov 09 2026 18:59:26.175966 [Info] - [Steam] Connect to Steam finished: check for dismissable warnings
+Mon Nov 09 2026 18:59:26.179848 [Info] - [Chaperone] The universe id is invalid, but the system did not run long enough.
+Mon Nov 09 2026 18:59:26.181497 [Info] - Skipping OpenXR prompt because it's been dismissed
+Mon Nov 09 2026 18:59:26.189401 [Info] - [System] Transition from 'SteamVRSystemState_Startup' to 'SteamVRSystemState_Connecting'.
+Mon Nov 09 2026 18:59:32.179565 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Connecting' to 'SteamVRSystemState_Standby'.
+Mon Nov 09 2026 18:59:33.529265 [Info] - [System] System is running for 10 seconds.
+Mon Nov 09 2026 18:59:33.529347 [Info] - Checking for Vive wireless receivers. 2 detected.
+Mon Nov 09 2026 18:59:34.078536 [Info] - [Status Warning Added LHR-D006848D Casque(0)] Recherche...
+Mon Nov 09 2026 18:59:34.078602 [Info] - [Status Warning Added LHB-A47924B5 Station de base(1)] Recherche...
+Mon Nov 09 2026 18:59:34.078622 [Info] - [Status Warning Added LHB-0FF8C23D Station de base(2)] Recherche...
+Mon Nov 09 2026 19:01:29.028811 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Standby' to 'SteamVRSystemState_Ready'.
+Mon Nov 09 2026 19:01:34.029464 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Ready' to 'SteamVRSystemState_Standby'.
+Mon Nov 09 2026 19:01:55.304220 [Info] - [System] Chaperone Universe changes for the first time
+Mon Nov 09 2026 19:01:55.304270 [Info] - [System] Chaperone does not indicate room setup
+Mon Nov 09 2026 19:01:56.029010 [Info] - [Status Warning Removed LHR-D006848D Casque(0)] Recherche...
+Mon Nov 09 2026 19:01:56.029054 [Info] - [Status Warning Removed LHB-A47924B5 Station de base(1)] Recherche...
+Mon Nov 09 2026 19:01:56.029075 [Info] - [Status Warning Removed LHB-0FF8C23D Station de base(2)] Recherche...
+Mon Nov 09 2026 19:01:56.029170 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Standby' to 'SteamVRSystemState_Ready'.
+Mon Nov 09 2026 19:02:05.643838 [Info] - Tracked device activated: 3
+Mon Nov 09 2026 19:02:06.029507 [Info] - [Status Warning Added LHR-FDA99BC1 Contrôleur(3)] Recherche...
+Mon Nov 09 2026 19:02:06.029559 [Info] - [System] Distance between basestations is 3.704283 meters.
+Mon Nov 09 2026 19:02:07.028948 [Info] - [Status Warning Removed LHR-FDA99BC1 Contrôleur(3)] Recherche...
+Mon Nov 09 2026 19:02:07.783815 [Info] - Tracked device activated: 4
+Mon Nov 09 2026 19:02:08.031379 [Info] - [Status Warning Added LHR-FFE4BFC4 Contrôleur(4)] Recherche...
+Mon Nov 09 2026 19:02:11.029379 [Info] - [Status Warning Removed LHR-FFE4BFC4 Contrôleur(4)] Recherche...
+Mon Nov 09 2026 19:02:16.029297 [Info] - [Status Warning Added LHR-FFE4BFC4 Contrôleur(4)] Recherche...
+Mon Nov 09 2026 19:02:22.028983 [Info] - [Status Warning Removed LHR-FFE4BFC4 Contrôleur(4)] Recherche...
+Mon Nov 09 2026 19:02:26.029298 [Info] - [Status Warning Added LHR-FFE4BFC4 Contrôleur(4)] Recherche...
+Mon Nov 09 2026 19:02:33.029451 [Info] - [Status Warning Removed LHR-FFE4BFC4 Contrôleur(4)] Recherche...
+Mon Nov 09 2026 19:03:07.028725 [Info] - [Status Warning Added LHR-FFE4BFC4 Contrôleur(4)] Recherche...
+Mon Nov 09 2026 19:03:09.028601 [Info] - [Status Warning Removed LHR-FFE4BFC4 Contrôleur(4)] Recherche...
+Mon Nov 09 2026 19:03:14.029520 [Info] - [Status Warning Added LHR-FFE4BFC4 Contrôleur(4)] Recherche...
+Mon Nov 09 2026 19:03:15.028732 [Info] - [Status Warning Removed LHR-FFE4BFC4 Contrôleur(4)] Recherche...
+Mon Nov 09 2026 19:10:33.029471 [Info] - [Status Warning Added LHR-FFE4BFC4 Contrôleur(4)] Recherche...
+Mon Nov 09 2026 19:10:43.029018 [Info] - [Status Warning Removed LHR-FFE4BFC4 Contrôleur(4)] Recherche...
+Mon Nov 09 2026 19:10:48.029198 [Info] - [Status Warning Added LHR-FFE4BFC4 Contrôleur(4)] Recherche...
+Mon Nov 09 2026 19:10:53.028628 [Info] - [Status Warning Removed LHR-FFE4BFC4 Contrôleur(4)] Recherche...
+Mon Nov 09 2026 19:31:35.028637 [Info] - [Status Warning Added LHR-FFE4BFC4 Contrôleur(4)] Recherche...
+Mon Nov 09 2026 19:31:44.028605 [Info] - [Status Warning Added LHR-D006848D Casque(0)] Recherche...
+Mon Nov 09 2026 19:31:44.028765 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Ready' to 'SteamVRSystemState_Connecting'.
+Mon Nov 09 2026 19:36:51.029232 [Info] - [Status Warning Added LHB-A47924B5 Station de base(1)] Recherche...
+Mon Nov 09 2026 19:36:51.029300 [Info] - [Status Warning Added LHB-0FF8C23D Station de base(2)] Recherche...
+Mon Nov 09 2026 19:36:51.029324 [Info] - [Status Warning Added LHR-FDA99BC1 Contrôleur(3)] Recherche...
+Mon Nov 09 2026 20:19:37.029362 [Info] - [Dismissable Warning Added] Station de base : avertissement (0x0004)
+Mon Nov 09 2026 20:19:43.433154 [Info] - [Dismissable Warning Removed] Station de base : avertissement (0x0004)
+Mon Nov 09 2026 20:41:41.031205 [Info] - [Dismissable Warning Added] Station de base : avertissement (0x0004)
+Mon Nov 09 2026 20:41:43.449518 [Info] - [Dismissable Warning Removed] Station de base : avertissement (0x0004)
+Mon Nov 09 2026 20:41:43.449660 [Info] - [Dismissable Warning Added] Station de base : avertissement (0x0004)
+Mon Nov 09 2026 21:46:37.442579 [Info] - [System] Transition from 'SteamVRSystemState_Connecting' to 'SteamVRSystemState_ShutdownRequested'.
+Mon Nov 09 2026 21:46:37.456854 [Info] - [System] Quit gracefully: Waiting for process quitting...
+Mon Nov 09 2026 21:46:38.724020 [Info] - [System] Transition from 'SteamVRSystemState_ShutdownRequested' to 'SteamVRSystemState_Shutdown'.
+Mon Nov 09 2026 21:46:38.724079 [Info] - [Audio] Audio shutdown!
+Mon Nov 09 2026 21:46:38.828250 [Info] - Drops over entire run:-  43145 single frame-  10071 2 frame-  1799 3 frame-  689 4 or more- Total 77832 in 177852 frames
+Tue Nov 10 2026 19:08:27.472107 [Info] - //==============================================================================================
+Tue Nov 10 2026 19:08:27.472321 [Info] - ================================================================================================
+Tue Nov 10 2026 19:08:27.472341 [Info] - ================================================================================================
+Tue Nov 10 2026 19:08:27.472365 [Info] - vrmonitor 2.19.2 startup with PID=1853760, config=/home/yan/.local/share/Steam/config, runtime=/home/yan/.local/share/Steam/steamapps/common/SteamVR, arch=linux64
+Tue Nov 10 2026 19:08:27.472419 [Info] - Tools Path: /home/yan/.local/share/Steam/steamapps/common/SteamVR/tools exists.
+Tue Nov 10 2026 19:08:27.472445 [Info] - Demo Path: /home/yan/.local/share/Steam/steamapps/common/SteamVR/demo not found.
+Tue Nov 10 2026 19:08:27.505438 [Error] - Failed to associate extension: icon registration failed for vrmanifest
+Tue Nov 10 2026 19:08:27.505502 [Info] - Default Playback Audio Devices: ,  (Comm)
+Tue Nov 10 2026 19:08:27.505519 [Info] - Default Record Audio Device: ,  (Comm)
+Tue Nov 10 2026 19:08:27.596766 [Info] - [System] Transition from 'SteamVRSystemState_Off' to 'SteamVRSystemState_Startup'.
+Tue Nov 10 2026 19:08:30.702046 [Info] - [System] Runtime: 1794004177 250820  STEAMVR
+Tue Nov 10 2026 19:08:30.919631 [Info] - VR_Init successful
+Tue Nov 10 2026 19:08:30.931344 [Info] - [Steam] Attempt to connect to Steam
+Tue Nov 10 2026 19:08:30.931397 [Info] - CIPCPipe::ConnectPipe(SteamVR_Namespace) attempting connect to /steamvr/SteamVR_Namespace
+Tue Nov 10 2026 19:08:30.931550 [Info] - CSharedResourceNamespaceClient::Init(): received namespace data 1853562
+Tue Nov 10 2026 19:08:30.931992 [Info] - CheckHmdDriverName: ActualTrackingSystemName: lighthouse (0)
+Tue Nov 10 2026 19:08:30.932262 [Info] - Add Json firmware manifest from {htc}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 19:08:30.932331 [Info] - Add Json firmware manifest from {indexcontroller}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 19:08:30.932398 [Info] - Add Json firmware manifest from {indexhmd}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 19:08:30.932517 [Info] - Add Json firmware manifest from {lighthouse}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 19:08:30.932599 [Info] - Add Json firmware manifest from {tundra_labs}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 19:08:30.933153 [Info] - [Audio] Audio init
+Tue Nov 10 2026 19:08:30.939521 [Info] - [Steam] Connected to Steam in 0.00 seconds.
+Tue Nov 10 2026 19:08:30.952865 [Info] - [System] Runtime: 1794004177 250820 beta STEAMVR beta
+Tue Nov 10 2026 19:08:30.953005 [Info] - [Steam] Connect to Steam finished: check for dismissable warnings
+Tue Nov 10 2026 19:08:30.957246 [Info] - [Chaperone] The universe id is invalid, but the system did not run long enough.
+Tue Nov 10 2026 19:08:30.959322 [Info] - Skipping OpenXR prompt because it's been dismissed
+Tue Nov 10 2026 19:08:30.986226 [Info] - [System] Transition from 'SteamVRSystemState_Startup' to 'SteamVRSystemState_Connecting'.
+Tue Nov 10 2026 19:08:37.029004 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Connecting' to 'SteamVRSystemState_Standby'.
+Tue Nov 10 2026 19:08:37.528722 [Info] - [System] System is running for 10 seconds.
+Tue Nov 10 2026 19:08:37.529240 [Info] - Checking for Vive wireless receivers. 2 detected.
+Tue Nov 10 2026 19:08:38.028701 [Info] - [Status Warning Added LHR-D006848D Casque(0)] Recherche...
+Tue Nov 10 2026 19:08:38.028762 [Info] - [Status Warning Added LHB-0FF8C23D Station de base(1)] Recherche...
+Tue Nov 10 2026 19:08:38.028781 [Info] - [Status Warning Added LHB-A47924B5 Station de base(2)] Recherche...
+Tue Nov 10 2026 19:08:44.737187 [Info] - [System] Chaperone Universe changes for the first time
+Tue Nov 10 2026 19:08:44.737239 [Info] - [System] Chaperone does not indicate room setup
+Tue Nov 10 2026 19:08:45.028703 [Info] - [Status Warning Removed LHR-D006848D Casque(0)] Recherche...
+Tue Nov 10 2026 19:08:45.028740 [Info] - [Status Warning Removed LHB-0FF8C23D Station de base(1)] Recherche...
+Tue Nov 10 2026 19:08:45.028759 [Info] - [Status Warning Removed LHB-A47924B5 Station de base(2)] Recherche...
+Tue Nov 10 2026 19:08:45.028845 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Standby' to 'SteamVRSystemState_Ready'.
+Tue Nov 10 2026 19:08:53.916871 [Info] - Tracked device activated: 3
+Tue Nov 10 2026 19:08:54.031987 [Info] - [Status Warning Added LHR-FDA99BC1 Contrôleur(3)] Recherche...
+Tue Nov 10 2026 19:08:55.030611 [Info] - [Status Warning Removed LHR-FDA99BC1 Contrôleur(3)] Recherche...
+Tue Nov 10 2026 19:08:55.030698 [Info] - [System] Distance between basestations is 3.672562 meters.
+Tue Nov 10 2026 19:08:55.137363 [Info] - Tracked device activated: 4
+Tue Nov 10 2026 19:09:14.031499 [Info] - [System] Transition from 'SteamVRSystemState_Ready' to 'SteamVRSystemState_NotReady'.
+Tue Nov 10 2026 19:09:14.091992 [Info] - [Status Alert] Erreur de SteamVR (-203)
+Tue Nov 10 2026 19:09:47.029156 [Info] - [Status Warning Added LHR-FDA99BC1 Contrôleur(3)] Recherche...
+Tue Nov 10 2026 19:09:47.031987 [Info] - [Status Alert] Erreur de SteamVR (-203)
+Tue Nov 10 2026 19:14:57.032939 [Info] - [Status Alert] Erreur de SteamVR (-203)
+Tue Nov 10 2026 19:19:58.340616 [Info] - [System] Transition from 'SteamVRSystemState_NotReady' to 'SteamVRSystemState_ShutdownRequested'.
+Tue Nov 10 2026 19:19:58.352095 [Info] - [System] Quit gracefully: Waiting for process quitting...
+Tue Nov 10 2026 19:20:03.725986 [Info] - [System] Transition from 'SteamVRSystemState_ShutdownRequested' to 'SteamVRSystemState_Shutdown'.
+Tue Nov 10 2026 19:20:03.726076 [Info] - [Audio] Audio shutdown!
+Tue Nov 10 2026 19:20:03.827445 [Info] - Drops over entire run:-  150 single frame-  10 2 frame-  7 3 frame-  3 4 or more- Total 2640 in 2822 frames
+Tue Nov 10 2026 19:22:01.294937 [Info] - //==============================================================================================
+Tue Nov 10 2026 19:22:01.294973 [Info] - ================================================================================================
+Tue Nov 10 2026 19:22:01.294988 [Info] - ================================================================================================
+Tue Nov 10 2026 19:22:01.295009 [Info] - vrmonitor 2.19.2 startup with PID=1879194, config=/home/yan/.local/share/Steam/config, runtime=/home/yan/.local/share/Steam/steamapps/common/SteamVR, arch=linux64
+Tue Nov 10 2026 19:22:01.295051 [Info] - Tools Path: /home/yan/.local/share/Steam/steamapps/common/SteamVR/tools exists.
+Tue Nov 10 2026 19:22:01.295069 [Info] - Demo Path: /home/yan/.local/share/Steam/steamapps/common/SteamVR/demo not found.
+Tue Nov 10 2026 19:22:01.304217 [Error] - Failed to associate extension: icon registration failed for vrmanifest
+Tue Nov 10 2026 19:22:01.304258 [Info] - Default Playback Audio Devices: ,  (Comm)
+Tue Nov 10 2026 19:22:01.304275 [Info] - Default Record Audio Device: ,  (Comm)
+Tue Nov 10 2026 19:22:01.377481 [Info] - [System] Transition from 'SteamVRSystemState_Off' to 'SteamVRSystemState_Startup'.
+Tue Nov 10 2026 19:22:03.339880 [Info] - [System] Runtime: 1794004177 250820  STEAMVR
+Tue Nov 10 2026 19:22:03.496389 [Info] - VR_Init successful
+Tue Nov 10 2026 19:22:03.499679 [Info] - CIPCPipe::ConnectPipe(SteamVR_Namespace) attempting connect to /steamvr/SteamVR_Namespace
+Tue Nov 10 2026 19:22:03.499743 [Info] - [Steam] Attempt to connect to Steam
+Tue Nov 10 2026 19:22:03.499780 [Info] - CSharedResourceNamespaceClient::Init(): received namespace data 1879032
+Tue Nov 10 2026 19:22:03.500193 [Info] - CheckHmdDriverName: ActualTrackingSystemName: lighthouse (0)
+Tue Nov 10 2026 19:22:03.500402 [Info] - Add Json firmware manifest from {htc}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 19:22:03.500477 [Info] - Add Json firmware manifest from {indexcontroller}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 19:22:03.500547 [Info] - Add Json firmware manifest from {indexhmd}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 19:22:03.500657 [Info] - Add Json firmware manifest from {lighthouse}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 19:22:03.500738 [Info] - Add Json firmware manifest from {tundra_labs}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 19:22:03.501453 [Info] - [Audio] Audio init
+Tue Nov 10 2026 19:22:03.505413 [Info] - [Steam] Connected to Steam in 0.00 seconds.
+Tue Nov 10 2026 19:22:03.511458 [Info] - [System] Runtime: 1794004177 250820 beta STEAMVR beta
+Tue Nov 10 2026 19:22:03.511600 [Info] - [Steam] Connect to Steam finished: check for dismissable warnings
+Tue Nov 10 2026 19:22:03.515145 [Info] - [Chaperone] The universe id is invalid, but the system did not run long enough.
+Tue Nov 10 2026 19:22:03.517253 [Info] - Skipping OpenXR prompt because it's been dismissed
+Tue Nov 10 2026 19:22:03.523977 [Info] - [System] Transition from 'SteamVRSystemState_Startup' to 'SteamVRSystemState_Connecting'.
+Tue Nov 10 2026 19:22:09.528905 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Connecting' to 'SteamVRSystemState_Standby'.
+Tue Nov 10 2026 19:22:11.529105 [Info] - [System] System is running for 10 seconds.
+Tue Nov 10 2026 19:22:11.529180 [Info] - Checking for Vive wireless receivers. 2 detected.
+Tue Nov 10 2026 19:22:11.529232 [Info] - [Status Warning Added LHR-D006848D Casque(0)] Recherche...
+Tue Nov 10 2026 19:22:26.520008 [Info] - [System] Transition from 'SteamVRSystemState_Standby' to 'SteamVRSystemState_ShutdownRequested'.
+Tue Nov 10 2026 19:22:26.530851 [Info] - [System] Quit gracefully: Waiting for process quitting...
+Tue Nov 10 2026 19:22:27.162010 [Info] - [System] Transition from 'SteamVRSystemState_ShutdownRequested' to 'SteamVRSystemState_Shutdown'.
+Tue Nov 10 2026 19:22:27.162063 [Info] - [Audio] Audio shutdown!
+Tue Nov 10 2026 19:22:27.262641 [Info] - Drops over entire run:-  5 single frame-  1 2 frame-  1 3 frame-  0 4 or more- Total 472 in 480 frames
+Tue Nov 10 2026 19:23:26.881176 [Info] - //==============================================================================================
+Tue Nov 10 2026 19:23:26.881223 [Info] - ================================================================================================
+Tue Nov 10 2026 19:23:26.881239 [Info] - ================================================================================================
+Tue Nov 10 2026 19:23:26.881260 [Info] - vrmonitor 2.19.2 startup with PID=1882385, config=/home/yan/.local/share/Steam/config, runtime=/home/yan/.local/share/Steam/steamapps/common/SteamVR, arch=linux64
+Tue Nov 10 2026 19:23:26.881304 [Info] - Tools Path: /home/yan/.local/share/Steam/steamapps/common/SteamVR/tools exists.
+Tue Nov 10 2026 19:23:26.881323 [Info] - Demo Path: /home/yan/.local/share/Steam/steamapps/common/SteamVR/demo not found.
+Tue Nov 10 2026 19:23:26.890977 [Error] - Failed to associate extension: icon registration failed for vrmanifest
+Tue Nov 10 2026 19:23:26.891025 [Info] - Default Playback Audio Devices: ,  (Comm)
+Tue Nov 10 2026 19:23:26.891043 [Info] - Default Record Audio Device: ,  (Comm)
+Tue Nov 10 2026 19:23:26.990309 [Info] - [System] Transition from 'SteamVRSystemState_Off' to 'SteamVRSystemState_Startup'.
+Tue Nov 10 2026 19:23:28.896878 [Info] - [System] Runtime: 1794004177 250820  STEAMVR
+Tue Nov 10 2026 19:23:29.064164 [Info] - VR_Init successful
+Tue Nov 10 2026 19:23:29.067995 [Info] - CIPCPipe::ConnectPipe(SteamVR_Namespace) attempting connect to /steamvr/SteamVR_Namespace
+Tue Nov 10 2026 19:23:29.068056 [Info] - [Steam] Attempt to connect to Steam
+Tue Nov 10 2026 19:23:29.068094 [Info] - CSharedResourceNamespaceClient::Init(): received namespace data 1882196
+Tue Nov 10 2026 19:23:29.068573 [Info] - CheckHmdDriverName: ActualTrackingSystemName: lighthouse (0)
+Tue Nov 10 2026 19:23:29.068838 [Info] - Add Json firmware manifest from {htc}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 19:23:29.068909 [Info] - Add Json firmware manifest from {indexcontroller}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 19:23:29.068980 [Info] - Add Json firmware manifest from {indexhmd}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 19:23:29.069094 [Info] - Add Json firmware manifest from {lighthouse}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 19:23:29.069175 [Info] - Add Json firmware manifest from {tundra_labs}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 19:23:29.069917 [Info] - [Audio] Audio init
+Tue Nov 10 2026 19:23:29.074154 [Info] - [Steam] Connected to Steam in 0.00 seconds.
+Tue Nov 10 2026 19:23:29.080704 [Info] - [System] Runtime: 1794004177 250820 beta STEAMVR beta
+Tue Nov 10 2026 19:23:29.080874 [Info] - [Steam] Connect to Steam finished: check for dismissable warnings
+Tue Nov 10 2026 19:23:29.084797 [Info] - [Chaperone] The universe id is invalid, but the system did not run long enough.
+Tue Nov 10 2026 19:23:29.086848 [Info] - Skipping OpenXR prompt because it's been dismissed
+Tue Nov 10 2026 19:23:29.095751 [Info] - [System] Transition from 'SteamVRSystemState_Startup' to 'SteamVRSystemState_Connecting'.
+Tue Nov 10 2026 19:23:35.079548 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Connecting' to 'SteamVRSystemState_Standby'.
+Tue Nov 10 2026 19:23:36.529059 [Info] - [System] System is running for 10 seconds.
+Tue Nov 10 2026 19:23:36.529146 [Info] - Checking for Vive wireless receivers. 2 detected.
+Tue Nov 10 2026 19:23:37.029099 [Info] - [Status Warning Added LHR-D006848D Casque(0)] Recherche...
+Tue Nov 10 2026 19:23:37.029162 [Info] - [Status Warning Added LHB-A47924B5 Station de base(1)] Recherche...
+Tue Nov 10 2026 19:23:37.029181 [Info] - [Status Warning Added LHB-0FF8C23D Station de base(2)] Recherche...
+Tue Nov 10 2026 19:23:39.873971 [Info] - [System] Chaperone Universe changes for the first time
+Tue Nov 10 2026 19:23:39.874030 [Info] - [System] Chaperone does not indicate room setup
+Tue Nov 10 2026 19:23:40.029534 [Info] - [Status Warning Removed LHR-D006848D Casque(0)] Recherche...
+Tue Nov 10 2026 19:23:40.029579 [Info] - [Status Warning Removed LHB-A47924B5 Station de base(1)] Recherche...
+Tue Nov 10 2026 19:23:40.029597 [Info] - [Status Warning Removed LHB-0FF8C23D Station de base(2)] Recherche...
+Tue Nov 10 2026 19:23:40.714498 [Info] - Tracked device activated: 3
+Tue Nov 10 2026 19:23:41.029279 [Info] - [Status Warning Added LHR-FFE4BFC4 Contrôleur(3)] Recherche...
+Tue Nov 10 2026 19:23:41.029391 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Standby' to 'SteamVRSystemState_Ready'.
+Tue Nov 10 2026 19:23:41.794459 [Info] - Tracked device activated: 4
+Tue Nov 10 2026 19:23:42.028957 [Info] - [Status Warning Added LHR-FDA99BC1 Contrôleur(4)] Recherche...
+Tue Nov 10 2026 19:23:47.029223 [Info] - [Status Warning Removed LHR-FFE4BFC4 Contrôleur(3)] Recherche...
+Tue Nov 10 2026 19:23:47.029289 [Info] - [Status Warning Removed LHR-FDA99BC1 Contrôleur(4)] Recherche...
+Tue Nov 10 2026 19:23:50.028901 [Info] - [System] Distance between basestations is 3.672562 meters.
+Tue Nov 10 2026 19:24:00.029176 [Info] - [Status Warning Added LHR-FDA99BC1 Contrôleur(4)] Recherche...
+Tue Nov 10 2026 19:24:01.338646 [Info] - [System] Transition from 'SteamVRSystemState_Ready' to 'SteamVRSystemState_NotReady'.
+Tue Nov 10 2026 19:24:01.398102 [Info] - [Status Alert] Erreur de SteamVR (-203)
+Tue Nov 10 2026 19:24:08.029379 [Info] - [Status Warning Removed LHR-FDA99BC1 Contrôleur(4)] Recherche...
+Tue Nov 10 2026 19:24:08.032329 [Info] - [Status Alert] Erreur de SteamVR (-203)
+Tue Nov 10 2026 19:24:36.031626 [Info] - [Status Alert] Erreur de SteamVR (-203)
+Tue Nov 10 2026 19:29:45.028770 [Info] - [Status Warning Added LHR-FDA99BC1 Contrôleur(4)] Recherche...
+Tue Nov 10 2026 19:29:45.031790 [Info] - [Status Alert] Erreur de SteamVR (-203)
+Tue Nov 10 2026 19:29:48.031859 [Info] - [Status Alert] Erreur de SteamVR (-203)
+Tue Nov 10 2026 19:29:49.028623 [Info] - [Status Warning Added LHR-FFE4BFC4 Contrôleur(3)] Recherche...
+Tue Nov 10 2026 19:30:32.884271 [Info] - [System] Transition from 'SteamVRSystemState_NotReady' to 'SteamVRSystemState_ShutdownRequested'.
+Tue Nov 10 2026 19:30:32.895548 [Info] - [System] Quit gracefully: Waiting for process quitting...
+Tue Nov 10 2026 19:30:38.181090 [Info] - [System] Transition from 'SteamVRSystemState_ShutdownRequested' to 'SteamVRSystemState_Shutdown'.
+Tue Nov 10 2026 19:30:38.181145 [Info] - [Audio] Audio shutdown!
+Tue Nov 10 2026 19:30:38.281767 [Info] - Drops over entire run:-  73 single frame-  4 2 frame-  0 3 frame-  2 4 or more- Total 2084 in 2170 frames
+Tue Nov 10 2026 19:49:05.437226 [Info] - //==============================================================================================
+Tue Nov 10 2026 19:49:05.437267 [Info] - ================================================================================================
+Tue Nov 10 2026 19:49:05.437283 [Info] - ================================================================================================
+Tue Nov 10 2026 19:49:05.437303 [Info] - vrmonitor 2.19.2 startup with PID=1910719, config=/home/yan/.local/share/Steam/config, runtime=/home/yan/.local/share/Steam/steamapps/common/SteamVR, arch=linux64
+Tue Nov 10 2026 19:49:05.437346 [Info] - Tools Path: /home/yan/.local/share/Steam/steamapps/common/SteamVR/tools exists.
+Tue Nov 10 2026 19:49:05.437365 [Info] - Demo Path: /home/yan/.local/share/Steam/steamapps/common/SteamVR/demo not found.
+Tue Nov 10 2026 19:49:05.446569 [Error] - Failed to associate extension: icon registration failed for vrmanifest
+Tue Nov 10 2026 19:49:05.446617 [Info] - Default Playback Audio Devices: ,  (Comm)
+Tue Nov 10 2026 19:49:05.446635 [Info] - Default Record Audio Device: ,  (Comm)
+Tue Nov 10 2026 19:49:05.526374 [Info] - [System] Transition from 'SteamVRSystemState_Off' to 'SteamVRSystemState_Startup'.
+Tue Nov 10 2026 19:49:07.539065 [Info] - [System] Runtime: 1794004177 250820  STEAMVR
+Tue Nov 10 2026 19:49:07.706829 [Info] - VR_Init successful
+Tue Nov 10 2026 19:49:07.710039 [Info] - CIPCPipe::ConnectPipe(SteamVR_Namespace) attempting connect to /steamvr/SteamVR_Namespace
+Tue Nov 10 2026 19:49:07.710101 [Info] - [Steam] Attempt to connect to Steam
+Tue Nov 10 2026 19:49:07.710147 [Info] - CSharedResourceNamespaceClient::Init(): received namespace data 1910417
+Tue Nov 10 2026 19:49:07.710628 [Info] - CheckHmdDriverName: ActualTrackingSystemName: lighthouse (0)
+Tue Nov 10 2026 19:49:07.710845 [Info] - Add Json firmware manifest from {htc}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 19:49:07.710914 [Info] - Add Json firmware manifest from {indexcontroller}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 19:49:07.710981 [Info] - Add Json firmware manifest from {indexhmd}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 19:49:07.711092 [Info] - Add Json firmware manifest from {lighthouse}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 19:49:07.711172 [Info] - Add Json firmware manifest from {tundra_labs}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 19:49:07.711854 [Info] - [Audio] Audio init
+Tue Nov 10 2026 19:49:07.715465 [Info] - [Steam] Connected to Steam in 0.00 seconds.
+Tue Nov 10 2026 19:49:07.721655 [Info] - [System] Runtime: 1794004177 250820 beta STEAMVR beta
+Tue Nov 10 2026 19:49:07.721804 [Info] - [Steam] Connect to Steam finished: check for dismissable warnings
+Tue Nov 10 2026 19:49:07.725600 [Info] - [Chaperone] The universe id is invalid, but the system did not run long enough.
+Tue Nov 10 2026 19:49:07.727394 [Info] - Skipping OpenXR prompt because it's been dismissed
+Tue Nov 10 2026 19:49:07.735262 [Info] - [System] Transition from 'SteamVRSystemState_Startup' to 'SteamVRSystemState_Connecting'.
+Tue Nov 10 2026 19:49:13.679684 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Connecting' to 'SteamVRSystemState_Standby'.
+Tue Nov 10 2026 19:49:15.529024 [Info] - [System] System is running for 10 seconds.
+Tue Nov 10 2026 19:49:15.529108 [Info] - Checking for Vive wireless receivers. 2 detected.
+Tue Nov 10 2026 19:49:15.579750 [Info] - [Status Warning Added LHR-D006848D Casque(0)] Recherche...
+Tue Nov 10 2026 19:49:15.579798 [Info] - [Status Warning Added LHB-A47924B5 Station de base(1)] Recherche...
+Tue Nov 10 2026 19:49:15.579816 [Info] - [Status Warning Added LHB-0FF8C23D Station de base(2)] Recherche...
+Tue Nov 10 2026 19:50:33.529234 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Standby' to 'SteamVRSystemState_Ready'.
+Tue Nov 10 2026 19:50:38.528930 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Ready' to 'SteamVRSystemState_Standby'.
+Tue Nov 10 2026 19:50:53.529328 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Standby' to 'SteamVRSystemState_Ready'.
+Tue Nov 10 2026 19:50:58.528757 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Ready' to 'SteamVRSystemState_Standby'.
+Tue Nov 10 2026 19:51:10.529227 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Standby' to 'SteamVRSystemState_Ready'.
+Tue Nov 10 2026 19:51:19.528708 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Ready' to 'SteamVRSystemState_Standby'.
+Tue Nov 10 2026 19:52:57.246852 [Info] - [System] Chaperone Universe changes for the first time
+Tue Nov 10 2026 19:52:57.246903 [Info] - [System] Chaperone does not indicate room setup
+Tue Nov 10 2026 19:52:57.363818 [Info] - [System] The chaperone file has changed on disk.
+Tue Nov 10 2026 19:52:57.528734 [Info] - [Status Warning Removed LHR-D006848D Casque(0)] Recherche...
+Tue Nov 10 2026 19:52:57.528787 [Info] - [Status Warning Removed LHB-A47924B5 Station de base(1)] Recherche...
+Tue Nov 10 2026 19:52:57.528807 [Info] - [Status Warning Removed LHB-0FF8C23D Station de base(2)] Recherche...
+Tue Nov 10 2026 19:52:57.528905 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Standby' to 'SteamVRSystemState_Ready'.
+Tue Nov 10 2026 19:53:07.528738 [Info] - [System] Distance between basestations is 3.693155 meters.
+Tue Nov 10 2026 19:55:40.996544 [Info] - //==============================================================================================
+Tue Nov 10 2026 19:55:40.996587 [Info] - ================================================================================================
+Tue Nov 10 2026 19:55:40.996603 [Info] - ================================================================================================
+Tue Nov 10 2026 19:55:40.996623 [Info] - vrmonitor 2.19.2 startup with PID=1922630, config=/home/yan/.local/share/Steam/config, runtime=/home/yan/.local/share/Steam/steamapps/common/SteamVR, arch=linux64
+Tue Nov 10 2026 19:55:40.996666 [Info] - Tools Path: /home/yan/.local/share/Steam/steamapps/common/SteamVR/tools exists.
+Tue Nov 10 2026 19:55:40.996683 [Info] - Demo Path: /home/yan/.local/share/Steam/steamapps/common/SteamVR/demo not found.
+Tue Nov 10 2026 19:55:41.005731 [Error] - Failed to associate extension: icon registration failed for vrmanifest
+Tue Nov 10 2026 19:55:41.005779 [Info] - Default Playback Audio Devices: ,  (Comm)
+Tue Nov 10 2026 19:55:41.005796 [Info] - Default Record Audio Device: ,  (Comm)
+Tue Nov 10 2026 19:55:41.006488 [Warning] - Reaped dangling shared memory segment
+Tue Nov 10 2026 19:55:41.080308 [Info] - [System] Transition from 'SteamVRSystemState_Off' to 'SteamVRSystemState_Startup'.
+Tue Nov 10 2026 19:55:43.104622 [Info] - [System] Runtime: 1794004177 250820  STEAMVR
+Tue Nov 10 2026 19:55:43.310479 [Info] - VR_Init successful
+Tue Nov 10 2026 19:55:43.313693 [Info] - [Steam] Attempt to connect to Steam
+Tue Nov 10 2026 19:55:43.313743 [Info] - CIPCPipe::ConnectPipe(SteamVR_Namespace) attempting connect to /steamvr/SteamVR_Namespace
+Tue Nov 10 2026 19:55:43.313870 [Info] - CSharedResourceNamespaceClient::Init(): received namespace data 1922472
+Tue Nov 10 2026 19:55:43.314366 [Info] - CheckHmdDriverName: ActualTrackingSystemName: lighthouse (0)
+Tue Nov 10 2026 19:55:43.314627 [Info] - Add Json firmware manifest from {htc}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 19:55:43.314704 [Info] - Add Json firmware manifest from {indexcontroller}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 19:55:43.314772 [Info] - Add Json firmware manifest from {indexhmd}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 19:55:43.314883 [Info] - Add Json firmware manifest from {lighthouse}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 19:55:43.314963 [Info] - Add Json firmware manifest from {tundra_labs}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 19:55:43.315715 [Info] - [Audio] Audio init
+Tue Nov 10 2026 19:55:43.319363 [Info] - [Steam] Connected to Steam in 0.00 seconds.
+Tue Nov 10 2026 19:55:43.325184 [Info] - [System] Runtime: 1794004177 250820 beta STEAMVR beta
+Tue Nov 10 2026 19:55:43.325318 [Info] - [Steam] Connect to Steam finished: check for dismissable warnings
+Tue Nov 10 2026 19:55:43.331570 [Info] - Skipping OpenXR prompt because it's been dismissed
+Tue Nov 10 2026 19:55:43.339801 [Info] - [System] Transition from 'SteamVRSystemState_Startup' to 'SteamVRSystemState_Connecting'.
+Tue Nov 10 2026 19:55:43.398078 [Info] - [System] Chaperone Universe changes for the first time
+Tue Nov 10 2026 19:55:43.398145 [Info] - [System] Chaperone does not indicate room setup
+Tue Nov 10 2026 19:55:43.429020 [Info] - [System] Transition from 'SteamVRSystemState_Connecting' to 'SteamVRSystemState_Ready'.
+Tue Nov 10 2026 19:55:44.428758 [Info] - [System] Distance between basestations is 3.693155 meters.
+Tue Nov 10 2026 19:55:45.396845 [Info] - Tracked device activated: 4
+Tue Nov 10 2026 19:55:50.529211 [Info] - [System] System is running for 10 seconds.
+Tue Nov 10 2026 19:55:50.529290 [Info] - Checking for Vive wireless receivers. 2 detected.
+Tue Nov 10 2026 19:55:51.480116 [Info] - [Status Warning Added LHR-FFE4BFC4 Contrôleur(3)] Recherche...
+Tue Nov 10 2026 19:55:51.480174 [Info] - [Status Warning Added LHR-FDA99BC1 Contrôleur(4)] Recherche...
+Tue Nov 10 2026 19:56:50.529517 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Ready' to 'SteamVRSystemState_Standby'.
+Tue Nov 10 2026 19:58:21.528864 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Standby' to 'SteamVRSystemState_Ready'.
+Tue Nov 10 2026 19:58:26.529163 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Ready' to 'SteamVRSystemState_Standby'.
+Tue Nov 10 2026 19:58:28.529536 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Standby' to 'SteamVRSystemState_Ready'.
+Tue Nov 10 2026 19:58:33.543121 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Ready' to 'SteamVRSystemState_Standby'.
+Tue Nov 10 2026 20:10:52.059407 [Info] - [System] Transition from 'SteamVRSystemState_Standby' to 'SteamVRSystemState_ShutdownRequested'.
+Tue Nov 10 2026 20:10:52.070341 [Info] - [System] Quit gracefully: Waiting for process quitting...
+Tue Nov 10 2026 20:10:52.906776 [Info] - [System] Transition from 'SteamVRSystemState_ShutdownRequested' to 'SteamVRSystemState_Shutdown'.
+Tue Nov 10 2026 20:10:52.906816 [Info] - [Audio] Audio shutdown!
+Tue Nov 10 2026 20:10:53.007485 [Info] - Drops over entire run:-  541 single frame-  44 2 frame-  20 3 frame-  12 4 or more- Total 5678 in 6346 frames
+Tue Nov 10 2026 22:11:41.896607 [Info] - //==============================================================================================
+Tue Nov 10 2026 22:11:41.896665 [Info] - ================================================================================================
+Tue Nov 10 2026 22:11:41.896681 [Info] - ================================================================================================
+Tue Nov 10 2026 22:11:41.896703 [Info] - vrmonitor 2.19.2 startup with PID=2024048, config=/home/yan/.local/share/Steam/config, runtime=/home/yan/.local/share/Steam/steamapps/common/SteamVR, arch=linux64
+Tue Nov 10 2026 22:11:41.896764 [Info] - Tools Path: /home/yan/.local/share/Steam/steamapps/common/SteamVR/tools exists.
+Tue Nov 10 2026 22:11:41.896785 [Info] - Demo Path: /home/yan/.local/share/Steam/steamapps/common/SteamVR/demo not found.
+Tue Nov 10 2026 22:11:41.910306 [Error] - Failed to associate extension: icon registration failed for vrmanifest
+Tue Nov 10 2026 22:11:41.910376 [Info] - Default Playback Audio Devices: ,  (Comm)
+Tue Nov 10 2026 22:11:41.910395 [Info] - Default Record Audio Device: ,  (Comm)
+Tue Nov 10 2026 22:11:42.048228 [Info] - [System] Transition from 'SteamVRSystemState_Off' to 'SteamVRSystemState_Startup'.
+Tue Nov 10 2026 22:11:44.092315 [Info] - [System] Runtime: 1794004177 250820  STEAMVR
+Tue Nov 10 2026 22:11:44.275884 [Info] - VR_Init successful
+Tue Nov 10 2026 22:11:44.279804 [Info] - [Steam] Attempt to connect to Steam
+Tue Nov 10 2026 22:11:44.279880 [Info] - CIPCPipe::ConnectPipe(SteamVR_Namespace) attempting connect to /steamvr/SteamVR_Namespace
+Tue Nov 10 2026 22:11:44.279979 [Info] - CSharedResourceNamespaceClient::Init(): received namespace data 2023635
+Tue Nov 10 2026 22:11:44.280461 [Info] - CheckHmdDriverName: ActualTrackingSystemName: lighthouse (0)
+Tue Nov 10 2026 22:11:44.280930 [Info] - Add Json firmware manifest from {htc}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 22:11:44.281006 [Info] - Add Json firmware manifest from {indexcontroller}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 22:11:44.281073 [Info] - Add Json firmware manifest from {indexhmd}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 22:11:44.281186 [Info] - Add Json firmware manifest from {lighthouse}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 22:11:44.281265 [Info] - Add Json firmware manifest from {tundra_labs}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 22:11:44.282085 [Info] - [Audio] Audio init
+Tue Nov 10 2026 22:11:44.285278 [Info] - [Steam] Connected to Steam in 0.00 seconds.
+Tue Nov 10 2026 22:11:44.292329 [Info] - [System] Runtime: 1794004177 250820 beta STEAMVR beta
+Tue Nov 10 2026 22:11:44.292479 [Info] - [Steam] Connect to Steam finished: check for dismissable warnings
+Tue Nov 10 2026 22:11:44.300621 [Info] - Skipping OpenXR prompt because it's been dismissed
+Tue Nov 10 2026 22:11:44.310526 [Info] - [System] Transition from 'SteamVRSystemState_Startup' to 'SteamVRSystemState_Connecting'.
+Tue Nov 10 2026 22:11:44.371022 [Info] - [System] Chaperone Universe changes for the first time
+Tue Nov 10 2026 22:11:44.371083 [Info] - [System] Chaperone does not indicate room setup
+Tue Nov 10 2026 22:11:44.400221 [Info] - [System] Transition from 'SteamVRSystemState_Connecting' to 'SteamVRSystemState_Ready'.
+Tue Nov 10 2026 22:11:45.429488 [Info] - [System] Distance between basestations is 3.679207 meters.
+Tue Nov 10 2026 22:11:50.378677 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Ready' to 'SteamVRSystemState_Standby'.
+Tue Nov 10 2026 22:11:51.529326 [Info] - [System] System is running for 10 seconds.
+Tue Nov 10 2026 22:11:51.529406 [Info] - Checking for Vive wireless receivers. 2 detected.
+Tue Nov 10 2026 22:12:08.528805 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Standby' to 'SteamVRSystemState_Ready'.
+Tue Nov 10 2026 22:12:23.130657 [Info] - [Steam] Attempt to disconnect from Steam
+Tue Nov 10 2026 22:12:23.130986 [Info] - [Steam] Disconnected from Steam
+Tue Nov 10 2026 22:12:31.529063 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Ready' to 'SteamVRSystemState_Standby'.
+Tue Nov 10 2026 22:23:40.779215 [Info] - //==============================================================================================
+Tue Nov 10 2026 22:23:40.779253 [Info] - ================================================================================================
+Tue Nov 10 2026 22:23:40.779268 [Info] - ================================================================================================
+Tue Nov 10 2026 22:23:40.779289 [Info] - vrmonitor 2.19.2 startup with PID=2041074, config=/home/yan/.local/share/Steam/config, runtime=/home/yan/.local/share/Steam/steamapps/common/SteamVR, arch=linux64
+Tue Nov 10 2026 22:23:40.779337 [Info] - Tools Path: /home/yan/.local/share/Steam/steamapps/common/SteamVR/tools exists.
+Tue Nov 10 2026 22:23:40.779354 [Info] - Demo Path: /home/yan/.local/share/Steam/steamapps/common/SteamVR/demo not found.
+Tue Nov 10 2026 22:23:40.790298 [Error] - Failed to associate extension: icon registration failed for vrmanifest
+Tue Nov 10 2026 22:23:40.790356 [Info] - Default Playback Audio Devices: ,  (Comm)
+Tue Nov 10 2026 22:23:40.790372 [Info] - Default Record Audio Device: ,  (Comm)
+Tue Nov 10 2026 22:23:40.791265 [Warning] - Reaped dangling shared memory segment
+Tue Nov 10 2026 22:23:40.910244 [Info] - [System] Transition from 'SteamVRSystemState_Off' to 'SteamVRSystemState_Startup'.
+Tue Nov 10 2026 22:23:42.882338 [Info] - [System] Runtime: 1794004177 250820  STEAMVR
+Tue Nov 10 2026 22:23:43.042960 [Info] - VR_Init successful
+Tue Nov 10 2026 22:23:43.046446 [Info] - CIPCPipe::ConnectPipe(SteamVR_Namespace) attempting connect to /steamvr/SteamVR_Namespace
+Tue Nov 10 2026 22:23:43.046514 [Info] - [Steam] Attempt to connect to Steam
+Tue Nov 10 2026 22:23:43.046571 [Info] - CSharedResourceNamespaceClient::Init(): received namespace data 2040705
+Tue Nov 10 2026 22:23:43.047015 [Info] - CheckHmdDriverName: ActualTrackingSystemName: lighthouse (0)
+Tue Nov 10 2026 22:23:43.047225 [Info] - Add Json firmware manifest from {htc}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 22:23:43.047291 [Info] - Add Json firmware manifest from {indexcontroller}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 22:23:43.047355 [Info] - Add Json firmware manifest from {indexhmd}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 22:23:43.047474 [Info] - Add Json firmware manifest from {lighthouse}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 22:23:43.047553 [Info] - Add Json firmware manifest from {tundra_labs}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 22:23:43.048373 [Info] - [Audio] Audio init
+Tue Nov 10 2026 22:23:43.052173 [Info] - [Steam] Connected to Steam in 0.00 seconds.
+Tue Nov 10 2026 22:23:43.058047 [Info] - [System] Runtime: 1794004177 250820 beta STEAMVR beta
+Tue Nov 10 2026 22:23:43.058194 [Info] - [Steam] Connect to Steam finished: check for dismissable warnings
+Tue Nov 10 2026 22:23:43.064276 [Info] - Skipping OpenXR prompt because it's been dismissed
+Tue Nov 10 2026 22:23:43.072023 [Info] - [System] Transition from 'SteamVRSystemState_Startup' to 'SteamVRSystemState_Connecting'.
+Tue Nov 10 2026 22:23:43.130715 [Info] - [System] Chaperone Universe changes for the first time
+Tue Nov 10 2026 22:23:43.130786 [Info] - [System] Chaperone does not indicate room setup
+Tue Nov 10 2026 22:23:43.154797 [Info] - [System] Transition from 'SteamVRSystemState_Connecting' to 'SteamVRSystemState_Ready'.
+Tue Nov 10 2026 22:23:44.128764 [Info] - [System] Distance between basestations is 3.679207 meters.
+Tue Nov 10 2026 22:23:49.078866 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Ready' to 'SteamVRSystemState_Standby'.
+Tue Nov 10 2026 22:23:50.529330 [Info] - [System] System is running for 10 seconds.
+Tue Nov 10 2026 22:23:50.529422 [Info] - Checking for Vive wireless receivers. 2 detected.
+Tue Nov 10 2026 22:23:58.028845 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Standby' to 'SteamVRSystemState_Ready'.
+Tue Nov 10 2026 22:24:03.028920 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Ready' to 'SteamVRSystemState_Standby'.
+Tue Nov 10 2026 22:25:24.028698 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Standby' to 'SteamVRSystemState_Ready'.
+Tue Nov 10 2026 22:25:34.029034 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Ready' to 'SteamVRSystemState_Standby'.
+Tue Nov 10 2026 22:25:36.929697 [Info] - [Steam] Attempt to disconnect from Steam
+Tue Nov 10 2026 22:25:36.930095 [Info] - [Steam] Disconnected from Steam
+Tue Nov 10 2026 22:25:38.029496 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Standby' to 'SteamVRSystemState_Ready'.
+Tue Nov 10 2026 22:25:43.029582 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Ready' to 'SteamVRSystemState_Standby'.
+Tue Nov 10 2026 22:28:47.187245 [Info] - //==============================================================================================
+Tue Nov 10 2026 22:28:47.187289 [Info] - ================================================================================================
+Tue Nov 10 2026 22:28:47.187304 [Info] - ================================================================================================
+Tue Nov 10 2026 22:28:47.187325 [Info] - vrmonitor 2.19.2 startup with PID=2053581, config=/home/yan/.local/share/Steam/config, runtime=/home/yan/.local/share/Steam/steamapps/common/SteamVR, arch=linux64
+Tue Nov 10 2026 22:28:47.187367 [Info] - Tools Path: /home/yan/.local/share/Steam/steamapps/common/SteamVR/tools exists.
+Tue Nov 10 2026 22:28:47.187384 [Info] - Demo Path: /home/yan/.local/share/Steam/steamapps/common/SteamVR/demo not found.
+Tue Nov 10 2026 22:28:47.196882 [Error] - Failed to associate extension: icon registration failed for vrmanifest
+Tue Nov 10 2026 22:28:47.196932 [Info] - Default Playback Audio Devices: ,  (Comm)
+Tue Nov 10 2026 22:28:47.196950 [Info] - Default Record Audio Device: ,  (Comm)
+Tue Nov 10 2026 22:28:47.197766 [Warning] - Reaped dangling shared memory segment
+Tue Nov 10 2026 22:28:47.297119 [Info] - [System] Transition from 'SteamVRSystemState_Off' to 'SteamVRSystemState_Startup'.
+Tue Nov 10 2026 22:28:49.218903 [Info] - [System] Runtime: 1794004177 250820  STEAMVR
+Tue Nov 10 2026 22:28:49.392057 [Info] - VR_Init successful
+Tue Nov 10 2026 22:28:49.395148 [Info] - [Steam] Attempt to connect to Steam
+Tue Nov 10 2026 22:28:49.395210 [Info] - CIPCPipe::ConnectPipe(SteamVR_Namespace) attempting connect to /steamvr/SteamVR_Namespace
+Tue Nov 10 2026 22:28:49.395321 [Info] - CSharedResourceNamespaceClient::Init(): received namespace data 2053435
+Tue Nov 10 2026 22:28:49.395829 [Info] - CheckHmdDriverName: ActualTrackingSystemName: lighthouse (0)
+Tue Nov 10 2026 22:28:49.396264 [Info] - Add Json firmware manifest from {htc}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 22:28:49.396339 [Info] - Add Json firmware manifest from {indexcontroller}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 22:28:49.396408 [Info] - Add Json firmware manifest from {indexhmd}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 22:28:49.396531 [Info] - Add Json firmware manifest from {lighthouse}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 22:28:49.396616 [Info] - Add Json firmware manifest from {tundra_labs}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 22:28:49.397279 [Info] - [Audio] Audio init
+Tue Nov 10 2026 22:28:49.401000 [Info] - [Steam] Connected to Steam in 0.00 seconds.
+Tue Nov 10 2026 22:28:49.407059 [Info] - [System] Runtime: 1794004177 250820 beta STEAMVR beta
+Tue Nov 10 2026 22:28:49.407221 [Info] - [Steam] Connect to Steam finished: check for dismissable warnings
+Tue Nov 10 2026 22:28:49.413458 [Info] - Skipping OpenXR prompt because it's been dismissed
+Tue Nov 10 2026 22:28:49.421379 [Info] - [System] Transition from 'SteamVRSystemState_Startup' to 'SteamVRSystemState_Connecting'.
+Tue Nov 10 2026 22:28:49.482013 [Info] - [System] Chaperone Universe changes for the first time
+Tue Nov 10 2026 22:28:49.482083 [Info] - [System] Chaperone does not indicate room setup
+Tue Nov 10 2026 22:28:49.512925 [Info] - [System] Transition from 'SteamVRSystemState_Connecting' to 'SteamVRSystemState_Ready'.
+Tue Nov 10 2026 22:28:50.528850 [Info] - [System] Distance between basestations is 3.679207 meters.
+Tue Nov 10 2026 22:28:55.479541 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Ready' to 'SteamVRSystemState_Standby'.
+Tue Nov 10 2026 22:28:56.528996 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Standby' to 'SteamVRSystemState_Ready'.
+Tue Nov 10 2026 22:28:57.529043 [Info] - [System] System is running for 10 seconds.
+Tue Nov 10 2026 22:28:57.529132 [Info] - Checking for Vive wireless receivers. 2 detected.
+Tue Nov 10 2026 22:28:59.529047 [Info] - [Status Warning Added LHR-D006848D Casque(0)] Recherche...
+Tue Nov 10 2026 22:28:59.529120 [Info] - [Status Warning Added LHB-A47924B5 Station de base(1)] Recherche...
+Tue Nov 10 2026 22:28:59.529141 [Info] - [Status Warning Added LHB-0FF8C23D Station de base(2)] Recherche...
+Tue Nov 10 2026 22:28:59.529234 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Ready' to 'SteamVRSystemState_Connecting'.
+Tue Nov 10 2026 22:29:03.529197 [Info] - [Status Warning Removed LHR-D006848D Casque(0)] Recherche...
+Tue Nov 10 2026 22:29:03.529285 [Info] - [Status Warning Removed LHB-A47924B5 Station de base(1)] Recherche...
+Tue Nov 10 2026 22:29:03.529306 [Info] - [Status Warning Removed LHB-0FF8C23D Station de base(2)] Recherche...
+Tue Nov 10 2026 22:29:03.529409 [Info] - [System] Transition from 'SteamVRSystemState_Connecting' to 'SteamVRSystemState_Ready'.
+Tue Nov 10 2026 22:29:08.478236 [Info] - Tracked device activated: 3
+Tue Nov 10 2026 22:29:08.530705 [Info] - [Status Warning Added LHR-FFE4BFC4 Contrôleur(3)] Recherche...
+Tue Nov 10 2026 22:32:06.317637 [Info] - //==============================================================================================
+Tue Nov 10 2026 22:32:06.317754 [Info] - ================================================================================================
+Tue Nov 10 2026 22:32:06.317776 [Info] - ================================================================================================
+Tue Nov 10 2026 22:32:06.317800 [Info] - vrmonitor 2.19.2 startup with PID=2060117, config=/home/yan/.local/share/Steam/config, runtime=/home/yan/.local/share/Steam/steamapps/common/SteamVR, arch=linux64
+Tue Nov 10 2026 22:32:06.317851 [Info] - Tools Path: /home/yan/.local/share/Steam/steamapps/common/SteamVR/tools exists.
+Tue Nov 10 2026 22:32:06.317871 [Info] - Demo Path: /home/yan/.local/share/Steam/steamapps/common/SteamVR/demo not found.
+Tue Nov 10 2026 22:32:06.331241 [Error] - Failed to associate extension: icon registration failed for vrmanifest
+Tue Nov 10 2026 22:32:06.331307 [Info] - Default Playback Audio Devices: ,  (Comm)
+Tue Nov 10 2026 22:32:06.331326 [Info] - Default Record Audio Device: ,  (Comm)
+Tue Nov 10 2026 22:32:06.559143 [Info] - [System] Transition from 'SteamVRSystemState_Off' to 'SteamVRSystemState_Startup'.
+Tue Nov 10 2026 22:32:08.777420 [Info] - [System] Runtime: 1794004177 250820  STEAMVR
+Tue Nov 10 2026 22:32:08.967213 [Info] - VR_Init successful
+Tue Nov 10 2026 22:32:08.981675 [Info] - [Steam] Attempt to connect to Steam
+Tue Nov 10 2026 22:32:08.981810 [Info] - CIPCPipe::ConnectPipe(SteamVR_Namespace) attempting connect to /steamvr/SteamVR_Namespace
+Tue Nov 10 2026 22:32:08.981891 [Info] - CSharedResourceNamespaceClient::Init(): received namespace data 2059755
+Tue Nov 10 2026 22:32:08.982553 [Info] - CheckHmdDriverName: ActualTrackingSystemName: lighthouse (0)
+Tue Nov 10 2026 22:32:08.982817 [Info] - Add Json firmware manifest from {htc}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 22:32:08.982940 [Info] - Add Json firmware manifest from {indexcontroller}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 22:32:08.983017 [Info] - Add Json firmware manifest from {indexhmd}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 22:32:08.983133 [Info] - Add Json firmware manifest from {lighthouse}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 22:32:08.983217 [Info] - Add Json firmware manifest from {tundra_labs}/firmware/manifest.vrfirmware
+Tue Nov 10 2026 22:32:08.983896 [Info] - [Audio] Audio init
+Tue Nov 10 2026 22:32:08.996900 [Info] - [Steam] Connected to Steam in 0.00 seconds.
+Tue Nov 10 2026 22:32:09.003853 [Info] - [System] Runtime: 1794004177 250820 beta STEAMVR beta
+Tue Nov 10 2026 22:32:09.004034 [Info] - [Steam] Connect to Steam finished: check for dismissable warnings
+Tue Nov 10 2026 22:32:09.010421 [Info] - [Chaperone] The universe id is invalid, but the system did not run long enough.
+Tue Nov 10 2026 22:32:09.013078 [Info] - Skipping OpenXR prompt because it's been dismissed
+Tue Nov 10 2026 22:32:09.023385 [Info] - [System] Transition from 'SteamVRSystemState_Startup' to 'SteamVRSystemState_Connecting'.
+Tue Nov 10 2026 22:32:15.029547 [Info] - [System] Unknown Transition from 'SteamVRSystemState_Connecting' to 'SteamVRSystemState_Standby'.
+Tue Nov 10 2026 22:32:16.528497 [Info] - [System] System is running for 10 seconds.
+Tue Nov 10 2026 22:32:16.528584 [Info] - Checking for Vive wireless receivers. 2 detected.
+Tue Nov 10 2026 22:32:17.029197 [Info] - [Status Warning Added LHR-D006848D Casque(0)] Recherche...
+Tue Nov 10 2026 22:32:17.029276 [Info] - [Status Warning Added LHR-FFE4BFC4 Contrôleur(1)] Recherche...
+Tue Nov 10 2026 22:32:17.029295 [Info] - [Status Warning Added LHR-FDA99BC1 Contrôleur(2)] Recherche...
+Tue Nov 10 2026 22:32:17.029312 [Info] - [Status Warning Added LHB-0FF8C23D Station de base(3)] Recherche...
+Tue Nov 10 2026 22:32:17.029326 [Info] - [Status Warning Added LHB-A47924B5 Station de base(4)] Recherche...

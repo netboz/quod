@@ -1,0 +1,44 @@
+[
+  {
+    "path": "logs/protocol-capture-01.log",
+    "private_tuples_redacted": 8,
+    "original_sha256": "bac614934b657fe5de3d5781ce45e002d2012c1766362bcebf65b4d4d45ec06c",
+    "redacted_sha256": "5dbe5badfb05a3e4f128dd6499f9502a6e676c62f239dba3b821b3505d79be57"
+  },
+  {
+    "path": "logs/runtime-focused-tmpfs-03.log",
+    "private_tuples_redacted": 9,
+    "original_sha256": "16a2e916b90aa84935c685fa4433a3d7b8bac7ba213c9d8c827fb91673595fa6",
+    "redacted_sha256": "1def0ed79ae2333a6faf9ead8aa1aac18ab498df9183166b65e5dbe264cc63ba"
+  },
+  {
+    "path": "logs/r1-gates-02-eunit.log",
+    "private_tuples_redacted": 40,
+    "original_sha256": "c98ae21676376460dc8b7c79fd522dd5658d3d8657d3e744eacc2fd6b871cc88",
+    "redacted_sha256": "78098d63374200853388f81e83e5c1dbec4080a88d99f4833dbaee7bf766a572"
+  },
+  {
+    "path": "logs/r1-gates-03-eunit.log",
+    "private_tuples_redacted": 40,
+    "original_sha256": "1d6aabf85b1be46e4a449ceaf10b0b0aa29a861c725b5516606443406e6504c9",
+    "redacted_sha256": "b8100c97af9ca1c7d5fa777cd5eedf79db3b94e67dfe788eb8fc668e49a9e97d"
+  },
+  {
+    "path": "logs/r1-gates-04-eunit.log",
+    "private_tuples_redacted": 40,
+    "original_sha256": "c5bf886fc438fb338fe6bdbf61ac919a5aca3376b444706b1fd2203d64dc51b9",
+    "redacted_sha256": "2a8ce4d287562503300d9de9f3f0075350726fc583c710ce4c919006c657b5f9"
+  },
+  {
+    "path": "logs/r1-gates-05-eunit.log",
+    "private_tuples_redacted": 40,
+    "original_sha256": "6dad6bed7e081bb36b7cfe041ab6ac6fdeb24b74d0d5dc5def880a066041edf9",
+    "redacted_sha256": "cc50d439e40e4bbe3ff656090dd84ae8a34c0f755158fa5c1f4d2b6fc985857b"
+  },
+  {
+    "path": "logs/r1-gates-06-eunit.log",
+    "private_tuples_redacted": 40,
+    "original_sha256": "3d58f90ed7d01c96ff66612077ca254055d5dce96bf6271e40c0144164119ac5",
+    "redacted_sha256": "c7a25f60191ce02c34bbcfa4979e266fdd92b839990084bc6e3a8c85e38962a1"
+  }
+]

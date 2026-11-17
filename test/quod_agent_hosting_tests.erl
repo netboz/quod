@@ -4,7 +4,156 @@
 -export([quod_predicate_module/0, load/1, test_host_barrier/3, test_fill_agents/3,
          test_fill_work_queue/3, test_local_wait/3,
          with_host/1, with_host/2, with_host/4, domain_agents/1,
-         start_ontology/5, stop_ontology/1]).
+         start_ontology/5, stop_ontology/1, agent/1, agent_ref/2]).
+
+class_owner_hosting_transitions_test_() ->
+    {timeout, 60, fun() -> with_host(fun(#{namespace := Ns, reference := Agent,
+            node := Node, key := Key}) ->
+        Owner = <<"quod:agent">>,
+            Grant = {can_assign_agent_host, Node, actor, {'_'}, {'_'}, Node, {'_'}},
+            commit(Ns, {assertz, Grant}),
+            Initial = {goal, {agent_hosted, Agent, Node, 1, Key}},
+            ?assertMatch({ok, _, {normalized, {committed, _, _}}},
+                signed_owner_transition(Owner, Initial)),
+            ?assertMatch({ok, [_], _},
+                quod_prolog:prove_ro(Ns, {agent_hosted, actor, Node, 1, Key})),
+            Height = quod_prolog:applied(Ns),
+            ?assertMatch({ok, _, {normalized, {answers, _, _}}},
+                signed_owner_transition(Owner, Initial)),
+            ?assertEqual(Height, quod_prolog:applied(Ns)),
+            NewKey = crypto:strong_rand_bytes(32),
+            Move = {goal, {agent_assignment, Agent, Node, 1, Node, 2, NewKey}},
+            ?assertMatch({ok, _, {normalized, {committed, _, _}}},
+                signed_owner_transition(Owner, Move)),
+            ?assertMatch({ok, [_], _},
+                quod_prolog:prove_ro(Ns, {agent_key, actor, Key, revoked})),
+            ?assertMatch({ok, [_], _},
+                quod_prolog:prove_ro(Ns, {agent_hosted, actor, Node, 2, NewKey})),
+            Stale = {goal, {agent_assignment, Agent, Node, 1, Node, 2,
+                            crypto:strong_rand_bytes(32)}},
+            ?assertMatch({ok, _, {normalized, {failed, _}}},
+                signed_owner_transition(Owner, Stale)),
+            commit(Ns, {retract, Grant}),
+            Denied = {goal, {agent_assignment, Agent, Node, 2, Node, 3,
+                             crypto:strong_rand_bytes(32)}},
+            ?assertMatch({ok, _, {normalized, {failed, _}}},
+                signed_owner_transition(Owner, Denied)),
+            ?assertMatch({ok, [_], _},
+                quod_prolog:prove_ro(Ns, {agent_hosted, actor, Node, 2, NewKey})),
+            commit(Ns, {assertz, {can_report_agent_failure, Node, actor, Node, {'_'}}}),
+            Round = crypto:strong_rand_bytes(32),
+            ?assertMatch({ok, _, {normalized, {committed, _, _}}},
+                signed_owner_transition(Owner,
+                    {goal, {agent_recovery_current, Agent, Node, 2, Round}})),
+            Report = {agent_failure_report, Agent, Node, 2, Round, Node,
+                {observation, 1, crypto:strong_rand_bytes(32), {'Expiry'}}, suspected_unreachable},
+            ?assertMatch({ok, _, {normalized, {committed, _, _}}},
+                signed_owner_transition(Owner, {goal, Report})),
+            Withdrawal = setelement(8, setelement(7, Report,
+                {observation, 2, crypto:strong_rand_bytes(32), {'Expiry'}}), reachable),
+            ?assertMatch({ok, _, {normalized, {committed, _, _}}},
+                signed_owner_transition(Owner, {goal, Withdrawal})),
+            ?assertMatch({ok, [#{'Rows' := [{report, {observation, 2, _, _}, reachable}]}], _},
+                quod_prolog:prove_ro(Ns, {findall, {report, {'O'}, {'K'}},
+                    {agent_failure_report, actor, Node, 2, Round, Node, {'O'}, {'K'}}, {'Rows'}})),
+            commit(Ns, {assertz, Grant}),
+            LastKey = crypto:strong_rand_bytes(32),
+            ?assertMatch({ok, _, {normalized, {committed, _, _}}},
+                signed_owner_transition(Owner,
+                    {goal, {agent_assignment, Agent, Node, 2, Node, 3, LastKey}})),
+            ?assertMatch({ok, [#{'Rows' := []}], _}, quod_prolog:prove_ro(Ns,
+                {findall, {'R'}, {agent_recovery_round, actor, {'_'}, {'_'}, {'R'}}, {'Rows'}})),
+            ?assertMatch({ok, [#{'Rows' := []}], _}, quod_prolog:prove_ro(Ns,
+                {findall, {'R'}, {agent_failure_report, actor, {'_'}, {'_'}, {'_'},
+                    {'_'}, {'R'}, {'_'}}, {'Rows'}})),
+            ?assertEqual(fail, quod_prolog:prove_ro(Ns,
+                {current_predicate, {'/', initialize_agent_host, 3}}))
+    end) end}.
+
+signed_owner_transition(Owner, Goal) ->
+    {Numbered, _, _} = erlog_int:term_instance({'::', Owner, Goal}, 0),
+    {ok, Bytes, Signature} = quod_node_actor:signed_goal(execute, Numbered,
+        crypto:strong_rand_bytes(32), quod_time:now_ms() + 20000),
+    Result = quod_client_goal_ingress:submit(Bytes, Signature),
+    case Result of
+        {ok, Evidence, {normalized, {committed, _, _}}} ->
+            Operation = quod_client_goal:operation_ref(Evidence),
+            ?assertMatch(#{operation_state := terminal},
+                quod_ct:await_operation_complete(element(2, Operation), Operation, 10000));
+        _ -> ok
+    end,
+    Result.
+
+class_owner_signing_preserves_storage_and_policy_boundaries_test_() ->
+    {timeout, 60, fun() ->
+        with_host(fun(#{namespace := Ns, reference := Agent, node := Node,
+                key := Key}) ->
+            Owner = <<"quod:agent">>,
+                commit(Ns, {',', {assertz, {agent_key, actor, Key, active}},
+                    {assertz, {agent_host, actor, Node, 1, Key}}}),
+                Typed = {agent_goal_v1, <<42:256>>, Agent, <<"actor.">>, Key,
+                    crypto:strong_rand_bytes(32), quod_time:now_ms() + 20000,
+                    execute, 3, <<"true.">>},
+                ?assertEqual(fail, quod_prolog:prove_ro(Ns,
+                    {current_predicate, {'/', can_sign_agent_request, 3}})),
+                Read = {sign_agent_request, Typed, {0}},
+                {answers, _, [Answer]} = signed_read(Ns, Read),
+                {ok, [{_, Signature}]} = quod_client_result:decode_binding(Answer),
+                {ok, _, Bytes} = quod_client_goal:encode_typed(Typed),
+                ?assert(quod_identity:verify(Signature, Bytes, Key)),
+                quod_lobby_tests:assert_read_has_no_io(fun() ->
+                    ?assertMatch({answers, _, [_]},
+                        signed_read(Ns, Read))
+                end),
+                %% The foreign owner's rule does not relocate custody or let
+                %% a different native scope release this storing identity's key.
+                ?assertEqual({error, proof_unavailable}, signed_read(element(2, Node), Read)),
+                WrongKey = setelement(5, Typed, crypto:strong_rand_bytes(32)),
+                ?assertMatch({failed, _},
+                    signed_read(Ns, {sign_agent_request, WrongKey, {0}})),
+                lists:foreach(fun(Status) ->
+                    commit(Ns, {',', {retract, {agent_key, actor, Key, active}},
+                        {assertz, {agent_key, actor, Key, Status}}}),
+                    ?assertMatch({failed, _}, signed_read(Ns, Read)),
+                    commit(Ns, {',', {retract, {agent_key, actor, Key, Status}},
+                        {assertz, {agent_key, actor, Key, active}}})
+                end, [revoked, staged]),
+                OtherHost = setelement(2, Node, <<"other-host">>),
+                commit(Ns, {',', {retract, {agent_host, actor, Node, 1, Key}},
+                    {assertz, {agent_host, actor, OtherHost, 1, Key}}}),
+                ?assertMatch({failed, _}, signed_read(Ns, Read)),
+                commit(Ns, {',', {retract, {agent_host, actor, OtherHost, 1, Key}},
+                    {assertz, {agent_host, actor, Node, 1, Key}}}),
+                %% Admission to the original signing read grants no callback
+                %% read to the class owner on the caller's behalf.
+                Broad = {can_invoke, {'_'}, Node, {'_'}, Ns},
+                commit(Ns, {',', {abolish, {'/', can_invoke, 4}},
+                    {',', {assertz, {can_invoke, {'_'}, {'_'}, [], {'_'}}},
+                        {assertz, {can_invoke, {sign_agent_request, {'_'}, {'_'}}, Node, {'_'}, Ns}}}}),
+                ?assertMatch({source_acl, {failed, _}}, {source_acl, signed_read(Ns, Read)}),
+                commit(Ns, {assertz, Broad}),
+                Public = {agent_query, {can_sign_agent_request, {'_'}, {'_'}, {'_'}}},
+                commit(Owner, {retract, Public}),
+                ?assertMatch({owner_acl, {failed, _}}, {owner_acl, signed_read(Ns, Read)}),
+                commit(Owner, {assertz, Public}),
+                commit(Ns, {retract, {agent_key, actor, Key, active}}),
+                ?assertMatch({revoked_key, {failed, _}}, {revoked_key, signed_read(Ns, Read)}),
+                commit(Owner, {assertz, {':-', {can_sign_agent_request, {'_'}, {'_'}, {'_'}},
+                    {assertz, signature_policy_write}}}),
+                ?assertEqual({error, read_only}, signed_read(Ns, Read)),
+                ?assertMatch({ok, [#{'Rows' := []}], _}, quod_prolog:prove_ro(Owner,
+                    {findall, true, signature_policy_write, {'Rows'}}))
+        end)
+    end}.
+
+signed_read(Ns, Goal) ->
+    {Numbered, _, _} = erlog_int:term_instance({'::', Ns, Goal}, 0),
+    {ok, Bytes, Signature} = quod_node_actor:signed_goal(read, Numbered,
+        crypto:strong_rand_bytes(32), quod_time:now_ms() + 20000),
+    case quod_client_goal_ingress:submit(Bytes, Signature) of
+        {ok, _, {normalized, {read, _, Result}}} -> Result;
+        Other -> Other
+    end.
 
 quod_predicate_module() -> true.
 load(Est) ->
@@ -24,7 +173,11 @@ load(Est) ->
                                               ?MODULE, test_local_wait, Filled#est.db)}.
 
 test_local_wait(Goal, Next, St) when Goal =:= test_local_wait; Goal =:= test_physics_snapshot ->
-    quod_reg:where({host_test, local_proof}) ! {local_proof_waiting, self()},
+    Operation = case quod_scope_session:request_operation() of
+        error -> quod_proof_context:request_operation();
+        Bound -> Bound
+    end,
+    quod_reg:where({host_test, local_proof}) ! {local_proof_waiting, self(), Operation},
     receive release -> erlog_int:prove_body(Next, St) end.
 test_host_barrier(test_fipa_completion, Next, St) ->
     #{operation_ref := Operation} = quod_proof_context:request_evidence(),
@@ -70,7 +223,7 @@ projected_work_drains_more_than_queue_capacity_and_skips_refusal_test_() ->
         Keys = [<<N:256>> || N <- lists:seq(0, 23)],
         commit(Ns, work_assertions([{work_rejected, <<0:256>>} |
                                     [{work_pending, K} || K <- Keys]])),
-        commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+        commit(Ns,agent({goal, {agent_hosted, agent_ref(Ns,actor), Node, 1, Key}})),
         _ = installed(Ref, 1),
         work_status(Ns, agent_work_idle, 1),
         ?assertMatch({ok, [#{'Rows' := [<<0:256>>]}], _}, quod_prolog:prove_ro(Ns,
@@ -84,7 +237,7 @@ projected_work_drains_more_than_queue_capacity_and_skips_refusal_test_() ->
 projected_work_wakes_after_real_queue_capacity_release_test_() ->
     {timeout, 60, fun() -> with_projected_work(fun(#{namespace := Ns, reference := Ref,
                                                    node := Node, key := Key}) ->
-        commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+        commit(Ns,agent({goal, {agent_hosted, agent_ref(Ns,actor), Node, 1, Key}})),
         _ = installed(Ref, 1),
         work_status(Ns, agent_work_idle, 1),
         commit(Ns, {trigger_event, fill_work_queue}),
@@ -165,14 +318,14 @@ logical_node_observations_wait_for_own_queue_without_blocking_input_test_() ->
             ok = sys:install(Runtime, {Observe, none}),
             try
                 commit(Ns, {assertz, node_readiness_tick}),
-                First = receive {local_proof_waiting, Pid} -> Pid
+                First = receive {local_proof_waiting, Pid, _} -> Pid
                         after 5000 -> error(readiness_goal_not_started) end,
                 commit(Ns, {assertz, canonical_keeps_progressing}),
                 Height = quod_prolog:applied(Ns),
                 await_processed_height(Token, Height),
                 First ! release,
                 lists:foreach(fun(_) ->
-                    receive {local_proof_waiting, Proof} -> Proof ! release
+                    receive {local_proof_waiting, Proof, _} -> Proof ! release
                     after 5000 -> error(ready_goal_lost_at_capacity) end
                 end, lists:seq(2, 20)),
                 ?assertEqual(lists:seq(1, 20), lists:sort(await_local_ready(Ns, Node, 20))),
@@ -226,7 +379,7 @@ retained_request_uses_original_bytes_and_timeout_identity_test_() ->
                   {',', {retained_intent, {'Bytes'}, {'Value'}},
                    {',', {current_signed_request, {'Bytes'}}, {record_ping, {'Value'}}}}}],
         with_host(fun(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
-            commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+            commit(Ns,agent({goal, {agent_hosted, agent_ref(Ns,actor), Node, 1, Key}})),
             {Owner, Child} = installed(Ref, 1),
             {ok, Network} = quod_ontology:network_identity(),
             {ok, Text} = quod_client_goal_parser:format({record_retained, Case}),
@@ -291,7 +444,7 @@ retained_request_uses_original_bytes_and_timeout_identity_test_() ->
 runtime_owner_death_reaps_blocked_workers_test_() ->
     [{atom_to_list(Kind) ++ "/" ++ atom_to_list(Reason), {timeout, 30, fun() ->
         with_host(fun(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
-            commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+            commit(Ns,agent({goal, {agent_hosted, agent_ref(Ns,actor), Node, 1, Key}})),
             {Runtime, _} = installed(Ref, 1),
             true = quod_reg:reg({host_test, barrier}),
             Pause = case Kind of resource -> pause_resource(Runtime, agent_hosts); reaction -> none end,
@@ -376,11 +529,8 @@ fipa_competing_completions_commit_once_test_() ->
 with_fipa_request(Scenario) ->
     {ok, _} = application:ensure_all_started(gproc),
     true = quod_reg:reg({host_test, barrier}),
-    try with_host(fun(Ctx = #{directory := Dir}) ->
-        {ok, Foreign} = quod_foreign_log:start_link(
-                          #{cache_dir => filename:join(Dir, "foreign")}),
-        try fipa_request_exchange(Ctx, Scenario)
-        after gen_server:stop(Foreign) end
+    try with_host(fun(Ctx) ->
+        fipa_request_exchange(Ctx, Scenario)
     end, fipa_initiator_rules())
     after gproc:unreg(quod_reg:name({host_test, barrier})) end.
 
@@ -402,7 +552,7 @@ fipa_initiator_rules() ->
 fipa_request_exchange(#{namespace := SenderNs, reference := SenderRef,
                        node := Node, key := SenderKey, directory := Dir,
                        identity := Identity}, Scenario) ->
-    commit(SenderNs, {goal, {agent_hosted, actor, Node, 1, SenderKey}}),
+    commit(SenderNs,agent({goal, {agent_hosted, agent_ref(SenderNs,actor), Node, 1, SenderKey}})),
     _ = installed(SenderRef, 1),
     ReceiverNs = <<"host-test-fipa-receiver">>,
     Terms = lists:append([quod_prolog:read_terms(filename:join(code:priv_dir(quod),
@@ -419,7 +569,7 @@ fipa_request_exchange(#{namespace := SenderNs, reference := SenderRef,
     Waiting = {fipa_conversation, actor, Id, initiator, ReceiverRef, Action, waiting},
     Pending = {fipa_conversation, receiver, Id, participant, SenderRef, Action, pending},
     try
-        commit(ReceiverNs, {goal, {agent_hosted, receiver, Node, 1, Key}}),
+        commit(ReceiverNs,agent({goal, {agent_hosted, agent_ref(ReceiverNs,receiver), Node, 1, Key}})),
         _ = installed(ReceiverRef, 1),
         case Scenario of
             complete ->
@@ -507,8 +657,8 @@ fipa_request_exchange(#{namespace := SenderNs, reference := SenderRef,
                         Reopened;
                     rotate_proof ->
                         {ok, NextKey} = quod_agent_vault:prepare(Blob, 1),
-                        commit(ReceiverNs, {goal, {agent_assignment, receiver,
-                                                   Node, 1, Node, 2, NextKey}}),
+                        commit(ReceiverNs,agent({goal, {agent_assignment, agent_ref(ReceiverNs,receiver),
+                                                   Node, 1, Node, 2, NextKey}})),
                         _ = installed(ReceiverRef, 2),
                         Receiver
                 end,
@@ -569,7 +719,9 @@ fipa_participant_rules(Ns, Node, Sender, Pub, Scenario) ->
             {',', test_fipa_completion, Reserve};
         _ -> Reserve
     end,
-    [{can_assign_agent_host, {node, Pub}, receiver, {'_'}, {'_'}, Node, {'_'}},
+    [{instance_of,{':',quod,{':',agent,agent}},receiver},
+     {can_invoke,{'_'},{node,Pub},{'_'},Ns},
+     {can_assign_agent_host, {node, Pub}, receiver, {'_'}, {'_'}, Node, {'_'}},
      {can_invoke, {'_'}, Node, {'_'}, Ns},
      {can_invoke, {fipa_fulfil_request, receiver, Id},
       {agent_instance_ref, Ns, {'_'}, receiver}, {'_'}, Ns},
@@ -710,10 +862,10 @@ unexpected_child_exit_enters_ontology_reaction_test_() ->
         with_host(fun(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
             true = quod_reg:reg({host_test, barrier}),
             try
-                commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+                commit(Ns,agent({goal, {agent_hosted, agent_ref(Ns,actor), Node, 1, Key}})),
                 {Owner, Child} = installed(Ref, 1),
                 OtherRef = setelement(4, Ref, other),
-                commit(Ns, {goal, {agent_hosted, other, Node, 1, <<91:256>>}}),
+                commit(Ns,agent({goal, {agent_hosted, agent_ref(Ns,other), Node, 1, <<91:256>>}})),
                 {Owner, _} = installed(OtherRef, 1),
                 exit(Child, kill),
                 Runner = receive {host_projection_waiting, R} -> R
@@ -732,7 +884,7 @@ unexpected_child_exit_enters_ontology_reaction_test_() ->
                 try
                     {ok, Blob} = quod_wire_term:encode_canonical(Ref),
                     {ok, NextKey} = quod_agent_vault:prepare(Blob, 1),
-                    commit(Ns, {goal, {agent_assignment, actor, Node, 1, Node, 2, NextKey}}),
+                    commit(Ns,agent({goal, {agent_assignment, agent_ref(Ns,actor), Node, 1, Node, 2, NextKey}})),
                     {Owner, _} = installed(Ref, 2),
                     Barrier = erlang:trace_delivered(Owner),
                     receive {trace_delivered, Owner, Barrier} -> ok
@@ -757,17 +909,17 @@ process_down_rules(_Pub) ->
               true},
        {',', {me, {agent_instance_ref, <<"host-test-agent">>, {'_'}, other}},
         {',', {agent_hosted, actor, {'Node'}, 1, {'Key'}},
-         {',', {agent_identifier, {'Observation'}},
+         {',', {',',{binary_codes,{'Observation'},{'Codes'}},{length,{'Codes'},32}},
           {',', test_reaction_barrier, fail}}}}}].
 
 observation_during_restoration_survives_pending_installation_test_() ->
     {timeout, 60, fun() ->
         true = quod_reg:reg({host_test, barrier}),
         try with_host(fun(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
-            commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+            commit(Ns,agent({goal, {agent_hosted, agent_ref(Ns,actor), Node, 1, Key}})),
             {Runtime, Child} = installed(Ref, 1),
             OtherRef = setelement(4, Ref, other),
-            commit(Ns, {goal, {agent_hosted, other, Node, 1, <<91:256>>}}),
+            commit(Ns,agent({goal, {agent_hosted, agent_ref(Ns,other), Node, 1, <<91:256>>}})),
             {Runtime, _} = installed(OtherRef, 1),
             Pause = pause_resource(Runtime, agent_hosts),
             request_resource(Ns, agent_hosts),
@@ -799,7 +951,7 @@ observation_during_restoration_survives_pending_installation_test_() ->
 optional_recovery_policy_uses_direct_resource_selection_test_() ->
     {timeout, 60, fun() -> with_host(fun(#{namespace := Ns, reference := Ref,
                                          node := Node, key := Key}) ->
-        commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+        commit(Ns,agent({goal, {agent_hosted, agent_ref(Ns,actor), Node, 1, Key}})),
         _ = installed(Ref, 1),
         ?assertMatch(#{mode := live, reconcile_failures := 0}, quod_runtime:stats(Ns))
     end, fun(_Pub) ->
@@ -843,10 +995,10 @@ physical_recovery(#{namespace := Ns, reference := Ref = {agent_instance_ref, Ns,
                  {eligible_agent_host, actor, Node}, {agent_host_rank, actor, Node, 1},
                  {ping, durable_before_loss}],
         lists:foreach(fun(F) -> commit(Ns, {assertz, F}) end, Facts),
-        Operations = [{report_agent_observation, actor, Old, 1, {'_'}, {'_'}, {'_'}, {'_'}},
-                      {report_agent_observation_with_custody, actor, Old, 1,
-                       {'_'}, {'_'}, {'_'}, {'_'}, {'_'}},
-                      {prepare_agent_and_converge, actor, Old, 1, Node, Key}],
+        Operations = [agent({report_agent_observation,Ref,Old,1,{'_'},{'_'},{'_'},{'_'}}),
+                      agent({report_agent_observation_with_custody,Ref,Old,1,
+                       {'_'},{'_'},{'_'},{'_'},{'_'}}),
+                      agent({prepare_agent_and_converge,Ref,Old,1,Node,Key})],
         commit(NodeNs, work_assertions([{can_execute_for, Ns, Anchor, G} || G <- Operations])),
         1 = erlang:trace_pattern({quod_agent_observer, handle, 2},
                                  [{'_', [], [{return_trace}]}], [local]),
@@ -856,14 +1008,14 @@ physical_recovery(#{namespace := Ns, reference := Ref = {agent_instance_ref, Ns,
           #{author => {node_actor, Blob}, node_key => PeerKey, endpoint => Endpoint,
             epoch => 1, generation => 1, page => 0, last => true,
             hosted => [{element(2, Old), element(3, Old), observer, node}]}),
-        commit(Ns, {goal, {agent_hosted, actor, Old, 1, OldKey}}),
+        commit(Ns,agent({goal, {agent_hosted, agent_ref(Ns,actor), Old, 1, OldKey}})),
         await_observer_coverage(Runtime, Old),
         erlang:trace(Runtime, false, [call]),
         erlang:trace_pattern({quod_agent_observer, handle, 2}, false, [local]),
         case Loss of
             graceful ->
                 Prepared = node_request(Ns, Anchor,
-                              {prepare_agent_and_converge, actor, Old, 1, Node, Key},
+                              agent({prepare_agent_and_converge,Ref,Old,1,Node,Key}),
                               quod_time:now_ms() + 10000),
                 ?assertMatch({ok, _, {normalized, {committed, [_], _}}}, Prepared);
             abrupt -> ok
@@ -923,7 +1075,7 @@ node_execution_policy_installs_through_ordinary_signed_goal_test_() ->
                      Submit({assertz, {can_execute_for, Ns, Anchor, true}})),
         ?assertMatch({ok, _, {normalized, {failed, _}}},
                      Submit({node_authorized_goal, Ns, Anchor, true})),
-        Source = filename:join(code:priv_dir(quod), "ontologies/node_execution.pl"),
+        Source = filename:join(code:priv_dir(quod), "ontologies/node_instance.pl"),
         [SourceRule] = [Term || {':-', {node_authorized_goal, _, _, _}, _} = Term
                           <- quod_prolog:read_terms(Source)],
         RuleText = iolist_to_binary([erlog_io:writeq1(SourceRule), $.]),
@@ -948,7 +1100,7 @@ installed_handler(#{namespace := Ns, reference := Ref = {agent_instance_ref,Ns,A
     Observe = fun(A,E,K,C) -> quod_runtime:installed_agent_reaction(
         Ns,A,quod_prolog:applied(Ns),{agent,actor,E,K},C,quod_time:mono_ms()+5000) end,
     ?assertEqual({error,agent_handler_unavailable},Observe(Anchor,1,Key,Handler)),
-    commit(Ns,{goal,{agent_hosted,actor,Node,1,Key}}),
+    commit(Ns,agent({goal,{agent_hosted,agent_ref(Ns,actor),Node,1,Key}})),
     {Owner,Child} = installed(Ref,1),
     ?assertEqual({ok,{Owner,Child}},Observe(Anchor,1,Key,Handler)),
     ?assertEqual({error,runtime_unavailable},Observe(<<0:256>>,1,Key,Handler)),
@@ -1049,7 +1201,7 @@ unrelated_node_retirement(#{namespace := Ns, reference := Ref,
                            node := Node = {agent_instance_ref, NodeNs, _, _}, key := Key}) ->
     {ok, Principal} = quod_node_actor:principal(),
     delayed_node_identity_notice(NodeNs, Principal),
-    commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+    commit(Ns,agent({goal, {agent_hosted, agent_ref(Ns,actor), Node, 1, Key}})),
     {Owner, Hosted} = installed(Ref, 1),
     {Owner, [#{pid := Hosted, binding := #{reference := Ref}}]} = quod_runtime:agents(Ns),
     true = quod_reg:subscribe({agent, Node}),
@@ -1119,7 +1271,7 @@ signed_node_request_context_survives_foreign_scope_test_() ->
 failed_staged_assignment_cannot_install_hosted_process_test_() ->
     {timeout, 60, fun() -> with_host(fun(#{namespace := Ns, reference := Ref,
                                          node := Node, key := Key}) ->
-        commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+        commit(Ns,agent({goal, {agent_hosted, agent_ref(Ns,actor), Node, 1, Key}})),
         {Runtime, Child} = installed(Ref, 1),
         Goal = {',', {assertz, {agent_key, uncommitted, Key, active}},
                  {',', {assertz, {agent_host, uncommitted, Node, 1, Key}}, fail}},
@@ -1134,10 +1286,10 @@ failed_staged_assignment_cannot_install_hosted_process_test_() ->
 agent_queue_has_aggregate_byte_bound_and_reclaims_on_discard_test_() ->
     {timeout, 60, fun() -> with_host(fun(#{namespace := Ns, reference := Ref,
                                          node := Node, key := Key}) ->
-        commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+        commit(Ns,agent({goal, {agent_hosted, agent_ref(Ns,actor), Node, 1, Key}})),
         {Owner, _} = installed(Ref, 1),
         OtherRef = setelement(4, Ref, other),
-        commit(Ns, {goal, {agent_hosted, other, Node, 1, <<91:256>>}}),
+        commit(Ns,agent({goal, {agent_hosted, agent_ref(Ns,other), Node, 1, <<91:256>>}})),
         {Owner, _} = installed(OtherRef, 1),
         true = quod_reg:reg({host_test, barrier}),
         try
@@ -1170,7 +1322,7 @@ reporting_without_takeover_authority_retains_observation_test_() ->
     {timeout, 60, fun() -> with_host(fun(Ctx) -> atomic_recovery(Ctx, false) end) end}.
 
 atomic_recovery(#{namespace := Ns, reference := Ref, node := Node, key := Key}, Allow) ->
-    commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+    commit(Ns,agent({goal, {agent_hosted, agent_ref(Ns,actor), Node, 1, Key}})),
     {Owner, Child} = installed(Ref, 1),
     Round = crypto:strong_rand_bytes(32),
     Expiry = quod_time:now_ms() + 10000,
@@ -1179,17 +1331,17 @@ atomic_recovery(#{namespace := Ns, reference := Ref, node := Node, key := Key}, 
     Policy = [{can_report_agent_failure, Node, actor, Node, {'_'}},
               {can_prepare_agent_key, Node, actor, Node, 1, Node},
               {':-', {agent_recovery_candidate, Node, actor, Node, 1, Round, Node, 1},
-                       {agent_failure_support, actor, Node, 1, Round, Node, process_down}}],
+                       agent({agent_failure_support,Ref,Node,1,Round,Node,process_down})}],
     lists:foreach(fun(Fact) -> commit(Ns, {assertz, Fact}) end,
                   case Allow of false -> Policy;
                                 _ -> [{can_assign_agent_host, Node, actor, {'_'}, {'_'}, Node, {'_'}}|Policy] end),
     ?assertMatch({ok, _, _}, node_goal(Ns,
-      {goal, {agent_recovery_current, actor, Node, 1, Round}}, Expiry)),
+      agent({goal,{agent_recovery_current,Ref,Node,1,Round}}), Expiry)),
     ?assertMatch({ok, _, _}, node_goal(Ns,
-      {prepare_agent_and_converge, actor, Node, 1, Node, NextKey}, Expiry)),
+      agent({prepare_agent_and_converge,Ref,Node,1,Node,NextKey}), Expiry)),
     Before = quod_prolog:applied(Ns),
     Observation = {observation, 1, crypto:strong_rand_bytes(32), Expiry},
-    Recovery = {report_agent_and_converge, actor, Node, 1, Round, Observation, process_down},
+    Recovery = agent({report_agent_observation,Ref,Node,1,{current,Round},Round,Observation,process_down}),
     Goal = case Allow of rollback -> {',', Recovery, fail}; _ -> Recovery end,
     Result = node_goal(Ns, Goal, Expiry),
     case Allow of
@@ -1234,14 +1386,14 @@ host_teardown_uses_runner_budget_not_default_call_timeout_test_() ->
     {timeout, 60, fun() -> with_host(fun(Ctx) -> host_teardown(Ctx, 5500) end) end}.
 
 host_teardown(#{namespace := Ns, reference := Ref, node := Node, key := Key}, HoldMs) ->
-        commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+        commit(Ns,agent({goal, {agent_hosted, agent_ref(Ns,actor), Node, 1, Key}})),
         {Owner, Child} = installed(Ref, 1),
         {ok, Blob} = quod_wire_term:encode_canonical(Ref),
         {ok, NextKey} = quod_agent_vault:prepare(Blob, 1),
         ok = sys:suspend(Child),
         1 = erlang:trace(Owner, true, ['receive']),
         try
-            commit(Ns, {goal, {agent_assignment, actor, Node, 1, Node, 2, NextKey}}),
+            commit(Ns,agent({goal, {agent_assignment, agent_ref(Ns,actor), Node, 1, Node, 2, NextKey}})),
             Runner = receive
                 {trace, Owner, 'receive', {'$gen_call', {Caller, _}, {project_agents, _, _}}} -> Caller
             after 5000 -> error(projection_not_delivered)
@@ -1277,7 +1429,7 @@ host_move_withdraws_child_and_revokes_released_signature_test_() ->
     {timeout, 60, fun() -> with_host(fun host_move/1) end}.
 
 host_move(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
-    commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+    commit(Ns,agent({goal, {agent_hosted, agent_ref(Ns,actor), Node, 1, Key}})),
     {Owner, Child} = installed(Ref, 1),
     {ok, Network} = quod_ontology:network_identity(),
     Request = #{network_identity => Network, agent_namespace => Ns,
@@ -1288,7 +1440,7 @@ host_move(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
     {ok, Bytes, Signature} = quod_agent_vault:sign(Request, quod_time:mono_ms() + 5000),
     Remote = setelement(2, Node, <<"remote-node">>),
     Monitor = monitor(process, Child),
-    commit(Ns, {goal, {agent_assignment, actor, Node, 1, Remote, 2, <<88:256>>}}),
+    commit(Ns,agent({goal, {agent_assignment, agent_ref(Ns,actor), Node, 1, Remote, 2, <<88:256>>}})),
     receive {'DOWN', Monitor, process, Child, _} -> ok after 5000 -> error(host_not_withdrawn) end,
     ?assertEqual({Owner, []}, domain_agents(Ns)),
     ?assertMatch({ok, _, {normalized, {failed, _}}},
@@ -1296,7 +1448,7 @@ host_move(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
     ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {ping, stale})),
     {ok, Blob} = quod_wire_term:encode_canonical(Ref),
     {ok, NextKey} = quod_agent_vault:prepare(Blob, 2),
-    commit(Ns, {goal, {agent_assignment, actor, Remote, 2, Node, 3, NextKey}}),
+    commit(Ns,agent({goal, {agent_assignment, agent_ref(Ns,actor), Remote, 2, Node, 3, NextKey}})),
     {Owner, NextChild} = installed(Ref, 3),
     commit(Ns, {trigger_event, {do_work, returned}}),
     receive {agent_request_finished, Owner, NextChild, _, _, Result} ->
@@ -1307,7 +1459,7 @@ host_move(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
 running_request_deadline_kills_worker_without_claiming_rejection_test_() ->
     {timeout, 60, fun() -> with_host(fun(#{namespace := Ns, reference := Ref,
                                          node := Node, key := Key}) ->
-        commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+        commit(Ns,agent({goal, {agent_hosted, agent_ref(Ns,actor), Node, 1, Key}})),
         {Owner, Child} = installed(Ref, 1),
         Vault = quod_reg:where({agent_vault, node}),
         ok = sys:suspend(Vault),
@@ -1420,9 +1572,8 @@ domain_agents(Ns) ->
 
 exchange(#{namespace := SenderNs, reference := SenderRef, node := Node, key := Key,
            directory := Dir, identity := Identity}) ->
-    commit(SenderNs, {goal, {agent_hosted, actor, Node, 1, Key}}),
+    commit(SenderNs,agent({goal, {agent_hosted, agent_ref(SenderNs,actor), Node, 1, Key}})),
     installed(SenderRef, 1),
-    {ok, Foreign} = quod_foreign_log:start_link(#{cache_dir => filename:join(Dir, "foreign")}),
     ReceiverNs = <<"host-test-receiver">>,
     SourceAnchor = element(3, SenderRef),
     Source = filename:join(code:priv_dir(quod), "ontologies/agent_instance.pl"),
@@ -1430,6 +1581,8 @@ exchange(#{namespace := SenderNs, reference := SenderRef, node := Node, key := K
     Receiver = start_ontology(ReceiverNs, Dir, Identity, quod_prolog:genesis_diff(Source),
       [{subscribes, SenderNs, SourceAnchor},
        {can_assign_agent_host, {node, maps:get(pubkey, Identity)}, receiver, {'_'}, {'_'}, Node, {'_'}},
+       {instance_of,{':',quod,{':',agent,agent}},receiver},
+       {can_invoke,{'_'},{node,maps:get(pubkey,Identity)},{'_'},ReceiverNs},
        {can_invoke, {'_'}, Node, {'_'}, ReceiverNs},
        {can_invoke, {record_reply, {'_'}}, {agent_instance_ref, ReceiverNs, {'_'}, receiver}, {'_'}, ReceiverNs},
        {can_request_agent_signature, Node, receiver, {'_'}},
@@ -1441,7 +1594,7 @@ exchange(#{namespace := SenderNs, reference := SenderRef, node := Node, key := K
     {ok, ReceiverKey} = quod_agent_vault:prepare(Blob, 0),
     true = quod_reg:subscribe({agent, Ref}),
     try
-        commit(ReceiverNs, {goal, {agent_hosted, receiver, Node, 1, ReceiverKey}}),
+        commit(ReceiverNs,agent({goal, {agent_hosted, agent_ref(ReceiverNs,receiver), Node, 1, ReceiverKey}})),
         {Owner, Child} = installed(Ref, 1),
         await_source_ready(ReceiverNs),
         commit(SenderNs, {trigger_event, {do_work, exchange}}),
@@ -1464,7 +1617,7 @@ exchange(#{namespace := SenderNs, reference := SenderRef, node := Node, key := K
     after
         quod_reg:unsubscribe({agent, Ref}),
         quod_reg:unsubscribe({agent_hosting, ReceiverNs}),
-        stop_ontology(Receiver), gen_server:stop(Foreign)
+        stop_ontology(Receiver)
     end.
 
 %% Observe actual receipt, then use a synchronous snapshot to establish that
@@ -1491,10 +1644,10 @@ await_source_ready_snapshot(Ns, Tag) ->
 
 
 exercise(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
-    commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+    commit(Ns,agent({goal, {agent_hosted, agent_ref(Ns,actor), Node, 1, Key}})),
     {Owner, First} = installed(Ref, 1),
     OtherRef = setelement(4, Ref, other),
-    commit(Ns, {goal, {agent_hosted, other, Node, 1, <<91:256>>}}),
+    commit(Ns,agent({goal, {agent_hosted, agent_ref(Ns,other), Node, 1, <<91:256>>}})),
     {Owner, Other} = installed(OtherRef, 1),
     ?assertEqual({error, stale_resource_owner}, quod_runtime:project_agents(Ns, all, [])),
     ?assertEqual({error, stale_executor}, quod_runtime:agent_request(
@@ -1518,7 +1671,7 @@ exercise(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
                      end, Children)),
     {ok, Blob} = quod_wire_term:encode_canonical(Ref),
     {ok, NextKey} = quod_agent_vault:prepare(Blob, 1),
-    commit(Ns, {goal, {agent_assignment, actor, Node, 1, Node, 2, NextKey}}),
+    commit(Ns,agent({goal, {agent_assignment, agent_ref(Ns,actor), Node, 1, Node, 2, NextKey}})),
     {Owner, Third} = installed(Ref, 2),
     ?assertNot(is_process_alive(Second)),
     ?assertNotEqual(Second, Third),
@@ -1542,7 +1695,7 @@ exercise(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
     end,
     ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {ping, after_restart})),
     ?assertMatch({fail, _}, quod_prolog:execute(Ns,
-      {goal, {agent_assignment, actor, Node, 2, Node, 3, Key}})).
+      agent({goal, {agent_assignment,Ref,Node,2,Node,3,Key}}))).
 
 installed(Ref, Epoch) ->
     receive
@@ -1605,11 +1758,12 @@ with_host(Fun, ExtraFacts, NodePolicy, Ns) ->
     {ok, Auth} = quod_client_auth:start_link(#{network_id => <<42:256>>, node_key => Pub}),
     Dir = filename:join("/tmp", "quod_hosted_" ++ binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(8)))),
     ok = filelib:ensure_dir(filename:join(Dir, "file")),
+    {ok, _} = quod_foreign_log:start_link(#{cache_dir => filename:join(Dir, "foreign")}),
     Unlock = filename:join(Dir, "unlock"),
     ok = quod_file:write_atomic(Unlock, crypto:strong_rand_bytes(32), 8#600),
     {ok, Vault} = quod_agent_vault:start_link(#{directory => filename:join(Dir, "keys"), unlock_file => Unlock}),
     NodeNs = <<"host-test-node">>,
-    NodeExecution = filename:join(code:priv_dir(quod), "ontologies/node_execution.pl"),
+    NodeExecution = filename:join(code:priv_dir(quod), "ontologies/node_instance.pl"),
     NodeDiff = case NodePolicy of
         current -> quod_prolog:genesis_diff(NodeExecution);
         legacy -> []
@@ -1632,10 +1786,15 @@ with_host(Fun, ExtraFacts, NodePolicy, Ns) ->
         F when is_function(F, 1) -> F(Pub);
         Facts -> Facts
     end,
+    AgentOwner = start_ontology(<<"quod:agent">>,Dir,Identity,
+        quod_prolog:genesis_diff("priv/ontologies/quod_agent.pl"),[]),
     ActorOntology = start_ontology(Ns, Dir, Identity, Diff,
-      [{can_assign_agent_host, {node, Pub}, actor, {'_'}, {'_'}, Node, {'_'}},
+      [{isa,hosted_actor,{':',quod,{':',agent,agent}}},
+       {instance_of,hosted_actor,actor}, {instance_of,hosted_actor,other},
+       {can_assign_agent_host, {node, Pub}, actor, {'_'}, {'_'}, Node, {'_'}},
        {can_assign_agent_host, {node, Pub}, actor, {'_'}, {'_'}, setelement(2, Node, <<"remote-node">>), {'_'}},
        {can_assign_agent_host, {node, Pub}, other, {'_'}, {'_'}, Node, {'_'}},
+       {can_invoke, {'_'}, {node,Pub}, {'_'}, Ns},
        {can_invoke, {'_'}, Node, {'_'}, Ns},
        {can_invoke, {record_ping, {'_'}}, {agent_instance_ref, Ns, {'_'}, actor}, {'_'}, Ns},
        {can_request_agent_signature, Node, actor, {'_'}},
@@ -1657,8 +1816,12 @@ with_host(Fun, ExtraFacts, NodePolicy, Ns) ->
     after
         quod_reg:unsubscribe({agent, Ref}),
         quod_reg:unsubscribe({agent_hosting, Ns}),
-        stop_ontology(ActorOntology), stop_ontology(NodeOntology),
+        stop_ontology(ActorOntology), stop_ontology(AgentOwner), stop_ontology(NodeOntology),
         release_host_notifications(Ns), release_host_notifications(NodeNs),
+        case quod_reg:where({foreign_log, node}) of
+            undefined -> ok;
+            Foreign -> gen_server:stop(Foreign)
+        end,
         gen_server:stop(Vault), gen_server:stop(Auth), gen_server:stop(Router),
         ok = file:delete(BeamPath),
         lists:foreach(fun({K, undefined}) -> application:unset_env(quod, K);
@@ -1715,3 +1878,6 @@ stop_ontology(Sup) ->
     Monitor = monitor(process, Sup),
     exit(Sup, shutdown),
     receive {'DOWN', Monitor, process, Sup, _} -> ok after 5000 -> error(namespace_stop_timeout) end.
+
+agent_ref(Ns,Id) -> {agent_instance_ref,Ns,quod_simplex:genesis_hash(Ns),Id}.
+agent(Goal) -> {'::',{':',quod,agent},Goal}.

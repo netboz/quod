@@ -1,0 +1,25 @@
+{
+  "command": [
+    "env",
+    "M1B_PHASE=input",
+    "M1B_NETWORK=EiMiqMbfwawhDNLqANUrPyoGuDvUyNi_7Wf2Hq9FctQ",
+    "M1B_ORIGINAL=/tmp/quod-m1b-input-01-private/original.json",
+    "M1B_RESULT=/tmp/quod-m1b-input-01-private/result.json",
+    "XDG_DATA_HOME=/tmp/quod-m1b-input-01-private/data",
+    "XDG_CONFIG_HOME=/tmp/quod-m1b-input-01-private/config",
+    "DOTNET_ROOT=/tmp/quod-m1b-no-runtime",
+    "/tmp/quod-m1b-export-10/quod.x86_64",
+    "--headless",
+    "--",
+    "--qualification",
+    "--profile",
+    "/tmp/quod-m1b-input-01-private/identity",
+    "--node",
+    "https://127.0.0.1:41587",
+    "--ca",
+    "/tmp/quod-m1b-live-02/backend-ca.pem"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 17.620324288996926
+}

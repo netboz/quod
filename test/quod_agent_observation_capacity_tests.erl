@@ -1,5 +1,6 @@
 -module(quod_agent_observation_capacity_tests).
 -include_lib("eunit/include/eunit.hrl").
+-import(quod_agent_hosting_tests, [agent/1, agent_ref/2]).
 
 observation_capacity_preserves_hosts_and_wakes_on_withdrawal_test_() ->
     [{atom_to_list(Limit), {timeout, 30, fun() -> capacity(Limit) end}}
@@ -26,7 +27,7 @@ exercise(Limit, #{namespace := Ns, node := Node, reference := Ref, key := Key}) 
                         case Limit of instances -> 2; bytes -> 3 end),
     application:set_env(quod, runtime_max_agent_observation_bytes,
                         case Limit of bytes -> Size * 2; instances -> 1048576 end),
-    commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+    commit(Ns, agent({goal, {agent_hosted, agent_ref(Ns, actor), Node, 1, Key}})),
     {Owner, Child} = receive
         {agent_installed, Runtime, Pid, #{reference := Ref, epoch := 1}, _} -> {Runtime, Pid}
     after 5000 -> error(local_agent_not_installed) end,

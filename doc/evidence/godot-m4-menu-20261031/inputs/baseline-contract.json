@@ -1,0 +1,31 @@
+{
+  "parent_manifest": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-morning-journey-20261031/inputs/client-morning-product02-manifest.json",
+  "sha256": "895a65d444367cd85d6bcea63178a5a7aa43dc101560a2a633cdf46c57e79ecb",
+  "sources": {
+    "client/godot/OpenXRInput.cs": {
+      "before": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/inputs/OpenXRInput.cs.before",
+      "sha256": "d3fc51482e09c8387345761ceaa39cbf223a48aad802db1399c0a6ba64b9d954",
+      "mode": 33188
+    },
+    "client/godot/README.md": {
+      "before": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/inputs/README.md.before",
+      "sha256": "20a2918b028739950d3d385645a20a9fd1f42a78e068f89389103736752f9ac8",
+      "mode": 33188
+    },
+    "client/godot/tests/WorkspaceChecks.cs": {
+      "before": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/inputs/WorkspaceChecks.cs.before",
+      "sha256": "32faae6b9e999d9acd97a0cd2eb5764524f5f54b0a38399cc0a7a7f3eacd058a",
+      "mode": 33188
+    },
+    "client/godot/tests/ControllerChecks.cs": {
+      "before": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/inputs/ControllerChecks.cs.before",
+      "sha256": "39342251e90dc7cbd4abcae938a585f2770ed5f672fa0907cb0bde2522951832",
+      "mode": 33188
+    },
+    "client/godot/SpatialGui.cs": {
+      "before": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-menu-20261031/inputs/SpatialGui.cs.before",
+      "sha256": "84a3f6085f1e6b2ad91106785595701c3a14fb56988f87f4383689c77fd791bc",
+      "mode": 33188
+    }
+  }
+}

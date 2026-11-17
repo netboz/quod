@@ -7,6 +7,7 @@ keypairs, so the crypto path is exercised end-to-end. Real multi-node QUIC behav
 are covered by `simplex_SUITE`.
 """.
 -include_lib("eunit/include/eunit.hrl").
+-include("retired_remaining_sizes.hrl").
 -include_lib("opentelemetry/include/otel_span.hrl").
 -include("quod_ledger.hrl").
 -include("quod_ingress_limits.hrl").
@@ -6113,7 +6114,7 @@ queued_membership_stops_the_drain_test() ->
 %% Capacity backpressure is author-local. A large A1 that cannot join the open
 %% batch holds A2 behind it, preserving signed author sequence, while a small B
 %% may fill the otherwise usable block. The held pair is restored in order.
-blocked_author_does_not_block_other_authors_test() ->
+large_author_keeps_order_without_blocking_other_authors_test() ->
     Committee = committee(4),
     Validators = pubs(Committee),
     {Me, MyId} = lists:keyfind(quod_simplex:leader(4, Validators), 1, Committee),
@@ -6121,11 +6122,11 @@ blocked_author_does_not_block_other_authors_test() ->
         [P || {Pub, _} = P <- Committee, Pub =/= Me],
     Filler = signed_tx(
                <<"t">>, <<"batch-filler">>,
-               [{assert, {{blob, binary:copy(<<1>>, ?MAX_BLOCK_BYTES * 4 div 5)}, true}}],
+               [{assert, {{blob, binary:copy(<<1>>, ?LEGACY_MAX_BLOCK_BYTES * 4 div 5)}, true}}],
                {FillerAuthor, FillerId}),
     A1 = signed_tx_seq(
            <<"t">>, <<"a-large">>, 10,
-           [{assert, {{blob, binary:copy(<<2>>, ?MAX_BLOCK_BYTES div 2)}, true}}],
+           [{assert, {{blob, binary:copy(<<2>>, ?LEGACY_MAX_BLOCK_BYTES div 2)}, true}}],
            {AuthorA, IdA}),
     A2 = signed_tx_seq(
            <<"t">>, <<"a-small">>, 11,
@@ -6150,26 +6151,19 @@ blocked_author_does_not_block_other_authors_test() ->
     A1Origin = quod_simplex:test_relay_origin(AuthorA, 4, A1, Queued),
     A2Origin = quod_simplex:test_relay_origin(AuthorA, 4, A2, Queued),
     BOrigin = quod_simplex:test_relay_origin(AuthorB, 4, B, Queued),
-    ?assertMatch({park, _},
+    ?assertEqual({collect, 4},
                  quod_simplex:test_route(drain, A1Origin, A1, Queued)),
     ?assertEqual({collect, 4},
                  quod_simplex:test_route(drain, A2Origin, A2, Queued)),
     ?assertEqual({collect, 4},
                  quod_simplex:test_route(drain, BOrigin, B, Queued)),
     {Drained, _Actions} = quod_simplex:test_drain(Queued),
-    {2, _, #{AuthorA := 2},
-     [{relayed, A1Id, _}, {relayed, A2Id, _}]} =
-        quod_simplex:test_ingress(Drained),
-    ?assertEqual(A1#transaction.tx_id, A1Id),
-    ?assertEqual(A2#transaction.tx_id, A2Id),
-    ?assertEqual(2, maps:get(appends, quod_simplex:stats_map(Drained))),
+    {0, 0, _, []} = quod_simplex:test_ingress(Drained),
+    ?assertEqual(4, maps:get(appends, quod_simplex:stats_map(Drained))),
     ?assertNot(quod_simplex:test_ingress_needs_drain(Drained, Drained)).
 
-%% The first pass can itself change routing: B and C fill and seal slot 4 while
-%% A1/A2 are held behind A1's capacity block. The second pass must then revisit A
-%% and reject its now-closed exact target. A one-pass drain leaves both A requests
-%% stranded even though the route changed during the same statem event.
-drain_rechecks_held_authors_after_route_change_test() ->
+%% All queued material is retained without an artificial batch-byte closure.
+large_batch_drain_preserves_all_authors_test() ->
     Committee = committee(5),
     Validators = pubs(Committee),
     {Me, MyId} = lists:keyfind(quod_simplex:leader(4, Validators), 1, Committee),
@@ -6178,11 +6172,11 @@ drain_rechecks_held_authors_after_route_change_test() ->
         [P || {Pub, _} = P <- Committee, Pub =/= Me],
     Filler = signed_tx(
                <<"t">>, <<"multipass-filler">>,
-               [{assert, {{blob, binary:copy(<<1>>, ?MAX_BLOCK_BYTES * 4 div 5)}, true}}],
+               [{assert, {{blob, binary:copy(<<1>>, ?LEGACY_MAX_BLOCK_BYTES * 4 div 5)}, true}}],
                {FillerAuthor, FillerId}),
     A1 = signed_tx_seq(
            <<"t">>, <<"multipass-a-large">>, 10,
-           [{assert, {{blob, binary:copy(<<2>>, ?MAX_BLOCK_BYTES div 2)}, true}}],
+           [{assert, {{blob, binary:copy(<<2>>, ?LEGACY_MAX_BLOCK_BYTES div 2)}, true}}],
            {AuthorA, IdA}),
     A2 = signed_tx_seq(
            <<"t">>, <<"multipass-a-small">>, 11,
@@ -6210,8 +6204,8 @@ drain_rechecks_held_authors_after_route_change_test() ->
     {Drained, _Actions} = quod_simplex:test_drain(Queued),
     {0, 0, _, []} = quod_simplex:test_ingress(Drained),
     Stats = quod_simplex:stats_map(Drained),
-    ?assertEqual(3, maps:get(appends, Stats)),
-    ?assertEqual(2, maps:get(r_redirect, Stats)).
+    ?assertEqual(5, maps:get(appends, Stats)),
+    ?assertEqual(0, maps:get(r_redirect, Stats)).
 
 %% A participant can temporarily lose voting capability while recovering or while a
 %% finality cert arrives before its block. Unsigned local work and authenticated
@@ -6252,10 +6246,8 @@ queued_work_survives_temporary_unready_state_test() ->
     {0, 0, _, []} = quod_simplex:test_ingress(Drained),
     ?assertEqual(1, maps:get(appends, quod_simplex:stats_map(Drained))).
 
-%% Shared and per-author bounds: overflow is the only remaining live source of busy.
-%% A foreign author reaches this node only over the signed relay, so its park rides
-%% the relayed entry; the flooding author's overflow never blocks anyone else's seat.
-ingress_overflow_and_author_cap_test() ->
+%% The real append owner retains every distinct waiter while consensus is blocked.
+ingress_retains_all_authors_test() ->
     Committee = committee(2),
     Validators = pubs(Committee),
     %% the node that leads the blocked-time floor (slot 6) — local items park HERE
@@ -6264,24 +6256,24 @@ ingress_overflow_and_author_cap_test() ->
     Blocked = st(#{self => Me, id => Id, validators => Validators, sync => ready,
                    slot => 3, history_head => {3, quod_simplex:block_hash(blk(3))},
                    eng => notarized_prefix(Committee, 3, 5)}),
-    %% Fill one author to its fair-share cap (64). Planting the queue directly
-    %% isolates the queue bounds from source-side target selection.
+    %% Seed the historical boundary; the existing append owner must retain
+    %% another waiter without altering source-side target selection.
     S64 = quod_simplex:test_state_set(
             ingress,
             [{local, {self(), make_ref()}, lt(N, Me),
               quod_time:mono_ms() + N} || N <- lists:seq(1, 64)],
             Blocked),
     {64, _, #{Me := 64}, _} = quod_simplex:test_ingress(S64),
-    %% the 65th from the SAME author overflows busy; another author still parks
+    %% Both the next waiter and another author remain queued.
     FromB = {self(), make_ref()},
     {S65, A65} = quod_simplex:test_append(FromB, lt(65, Me), S64),
-    ?assert(lists:member({reply, FromB, {error, busy}}, A65)),
-    ?assertEqual(1, maps:get(ingress_overflow, quod_simplex:stats_map(S65))),
+    ?assertEqual([], A65),
+    ?assertMatch({65, _, #{Me := 65}, _}, quod_simplex:test_ingress(S65)),
     OtherTx = signed_tx(<<"t">>, <<"other-park">>,
                         [{assert, {{other, fact}, true}}], {Other, OtherId}),
     {S66, []} = quod_simplex:test_relayed_append(
                   Other, OtherTx, S65),
-    {65, _, #{Other := 1}, _} = quod_simplex:test_ingress(S66).
+    {66, _, #{Me := 65, Other := 1}, _} = quod_simplex:test_ingress(S66).
 
 %% TTL expiry fails VISIBLY (busy) and walks only the queue head — a stalled cluster
 %% must never silently hold callers hostage.
@@ -7148,9 +7140,9 @@ same_lane_partial_completion_and_view_change_retargets_cohort_test() ->
     assert_no_reply(From4).
 
 %% Ready custody always precedes this author's later unsigned ingress. In
-%% particular, a large lower sequence that cannot fit the remaining active
-%% batch must stop a later small write that otherwise could join and commit.
-ready_lower_sequence_capacity_block_prevents_local_overtake_test() ->
+%% particular, a retained lower sequence keeps a later write parked until
+%% custody has placed it, even when both can join the active batch.
+ready_lower_sequence_keeps_priority_without_byte_quota_test() ->
     Committee = committee(4),
     Validators = pubs(Committee),
     Target4 = quod_simplex:leader(4, Validators),
@@ -7167,11 +7159,11 @@ ready_lower_sequence_capacity_block_prevents_local_overtake_test() ->
            author = Me, sig = none, read_check = #{},
            diff =
                [{assert,
-                 {{blob, binary:copy(<<1>>, ?MAX_BLOCK_BYTES div 2)}, true}}]}),
+                 {{blob, binary:copy(<<1>>, ?LEGACY_MAX_BLOCK_BYTES div 2)}, true}}]}),
     Filler =
         signed_tx(
           <<"t">>, <<"ready-order-filler">>,
-          [{assert, {{blob, binary:copy(<<2>>, ?MAX_BLOCK_BYTES * 4 div 5)}, true}}],
+          [{assert, {{blob, binary:copy(<<2>>, ?LEGACY_MAX_BLOCK_BYTES * 4 div 5)}, true}}],
           {FillerAuthor, FillerId}),
     Small = bind_test_id(
         #transaction{
@@ -7214,7 +7206,7 @@ ready_lower_sequence_capacity_block_prevents_local_overtake_test() ->
         quod_simplex:test_relayed_append(
           FillerAuthor, Filler, Ready),
     ?assertEqual(
-       {park, awaiting_turn},
+       {collect, 5},
        quod_simplex:test_route(
          drain, {custody, SubmissionId}, SignedLower, WithBatch)),
 
@@ -7224,14 +7216,14 @@ ready_lower_sequence_capacity_block_prevents_local_overtake_test() ->
     {1, _, #{Me := 1}, [{local, SmallId, _}]} =
         quod_simplex:test_ingress(ParkedSmall),
     ?assertEqual(Small#transaction.tx_id, SmallId),
-    {CustodyHeld, []} =
+    {CustodyHeld, _} =
         quod_simplex:test_drain_custody(ParkedSmall),
-    {StillHeld, []} = quod_simplex:test_drain(CustodyHeld),
-    [{SubmissionId, 1, Submission, ready, Deadline, 1}] =
-        quod_simplex:test_custody(StillHeld),
-    {1, _, #{Me := 1}, [{local, SmallId, _}]} =
-        quod_simplex:test_ingress(StillHeld),
-    ?assertEqual(1, maps:get(appends, quod_simplex:stats_map(StillHeld))),
+    {StillHeld, _} = quod_simplex:test_drain(CustodyHeld),
+    [{SubmissionId, 1, Submission, {local, 5}, Deadline, 2},
+     {_, 2, _, {local, 5}, _, 1}] =
+        lists:keysort(2, quod_simplex:test_custody(StillHeld)),
+    {0, 0, _, []} = quod_simplex:test_ingress(StillHeld),
+    ?assertEqual(3, maps:get(appends, quod_simplex:stats_map(StillHeld))),
     assert_no_reply(LowerFrom),
     assert_no_reply(SmallFrom).
 
@@ -8967,8 +8959,8 @@ verify_cert_caps_sigs_test() ->
     Wrapped = Good#cert{slot = (1 bsl 64) + 1},
     ?assertNot(quod_simplex:verify_cert(?DOMAIN, Wrapped, Vals)).
 
-validator_cap_certificate_boundary_test() ->
-    N = ?MAX_VALIDATORS,
+committee_certificate_uses_actual_population_test() ->
+    N = ?LEGACY_MAX_VALIDATORS,
     Ids = committee(N + 1),
     AtLimitIds = take(N, Ids),
     AtLimitVals = pubs(AtLimitIds),
@@ -8986,11 +8978,16 @@ validator_cap_certificate_boundary_test() ->
     Cert = #cert{kind = support, era = ?FIXTURE_ERA, slot = 1, block_hash = H,
                  sigs = [{Share#share.signer, Share#share.sig}
                          || Share <- Shares]},
-    ?assertNot(quod_simplex:verify_cert(?DOMAIN, Cert, Vals)),
+    ?assert(quod_simplex:verify_cert(?DOMAIN, Cert, Vals)),
+    {ok, Formed} = quod_simplex:form_cert(
+                     ?DOMAIN, support, {?FIXTURE_ERA, 1}, H, Shares, Vals),
+    ?assert(quod_simplex:verify_cert(?DOMAIN, Formed, Vals)),
+    ?assertNot(quod_simplex:verify_cert(<<16#52:256>>, Formed, Vals)),
     ?assertEqual(
        {error, insufficient},
        quod_simplex:form_cert(
-         ?DOMAIN, support, {?FIXTURE_ERA, 1}, H, Shares, Vals)).
+         ?DOMAIN, support, {?FIXTURE_ERA, 1}, H,
+         lists:droplast(Shares), Vals)).
 
 %%%===================================================================
 %%% consensus engine — certificate pool + block tree (§2.3)
@@ -9583,13 +9580,13 @@ membership_gate_test() ->
                  tx([{assert, {{peer_admitted, na, undefined, undefined, na}, true}}]), [A])),
     ?assertNot(quod_simplex:membership_change_ok(tx([{retract, garbage}]), [A])).  %% catch-all is total
 
-membership_gate_enforces_validator_cap_test() ->
-    Current = [<<I:256>> || I <- lists:seq(1, ?MAX_VALIDATORS)],
-    Candidate = <<(?MAX_VALIDATORS + 1):256>>,
+membership_gate_uses_shape_and_permission_not_population_test() ->
+    Current = [<<I:256>> || I <- lists:seq(1, ?LEGACY_MAX_VALIDATORS)],
+    Candidate = <<(?LEGACY_MAX_VALIDATORS + 1):256>>,
     ?assert(quod_simplex:membership_change_ok(
               tx([pa(lists:last(Current))]),
-              lists:sublist(Current, ?MAX_VALIDATORS - 1))),
-    ?assertNot(quod_simplex:membership_change_ok(
+              lists:sublist(Current, ?LEGACY_MAX_VALIDATORS - 1))),
+    ?assert(quod_simplex:membership_change_ok(
                  tx([pa(Candidate)]), Current)),
     %% Reasserting an existing member does not grow the set and remains a
     %% shape-valid no-op for the later KB verdict to classify.
@@ -9614,6 +9611,12 @@ transaction_shape_gate_test() ->
     [A] = pubs(committee(1)),
     Good = tx([{assert, {{ok, x}, true}}]),
     ?assert(quod_simplex:change_acceptable(Good, [A])),
+    ?assert(quod_simplex:change_acceptable(
+                 Good#transaction{diff = [{abolish, {ok, 1}}]}, [A])),
+    ?assertNot(quod_simplex:change_acceptable(
+                 Good#transaction{diff = [{abolish, {peer_admitted, 4}}]}, [A])),
+    ?assertNot(quod_simplex:change_acceptable(
+                 Good#transaction{diff = [{abolish, {ok, -1}}]}, [A])),
     ?assertNot(quod_simplex:change_acceptable(Good#transaction{diff = [garbage]}, [A])),
     ?assertNot(quod_simplex:change_acceptable(
                  Good#transaction{diff = [{assert, {42, true}}]}, [A])),
@@ -10117,7 +10120,7 @@ unique_gate_namespace(Label) ->
       (integer_to_binary(erlang:unique_integer([positive])))/binary>>.
 
 with_simplex_gate(Ns, Row, Fun) ->
-    Name = binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
+    Name = binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
     Tab = ets:new(Name, [named_table, protected, set]),
     true = ets:insert(Tab, [{anchor, <<0:256>>}, Row]),
     try Fun(Tab)
@@ -10300,3 +10303,55 @@ assert_no_transport_cast() ->
     end.
 
 result_state(Result) -> element(2, Result).
+
+outbox_preserves_every_distinct_frame_and_deduplicates_test() ->
+    Frames = [<<N:64>> || N <- lists:seq(1, 1025)],
+    Buffered = lists:foldl(fun quod_simplex:buffer_frame/2, [], Frames),
+    ?assertEqual(lists:reverse(Frames), Buffered),
+    ?assertEqual(Buffered, quod_simplex:buffer_frame(hd(Frames), Buffered)).
+
+held_membership_rechecks_after_same_event_batch_seal_test() ->
+    Committee = committee(4), Validators = pubs(Committee),
+    {Me, MyId} = lists:keyfind(quod_simplex:leader(4, Validators), 1, Committee),
+    [{A, IdA}, {B, IdB}, {C, IdC}] = [P || {Pub, _} = P <- Committee, Pub =/= Me],
+    First = signed_tx(<<"t">>, <<"fixed-point-first">>, [{assert, {{ordinary, first}, true}}], {B, IdB}),
+    Second = signed_tx(<<"t">>, <<"fixed-point-second">>, [{assert, {{ordinary, second}, true}}], {C, IdC}),
+    Membership = signed_tx_seq(<<"t">>, <<"fixed-point-member">>, 10, [pa(<<99:256>>)], {A, IdA}),
+    Tail = signed_tx_seq(<<"t">>, <<"fixed-point-tail">>, 11, [{assert, {{ordinary, tail}, true}}], {A, IdA}),
+    Base = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
+                slot => 3, history_head => {3, <<1:256>>}, eng => root_engine(3)}),
+    Now = quod_time:mono_ms(),
+    Queued = quod_simplex:test_state_set(ingress,
+        [{relayed, B, 4, First, Now}, {relayed, C, 4, Second, Now + 1},
+         {relayed, A, 4, Membership, Now + 2}, {relayed, A, 4, Tail, Now + 3}], Base),
+    %% The first two ordinary items form a batch. Membership cannot join it;
+    %% stopping that pass seals the batch and closes its exact relay target.
+    %% A single pass leaves the last two rows stranded. The existing fixed-point
+    %% owner must revisit and redirect both during this same test_drain call.
+    {Drained, Actions} = quod_simplex:test_drain(Queued),
+    ?assert(lists:member({{timeout, batch}, cancel}, Actions)),
+    ?assertMatch({0, 0, _, []}, quod_simplex:test_ingress(Drained)),
+    Stats = quod_simplex:stats_map(Drained),
+    ?assertEqual(2, maps:get(appends, Stats)),
+    ?assertEqual(2, maps:get(r_redirect, Stats)),
+    ?assertNot(quod_simplex:test_ingress_needs_drain(Drained, Drained)).
+
+relay_queue_retains_distinct_signed_submissions_above_former_quotas_test() ->
+    Committee = committee(2), Validators = pubs(Committee),
+    {Me, Id} = lists:keyfind(quod_simplex:leader(6, Validators), 1, Committee),
+    [{Other, OtherId}] = [P || {Pub, _} = P <- Committee, Pub =/= Me],
+    Blocked = st(#{self => Me, id => Id, validators => Validators, sync => ready,
+        slot => 3, history_head => {3, quod_simplex:block_hash(blk(3))},
+        eng => notarized_prefix(Committee, 3, 5)}),
+    Transactions = [signed_tx_seq(<<"t">>, <<"queued-", (integer_to_binary(N))/binary>>,
+        N, [{assert, {{queued_item, N}, true}}], {Other, OtherId})
+        || N <- lists:seq(1, 513)],
+    Queued = lists:foldl(fun(Tx, S) ->
+        {Next, []} = quod_simplex:test_relayed_append(Other, Tx, S), Next
+    end, Blocked, Transactions),
+    {513, _, #{Other := 513}, Rows} = quod_simplex:test_ingress(Queued),
+    ?assertEqual([Tx#transaction.tx_id || Tx <- Transactions],
+                 [TxId || {relayed, TxId, _} <- Rows]),
+    {Unchanged, []} = quod_simplex:test_drain(Queued),
+    ?assertEqual(quod_simplex:test_ingress(Queued), quod_simplex:test_ingress(Unchanged)),
+    ?assertNot(quod_simplex:test_ingress_needs_drain(Queued, Unchanged)).

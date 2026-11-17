@@ -1,0 +1,6 @@
+error: Your local changes to the following files would be overwritten by checkout:
+	src/erlog_int.erl
+	src/erlog_int.hrl
+	test/erlog_failure_reasons_tests.erl
+Please commit your changes or stash them before you switch branches.
+Aborting

@@ -1,0 +1,118 @@
+--- client/godot/Core/Transport.cs before
+
++++ client/godot/Core/Transport.cs
+
+@@ -12,6 +12,7 @@
+
+ 
+ public sealed class ApiError(string message, int status, bool definite = false) : Exception(message)
+ { public int Status { get; } = status; public bool Definite { get; } = definite; }
++public sealed record ProofPreview(string Cursor,SignedWork Work,ulong Deadline,JsonNode Reply);
+ public static class Json
+ {
+     public static string S(JsonNode? value, string key) => value?[key]?.GetValue<string>() ?? throw new FormatException("Missing " + key);
+@@ -128,10 +129,15 @@
+
+     public Task<JsonNode> SendDeadline(string route, JsonObject body, CancellationToken cancellation) => SendAt(route, body, Deadline, cancellation);
+     public async Task<JsonNode> SendAt(string route, JsonObject body, ulong deadline, CancellationToken cancellation)
+     {
+-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+-        if (deadline <= Now) throw new TimeoutException("Original request deadline expired.");
+-        timeout.CancelAfter(TimeSpan.FromMilliseconds(deadline - Now));
++        using var timeout = RequestBudget(deadline,cancellation);
+         return await Transport.Send(route, body, timeout.Token);
++    }
++    static CancellationTokenSource RequestBudget(ulong deadline,CancellationToken cancellation)
++    {
++        cancellation.ThrowIfCancellationRequested();ulong now=Now;
++        if(deadline<=now)throw new TimeoutException("Original request deadline expired.");
++        var timeout=CancellationTokenSource.CreateLinkedTokenSource(cancellation);
++        timeout.CancelAfter(TimeSpan.FromMilliseconds(deadline-now));return timeout;
+     }
+     public async Task<JsonNode> Execute(Actor actor, string goal, string flow, CancellationToken cancellation)
+     {
+@@ -152,11 +158,18 @@
+
+     }
+     async Task<JsonNode> Dispatch(SignedWork work, JsonObject body, string route, CancellationToken cancellation, ulong? expiry = null)
+     {
++        ulong deadline=expiry??Deadline;
++        using(var admitted=RequestBudget(deadline,cancellation)) { }
+         // Recovery is conservative even for a crash between durable save and send.
+         store.Update(s => s.Pending.Add(work));
+-        if (cancellation.IsCancellationRequested) { Forget(work.Id); cancellation.ThrowIfCancellationRequested(); }
+         try {
+-            var reply = await SendAt(route, body, expiry ?? Deadline, cancellation);
++            // Persistence can consume the remaining allowance. Only this local
++            // pre-send refusal is known not to have reached the transport.
++            CancellationTokenSource timeout;
++            try { timeout=RequestBudget(deadline,cancellation); }
++            catch { Forget(work.Id);throw; }
++            using var sending=timeout;
++            var reply = await Transport.Send(route, body, timeout.Token);
+             if (!Json.Terminal(reply) && reply["result"]?.ToString() != "pending" && reply["status"]?.ToString() != "pending")
+                 throw new FormatException("Unrecognized write reply; original work retained.");
+             if (!Json.Terminal(reply) && reply["group_id"] != null) {
+@@ -167,7 +180,7 @@
+
+                     s.Pending[index] = work with { OutcomeReference = reference.ToJsonString() }; });
+             }
+             // Account handoffs consume results together with their original work.
+-            if (work.Flow is not ("signup" or "setup") && Json.Terminal(reply)) Forget(work.Id);
++            if (work.Flow is not ("signup" or "setup") && Json.Terminal(reply)) Finish(work,reply);
+             return reply;
+         } catch (ApiError error) {
+             // Only installed pre-submission refusals can discard original work.
+@@ -176,6 +189,14 @@
+
+         }
+     }
+     public void Forget(string id) => store.Update(s => s.Pending.RemoveAll(w => w.Id == id));
++    public void Finish(SignedWork original,JsonNode reply)
++    {
++        if(!Json.Terminal(reply))return;
++        store.Update(s=>{
++            s.Pending.RemoveAll(w=>w.Id==original.Id);
++            if(Json.Committed(reply) && original.SourceDraft!=null && s.SourceDrafts.GetValueOrDefault(original.Flow)==original.SourceDraft)s.SourceDrafts.Remove(original.Flow);
++        });
++    }
+     public async Task<JsonNode> Resolve(SignedWork work, CancellationToken cancellation)
+     {
+         if (work.Network != Network) throw new InvalidOperationException("Work belongs to another network.");
+@@ -191,15 +212,31 @@
+
+     }
+     public static string ViewGoal(Actor target, Term goal) =>
+         $"{Term.Text(target.Namespace)}::(current_ontology_identity({Term.Text(target.Namespace)},{Term.Binary(Identity.Decode(target.Anchor))}),{goal}).";
+-    public async Task<string> ReadSource(Actor human, Actor tools, Actor target, CancellationToken cancellation)
+-    {
+-        var signed = Sign(human, ViewGoal(tools, Term.Call("prolog_source", target.Ontology, Term.Variable("Source"))), 2);
++    public async Task<ProofPreview> Preview(Actor actor,string goal,string flow,SourceDraft draft,CancellationToken cancellation)
++    {
++        var signed=Sign(actor,goal,2);
++        var reply=await SendAt("/api/goals/cursors",signed.Body,signed.Deadline,cancellation);
++        if(reply["result"]?.ToString()!="solution")throw new InvalidOperationException("Edit preview refused: "+reply.ToJsonString());
++        return new(Json.S(reply,"cursor"),new(Identity.Digest(signed.Bytes),Network,actor,Json.S(signed.Body,"request"),Json.S(signed.Body,"signature"),flow,SourceDraft:draft),signed.Deadline,reply);
++    }
++    public Task<JsonNode> Accept(ProofPreview preview,CancellationToken cancellation) =>
++        Dispatch(preview.Work,new() { ["session_id"]=SessionId },"/api/goals/cursors/"+Uri.EscapeDataString(preview.Cursor)+"/accept",cancellation,preview.Deadline);
++    public async Task Stop(ProofPreview preview)
++    {
++        using var until=new CancellationTokenSource(TimeSpan.FromMilliseconds(preview.Deadline>Now ? preview.Deadline-Now : 1));
++        await Transport.Send("/api/goals/cursors/"+Uri.EscapeDataString(preview.Cursor),new() { ["session_id"]=SessionId },until.Token,HttpMethod.Delete);
++    }
++    public Task<string> ReadSource(Actor human, Actor tools, Actor target, CancellationToken cancellation) =>
++        ReadSource(human,ViewGoal(tools,Term.Call("prolog_source",target.Ontology,Term.Variable("Source"))),"Source",cancellation);
++    public async Task<string> ReadSource(Actor human,string goal,string binding,CancellationToken cancellation)
++    {
++        var signed = Sign(human,goal,2);
+         var reply = await SendAt("/api/goals/cursors", signed.Body, signed.Deadline, cancellation);
+         string? cursor = null; var text = new StringBuilder(); var decoder = new UTF8Encoding(false, true).GetDecoder();
+         try {
+             while (reply["result"]?.ToString() == "solution") {
+                 cancellation.ThrowIfCancellationRequested(); cursor = Json.S(reply, "cursor");
+-                var chunk = Json.Binding(reply, "Source").Require("source_chunk", 2);
++                var chunk = Json.Binding(reply,binding).Require("source_chunk",2);
+                 if (chunk[0].Name is not ("more" or "done") || chunk[1].Kind != "binary") throw new FormatException("Invalid source chunk.");
+                 var chars = new char[Encoding.UTF8.GetMaxCharCount(chunk[1].Bytes.Length)];
+                 int count = decoder.GetChars(chunk[1].Bytes, chars, chunk[0].Name == "done"); text.Append(chars, 0, count);

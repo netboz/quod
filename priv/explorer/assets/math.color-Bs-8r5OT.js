@@ -1,0 +1,1 @@
+import{r as e}from"./math.color.pure-O66DKPA8.js";e();

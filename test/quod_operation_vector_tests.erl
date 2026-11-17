@@ -1,9 +1,9 @@
 -module(quod_operation_vector_tests).
 -include_lib("eunit/include/eunit.hrl").
 
-canonical_one_two_four_targets_test() ->
+canonical_target_populations_test() ->
     lists:foreach(fun(N) ->
-        Refs = [ref(I) || I <- lists:seq(1, N)],
+        Refs = lists:sort([ref(I) || I <- lists:seq(1, N)]),
         ?assertEqual({ok, Refs}, quod_operation_vector:references(lists:reverse(Refs))),
         {ok, Rows} = quod_ct:certified_receipt(lists:reverse(Refs)),
         ?assertEqual(Refs, [R || {_, {certified, R, _}} <- Rows]),
@@ -12,7 +12,7 @@ canonical_one_two_four_targets_test() ->
             ?assertEqual({ok, R}, quod_operation_vector:lookup(
                 quod_operation_vector:target(R), Refs))
         end, Refs)
-    end, [1, 2, 4]).
+    end, [1, 2, 4, 9, 16]).
 
 duplicate_target_cannot_be_hidden_by_another_transaction_id_test() ->
     R = ref(1),

@@ -1,0 +1,42 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-m4-vive-space-action-cue-20261031/binding_checks.py"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 0,
+  "timed_out": false,
+  "driver_inputs": {
+    "binding_checks.py": "5ae077c2e5f61410b9acdde9c255af803c0c31f005c472845ec268c52b82d5ec",
+    "build.py": "2f71593b790fe62bdcb979d9087549cac76ccc4d9c0f2c6b023cefe8acbbaa0b",
+    "cue_hashes.py": "0cec06be894a6923314910931fe5f606177ba5359dca6521e82aa04dc4e69716",
+    "run.py": "bb083951b41f9578d6ec35bd5fc6e51eb645475936642f1b9e2b725e138a4479"
+  },
+  "start_utc": "2026-10-31T00:43:31Z",
+  "elapsed_seconds": 1.5693097114562988,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/space-action-cue-binding01/stdout.raw",
+      "sha256": "d67d65269db646693bd77c71f55c29e88a304461efa1e117fbd0b9436331630b",
+      "bytes": 1538
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/space-action-cue-binding01/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-space-action-cue-20261031/logs/space-action-cue-binding01-stdout.log",
+      "sha256": "d67d65269db646693bd77c71f55c29e88a304461efa1e117fbd0b9436331630b",
+      "bytes": 1538
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-space-action-cue-20261031/logs/space-action-cue-binding01-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

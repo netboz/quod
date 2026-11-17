@@ -1,0 +1,11 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-onboarding-usability-20261101/build.py",
+    "onboarding-candidate07"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 36.42052538198186
+}

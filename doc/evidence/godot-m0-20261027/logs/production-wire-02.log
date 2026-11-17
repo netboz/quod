@@ -1,0 +1,18 @@
+node:internal/modules/run_main:111
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+
+  assert.ok(summaries.some(r=>r.operation==='controller_restore'))
+
+    at file:///home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m0-20261027/production-wire-check.mjs:25:8 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v26.10.0

@@ -539,7 +539,6 @@ local_subscription_reaches_one_shared_ready_projection_test_() ->
            #{followed_histories := 1, follow_consumers := 1,
              projection_workers := 1, follow_building := 0,
              follow_unreachable := 0}, FollowStats),
-        ?assert(maps:get(follow_pages, FollowStats) > 0),
         ?assert(maps:get(follow_entries, FollowStats) > 0),
         ?assert(maps:get(projection_rebuilds, FollowStats) > 0),
         ?assertMatch(
@@ -1327,6 +1326,7 @@ with_resource_fixture(Fun) -> with_resource_fixture(Fun, #{}).
 with_resource_fixture(Fun, Config) -> with_resource_fixture(Fun, Config, []).
 
 with_resource_fixture(Fun, Config, ExtraTerms) ->
+    quod_agent_hosting_tests:with_host(fun(_) ->
     {ok, _} = application:ensure_all_started(gproc),
     true = quod_reg:reg({runtime_test, resource_reader}),
     BeamPath = filename:join(filename:dirname(code:which(quod_predicates)),
@@ -1349,7 +1349,8 @@ with_resource_fixture(Fun, Config, ExtraTerms) ->
         cleanup_founded(F),
         gproc:unreg(quod_reg:name({runtime_test, resource_reader})),
         file:delete(BeamPath)
-    end.
+    end
+    end).
 
 resource_request(Ns, Height, Scope) ->
     Parent = self(),

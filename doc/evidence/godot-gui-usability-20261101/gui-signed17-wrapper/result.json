@@ -1,0 +1,13 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-gui-usability-20261101/signed.py",
+    "gui-signed17",
+    "doc/evidence/godot-gui-usability-20261101/inputs/client-gui-usability-final17-manifest.json",
+    "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source"
+  ],
+  "exit": 1,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 51.357554733986035
+}

@@ -1,0 +1,3 @@
+applied_floor=4
+operation state={terminal,2} first_slot=2 outcome_kind=group
+group complete_slot=4

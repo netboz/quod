@@ -1,0 +1,19 @@
+{
+  "tool_request": {
+    "provider": "claude-code",
+    "model": "claude-code:fable",
+    "toolScope": "read",
+    "title": "Godot M0 Fable review"
+  },
+  "response": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"sessionId\": \"f88942ed-05f0-4674-8db3-1259feb25d99\",\n  \"title\": \"Godot M0 Fable review\",\n  \"provider\": \"claude-code\",\n  \"model\": \"claude-code:fable\",\n  \"worktreeId\": null,\n  \"worktreePath\": null,\n  \"worktreeMode\": \"none\",\n  \"createdBySessionId\": \"31de17b5-0309-4c06-bd10-826ecd280745\",\n  \"queuedInitialPrompt\": true,\n  \"parentSessionId\": \"31de17b5-0309-4c06-bd10-826ecd280745\",\n  \"effortLevel\": null\n}"
+      }
+    ],
+    "isError": false
+  },
+  "input_snapshot": "/tmp/quod-godot-m0-handoff-31de17b5-20261027-03",
+  "snapshot_manifest_sha256": "c2707706e34907cc63de3042c6ad21722ef1634039d9b1a73414bb9c088b17d9"
+}

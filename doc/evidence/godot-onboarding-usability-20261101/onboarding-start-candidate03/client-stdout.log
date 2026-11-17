@@ -1,0 +1,12 @@
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS current startup raster retained
+PASS fresh offline profile permits key creation/import only
+PASS first-run presentation excludes unavailable account workspace actions
+PASS fresh first action is recognizable as the primary action
+ONBOARDING_PASS
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>

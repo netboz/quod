@@ -1,0 +1,74 @@
+{
+  "server_command": [
+    "python3",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/serve.py",
+    "physics-final04-server",
+    "--stage",
+    "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+    "--profile",
+    "prod",
+    "--qualified",
+    "--physics"
+  ],
+  "passed": true,
+  "native_input": [
+    {
+      "command": [
+        "ydotool",
+        "key",
+        "17:1"
+      ],
+      "child_exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "owned_pid": 521042,
+      "before_pid": 521042,
+      "after_pid": 521042
+    },
+    {
+      "command": [
+        "ydotool",
+        "key",
+        "17:0"
+      ],
+      "child_exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "owned_pid": 521042,
+      "before_pid": 521042,
+      "after_pid": 521042
+    }
+  ],
+  "driver_inputs": {
+    "doc/evidence/godot-m4-20261029/physics-campaign.py": "db562bcf4732896b1f62cc2226b1c83cadc6aa41545c9b42a1ae019ecad8f2e0",
+    "client/godot-tests/desktop_input.py": "8ae06b2a0f0e6c30b76636b5a0590f48370c66ba7f256c70e15426d279f18d26"
+  },
+  "retained_drivers": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/inputs/physics-final04-drivers",
+  "endpoint": {
+    "port": 39325,
+    "physics": true,
+    "control_port": 33393,
+    "network": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACo"
+  },
+  "private_key_transfer": {
+    "command": [
+      "docker",
+      "cp",
+      "quod-m4-live-physics-final04-server:/m1b/viewer.json",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/physics-final04/viewer.json"
+    ],
+    "child_exit": 0
+  },
+  "client_command": [
+    "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-final02/source/client/godot/dist/quod.x86_64",
+    "--display-driver",
+    "wayland",
+    "--",
+    "--qualification",
+    "--profile",
+    "/tmp/quod-m4-ca84d4f8/artifacts/private/physics-final04/identity"
+  ],
+  "client_child_exit": 0,
+  "final_input_release_exit": 0,
+  "server_child_exit": 0
+}

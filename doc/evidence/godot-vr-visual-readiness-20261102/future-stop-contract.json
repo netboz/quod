@@ -1,0 +1,36 @@
+{
+  "purpose": "Offline exact-owned teardown contract for the future visual-test recipe; not launch authority",
+  "launch_authorized": false,
+  "historical_targets_forbidden": true,
+  "sequence": [
+    {
+      "owner": "fresh exact-owned client supervisor",
+      "stdin": "finish\n",
+      "utf8_hex": "66696e6973680a",
+      "maximum_writes": 1,
+      "preconditions": [
+        "current invocation and executable incarnation verified",
+        "client live and finish not already requested"
+      ],
+      "after": "Await actual client exit and both EOF under the original normal-close bound; retain any failure"
+    },
+    {
+      "owner": "fresh exact-owned fixture wrapper",
+      "stdin": "stop\n",
+      "utf8_hex": "73746f700a",
+      "maximum_writes": 1,
+      "preconditions": [
+        "client closure already handled",
+        "current fixture invocation verified",
+        "fixture live and stop not already requested"
+      ],
+      "after": "Await actual fixture exit and both EOF under its original bounds; retain any failure"
+    }
+  ],
+  "fixture_format": "Four lowercase ASCII letters stop followed by one LF. Not an empty line, JSON string, or literal backslash+n.",
+  "uncertain_write": "Record an uncertain control write; do not resend it or reuse a closed/replaced PTY.",
+  "source": "doc/evidence/godot-attention-vr-preparation-20261102/godot_m3b_fixture.erl",
+  "source_sha256": "bdb10e1a18d12574a7a2a491e46b84e21c436b636adaed0cebb4adbb89c84a69",
+  "source_line": 161,
+  "qualification": "Actual fixture command branch source-bound; harmless accepted PTY wrapper received bytes73746f700a with child0/wrapper0/bothEOF. No fixture/client launched."
+}

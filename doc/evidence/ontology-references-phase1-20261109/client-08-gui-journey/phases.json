@@ -1,0 +1,86 @@
+[
+  {
+    "phase": "fresh",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--xr-mode",
+      "off",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/pearl-client-3jgeh3zs/client/identity",
+      "--node",
+      "https://127.0.0.1:39499"
+    ],
+    "child_exit": -9,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "elapsed_seconds": 7.086246762999508,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "reset",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--xr-mode",
+      "off",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/pearl-client-3jgeh3zs/client/identity",
+      "--node",
+      "https://127.0.0.1:39499"
+    ],
+    "child_exit": -9,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "elapsed_seconds": 4.726624313996581,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "m4-live",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--xr-mode",
+      "off",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/pearl-client-3jgeh3zs/client/identity",
+      "--node",
+      "https://127.0.0.1:39499"
+    ],
+    "child_exit": 0,
+    "expected_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "elapsed_seconds": 4.6448263749989565,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "final",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--xr-mode",
+      "off",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/pearl-client-3jgeh3zs/client/identity",
+      "--node",
+      "https://127.0.0.1:39499"
+    ],
+    "child_exit": 0,
+    "expected_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "elapsed_seconds": 25.68190234999929,
+    "godot_error_diagnostics": true,
+    "passed": false
+  }
+]

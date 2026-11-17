@@ -1,0 +1,70 @@
+======================== EUnit ========================
+module 'quod_wire_term_tests'
+  quod_wire_term_tests: self_scoped_symbols_use_the_same_admission_walk_test...[0.002 s] ok
+  quod_wire_term_tests: foreign_scope_defers_inner_symbols_even_when_nested_test...ok
+  quod_wire_term_tests: opaque_rule_clause_heads_remain_executable_test...ok
+  quod_wire_term_tests: roundtrip_existing_terms_test...ok
+  quod_wire_term_tests: unknown_symbol_does_not_allocate_atom_test...ok
+  quod_wire_term_tests: answer_bytes_bind_identically_before_and_after_atom_creation_test...[0.004 s] ok
+  quod_wire_term_tests: variable_name_is_not_treated_as_goal_vocabulary_test...ok
+  quod_wire_term_tests: opaque_spelling_wins_when_retained_goal_contains_both_test...ok
+  quod_wire_term_tests: malformed_reserved_marker_is_not_walked_as_vocabulary_test...ok
+  quod_wire_term_tests: unknown_predicate_stays_opaque_until_target_materializes_test...ok
+  quod_wire_term_tests: malformed_reserved_symbol_markers_are_rejected_test...ok
+  quod_wire_term_tests: goal_symbol_names_is_atom_safe_and_uses_callable_positions_test...ok
+  quod_wire_term_tests: remote_selector_is_materialized_but_inner_goal_stays_opaque_test...ok
+  quod_wire_term_tests: database_update_clause_heads_are_callable_positions_test...ok
+  quod_wire_term_tests: independent_walks_owned_goals_but_not_foreign_goals_or_data_test...ok
+  quod_wire_term_tests: independent_with_other_arity_does_not_materialize_data_test...ok
+  quod_wire_term_tests: -transaction_owned_goal_positions_test_/0-fun-8- (atom)...ok
+  quod_wire_term_tests: -transaction_owned_goal_positions_test_/0-fun-8- (opaque)...ok
+  quod_wire_term_tests: transaction_other_arity_keeps_data_opaque_test...ok
+  quod_wire_term_tests: depth_limit_test...ok
+  quod_wire_term_tests: flat_list_spine_does_not_consume_depth_test...ok
+  quod_wire_term_tests: flat_content_uses_enclosing_byte_bound_test...[0.006 s] ok
+  quod_wire_term_tests: improper_tuple_item_list_is_rejected_test...ok
+  quod_wire_term_tests: real_erlog_failure_stack_roundtrips_canonically_test...[0.002 s] ok
+  quod_wire_term_tests: quod_policy_bounds_the_real_erlog_stack_before_encoding_test...[0.007 s] ok
+  quod_wire_term_tests: failure_reason_count_and_shape_bounds_are_exact_test...ok
+  quod_wire_term_tests: failure_reason_canonical_byte_bounds_are_exact_test...ok
+  quod_wire_term_tests: empty_failure_stack_is_a_canonical_scope_completion_test...ok
+  quod_wire_term_tests: failure_stack_decode_rejects_noncanonical_etf_test...ok
+  [done in 0.108 s]
+module 'quod_client_auth_tests'
+  quod_client_auth_tests: challenge_is_single_use_test...[0.019 s] ok
+  quod_client_auth_tests: session_is_node_local_and_bounded_test...ok
+  quod_client_auth_tests: default_session_lasts_fifteen_minutes_test...ok
+  quod_client_auth_tests: default_client_goal_admission_has_no_rate_policy_test...ok
+  quod_client_auth_tests: default_challenge_admission_has_no_rate_policy_test...[0.003 s] ok
+  quod_client_auth_tests: application_rate_policy_is_applied_and_explicit_options_override_test...[0.001 s] ok
+  quod_client_auth_tests: invalid_signature_consumes_challenge_test...ok
+  quod_client_auth_tests: full_sessions_do_not_consume_a_challenge_test...ok
+  quod_client_auth_tests: challenge_budget_is_bounded_per_peer_test...ok
+  quod_client_auth_tests: full_challenge_table_does_not_charge_the_peer_test...ok
+  quod_client_auth_tests: signed_goal_admission_is_bounded_by_signing_key_and_peer_test...ok
+  quod_client_auth_tests: paired_goal_budgets_commit_only_when_both_admit_test...ok
+  quod_client_auth_tests: paired_symbol_budgets_commit_only_when_both_admit_test...[0.001 s] ok
+  quod_client_auth_tests: signed_goal_materialization_leaves_data_opaque_test...ok
+  quod_client_auth_tests: self_scoped_request_materializes_and_charges_callable_test...*failed*
+in function quod_client_auth_tests:'-self_scoped_request_materializes_and_charges_callable_test/0-fun-5-'/5 (/stage/quod_client_auth_tests.erl, line 304)
+in call from quod_client_auth_tests:with_auth/2 (/stage/quod_client_auth_tests.erl, line 449)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+**error:{assertEqual,[{module,quod_client_auth_tests},
+              {line,304},
+              {expression,"quod_client_auth : materialize_request ( PublicKey , ? PEER , AgentRef , Goal ( Next ) )"},
+              {expected,{error,client_goal_rate_limited}},
+              {value,{error,client_goal_busy}}]}
+  output:<<"">>
+
+  quod_client_auth_tests: signed_request_materializes_origin_but_not_remote_goal_test...ok
+  quod_client_auth_tests: materialized_atom_ceiling_survives_auth_owner_restart_test...ok
+  quod_client_auth_tests: malformed_requests_are_not_authentication_failures_test...ok
+  quod_client_auth_tests: owner_ready_notice_identifies_each_auth_incarnation_test...ok
+  [done in 0.083 s]
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 47.

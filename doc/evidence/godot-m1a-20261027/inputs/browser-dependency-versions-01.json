@@ -1,0 +1,551 @@
+{
+  "kind": "read-only installed package-version audit, not a clean npm installation or complete dependency-source manifest",
+  "projects": {
+    "client": {
+      "lock_sha256": "3669120cd18de6b5009a947d6742a55126b1c681801574add5245b64181ea3f5",
+      "node_modules_resolves_to": "/home/yan/src/quod_worktrees/pearl-stone/client/node_modules",
+      "installed_packages": {
+        "node_modules/@babylonjs/core": {
+          "expected_version": "9.18.1",
+          "installed_version": "9.18.1",
+          "package_json_sha256": "4ed1230ae88fadc45a9e22384fb2cf12f8e66ea2e5e3be952ed5515417ff6ca4"
+        },
+        "node_modules/@babylonjs/gui": {
+          "expected_version": "9.18.1",
+          "installed_version": "9.18.1",
+          "package_json_sha256": "addd9ba9c71356604a47df7a5f7f90fe2572be96a4fbea772ba44f6ef131755d"
+        },
+        "node_modules/@babylonjs/loaders": {
+          "expected_version": "9.18.1",
+          "installed_version": "9.18.1",
+          "package_json_sha256": "5fdc3d888bd239579a15e837ad8708bf60a699c488b03dda280c5088dbebfafc"
+        },
+        "node_modules/@yarnpkg/lockfile": {
+          "expected_version": "1.1.0",
+          "installed_version": "1.1.0",
+          "package_json_sha256": "40b02d6bd906ceb10acd716721e0fbf1d7ae51db4962621c348abc5229aa7d48"
+        },
+        "node_modules/ansi-styles": {
+          "expected_version": "4.3.0",
+          "installed_version": "4.3.0",
+          "package_json_sha256": "d405f010681d53f77691015e98461f8484b2afe6a9edfdd2ddb27b1e8a8e883d"
+        },
+        "node_modules/babylonjs-gltf2interface": {
+          "expected_version": "9.29.0",
+          "installed_version": "9.29.0",
+          "package_json_sha256": "20bf7b0cdd63184174afc3b059bbe75c0588a91927d34e1ac2f8478533de2bfe"
+        },
+        "node_modules/braces": {
+          "expected_version": "3.0.3",
+          "installed_version": "3.0.3",
+          "package_json_sha256": "56f08b888a4f30dc7cf8a7dbb36ffe92b737912ba36abe9d069d32167c957ac7"
+        },
+        "node_modules/call-bind": {
+          "expected_version": "1.0.9",
+          "installed_version": "1.0.9",
+          "package_json_sha256": "c11be8b7f9bbe367c27d42fba734b8226c0b15e1e5e1c2d842822d9791f053c7"
+        },
+        "node_modules/call-bind-apply-helpers": {
+          "expected_version": "1.0.2",
+          "installed_version": "1.0.2",
+          "package_json_sha256": "59639b628c6846f674857c6a613fd47e2e4d2a24036cdf0f7a62ac634f4c8a5f"
+        },
+        "node_modules/call-bound": {
+          "expected_version": "1.0.4",
+          "installed_version": "1.0.4",
+          "package_json_sha256": "dcc8abb3c4ad3774234272149020cb36d7b1a3d377a419454d1e7adb368dd9c3"
+        },
+        "node_modules/chalk": {
+          "expected_version": "4.1.2",
+          "installed_version": "4.1.2",
+          "package_json_sha256": "9cd907d34a45cb73b5c8a459d5602a36ccd456794665c529a3a5b0f02e196f26"
+        },
+        "node_modules/ci-info": {
+          "expected_version": "3.9.0",
+          "installed_version": "3.9.0",
+          "package_json_sha256": "9628944add57307e56929181423e29814b52dabb36fd5a693784f8aa0a00add9"
+        },
+        "node_modules/color-convert": {
+          "expected_version": "2.0.1",
+          "installed_version": "2.0.1",
+          "package_json_sha256": "9471d21744ca3137410448da6b3bd7b30ee91d42edce3b82ebcbf84faef74fb4"
+        },
+        "node_modules/color-name": {
+          "expected_version": "1.1.4",
+          "installed_version": "1.1.4",
+          "package_json_sha256": "4a557ea373907e4643badb89ff21b3f4b969d20631086d78eab2e03d05c2efa4"
+        },
+        "node_modules/cross-spawn": {
+          "expected_version": "7.0.6",
+          "installed_version": "7.0.6",
+          "package_json_sha256": "2e106cd9b4ae4e34ead35218371a0d4e172da72515a4f8f97d69a2e1fe3dee82"
+        },
+        "node_modules/define-data-property": {
+          "expected_version": "1.1.4",
+          "installed_version": "1.1.4",
+          "package_json_sha256": "bde7f1465b344a24da2b10d2ee99f87edf8e0ecd177c28370b60ad9595de730e"
+        },
+        "node_modules/dunder-proto": {
+          "expected_version": "1.0.1",
+          "installed_version": "1.0.1",
+          "package_json_sha256": "24df71008e4225c858f389dd2728b76cf66b752256d42a38ed7930aacae7fe2b"
+        },
+        "node_modules/es-define-property": {
+          "expected_version": "1.0.1",
+          "installed_version": "1.0.1",
+          "package_json_sha256": "3a2cb30dae30a96705dcd9aa2d5fb190cf8200f27badccfa5a81a4374e5708b4"
+        },
+        "node_modules/es-errors": {
+          "expected_version": "1.3.0",
+          "installed_version": "1.3.0",
+          "package_json_sha256": "1a0a0bcccc76b915cb64073317312840cf6363e9144b96f406d0059774dd5278"
+        },
+        "node_modules/es-object-atoms": {
+          "expected_version": "1.1.2",
+          "installed_version": "1.1.2",
+          "package_json_sha256": "e4b7882975d10c68457945c883e1060d0b058af5b1216215c872263f42e12fc9"
+        },
+        "node_modules/fill-range": {
+          "expected_version": "7.1.1",
+          "installed_version": "7.1.1",
+          "package_json_sha256": "87f5c78f9b47d21f9ca62b60cff1d250a3b468eab320dd13c3f3ab2464a02735"
+        },
+        "node_modules/find-yarn-workspace-root": {
+          "expected_version": "2.0.0",
+          "installed_version": "2.0.0",
+          "package_json_sha256": "3d15902c47dae2b9dc2c07e77ac289a7fb610e4af698177624babe6c1fdffb0c"
+        },
+        "node_modules/fs-extra": {
+          "expected_version": "10.1.0",
+          "installed_version": "10.1.0",
+          "package_json_sha256": "bf7cf7b87f05cd0718b28fdda520a34b1a1c47f8b5939c2f520accc38787f864"
+        },
+        "node_modules/function-bind": {
+          "expected_version": "1.1.2",
+          "installed_version": "1.1.2",
+          "package_json_sha256": "edb1c4faf4148e6e3d74ed8dbac1a1dc359a647ff4207aad4851396dc7a3559a"
+        },
+        "node_modules/get-intrinsic": {
+          "expected_version": "1.3.0",
+          "installed_version": "1.3.0",
+          "package_json_sha256": "45b14763baacc59b0fd7b39e3ad983d5d2aaf7f5ed682f2fce9edb469826c999"
+        },
+        "node_modules/get-proto": {
+          "expected_version": "1.0.1",
+          "installed_version": "1.0.1",
+          "package_json_sha256": "73839e012ac7134a632c9d9fc6bdb700ac9ab5553cce39eb789ba2b65663e734"
+        },
+        "node_modules/gopd": {
+          "expected_version": "1.2.0",
+          "installed_version": "1.2.0",
+          "package_json_sha256": "33ace32dc861f6da9d1fd9d0a44c66e8c6ff3b13358d070683c1c2978ff5f19f"
+        },
+        "node_modules/graceful-fs": {
+          "expected_version": "4.2.11",
+          "installed_version": "4.2.11",
+          "package_json_sha256": "5747d4ba6b17165c6ecac30ab3a331715f41c7ad546e1f1574dab1bdcb116181"
+        },
+        "node_modules/has-flag": {
+          "expected_version": "4.0.0",
+          "installed_version": "4.0.0",
+          "package_json_sha256": "3fef4b52efbeabeadfffd5994e90b1025eb24263286e34170675956637d368b1"
+        },
+        "node_modules/has-property-descriptors": {
+          "expected_version": "1.0.2",
+          "installed_version": "1.0.2",
+          "package_json_sha256": "59a91e2cf32e4303d248708999a9ec3afd8e3649a87ba7abcf2177dc1984e3d5"
+        },
+        "node_modules/has-symbols": {
+          "expected_version": "1.1.0",
+          "installed_version": "1.1.0",
+          "package_json_sha256": "5190268c0e3308d7446d1f7c036238f329f786938453e6017cb90980b3612e7a"
+        },
+        "node_modules/hasown": {
+          "expected_version": "2.0.4",
+          "installed_version": "2.0.4",
+          "package_json_sha256": "40b750c55a8bacf2c5ac316f5299dd44d48acc101c189a00cd59d39376b5eb89"
+        },
+        "node_modules/is-docker": {
+          "expected_version": "2.2.1",
+          "installed_version": "2.2.1",
+          "package_json_sha256": "3c3ab0ac757c5ea751b47f0ee860b311860ae1e6921fecb3c62d07640a52441a"
+        },
+        "node_modules/is-number": {
+          "expected_version": "7.0.0",
+          "installed_version": "7.0.0",
+          "package_json_sha256": "51c133f4e41df982aef69027249ff9d7262645029f437d079adc7c83328fb620"
+        },
+        "node_modules/is-wsl": {
+          "expected_version": "2.2.0",
+          "installed_version": "2.2.0",
+          "package_json_sha256": "b23cae273d6cf809eaaca3c3197ff7ebddf3374e0f5db1bce75c93cdf1ce989f"
+        },
+        "node_modules/isarray": {
+          "expected_version": "2.0.5",
+          "installed_version": "2.0.5",
+          "package_json_sha256": "b0802c09bce6bf067d3e5f52390ea26972e11c88bb6ae38991316ac83ca14127"
+        },
+        "node_modules/isexe": {
+          "expected_version": "2.0.0",
+          "installed_version": "2.0.0",
+          "package_json_sha256": "395c2af9abeeaafe7391974c1eacfb2a2bdeef187f21c3f5582c49e0368e59bf"
+        },
+        "node_modules/json-stable-stringify": {
+          "expected_version": "1.3.0",
+          "installed_version": "1.3.0",
+          "package_json_sha256": "44acadcddab94e5e5937a655a58d2d952c9aca658aeadf489e3c9000d136e26f"
+        },
+        "node_modules/jsonfile": {
+          "expected_version": "6.2.1",
+          "installed_version": "6.2.1",
+          "package_json_sha256": "df710d3401289ba32728b5459ac334bf99b18259900ca22b2401f48d92892613"
+        },
+        "node_modules/jsonify": {
+          "expected_version": "0.0.1",
+          "installed_version": "0.0.1",
+          "package_json_sha256": "041cdeeed354af419dafdd6dbece369df4118f6f2cdd4db8d46a3e20a6b912be"
+        },
+        "node_modules/klaw-sync": {
+          "expected_version": "6.0.0",
+          "installed_version": "6.0.0",
+          "package_json_sha256": "70fc5607e1838bc641f274e3f7d79bcdfc8d0f277c34481c0877e3cc58893e21"
+        },
+        "node_modules/math-intrinsics": {
+          "expected_version": "1.1.0",
+          "installed_version": "1.1.0",
+          "package_json_sha256": "39d74aa5a354153130706286dd60a2d8409ce0c8f66546eff2edcac0afff17e1"
+        },
+        "node_modules/micromatch": {
+          "expected_version": "4.0.8",
+          "installed_version": "4.0.8",
+          "package_json_sha256": "94dbc881c0329813f2481f35fcfa725a2285d45926d33e9b9b8b80b28487752b"
+        },
+        "node_modules/minimist": {
+          "expected_version": "1.2.8",
+          "installed_version": "1.2.8",
+          "package_json_sha256": "252881f6a068a3e70386706d88a694b5e8e9e053b6d9f309fd9a329e651bbf81"
+        },
+        "node_modules/object-keys": {
+          "expected_version": "1.1.1",
+          "installed_version": "1.1.1",
+          "package_json_sha256": "60128330481888bf0e83a713699bee6668c5948821ef06106d8c9613b6081b45"
+        },
+        "node_modules/open": {
+          "expected_version": "7.4.2",
+          "installed_version": "7.4.2",
+          "package_json_sha256": "a46cba93500e74f252e97a0a94a0d09a0767be2fcd0787f6ddd44a235dc71c56"
+        },
+        "node_modules/patch-package": {
+          "expected_version": "8.0.1",
+          "installed_version": "8.0.1",
+          "package_json_sha256": "b1c88c4fb72372373d98dde1fd0220a9f3dbf930321aeaf3d0dc9e4b4d7cadb9"
+        },
+        "node_modules/path-key": {
+          "expected_version": "3.1.1",
+          "installed_version": "3.1.1",
+          "package_json_sha256": "25594dab72681c910d9cc919263a4daf27d77a75e0d2c26a4d958d6d6b798f86"
+        },
+        "node_modules/picomatch": {
+          "expected_version": "2.3.2",
+          "installed_version": "2.3.2",
+          "package_json_sha256": "63264d817e856a4bff57d4304f2b38d2964a4f6df520eb169e7bcdb619f13e9a"
+        },
+        "node_modules/semver": {
+          "expected_version": "7.8.5",
+          "installed_version": "7.8.5",
+          "package_json_sha256": "7c94cb7f2a53c27b20d76386ec144c062894dbcc909cfabd0f728c37874b1776"
+        },
+        "node_modules/set-function-length": {
+          "expected_version": "1.2.2",
+          "installed_version": "1.2.2",
+          "package_json_sha256": "2c81bab7f7a60d625164bd840d863548e3f9d4d1aa976b9d2966e5e1e36132a7"
+        },
+        "node_modules/shebang-command": {
+          "expected_version": "2.0.0",
+          "installed_version": "2.0.0",
+          "package_json_sha256": "44de390ae5ed6c5f9758b8b9c90b93fa53977d5361731600429f1de08f4b3f30"
+        },
+        "node_modules/shebang-regex": {
+          "expected_version": "3.0.0",
+          "installed_version": "3.0.0",
+          "package_json_sha256": "b8018c6b8cc9900dfd1ac18a54956ba34c453fdc2da5e5fe555ee8f04133a1c5"
+        },
+        "node_modules/slash": {
+          "expected_version": "2.0.0",
+          "installed_version": "2.0.0",
+          "package_json_sha256": "c72a4140c8c14a740fd002a48daf883e761aa355dc6a9d2b36e5955d0231efaa"
+        },
+        "node_modules/supports-color": {
+          "expected_version": "7.2.0",
+          "installed_version": "7.2.0",
+          "package_json_sha256": "d410a772f9f64b224482ec13815a4bbf1837c533e1be04b3687755c48b2efa1f"
+        },
+        "node_modules/tmp": {
+          "expected_version": "0.2.7",
+          "installed_version": "0.2.7",
+          "package_json_sha256": "58dddc0fa17fbd6f4329189ffcd66d7c4a6c0487896accaf4e9853ba7462df2c"
+        },
+        "node_modules/to-regex-range": {
+          "expected_version": "5.0.1",
+          "installed_version": "5.0.1",
+          "package_json_sha256": "766fc1bb34fffcd503c89f4194188ce059795c52fd0dc6753cd4b7dcfc3fe1ec"
+        },
+        "node_modules/universalify": {
+          "expected_version": "2.0.1",
+          "installed_version": "2.0.1",
+          "package_json_sha256": "10e53f10939bb8a4a73af6e06829b670bbf9da66a36edcc644441852806b87ee"
+        },
+        "node_modules/which": {
+          "expected_version": "2.0.2",
+          "installed_version": "2.0.2",
+          "package_json_sha256": "43010039ed5e89f7186960be682b3cb5cda5ab6cdfb06cbfd4f081cf0e7b4260"
+        },
+        "node_modules/yaml": {
+          "expected_version": "2.9.1",
+          "installed_version": "2.9.1",
+          "package_json_sha256": "1c6441703d8204a23ded0d37ddf57c3b69d821dc392f20852d1f605bb9b8861c"
+        }
+      },
+      "required_missing": [],
+      "version_mismatches": []
+    },
+    "ui": {
+      "lock_sha256": "6984e8ee6ddb8ae197c43f117aff11c434ee1f0629627e2537dd778aea18b02e",
+      "node_modules_resolves_to": "/home/yan/src/quod_worktrees/pearl-stone/ui/node_modules",
+      "installed_packages": {
+        "node_modules/@jridgewell/gen-mapping": {
+          "expected_version": "0.3.13",
+          "installed_version": "0.3.13",
+          "package_json_sha256": "6264fca78382a9782f8e8d5e653e7bf43dc8aa6d469f3322a82e531093896a01"
+        },
+        "node_modules/@jridgewell/remapping": {
+          "expected_version": "2.3.5",
+          "installed_version": "2.3.5",
+          "package_json_sha256": "cc535fb0665977104146fb8fe6c81ff63d2c9ae7f7b783d86e7f7db064cde57a"
+        },
+        "node_modules/@jridgewell/resolve-uri": {
+          "expected_version": "3.1.2",
+          "installed_version": "3.1.2",
+          "package_json_sha256": "0793e722ffe08f3b4f1862c4dc96d920a62d6811a3648b4feb02f06c63227e8b"
+        },
+        "node_modules/@jridgewell/sourcemap-codec": {
+          "expected_version": "1.5.5",
+          "installed_version": "1.5.5",
+          "package_json_sha256": "398fc774628ec1592c794e8c14ecdc0096206a2521545e527e5a06429dac6006"
+        },
+        "node_modules/@jridgewell/trace-mapping": {
+          "expected_version": "0.3.31",
+          "installed_version": "0.3.31",
+          "package_json_sha256": "7f5eacc669d36013f9b792ab15721a97d48b26b093100122aa6c8691ebe656be"
+        },
+        "node_modules/@oxc-project/types": {
+          "expected_version": "0.139.0",
+          "installed_version": "0.139.0",
+          "package_json_sha256": "a1fd6732a952bcfae8540e6a1e4ce9d153f59a438f8f434f0de714986956608f"
+        },
+        "node_modules/@oxlint/binding-linux-x64-gnu": {
+          "expected_version": "1.74.0",
+          "installed_version": "1.74.0",
+          "package_json_sha256": "14f0d1939453ea6194ddb4e0eb3756bbf06b646148e7a3b542ed7d3ce564e291"
+        },
+        "node_modules/@rolldown/binding-linux-x64-gnu": {
+          "expected_version": "1.1.5",
+          "installed_version": "1.1.5",
+          "package_json_sha256": "4c465654b3cf360a6a25f5760f249c60613eded29ac881de585780a614975a7b"
+        },
+        "node_modules/@rolldown/pluginutils": {
+          "expected_version": "1.0.1",
+          "installed_version": "1.0.1",
+          "package_json_sha256": "c3d2bfe0ff94de71fd5b82e6f3a01b12ee4d99b8f1b34cc00b984b9acde61cfa"
+        },
+        "node_modules/@tailwindcss/node": {
+          "expected_version": "4.3.3",
+          "installed_version": "4.3.3",
+          "package_json_sha256": "2afa932dc85e4edc27126e83f8b31df2d5ec5b15f86b5033182d6a82466ed43f"
+        },
+        "node_modules/@tailwindcss/oxide": {
+          "expected_version": "4.3.3",
+          "installed_version": "4.3.3",
+          "package_json_sha256": "d57385a0a2f680b35a488f9a9816490a6580cc7a989a430e3e426b4c24af212e"
+        },
+        "node_modules/@tailwindcss/oxide-linux-x64-gnu": {
+          "expected_version": "4.3.3",
+          "installed_version": "4.3.3",
+          "package_json_sha256": "6a6772fb4dae4222c5425b3ebae25d7995bda879b453117e0fa7fd95eba19e61"
+        },
+        "node_modules/@tailwindcss/vite": {
+          "expected_version": "4.3.3",
+          "installed_version": "4.3.3",
+          "package_json_sha256": "cba2bb8613106ca608bbd757998b2cf56a464584e3848310338fe3fe3b4761aa"
+        },
+        "node_modules/@tanstack/query-core": {
+          "expected_version": "5.101.2",
+          "installed_version": "5.101.2",
+          "package_json_sha256": "a6e0ecd3732c18d82f4ed70829c121ff14fa97ba98f037cbfed4b7773d53c01f"
+        },
+        "node_modules/@tanstack/react-query": {
+          "expected_version": "5.101.2",
+          "installed_version": "5.101.2",
+          "package_json_sha256": "d9ebc9d11e76bdb5ca6c8929bf0a11fda60ce66bf238c6b6aed4809d070cc4bf"
+        },
+        "node_modules/@tanstack/react-table": {
+          "expected_version": "8.21.3",
+          "installed_version": "8.21.3",
+          "package_json_sha256": "06484aa892e133fd488097c4aa74f91452b73338a9115bc6c8939def748e8ce0"
+        },
+        "node_modules/@tanstack/table-core": {
+          "expected_version": "8.21.3",
+          "installed_version": "8.21.3",
+          "package_json_sha256": "897ae7d8c7ec183550fd6c1b685f732a33f516d8ed43d6c19117a91f9bf67b7e"
+        },
+        "node_modules/@types/node": {
+          "expected_version": "24.13.3",
+          "installed_version": "24.13.3",
+          "package_json_sha256": "a4d29a0f9a3b45be30a130591091ea1f7707d4193489960ef4ee98f35375a4e9"
+        },
+        "node_modules/@types/react": {
+          "expected_version": "19.2.17",
+          "installed_version": "19.2.17",
+          "package_json_sha256": "36496fc09a9dcf31b0ca969ce5677c9ce9ebb5c89da9bd6212e0c89b6fae3f88"
+        },
+        "node_modules/@types/react-dom": {
+          "expected_version": "19.2.3",
+          "installed_version": "19.2.3",
+          "package_json_sha256": "bf90986beaec5f757c164bf1d374f3038dc41b0b06673de4a55fd975d1e5deca"
+        },
+        "node_modules/@vitejs/plugin-react": {
+          "expected_version": "6.0.3",
+          "installed_version": "6.0.3",
+          "package_json_sha256": "744483e15597dba4505ff19c7af5d75ddb7280db9c894d8133f8a0edffe93c30"
+        },
+        "node_modules/csstype": {
+          "expected_version": "3.2.3",
+          "installed_version": "3.2.3",
+          "package_json_sha256": "c818b74a9bc1556488b7ec2a65399224738f6619228f9a6491c5c02ca91f849e"
+        },
+        "node_modules/detect-libc": {
+          "expected_version": "2.1.2",
+          "installed_version": "2.1.2",
+          "package_json_sha256": "ee88e5b954fdf3a8480b1d01ef767d68d8ca2c6da269f58c5cf1c5550e9aa2a7"
+        },
+        "node_modules/enhanced-resolve": {
+          "expected_version": "5.24.2",
+          "installed_version": "5.24.2",
+          "package_json_sha256": "5b16fc83f6a4255b7e60f48e172970c48da6112d959630aa54f35b5c219cd70f"
+        },
+        "node_modules/fdir": {
+          "expected_version": "6.5.0",
+          "installed_version": "6.5.0",
+          "package_json_sha256": "aca49395d61ef383a09f74555c66ed45817ca2b5724e710a4dc9e0471b83d8f5"
+        },
+        "node_modules/graceful-fs": {
+          "expected_version": "4.2.11",
+          "installed_version": "4.2.11",
+          "package_json_sha256": "5747d4ba6b17165c6ecac30ab3a331715f41c7ad546e1f1574dab1bdcb116181"
+        },
+        "node_modules/jiti": {
+          "expected_version": "2.7.0",
+          "installed_version": "2.7.0",
+          "package_json_sha256": "aab8aafc42d9aeec14a6e2fe0e15ea1514c0c205a624055a7e776f2ec456283c"
+        },
+        "node_modules/lightningcss": {
+          "expected_version": "1.32.0",
+          "installed_version": "1.32.0",
+          "package_json_sha256": "1b7fbd47a660ecb37d1fa8304a14b726aa44a31bb3d3338f417593f6276b762f"
+        },
+        "node_modules/lightningcss-linux-x64-gnu": {
+          "expected_version": "1.32.0",
+          "installed_version": "1.32.0",
+          "package_json_sha256": "38c8b40149b0492fbfcc06b4b8fab20314d9b9d0e648c7da8c5c0634b6a90412"
+        },
+        "node_modules/magic-string": {
+          "expected_version": "0.30.21",
+          "installed_version": "0.30.21",
+          "package_json_sha256": "86814aaf7dacba9d31fbf361c3285981f1cbbda0a87108caa4131d297bd9eba2"
+        },
+        "node_modules/nanoid": {
+          "expected_version": "3.3.16",
+          "installed_version": "3.3.16",
+          "package_json_sha256": "c6acf9ab29ee1c38ec6ef8dff594fc6218fd48028677632662c7397258986a8c"
+        },
+        "node_modules/oxlint": {
+          "expected_version": "1.74.0",
+          "installed_version": "1.74.0",
+          "package_json_sha256": "1123c4ee93ebe06ec6afd9c34ccf8c84cba582dd7401b29148f169dc8d844d64"
+        },
+        "node_modules/picocolors": {
+          "expected_version": "1.1.1",
+          "installed_version": "1.1.1",
+          "package_json_sha256": "ef2ac226c4811d312e12c64214c453878653e834482125ae475f27cea60de737"
+        },
+        "node_modules/picomatch": {
+          "expected_version": "4.0.5",
+          "installed_version": "4.0.5",
+          "package_json_sha256": "fb7766f5f9c724e13e075760a95d16f87cdb327143d153a913135fde267ec615"
+        },
+        "node_modules/postcss": {
+          "expected_version": "8.5.19",
+          "installed_version": "8.5.19",
+          "package_json_sha256": "38668abf89744224d5211254058040688fd8c06d8e28ecb15ae574146199df20"
+        },
+        "node_modules/react": {
+          "expected_version": "19.2.7",
+          "installed_version": "19.2.7",
+          "package_json_sha256": "51966ae9c8c377ff592b5d69c980966992101bc6791bf83a1e5c7ad9bcefa7f4"
+        },
+        "node_modules/react-dom": {
+          "expected_version": "19.2.7",
+          "installed_version": "19.2.7",
+          "package_json_sha256": "447acd72cdb6a966d9db967729e286e7cbb4a09ea61fddd45e12c2a97fd4cfb6"
+        },
+        "node_modules/rolldown": {
+          "expected_version": "1.1.5",
+          "installed_version": "1.1.5",
+          "package_json_sha256": "01de4c2d7ebcc0f36c92f41e4ecab383ae7f5dd2e26f8f4b640fc58ca9c8f8e7"
+        },
+        "node_modules/scheduler": {
+          "expected_version": "0.27.0",
+          "installed_version": "0.27.0",
+          "package_json_sha256": "393bb96b7e481bf50189a1a02c7e0e7f4d01acba5abc6fbe7d214638624462fc"
+        },
+        "node_modules/source-map-js": {
+          "expected_version": "1.2.1",
+          "installed_version": "1.2.1",
+          "package_json_sha256": "58f8e94a461a5e461e0cb2bb2be681cbd89b9181989fd26fceb858e67711469a"
+        },
+        "node_modules/tailwindcss": {
+          "expected_version": "4.3.3",
+          "installed_version": "4.3.3",
+          "package_json_sha256": "3dc86b46c511947ca00838aa3f1776243abe923ac347c092e60a0cbc7ae68559"
+        },
+        "node_modules/tapable": {
+          "expected_version": "2.3.3",
+          "installed_version": "2.3.3",
+          "package_json_sha256": "82d5903b3a6f9d6e41868f405176da8122799e8c71a51f5507087091862a2a3d"
+        },
+        "node_modules/tinyglobby": {
+          "expected_version": "0.2.17",
+          "installed_version": "0.2.17",
+          "package_json_sha256": "bd2b2af3c9ba0580f1acfb22c55d0b6d29abf683af5cac8a2efe82fa7c943f23"
+        },
+        "node_modules/typescript": {
+          "expected_version": "6.0.3",
+          "installed_version": "6.0.3",
+          "package_json_sha256": "9332e97c30d3e53ed54910b89207ed657fb444066484df6e5b6965bf130865e9"
+        },
+        "node_modules/undici-types": {
+          "expected_version": "7.18.2",
+          "installed_version": "7.18.2",
+          "package_json_sha256": "01701286a0441eddf1cd47d488047d363ce7d75466e7b6c89f1c605fba1c3957"
+        },
+        "node_modules/vite": {
+          "expected_version": "8.1.5",
+          "installed_version": "8.1.5",
+          "package_json_sha256": "2f482c846a1c5b9e5883b458b3e54a171a320c2e8d9b924c7383c4baef607b09"
+        }
+      },
+      "required_missing": [],
+      "version_mismatches": []
+    }
+  }
+}

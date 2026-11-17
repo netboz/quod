@@ -1,0 +1,63 @@
+{
+  "passed": false,
+  "reader_errors": [],
+  "host_input_or_focus_action": false,
+  "software_native_Control_inputs": true,
+  "setup_Control_signals": true,
+  "no_headset_or_runtime": true,
+  "companion_not_distributed": true,
+  "production_auth_lifetime_unchanged": true,
+  "manifest_sha256": "748f79ee41092ae1dafd34093b952d7f60c64998e5b0d2f4a5d1d013dbd13a0e",
+  "driver_inputs": {
+    "signed.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-preview-final21/drivers/signed.py",
+      "sha256": "bfcb85cfcaab3dada0f19494c606b38e4eba4704896ded1ff4fb588582871c8b"
+    },
+    "isolation.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-preview-final21/drivers/isolation.py",
+      "sha256": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8"
+    },
+    "hashes.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-preview-final21/drivers/hashes.py",
+      "sha256": "65aabc9c5a262d26e784bda8eeee52e3e9cde767ee74b8f1330a1628c8161c3e"
+    }
+  },
+  "failure": "AssertionError: ",
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-occurrence-preview-stdout": true,
+    "client-occurrence-preview-stderr": true
+  },
+  "streams": {
+    "server-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-preview-final21/server-stdout.raw",
+      "sha256": "df57ba6d54ea59c14e8127f6478a9e292f65fd47103610bbc61390603741027d",
+      "bytes": 129
+    },
+    "client-occurrence-preview-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-preview-final21/client-occurrence-preview-stdout.raw",
+      "sha256": "32bd7e657e3223c81dfda03f4b24c931fdaffb7e806c41aba17a0dffc6b8d6b3",
+      "bytes": 144205
+    },
+    "client-occurrence-preview-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-preview-final21/client-occurrence-preview-stderr.raw",
+      "sha256": "3e6a6c1249abfca5b4ea6983bc0a8fb09cb5c21b8957e6899a806bbe87d64b34",
+      "bytes": 5505
+    },
+    "server-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-preview-final21/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "native_input_count": 0,
+  "children": {
+    "server": {
+      "true_exit": 0
+    },
+    "client-occurrence-preview": {
+      "true_exit": 1
+    }
+  }
+}

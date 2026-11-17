@@ -1,0 +1,28 @@
+{
+  "command": [
+    "docker",
+    "run",
+    "--rm",
+    "--init",
+    "--network",
+    "none",
+    "-v",
+    "/tmp/quod-m1a-gates-04/source:/work:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone:/code:ro",
+    "-v",
+    "/tmp/quod-m1b-source-view-green-01:/test",
+    "-w",
+    "/work",
+    "-e",
+    "ERL_FLAGS=+S 4:4 +SDio 2 +SDcpu 2",
+    "--entrypoint",
+    "/bin/sh",
+    "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+    "-c",
+    "erl -noshell -pa /work/_build/test/lib/*/ebin /work/_build/test/lib/quod/test -eval '[begin {ok,M}=compile:file(\"/code/\"++Dir++\"/\"++atom_to_list(M)++\".erl\",[{outdir,\"/test/ebin\"},{i,\"/work/include\"},report_errors,report_warnings]) end || {Dir,M}<-[{\"src\",quod_client_view},{\"test\",quod_gui_question_tests},{\"test\",quod_source_view_tests}]],true=code:add_patha(\"/test/ebin\"),case eunit:test(quod_source_view_tests,[verbose]) of ok->halt(0);_->halt(1) end.'"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 13.041355228000612
+}

@@ -1,0 +1,363 @@
+{
+  "certificate_command": [
+    "openssl",
+    "req",
+    "-x509",
+    "-newkey",
+    "rsa:2048",
+    "-nodes",
+    "-keyout",
+    "/home/yan/.cache/quod-m2-artifacts/private/journey-production02/proxy-key.pem",
+    "-out",
+    "/home/yan/.cache/quod-m2-artifacts/private/journey-production02/proxy-ca.pem",
+    "-days",
+    "1",
+    "-subj",
+    "/CN=127.0.0.1",
+    "-addext",
+    "subjectAltName=IP:127.0.0.1",
+    "-addext",
+    "basicConstraints=critical,CA:TRUE"
+  ],
+  "certificate_child_exit": 0,
+  "origin": "https://127.0.0.1:35367",
+  "expected_hostname": "127.0.0.1",
+  "ca_sha256": "1708df800581b0bdfcb75e4b2048995fef7b173ca233aaca8940b3d17fcc508a",
+  "backend_ca_sha256": "2168d957b836592814a5223f54aa157a6120a47660def19d2f8f03d5f208cf41",
+  "certificate_validation": true,
+  "drops": {
+    "signup": 1,
+    "setup": 1,
+    "instruction": 1
+  },
+  "question_faults": {
+    "question_reply_lost": 0,
+    "question_unknown_error": 0
+  },
+  "projection_injections": {
+    "duplicate_projection": 17,
+    "late_after_refresh": 10,
+    "prior_socket_projection": 5
+  },
+  "requests": [
+    {
+      "method": "POST",
+      "route": "/api/auth/challenge",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": null,
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/auth/complete",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": null,
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/ontologies/system",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": null,
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/read",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "fail",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/execute",
+      "status": 200,
+      "flow": "signup",
+      "request_sha256": "b459f593c3891bff6d133edcae238451169b24e1fa2b027b5c698022ef23c584",
+      "reply_lost": true,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/outcomes",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "operation_outcome",
+      "outcome_status": "committed",
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/read",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/read",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/execute",
+      "status": 200,
+      "flow": "setup",
+      "request_sha256": "64bc1032ae963f4cf5a346496c348aa836ea20cad3cc044cc12ac07b38c0f4e0",
+      "reply_lost": true,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/outcomes",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "operation_outcome",
+      "outcome_status": "committed",
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/read",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/read",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/execute",
+      "status": 200,
+      "flow": "receiver",
+      "request_sha256": "3930a34010883640df5b3bebae9e3b03f1d7ad25b979e39083066ef20073f2e9",
+      "reply_lost": false,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/read",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/read",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/read",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/read",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/agents/instructions",
+      "status": 200,
+      "flow": "instruction",
+      "request_sha256": "49655bf002512ee8cfccb59e9417158bc4d72534fa7a90ec50d680d43029b511",
+      "reply_lost": true,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/read",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/auth/challenge",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": null,
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/auth/complete",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": null,
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/ontologies/system",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": null,
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/agents/instructions/outcomes",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "operation_outcome",
+      "outcome_status": "committed",
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/read",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/agents/instructions/outcomes",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "operation_outcome",
+      "outcome_status": "committed",
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/read",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/read",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/execute",
+      "status": 200,
+      "flow": "receiver",
+      "request_sha256": "80918e11fac857c66d43908fe76f096532352b5b56754d02e296b65d635b3bdc",
+      "reply_lost": false,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/read",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    }
+  ]
+}

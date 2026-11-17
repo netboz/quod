@@ -108,8 +108,20 @@ variable "cross_ontology_target_alloc_index" {
 
 variable "otel_exporter_otlp_endpoint" {
   type        = string
-  default     = "http://192.168.1.11:4318"
+  default     = "http://192.168.1.10:4318"
   description = "Reachable OTLP/HTTP endpoint for Tempo. Use an address routable from both home and cloud allocations; do not rely on host-local Consul DNS inside bridge containers."
+}
+
+variable "otel_traces_ratio" {
+  type        = string
+  default     = "1"
+  description = "Share of new traces each node keeps, from 0 to 1. Every trace is kept by default so one user action can always be read back; a load test passes a smaller share."
+}
+
+variable "client_edge_address" {
+  type        = string
+  default     = "192.168.1.11"
+  description = "Host running traefik-edge (port 443). Each quod-N.service.consul name resolves here; traefik-edge passes its TLS through to node N. Update if traefik-edge moves."
 }
 
 variable "genesis_hash" {
@@ -430,7 +442,7 @@ OTEL_TRACES_EXPORTER=otlp
 OTEL_EXPORTER_OTLP_ENDPOINT=${var.otel_exporter_otlp_endpoint}
 OTEL_EXPORTER_OTLP_PROTOCOL=http_protobuf
 OTEL_TRACES_SAMPLER=parentbased_traceidratio
-OTEL_TRACES_SAMPLER_ARG=0.05
+OTEL_TRACES_SAMPLER_ARG=${var.otel_traces_ratio}
 EOT
         destination = "${NOMAD_TASK_DIR}/env"
         env         = true
@@ -489,7 +501,16 @@ EOT
       service {
         name = "client"
         port = "client"
-        tags = ["quod", "client", "web"]
+        # traefik-edge passes TLS through untouched, by name, to this one node:
+        # the client trusts each node's own key, so a name never spans nodes.
+        tags = ["quod", "client", "web",
+          "traefik-edge.enable=true",
+          "traefik-edge.tcp.routers.quod-${NOMAD_ALLOC_INDEX}.rule=HostSNI(`quod-${NOMAD_ALLOC_INDEX}.service.consul`)",
+          "traefik-edge.tcp.routers.quod-${NOMAD_ALLOC_INDEX}.entrypoints=websecure",
+          "traefik-edge.tcp.routers.quod-${NOMAD_ALLOC_INDEX}.tls.passthrough=true",
+          "traefik-edge.tcp.routers.quod-${NOMAD_ALLOC_INDEX}.service=quod-${NOMAD_ALLOC_INDEX}",
+          "traefik-edge.tcp.services.quod-${NOMAD_ALLOC_INDEX}.loadbalancer.server.port=${NOMAD_HOST_PORT_client}",
+        ]
 
         check {
           type          = "http"
@@ -499,6 +520,15 @@ EOT
           interval      = "15s"
           timeout       = "3s"
         }
+      }
+
+      # The client's address for node N: quod-N.service.consul resolves to
+      # traefik-edge, which routes that name to the `client` service above.
+      service {
+        name    = "quod-${NOMAD_ALLOC_INDEX}"
+        port    = "client"
+        address = var.client_edge_address
+        tags    = ["quod", "client-address"]
       }
 
       kill_signal  = "SIGTERM"
@@ -687,7 +717,7 @@ OTEL_TRACES_EXPORTER=otlp
 OTEL_EXPORTER_OTLP_ENDPOINT=${var.otel_exporter_otlp_endpoint}
 OTEL_EXPORTER_OTLP_PROTOCOL=http_protobuf
 OTEL_TRACES_SAMPLER=parentbased_traceidratio
-OTEL_TRACES_SAMPLER_ARG=0.05
+OTEL_TRACES_SAMPLER_ARG=${var.otel_traces_ratio}
 EOT
         destination = "${NOMAD_TASK_DIR}/env"
         env         = true

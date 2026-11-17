@@ -1,0 +1,317 @@
+{
+  "checkpoint": 269,
+  "overall_passed": false,
+  "prepared": true,
+  "waiting_for_wear_observed": true,
+  "begin_dispatched": false,
+  "start_xr_action_executed": false,
+  "native_admission_run": false,
+  "participant_interval_started": false,
+  "human_task_passed": false,
+  "disposition": "Original preparation180 cutoff before coordinator begin; no retry authorized.",
+  "production_delta": {
+    "added": 0,
+    "removed": 0
+  },
+  "supervision": {
+    "checks": 28,
+    "child_exit": 0,
+    "wrapper_exit": 0,
+    "saved263_refresh_retained": true,
+    "exactly_once_begin_and_finish": true
+  },
+  "build": {
+    "live": 98,
+    "supplied": 99,
+    "phases": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "outer_exit": 0,
+    "diagnostic_overrides": {
+      "client/godot/tests/VrReady269.cs": "feaf8b8506d72642abc57028e89cb4fc1d67b256467a09c74b7fb936f9179722",
+      "client/godot/tests/ExportChecks.cs": {
+        "before": "0ddc2a52b4f871639b9d29ab0e27131cb2b84a400a3d461b2570650b9f7b4315",
+        "after": "e2a5b7cec634ce69ea87cb6348e599e2d75ab3fbcc18eeee316ac5a73c5ff65e"
+      }
+    },
+    "manifest": "doc/evidence/godot-steamvr-coordinated-20261101/inputs/client-steamvr269-companion01-manifest.json",
+    "compiled_application_inputs_copied": false,
+    "distributable": false
+  },
+  "qt_startup": {
+    "launch_lines": [
+      "vrenv.sh[3852603]: exec /home/yan/.local/share/Steam/steamapps/common/SteamVR/bin/linux64/vrmonitor -nokillprocess -startupexename quod.x86_64 -startupreason applaunch_unknown -startupapptype 10"
+    ],
+    "monitor_widgets_observed": true,
+    "old_platform_failure_present": false,
+    "helper": {
+      "pid": 3852603,
+      "executable": "/home/yan/.local/share/Steam/steamapps/common/SteamVR/bin/linux64/vrmonitor",
+      "incarnation": [
+        66305,
+        23627638,
+        20553586
+      ],
+      "xcb_plugin_mapped": [
+        "/home/yan/.local/share/Steam/steamapps/common/SteamVR/bin/linux64/qt/plugins/platforms/libqxcb.so"
+      ],
+      "read_only_no_control": true
+    }
+  },
+  "helper_after_client": {
+    "helper_still_same_incarnation": true,
+    "pid": 3852603,
+    "incarnation": [
+      66305,
+      23627638,
+      20553586
+    ],
+    "stdio": {
+      "0": "pipe:[30533674]",
+      "1": "pipe:[30533675]",
+      "2": "pipe:[30533676]"
+    },
+    "client_pipe_inodes_not_recorded": true,
+    "no_signal_or_attach": true
+  },
+  "client": {
+    "pty": 9623,
+    "owned": {
+      "pid": 3852502,
+      "incarnation": [
+        2050,
+        4875912,
+        20553356
+      ],
+      "address": "0x55f62bec27a0"
+    },
+    "child_exit": 0,
+    "wrapper_exit": 1,
+    "wrapper_exit_source": "actual exec/write_stdin completion",
+    "eof": {
+      "stdout": false,
+      "stderr": false
+    },
+    "reader_errors": [],
+    "finish_reason": "preparation_failure",
+    "normal_finish_writes": 1,
+    "failure": "preparation deadline before readiness",
+    "retirement_failure": null
+  },
+  "server": {
+    "pty": 92501,
+    "normal_stop_writes": 1,
+    "child_exit": 0,
+    "wrapper_exit": 0,
+    "eof": {
+      "stdout": true,
+      "stderr": true
+    },
+    "reader_errors": [],
+    "current_source_count": 14,
+    "runtime_recompiled": false,
+    "affected_outputs": [
+      "ebin/godot_m3b_fixture.beam",
+      "ebin/quod_lifecycle_single_path_tests.beam",
+      "ebin/quod_client_view.beam",
+      "ebin/quod_physics_tests.beam"
+    ]
+  },
+  "lifetime": {
+    "started_monotonic": 202225.365296797,
+    "prepared_reported_monotonic": 202235.482414227,
+    "finish_sent_monotonic": 202405.4664601,
+    "completed_monotonic": 202416.434093051,
+    "auth_expires_ms": 1793558094325,
+    "auth_deadline_monotonic": 203128.69244966807,
+    "participant_deadline_monotonic": null
+  },
+  "original_bounds_seconds": {
+    "preparation": 180,
+    "native_admission": 30,
+    "participant": 1800,
+    "normal_close": 60,
+    "outer": 2100
+  },
+  "launch_environment_before": {
+    "QT_QPA_PLATFORM": "wayland;xcb",
+    "DISPLAY": ":1",
+    "WAYLAND_DISPLAY": "wayland-1",
+    "QT_PLUGIN_PATH": null,
+    "QT_QPA_PLATFORM_PLUGIN_PATH": null
+  },
+  "launch_environment_after": {
+    "QT_QPA_PLATFORM": "xcb",
+    "DISPLAY": ":1",
+    "WAYLAND_DISPLAY": "wayland-1",
+    "QT_PLUGIN_PATH": null,
+    "QT_QPA_PLATFORM_PLUGIN_PATH": null
+  },
+  "host_input_or_focus_requests": 0,
+  "global_configuration_changed": false,
+  "original_profiles_pending_and_failed_cases_preserved": true,
+  "eof_cause_established": false,
+  "eof_limit": "At wrapper completion both drain threads had not reached EOF. The newly runtime-spawned monitor remained alive with pipe stdio; original client pipe inode IDs were not saved, so descriptor equality is unproved. No helper/runtime process was signaled.",
+  "receipts": [
+    {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/steamvr269-human01/invocation.json",
+      "sha256": "f6d409e7a88ca36a2cbb5666d29ac07743cb9acd8bf9acbfdc628b35ceb02821",
+      "bytes": 2899,
+      "mode": 33152,
+      "stat_key": [
+        2050,
+        27394147,
+        2899,
+        1793557382067177832,
+        1793557382067177832
+      ]
+    },
+    {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/steamvr269-human01/preparation.json",
+      "sha256": "6e91fe2f8d8e40f29af7616e2dd6e1b9b4773aaddac9e8c32d6cac8605ca50eb",
+      "bytes": 1385,
+      "mode": 33152,
+      "stat_key": [
+        2050,
+        27394293,
+        1385,
+        1793557200986235280,
+        1793557200986235280
+      ]
+    },
+    {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/steamvr269-human01/qt-startup.json",
+      "sha256": "60b592533fa402f2d0975fdb4fd7f51ab1f615e4dba8246e37c822781c4ef32e",
+      "bytes": 687,
+      "mode": 33152,
+      "stat_key": [
+        2050,
+        27394297,
+        687,
+        1793557238297456838,
+        1793557238297456838
+      ]
+    },
+    {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/steamvr269-human01/helper-after-client.json",
+      "sha256": "3c5d0ce6fcf0da7e8e0c7cbe5c9a191b48c0817889649aef242366a36fd34c68",
+      "bytes": 299,
+      "mode": 33152,
+      "stat_key": [
+        2050,
+        27394303,
+        299,
+        1793557418197953618,
+        1793557418197953618
+      ]
+    },
+    {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/steamvr269-human01/stdout.raw",
+      "sha256": "de2512037a33efe77da3f707b3f2e85f9e7200e8b2a334d8005a4183562261da",
+      "bytes": 201230,
+      "mode": 33152,
+      "stat_key": [
+        2050,
+        27394145,
+        201230,
+        1793557371923528098,
+        1793557371923528098
+      ]
+    },
+    {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/steamvr269-human01/stderr.raw",
+      "sha256": "5d378107744f1796affea8d73e7077daeb95091b9ffcc20e27afa2cc70b98754",
+      "bytes": 7237,
+      "mode": 33152,
+      "stat_key": [
+        2050,
+        27394146,
+        7237,
+        1793557193904057102,
+        1793557193904057102
+      ]
+    },
+    {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/steamvr269-preflight01/preflight.json",
+      "sha256": "c2854cea45f5b7212affabfee87e80bbedaf616f8871290c7eac4191c17c08cc",
+      "bytes": 1687,
+      "mode": 33152,
+      "stat_key": [
+        2050,
+        27394050,
+        1687,
+        1793557142133084275,
+        1793557142133084275
+      ]
+    },
+    {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-steamvr-coordinated-20261101/logs/steamvr269-supervision01.json",
+      "sha256": "af27c26259345d1369df5b54153f8c62cc40603f27c7c87aaa58cde4bd45c20b",
+      "bytes": 2154,
+      "mode": 33152,
+      "stat_key": [
+        66305,
+        28445607,
+        2154,
+        1793557103366291273,
+        1793557103366291273
+      ]
+    },
+    {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-steamvr-coordinated-20261101/logs/steamvr269-build01.json",
+      "sha256": "bae9a30199dd0f400f989abb31127ea677a35f724db38e66d28a9aaf802d068e",
+      "bytes": 2147,
+      "mode": 33152,
+      "stat_key": [
+        66305,
+        28445626,
+        2147,
+        1793557136494469424,
+        1793557136494469424
+      ]
+    },
+    {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-steamvr-coordinated-20261101/logs/steamvr269-server-wrapper01.json",
+      "sha256": "9f491ca4d2ac08ce2aae0e9ed78c3b5a419775bbe026ce80ff1dafad5b02ceec",
+      "bytes": 2441,
+      "mode": 33152,
+      "stat_key": [
+        66305,
+        28445653,
+        2441,
+        1793557396573287127,
+        1793557396573287127
+      ]
+    },
+    {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-steamvr-coordinated-20261101/inputs/server-steamvr269-human01-server.json",
+      "sha256": "5da3363d1e8cdc2be4ddcd38ae897c887dfc58ed7fab88ccfcc5bcd3dad4bf36",
+      "bytes": 13348,
+      "mode": 33152,
+      "stat_key": [
+        66305,
+        28445650,
+        13348,
+        1793557396403352539,
+        1793557396403352539
+      ]
+    },
+    {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-steamvr-coordinated-20261101/inputs/client-steamvr269-companion01-manifest.json",
+      "sha256": "187bea2c60cbd47daffc3568e22662828c56fc1a2c4b12b4009cd1fd01631374",
+      "bytes": 61637,
+      "mode": 33152,
+      "stat_key": [
+        66305,
+        28445608,
+        61637,
+        1793557136410093211,
+        1793557136410093211
+      ]
+    }
+  ]
+}

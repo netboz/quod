@@ -1,0 +1,43 @@
+{
+  "certificate_command": [
+    "openssl",
+    "req",
+    "-x509",
+    "-newkey",
+    "rsa:2048",
+    "-nodes",
+    "-keyout",
+    "/home/yan/.cache/quod-m2-artifacts/private/journey-production01/proxy-key.pem",
+    "-out",
+    "/home/yan/.cache/quod-m2-artifacts/private/journey-production01/proxy-ca.pem",
+    "-days",
+    "1",
+    "-subj",
+    "/CN=127.0.0.1",
+    "-addext",
+    "subjectAltName=IP:127.0.0.1",
+    "-addext",
+    "basicConstraints=critical,CA:TRUE"
+  ],
+  "certificate_child_exit": 0,
+  "origin": "https://127.0.0.1:39155",
+  "expected_hostname": "127.0.0.1",
+  "ca_sha256": "becd88bd4e98158f0a044df7cc21a3c97a18f519dfa76fdcd3ac897ccb8090cc",
+  "backend_ca_sha256": "dc5162bebdfd0e43f84333871ded706a877764a22918e8e0dabeda76910e4151",
+  "certificate_validation": true,
+  "drops": {
+    "signup": 0,
+    "setup": 0,
+    "instruction": 0
+  },
+  "question_faults": {
+    "question_reply_lost": 0,
+    "question_unknown_error": 0
+  },
+  "projection_injections": {
+    "duplicate_projection": 0,
+    "late_after_refresh": 0,
+    "prior_socket_projection": 0
+  },
+  "requests": []
+}

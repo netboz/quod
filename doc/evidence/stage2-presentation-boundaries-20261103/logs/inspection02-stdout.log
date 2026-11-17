@@ -1,0 +1,14 @@
+======================== EUnit ========================
+quod_lens_tests: exact_predicate_inspection_preserves_full_sorted_catalogue_test...*timed out*
+in function erlog_int:portable_failure_reason/1 (/work/_checkouts/erlog/src/erlog_int.erl, line 330)
+in call from erlog_int:portable_failure_reason_args/3 (/work/_checkouts/erlog/src/erlog_int.erl, line 349)
+in call from erlog_int:portable_failure_reason/1 (/work/_checkouts/erlog/src/erlog_int.erl, line 333)
+in call from erlog_int:portable_failure_reason_args/3 (/work/_checkouts/erlog/src/erlog_int.erl, line 349)
+in call from quod_wire_term:validate_failure_reason/1 (/checks/quod_wire_term.erl, line 648)
+in call from quod_wire_term:validate_failure_reasons/2 (/checks/quod_wire_term.erl, line 636)
+in call from quod_wire_term:encode_failure_reasons/1 (/checks/quod_wire_term.erl, line 601)
+in call from quod_wire_term:valid_failure_reason_stack/1 (/checks/quod_wire_term.erl, line 625)
+undefined
+=======================================================
+  Failed: 0.  Skipped: 0.  Passed: 0.
+One or more tests were cancelled.

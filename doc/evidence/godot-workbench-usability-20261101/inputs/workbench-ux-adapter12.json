@@ -1,0 +1,120 @@
+{
+  "passed": true,
+  "reader_errors": [],
+  "host_input_or_focus_action": false,
+  "software_native_Control_inputs": true,
+  "setup_Control_signals": true,
+  "no_headset_or_runtime": true,
+  "companion_not_distributed": true,
+  "production_auth_lifetime_unchanged": true,
+  "manifest_sha256": "9f1d702a9cb9079e18c17cfe559b2ac0c1c0e30213b53f100a2772c78f4c209a",
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-workbench-ux-adapter-stdout": true,
+    "client-workbench-ux-adapter-stderr": true
+  },
+  "streams": {
+    "server-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/workbench-ux-adapter12/server-stdout.raw",
+      "sha256": "cb798b8181a1b0bc15492f8ebbbf699468c970a9a1144bb0c2f47580e87dad57",
+      "bytes": 129
+    },
+    "client-workbench-ux-adapter-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/workbench-ux-adapter12/client-workbench-ux-adapter-stdout.raw",
+      "sha256": "7466ecf8d852d6f34bde3b5763cc7f7566ba2f4da30eb035e74e2521aa5fb6fe",
+      "bytes": 92395
+    },
+    "client-workbench-ux-adapter-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/workbench-ux-adapter12/client-workbench-ux-adapter-stderr.raw",
+      "sha256": "9faee901efd231152076fcde9be460be08252114e7e7d68aad945d86f14ffc85",
+      "bytes": 137
+    },
+    "server-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/workbench-ux-adapter12/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "native_input_count": 0,
+  "children": {
+    "server": {
+      "true_exit": 0
+    },
+    "client-workbench-ux-adapter": {
+      "explicit_completion": true,
+      "completion_monotonic": 152523.512254776,
+      "true_exit": 0,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "current native target is enabled and enclosed: @Button@79",
+        "native pointer releases the actual capture",
+        "one native release activates its displayed button exactly once",
+        "current native target is enabled and enclosed: control0",
+        "native pointer releases the actual capture",
+        "one native release activates its displayed button exactly once",
+        "opened native catalogue fits the actual surface",
+        "native pointer releases the actual capture",
+        "native catalogue selects a changed exact item once",
+        "current native target is enabled and enclosed: control1",
+        "native pointer releases the actual capture",
+        "one native release activates its displayed button exactly once",
+        "opened native catalogue fits the actual surface",
+        "native pointer releases the actual capture",
+        "native catalogue selects a changed exact item once",
+        "actual native raster retained: inspection-baseline",
+        "native inspection separates readable selected fact and exact details from unrequested class and attribute preparation fields",
+        "inspection retains the exact anchored class identity",
+        "current native target is enabled and enclosed: control0",
+        "native pointer releases the actual capture",
+        "one native release activates its displayed button exactly once",
+        "opened native catalogue fits the actual surface",
+        "native pointer releases the actual capture",
+        "native catalogue selects a changed exact item once",
+        "current native target is enabled and enclosed: control1",
+        "native pointer releases the actual capture",
+        "one native release activates its displayed button exactly once",
+        "opened native catalogue fits the actual surface",
+        "native pointer releases the actual capture",
+        "native catalogue selects a changed exact item once",
+        "native instance inspection preserves exact subject and membership fact while showing a readable caption",
+        "current native target is enabled and enclosed: control0",
+        "native pointer releases the actual capture",
+        "one native release activates its displayed button exactly once",
+        "opened native catalogue fits the actual surface",
+        "native pointer releases the actual capture",
+        "native catalogue selects a changed exact item once",
+        "current native target is enabled and enclosed: control1",
+        "native pointer releases the actual capture",
+        "one native release activates its displayed button exactly once",
+        "opened native catalogue fits the actual surface",
+        "native pointer releases the actual capture",
+        "native catalogue selects a changed exact item once",
+        "current native target is enabled and enclosed: control2",
+        "native pointer releases the actual capture",
+        "one native release activates its displayed button exactly once",
+        "current native target is enabled and enclosed: control7",
+        "native pointer releases the actual capture",
+        "authored readonly field stays readonly even when its signed source consumer permits editing",
+        "controls-only installation preserves the source editor and performs no source read or store write",
+        "software ray fixture starts without native XR or an existing head tracker",
+        "current signed mapping and injected ray focus the contextual class field at 26",
+        "same ray types once through current native field and draft at 26",
+        "mapped Back to inspection retires the local keyboard target at 26",
+        "current native target is enabled and enclosed: control2",
+        "native pointer releases the actual capture",
+        "one native release activates its displayed button exactly once",
+        "current signed mapping and injected ray focus the contextual class field at 48",
+        "same ray types once through current native field and draft at 48",
+        "mapped Back to inspection retires the local keyboard target at 48",
+        "software ray source subscriptions and captures retire without a runtime session",
+        "enabled action disconnect",
+        "adapter signed consumers retire normally"
+      ]
+    }
+  }
+}

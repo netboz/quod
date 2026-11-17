@@ -54,10 +54,8 @@ prepared material all pass through the existing canonical validators.
 new_est() ->
     {ok, Erl} = erlog:new(quod_erlog_db_mvcc, null),
     Est0 = element(3, Erl),
-    EstReasonBounded = erlog_int:set_failure_reason_policy(
-                         {quod_wire_term, valid_failure_reason_stack}, Est0),
     {succeed, Est1} = erlog_int:prove_goal(
-                        {set_prolog_flag, unknown, fail}, EstReasonBounded),
+                        {set_prolog_flag, unknown, fail}, Est0),
     Est2 = quod_predicates:load(Est1),
     Est3 = quod_ask:load(Est2),
     Est4 = quod_transaction_predicates:load(Est3),
@@ -614,7 +612,8 @@ load_common_predicates(#est{db = Db0} = Est) ->
     Terms =
         try lists:append(
               [read_terms(filename:join([code:priv_dir(quod), "ontologies", File]))
-               || File <- ["common_predicates.pl", "construction.pl", "material_policy.pl"]])
+               || File <- ["common_predicates.pl", "construction.pl", "material_policy.pl",
+                           "gui_forms.pl", "geometry_schema.pl"]])
         catch
             throw:{genesis_failed, ReadReason} ->
                 throw({common_predicates_failed, ReadReason})

@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m0-20261027/tls-check.py", line 25, in <module>
+    r=subprocess.run(command,capture_output=True);(out/f'certificate-{i}.log').write_bytes(r.stdout+r.stderr);assert r.returncode==0
+                                                                                                                     ^^^^^^^^^^^^^^^
+AssertionError

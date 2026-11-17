@@ -1,0 +1,29 @@
+--- client/godot/OpenXRInput.cs before
+
++++ client/godot/OpenXRInput.cs
+
+@@ -179,7 +179,7 @@
+
+     public void HideWorkspace() { CancelPresentation();CancelMenu();workspaceShown=false;movingWorkspace=false;placeRequested=false;panel.Visible=false;Changed?.Invoke(); }
+     public void MoveWorkspace() { CancelPresentation();workspaceShown=true;movingWorkspace=!movingWorkspace;placeRequested=movingWorkspace;Changed?.Invoke(); }
+     public void WorkspaceDistance(float change)
+-    { float next=Math.Clamp(workspaceDistance+change,.6f,4);if(next==workspaceDistance)return;workspaceDistance=next;ShowWorkspace(); }
++    { float next=Math.Clamp(workspaceDistance+change,.6f,4);if(next==workspaceDistance)return;workspaceDistance=next;ResizePanel();ShowWorkspace(); }
+     void PlaceWorkspace(bool interactive)
+     {
+         if(!interactive) { if(StopMovingWorkspace())Changed?.Invoke();return; }
+@@ -199,8 +199,11 @@
+
+     void ResizePanel()
+     {
+         var mesh=(QuadMesh)panel.Mesh;var pixels=gui.Surface.Size;
+-        if(pixels==panelPixels)return;
+-        var size=new Vector2(mesh.Size.Y*pixels.X/pixels.Y,mesh.Size.Y);
++        // Explicit depth changes preserve angular workspace/text/target scale.
++        // Placement remains world-stable; no ordinary frame resizes it.
++        float height=workspaceDistance/2;
++        var size=new Vector2(height*pixels.X/pixels.Y,height);
++        if(pixels==panelPixels && mesh.Size==size)return;
+         CancelPresentation();panelPixels=pixels;
+         if(mesh.Size!=size)mesh.Size=size;
+     }

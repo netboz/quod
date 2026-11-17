@@ -1,0 +1,15 @@
+{
+  "command": [
+    "dotnet",
+    "restore",
+    "Quod.csproj",
+    "--locked-mode",
+    "-p:Configuration=ExportRelease",
+    "-p:SelfContained=true",
+    "--source",
+    "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-stage2-credit-baseline01/dependency-feed"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 1.2805034019984305
+}

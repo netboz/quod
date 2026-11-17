@@ -1,5 +1,6 @@
 -module(quod_atomic_admission_tests).
 -include_lib("eunit/include/eunit.hrl").
+-include("retired_remaining_sizes.hrl").
 -include("quod_dtx_owner.hrl").
 -include("quod_ingress_limits.hrl").
 
@@ -223,27 +224,28 @@ out_of_order_removal_keeps_fifo_and_rejects_cross_group_tags_test() ->
                            Checking, [Fifth, Fourth, First, Third]),
     ?assertEqual(Empty, Finished).
 
-admission_bound_preserves_existing_and_durable_work_test_() ->
+admission_retains_new_existing_and_durable_work_test_() ->
     {timeout, 30, fun() ->
-        Materials = [material() || _ <- lists:seq(1, ?MAX_INGRESS_TXS + 1)],
+        Materials = [material() || _ <- lists:seq(1, ?LEGACY_MAX_INGRESS_TXS + 1)],
         [Extra | Enrolled] = Materials,
         Full = lists:foldl(fun(M, Acc) ->
             {ok, Next} = quod_atomic_admission:reserve(self(), make_ref(), M, #{}, Acc), Next
         end, quod_atomic_admission:new(), Enrolled),
-        ?assertEqual({0, ?MAX_INGRESS_TXS}, quod_atomic_admission:counts(Full)),
-        ?assertNot(quod_atomic_admission:has_capacity(group(Extra), Full)),
-        ?assertEqual({error, busy}, quod_atomic_admission:reserve(self(), make_ref(), Extra, #{}, Full)),
+        ?assertEqual({0, ?LEGACY_MAX_INGRESS_TXS}, quod_atomic_admission:counts(Full)),
+        {ok, Expanded} = quod_atomic_admission:reserve(self(), make_ref(), Extra, #{}, Full),
+        ?assertEqual({0, ?LEGACY_MAX_INGRESS_TXS + 1}, quod_atomic_admission:counts(Expanded)),
+        ?assertEqual({error, invalid_dtx_intent},
+                     quod_atomic_admission:reserve(self(), make_ref(), Extra, #{}, Expanded)),
         First = hd(Enrolled),
-        ?assert(quod_atomic_admission:has_capacity(group(First), Full)),
         Attached = quod_atomic_admission:admit(First, {dtx_endpoint, self()}, #{}, Full),
         ?assertEqual(quod_atomic_admission:counts(Full), quod_atomic_admission:counts(Attached)),
         %% Restore is not a fresh admission: a journal duty must never be
         %% discarded just because the volatile capacity is already occupied.
         Restored = quod_atomic_admission:admit(Extra, none, #{}, Attached),
-        ?assertEqual({1, ?MAX_INGRESS_TXS}, quod_atomic_admission:counts(Restored)),
+        ?assertEqual({1, ?LEGACY_MAX_INGRESS_TXS}, quod_atomic_admission:counts(Restored)),
         {_, Removed} = quod_atomic_admission:take(group(Extra), Restored),
         {_, Released} = quod_atomic_admission:take(group(First), Removed),
-        ?assert(quod_atomic_admission:has_capacity(group(Extra), Released))
+        ?assertEqual({0, ?LEGACY_MAX_INGRESS_TXS - 1}, quod_atomic_admission:counts(Released))
     end}.
 
 retained(M, F) ->

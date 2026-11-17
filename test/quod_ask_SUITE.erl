@@ -15,12 +15,14 @@
          remote_native_read_uses_selected_observer/1,
          remote_plain_read_rejects_lying_validator/1,
          remote_scope_solutions/1, remote_scope_trace_parentage/1,
+         proof_policy_refusal_local_and_remote/1,
+         answer_policy_producer_consumer_and_signed_change/1,
          remote_scope_symbol_safety/1,
          remote_signed_fresh_nested_symbol/1,
          remote_scope_chain_policy/1, remote_scope_failure_reasons/1,
          remote_scope_nested_failure_reasons/1,
          remote_scope_deep_failure_reasons/1,
-         remote_scope_structural_reason_truncation/1,
+         remote_scope_structural_reason_depth/1,
          remote_scope_cancel/1, remote_scope_transport_reuse/1,
          remote_signed_gateway_read_execute_cursor/1,
          remote_signed_read_certified_write/1,
@@ -42,7 +44,7 @@
          remote_group_recovers_after_origin_crash/1,
          remote_four_scope_chain_recovers_empty_routes/1]).
 -export([run_scope_proofs/3]).
--export([hold_group_activation/3, agent_custody_snapshot/2]).
+-export([hold_group_activation/3, agent_custody_snapshot/2, committed_remote_read/1]).
 -export([remote_signed_transaction_savepoints/1]).
 -export([cut_findall_local_and_cohosted/1,
          cut_findall_remote_boundaries/1,
@@ -73,12 +75,14 @@ all() -> [remote_signed_transaction_savepoints,
           remote_native_read_uses_selected_observer,
           remote_plain_read_rejects_lying_validator,
           remote_scope_solutions, remote_scope_trace_parentage,
+          proof_policy_refusal_local_and_remote,
+          answer_policy_producer_consumer_and_signed_change,
           remote_scope_symbol_safety,
           remote_signed_fresh_nested_symbol,
           remote_scope_chain_policy, remote_scope_failure_reasons,
           remote_scope_nested_failure_reasons,
           remote_scope_deep_failure_reasons,
-          remote_scope_structural_reason_truncation,
+          remote_scope_structural_reason_depth,
           remote_scope_cancel, remote_scope_transport_reuse,
           remote_signed_gateway_read_execute_cursor,
           remote_signed_read_certified_write,
@@ -118,11 +122,11 @@ node_enrollment_remote_custodian(Config) ->
         [NodeNs, #{node_id => SourceKey, mode => create, data_dir => NodeDir,
                    seed_peers => [], genesis_file => NodeSource,
                    external_predicate_modules => [quod_ontology_predicates]}]),
-    ok = peer:call(Source, ?MODULE, enrollment_wait_ready, [NodeNs, {isa, node, agent}], 15000),
+    ok = peer:call(Source, ?MODULE, enrollment_wait_ready, [NodeNs, {isa, node, {':',quod,{':',agent,agent}}}], 15000),
     NodeAnchor = peer:call(Source, quod_simplex, genesis_hash, [NodeNs]),
     start_brahms(Source, NodeNs, SourceAddr, []),
     {ok, Template} = file:read_file(filename:join(code:priv_dir(quod),
-                                                 "ontologies/node_execution.pl")),
+                                                 "ontologies/node_instance.pl")),
     HostNs = <<"node:remote-custodian">>,
     Options = quod_ct:node_identity_options(HostNs, me, HostKey),
     {ok, [#{'A' := HostAnchor}], _} = peer:call(Custodian, quod_prolog, execute,
@@ -765,24 +769,26 @@ remote_gui_opening_observer_receiver(Config) ->
             genesis_diff => quod_prolog:terms_to_diff(Terms)}],15000)
     end,
     GuiNs = <<"quod:gui">>, NodeNs = <<"gui:remote-node">>, AppNs = <<"gui:remote-app">>,
-    GuiAnchor = Start(GuiNs,Source("quod_gui.pl") ++ [{can_invoke,true,{'_'},{'_'},GuiNs}],
+    GuiAnchor = Start(GuiNs,quod_ct:gui_terms() ++ [{can_invoke,true,{'_'},{'_'},GuiNs}],
                       [quod_agent_predicates,quod_gui_predicates]),
+    AgentAnchor = Start(<<"quod:agent">>,Source("quod_agent.pl"),[quod_agent_predicates]),
+    UserAnchor = Start(<<"quod:user">>,Source("quod_user.pl"),[quod_agent_predicates]),
     start_brahms(Owner,GuiNs,OwnerAddr,[]),
     start_join_namespace(Receiver,ReceiverKey,GuiNs,GuiAnchor,[OwnerAddr],Config),
     start_brahms(Receiver,GuiNs,ReceiverAddr,[OwnerAddr]),
     ok = peer:call(Receiver,?MODULE,enrollment_wait_ready,[GuiNs,true],15000),
     ?assertMatch(#{role := observer},peer:call(Receiver,quod_simplex,status,[GuiNs])),
     HumanNs = <<"gui:remote-human">>, HumanInstance = {human_user,test_agent},
-    HumanAnchor = Start(HumanNs,Source("gui_hud.pl") ++ [
+    HumanAnchor = Start(HumanNs,quod_gui_question_tests:user_source_with_allowance(HumanInstance,2) ++ [
         {agent_key,HumanInstance,?config(agent_pub,Config),active},
-        {instance_of,human_user,HumanInstance},{gui_pending_allowance,HumanInstance,2},
+        {instance_of,{':',quod,{':',user,human_user}},HumanInstance},
         {can_invoke,{'_'},{agent_instance_ref,HumanNs,{'_'},HumanInstance},{'_'},HumanNs}],
         [quod_agent_predicates]),
     Human = {agent_instance_ref,HumanNs,HumanAnchor,HumanInstance},
     Ctx = #{agent => {HumanNs,HumanAnchor},key_pair => ?config(agent_key,Config),
             network => ?config(network_id,Config)},
     Admin = {can_invoke,{'_'},Human,{'_'},{'_'}},
-    NodeAnchor = Start(NodeNs,Source("node_execution.pl") ++ [Admin,
+    NodeAnchor = Start(NodeNs,Source("node_instance.pl") ++ [Admin,
         {can_invoke,{'_'},{node,OwnerKey},{'_'},NodeNs},
         {node_ontology,NodeNs},{instance_of,node,physical_node},{agent_key,physical_node,OwnerKey,active}],
         [quod_agent_predicates]),
@@ -800,9 +806,11 @@ remote_gui_opening_observer_receiver(Config) ->
     VaultConfig = #{directory => filename:join(?config(priv_dir,Config),"remote-gui-keys"),unlock_file => Unlock},
     ok = peer:call(Owner,application,set_env,[quod,agent_vault,VaultConfig]),
     {ok,_} = peer:call(Owner,supervisor,restart_child,[quod_reg:via({sup,node}),quod_agent_vault]),
-    AppAnchor = Start(AppNs,Source("agent_instance.pl") ++ Source("gui_question.pl") ++
-        Source("gui_instance.pl") ++ quod_prolog:read_terms(filename:join([
+    AppAnchor = Start(AppNs,Source("agent_instance.pl") ++ Source("gui_instance.pl") ++
+        quod_prolog:read_terms(filename:join([
             filename:dirname(code:which(?MODULE)),"fixtures","gui-components.pl"])) ++ [Admin,
+        {instance_of,{':',quod,{':',agent,agent}},actor},
+        {can_invoke,{'_'},{node,OwnerKey},{'_'},AppNs},
         {gui_vocabulary,GuiNs,GuiAnchor},{gui_pending_allowance,actor,2},{gui_completion_allowance,actor,30000},
         {can_assign_agent_host,Human,actor,none,0,Node,{'_'}},
         {':-',{settings_entered,{'N'},{'M'},{'L'},{'A'}},{assertz,{saved,{'N'},{'M'},{'L'},{'A'}}}}],
@@ -820,23 +828,24 @@ remote_gui_opening_observer_receiver(Config) ->
     ok = enrollment_route(Receiver,OwnerKey,OwnerAddr,
         [{?ASKER_NS,?config(asker_anchor,Config),validator},
          {HumanNs,HumanAnchor,validator},{GuiNs,GuiAnchor,validator},
-         {NodeNs,NodeAnchor,validator},{AppNs,AppAnchor,validator}]),
+         {NodeNs,NodeAnchor,validator},{AppNs,AppAnchor,validator},
+         {<<"quod:agent">>,AgentAnchor,validator},{<<"quod:user">>,UserAnchor,validator}]),
     ok = enrollment_route(Owner,ReceiverKey,ReceiverAddr,
         [{?THIRD_NS,?config(third_anchor,Config),validator},{?NS,?config(target_anchor,Config),observer},
          {GuiNs,GuiAnchor,observer}]),
     ?assertEqual(undefined,peer:call(Receiver,quod_reg,where,[{quod_prolog,HumanNs}])),
     ?assertEqual(undefined,peer:call(Receiver,quod_reg,where,[{quod_prolog,AppNs}])),
     ?assertMatch({ok,[#{<<"V0">> := []}],_},peer:call(Receiver,quod_lobby_tests,read,
-        [Ctx,Scope(HumanNs,HumanAnchor,{gui_pending_questions,{0}})],20000)),
+        [Ctx,Scope(HumanNs,HumanAnchor,gui({gui_pending_questions,{0}}))],20000)),
     Client = peer:call(Receiver,?MODULE,gui_receiver_start,[Ctx,HumanNs,HumanAnchor]),
     ReceiverCall = fun(Command) -> peer:call(Receiver,gen_server,call,[Client,Command,20000],25000) end,
     try
         #{<<"receiver">> := #{<<"token">> := TokenText}} = ReceiverCall(renew),
         Token = base64:decode(TokenText,#{mode => urlsafe,padding => false}),
         ?assertMatch({ok,_,{normalized,{committed,_,_}}},
-            Submit({gui_select_receiver,HumanInstance,ReceiverKey,Token})),
+            Submit(gui({gui_select_receiver,Human,ReceiverKey,Token}))),
         _ = ReceiverCall(renew),
-        Opening = Submit(Scope(AppNs,AppAnchor,{gui_open,settings,{0}})),
+        Opening = Submit(gui({gui_open,Ref,{0}})),
         case Opening of
             {ok,_,{normalized,{committed,_,_}}} -> ok;
             {ok,_,Outcome} -> error({remote_gui_open_failed,Outcome});
@@ -844,21 +853,21 @@ remote_gui_opening_observer_receiver(Config) ->
         end,
         ok = ReceiverCall(activated),
         {ok,[#{<<"V0">> := [{question_ref,AppNs,AppAnchor,Q}]}],_} =
-            peer:call(Owner,quod_lobby_tests,read,[Ctx,{gui_pending_questions,{0}}]),
+            peer:call(Owner,quod_lobby_tests,read,[Ctx,gui({gui_pending_questions,{0}})]),
         {ok,[#{<<"V0">> := Revision}],_} = peer:call(Owner,quod_lobby_tests,read,
             [Ctx,Scope(AppNs,AppAnchor,{gui_schema,settings,{0},{'_'}})]),
         Fields = [{field,name,<<"Remote">>},{field,mode,square},{field,level,75},{field,angle,180}],
         ok = peer:call(Owner,?MODULE,gui_complete_answer,
-            [Ctx,Actor,Q,Scope(AppNs,AppAnchor,{gui_submit,Q,Revision,apply,Fields})],30000),
+            [Ctx,Actor,Q,gui({gui_submit,{question_ref,AppNs,AppAnchor,Q},Revision,apply,Fields})],30000),
         ?assertMatch({ok,[_],_},peer:call(Owner,quod_lobby_tests,read,
             [Ctx,Scope(AppNs,AppAnchor,{saved,<<"Remote">>,square,75,180})])),
         #{<<"value">> := <<"[]">>} = ReceiverCall(renew),
         ok = ReceiverCall(stop),
         %% The signed route remains, but the authoritative remote receiver is
         %% absent. Public opening fails and creates no question or HUD row.
-        ?assertMatch({ok,_,{normalized,{failed,_}}},Submit(Scope(AppNs,AppAnchor,{gui_open,settings,{0}}))),
+        ?assertMatch({ok,_,{normalized,{failed,_}}},Submit(gui({gui_open,Ref,{0}}))),
         ?assertMatch({ok,[#{<<"V0">> := []}],_},peer:call(Owner,quod_lobby_tests,read,
-            [Ctx,{gui_pending_questions,{0}}]))
+            [Ctx,gui({gui_pending_questions,{0}})]))
     after
         _ = catch ReceiverCall(stop)
     end.
@@ -928,23 +937,23 @@ gui_receiver_projection(Hud,Message,Deadline) ->
         after 1000 -> error(remote_gui_socket_unresponsive) end
     end.
 
-gui_host_actor(Ctx,Actor = {agent_instance_ref,Ns,_,Instance},Node,Key) ->
+gui_host_actor(Ctx,Actor = {agent_instance_ref,Ns,_,_},Node,Key) ->
     true = quod_reg:subscribe({agent_hosting,Ns}),
     try
         ?assertMatch({ok,_,{normalized,{committed,_,_}}},quod_lobby_tests:submit(Ctx,execute,
-            {'::',Ns,{goal,{agent_hosted,Instance,Node,1,Key}}})),
+            {'::',<<"quod:agent">>,{goal,{agent_hosted,Actor,Node,1,Key}}})),
         receive {agent_installed,_,_,#{reference := Actor},_} -> ok
         after 10000 -> error(remote_gui_actor_not_installed) end
     after quod_reg:unsubscribe({agent_hosting,Ns}) end.
 
-gui_complete_answer(Ctx,Actor,Q,Goal) ->
+gui_complete_answer(Ctx,Actor = {agent_instance_ref,Ns,Anchor,_},Q,Goal) ->
     true = quod_reg:subscribe({agent,Actor}),
     try
         ?assertMatch({ok,_,{normalized,{committed,_,_}}},quod_lobby_tests:submit(Ctx,execute,Goal)),
         receive {agent_request_finished,_,_,#{reference := Actor},_,Result} ->
             {ok,#{request_bytes := Bytes},{normalized,{committed,_,_}}} = Result,
             {ok,#{goal_text := Text}} = quod_client_goal:decode(Bytes),
-            {ok,Expected} = quod_client_goal_parser:format({gui_complete,Q}),
+            {ok,Expected} = quod_client_goal_parser:format(gui({gui_complete,{question_ref,Ns,Anchor,Q}})),
             ?assertEqual(quod_client_goal_parser:parse(Expected,3),quod_client_goal_parser:parse(Text,3)),ok
         after 10000 -> error(remote_gui_completion_missing) end
     after quod_reg:unsubscribe({agent,Actor}) end.
@@ -1020,6 +1029,103 @@ remote_scope_solutions(Config) ->
     ?assertMatch({ok, [#{'L' := [{'$quod_symbol', <<"kibble">>},
                                   {'$quod_symbol', <<"meat">>}]}], _},
                  peer:call(Asker, quod_prolog, prove, [?ASKER_NS, All], 60000)).
+
+proof_policy_refusal_local_and_remote(Config) ->
+    Target = ?config(target, Config),
+    Asker = ?config(asker, Config),
+    Ns = <<"proof-policy-refusal">>,
+    Source = filename:join(?config(priv_dir, Config), "proof-policy-refusal.pl"),
+    ok = file:write_file(Source,
+        "can_invoke(_Goal, _Principal, _Chain, _Ns).\nready.\n"),
+    ok = start_namespace(Target, ?config(target_pub, Config), Ns, Source, [], Config),
+    ok = peer:call(Target, quod_ct, await_applied, [Ns, 1, 10000], 15000),
+    Anchor = peer:call(Target, quod_simplex, genesis_hash, [Ns]),
+    AnimalsAnchor = peer:call(Target, quod_simplex, genesis_hash, [?NS]),
+    FourthAnchor = peer:call(Target, quod_simplex, genesis_hash, [?FOURTH_NS]),
+    ok = enrollment_route(Asker, ?config(target_pub, Config), ?config(target_addr, Config),
+        [{Ns, Anchor, validator}, {?NS, AnimalsAnchor, validator},
+         {?FOURTH_NS, FourthAnchor, validator},
+         {?ROOT_NS, ?config(network_id, Config), validator}]),
+    Goal = {'::', Ns, ready},
+    %% Establish both real routes before closing this disposable target's
+    %% proof lane through its committed policy. No repair bypass is needed.
+    lists:foreach(fun({Peer, Origin}) ->
+        ?assertMatch({ok, [_], _},
+            peer:call(Peer, quod_prolog, prove_ro, [Origin, Goal], 15000))
+    end, [{Target, ?NS}, {Asker, ?ASKER_NS}]),
+    ?assertMatch({ok, [_], _}, peer:call(Target, quod_prolog, execute,
+        [Ns, {assertz, {material_limit_override, proof, heap_bytes, 0}}], 15000)),
+    lists:foreach(fun({Peer, Origin}) ->
+        ?assertMatch({error, {material_limit, proof, heap_bytes, Actual, 0}}
+                     when Actual > 0,
+            peer:call(Peer, quod_prolog, prove_ro, [Origin, Goal], 15000))
+    end, [{Target, ?NS}, {Asker, ?ASKER_NS}]).
+
+answer_policy_producer_consumer_and_signed_change(Config) ->
+    Target = ?config(target, Config), Asker = ?config(asker, Config),
+    Ns = <<"answer-policy-target">>, Value = binary:copy(<<"a">>, 80000),
+    Source = filename:join(?config(priv_dir, Config), "answer-policy-target.pl"),
+    ok = file:write_file(Source, [
+        "can_invoke(_Goal, _Principal, _Chain, _Ns).\n",
+        "material_limit_override(proof, answer_bytes, 1000).\n",
+        "answer_value(<<\"", Value, "\">>).\n"]),
+    ok = start_namespace(Target, ?config(target_pub, Config), Ns, Source, [], Config),
+    ok = peer:call(Target, quod_ct, await_applied, [Ns, 1, 10000], 15000),
+    Anchor = peer:call(Target, quod_simplex, genesis_hash, [Ns]),
+    ok = enrollment_route(Asker, ?config(target_pub, Config), ?config(target_addr, Config),
+        [{Ns, Anchor, validator}, {?NS, ?config(target_anchor, Config), validator},
+         {?FOURTH_NS, peer:call(Target, quod_simplex, genesis_hash, [?FOURTH_NS]), validator},
+         {?ROOT_NS, ?config(network_id, Config), validator}]),
+    Goal = {'::', Ns, {answer_value, {'Value'}}},
+    {ok, Canonical} = quod_wire_term:encode_canonical({answer_value, Value}),
+    Actual = byte_size(Canonical),
+    Expected = {error, {material_limit, proof, answer_bytes, Actual, 1000}},
+    %% Same selected producer, direct/cohosted/remote consumers.
+    ?assertEqual(Expected, peer:call(Target, quod_prolog, prove_ro,
+                                    [Ns, {answer_value, {'Value'}}], 15000)),
+    lists:foreach(fun({Peer, Origin}) ->
+        ?assertEqual(Expected, peer:call(Peer, quod_prolog, prove_ro, [Origin, Goal], 15000))
+    end, [{Target, ?NS}, {Asker, ?ASKER_NS}]),
+    %% Raise through the ordinary signed action, under the OLD committed policy.
+    Selector = {'$quod_symbol', Ns},
+    Raise = {'::', Selector, {',', {retract, {material_limit_override, proof, answer_bytes, 1000}},
+                            {assertz, {material_limit_override, proof, answer_bytes, 120000}}}},
+    {ok, RaiseText} = quod_client_goal_parser:format(Raise),
+    {ok, _} = quod_client_goal_parser:parse(RaiseText, 1),
+    ?assertMatch({ok, _, {normalized, {committed, [_], _}}},
+                 submit_signed_execute(Config, RaiseText)),
+    lists:foreach(fun({Peer, Origin}) ->
+        ?assertMatch({ok, [#{'Value' := Value}], _},
+                     peer:call(Peer, quod_prolog, prove_ro, [Origin, Goal], 15000))
+    end, [{Target, ?NS}, {Asker, ?ASKER_NS}]),
+    %% The outer rule exposes no large binding. Its receiving proof must still
+    %% account for the computed foreign answer before consuming/discarding it.
+    Rule = {':-', answer_seen, {'::', Selector, {answer_value, {0}}}},
+    {ok, RuleText} = quod_client_goal_parser:format({assertz, Rule}),
+    ?assertMatch({ok, _, {normalized, {committed, [_], _}}},
+                 submit_signed_execute(Config, RuleText)),
+    Session = ?config(client_session, Config),
+    Read = fun() ->
+        {Bytes, Sig} = signed_goal_request(?config(network_id, Config),
+            ?config(agent_pub, Config), ?config(agent_key, Config),
+            ?ASKER_NS, ?config(asker_anchor, Config), maps:get(expires_ms, Session),
+            read, <<"answer_seen.">>),
+        peer:call(Asker, quod_client_goal_ingress, submit,
+            [read, maps:get(session_id, Session), Bytes, Sig, ?config(client_peer, Config)], 60000)
+    end,
+    ?assertMatch({ok, _, {normalized, {read, _, {answers, _, [_]}}}}, Read()),
+    ?assertMatch({ok, _, {normalized, {committed, [_], _}}},
+        submit_signed_execute(Config,
+            <<"assertz(material_limit_override(proof, answer_bytes, 1000)).">>)),
+    ?assertEqual(Expected, peer:call(Asker, quod_prolog, prove_ro,
+                                    [?ASKER_NS, answer_seen], 15000)),
+    ?assertMatch({ok, _, {normalized, {read, _, Expected}}}, Read()),
+    %% A remote allowance never grants local capacity. Restore via a new,
+    %% explicitly intended small authorized action, not a replay of the read.
+    ?assertMatch({ok, _, {normalized, {committed, [_], _}}},
+        submit_signed_execute(Config,
+            <<"retract(material_limit_override(proof, answer_bytes, 1000)).">>)),
+    ?assertMatch({ok, _, {normalized, {read, _, {answers, _, [_]}}}}, Read()).
 
 remote_scope_trace_parentage(Config) ->
     Target = ?config(target, Config),
@@ -1216,31 +1322,22 @@ assert_foreign_current_keeps_symbol_opaque(
        {ok, {'$quod_symbol', SymbolName}},
        peer:call(Asker, quod_wire_term, decode, [{0, SymbolName}])).
 
-remote_scope_structural_reason_truncation(Config) ->
+remote_scope_structural_reason_depth(Config) ->
     Asker = ?config(asker, Config),
-    %% A deep value at the wire boundary must survive intact.  This makes the
-    %% over-depth assertion below non-vacuous: the recursive builder really is
-    %% compiled and its binding crosses the remote proof boundary.
-    Legal = {'::', ?NS, bounded_reason},
-    {fail, LegalReasons} = peer:call(
-                             Asker, quod_prolog, prove,
-                             [?ASKER_NS, Legal], 60000),
+    %% The wire codec chooses no nesting quota: a reason built at proof time
+    %% crosses the remote proof boundary whole, without a truncation marker.
     {ok, Bottom} = peer:call(
                      Asker, quod_wire_term, decode,
                      [{0, <<"deep_bottom">>}]),
-    LegalReason = lists:foldl(
-                    fun(_, Acc) -> [Acc] end, Bottom,
-                    lists:seq(1, 63)),
-    ?assert(lists:member(LegalReason, LegalReasons)),
-    ?assert(quod_wire_term:valid_failure_reason_stack(LegalReasons)),
-
     Remote = {'::', ?NS, deep_reason},
     {fail, Reasons} = peer:call(
                         Asker, quod_prolog, prove,
                         [?ASKER_NS, Remote], 60000),
+    Reason = lists:foldl(
+               fun(_, Acc) -> [Acc] end, Bottom, lists:seq(1, 70)),
     ?assertEqual(Remote, hd(Reasons)),
-    ?assert(lists:member(deep_reason, Reasons)),
-    ?assert(lists:member(fail_reasons_truncated, Reasons)),
+    ?assert(lists:member(Reason, Reasons)),
+    ?assertNot(lists:member(fail_reasons_truncated, Reasons)),
     ?assert(quod_wire_term:valid_failure_reason_stack(Reasons)).
 
 remote_scope_cancel(Config) ->
@@ -1264,6 +1361,17 @@ remote_scope_transport_reuse(Config) ->
     wait_scope_workers(Target, 0, 200),
     run_scope_wave(Asker, Goal, second),
     wait_scope_workers(Target, 0, 200).
+
+%% The selector owns this empty origin fixture snapshot on the originating peer;
+%% its signed foreign scope reads the real target under that target's ACL.
+committed_remote_read(Evidence = #{request := #{agent_namespace := Ns,
+        agent_genesis_anchor := Anchor,not_after_ms := Expiry},goal := Frozen}) ->
+    {ok,Goal} = quod_wire_term:materialize_symbols(Frozen),
+    Est = quod_predicates:set_context(quod_ct:committed_kb([]),
+                                     quod_predicates:proof_context(Ns,1,[])),
+    quod_prolog:prove_est(Goal,Est,#{identity => {Ns,Anchor},height => 1,
+        deadline_ms => quod_time:mono_ms() + max(0,Expiry-quod_time:now_ms()),
+        evidence => Evidence}).
 
 %% The browser is logged into A as an agent stored in A. Exact selectors reach
 %% B through the ordinary scope path. A has no ACL clause for these goals, so
@@ -1291,10 +1399,19 @@ remote_signed_gateway_read_execute_cursor(Config) ->
           [read, maps:get(session_id, Session), ReadBytes, ReadSignature, Peer],
           60000),
     ?assertEqual({?ASKER_NS,AgentAnchor,ReadHeight},
-        lists:keyfind(?ASKER_NS,1,ReadDependencies)),
+        lists:keyfind(?ASKER_NS,1,[{N,A,H} || {N,A,H,_} <- ReadDependencies])),
     ?assertEqual({?NS,?config(target_anchor,Config),
                   peer:call(?config(target,Config),quod_prolog,applied,[?NS])},
-        lists:keyfind(?NS,1,ReadDependencies)),
+        lists:keyfind(?NS,1,[{N,A,H} || {N,A,H,_} <- ReadDependencies])),
+    ?assert(lists:all(fun({_,_,_,Reads}) -> Reads =:= [] end,ReadDependencies)),
+    {read,SelectorDependencies,{ok,_,_,_}} =
+        peer:call(Asker,?MODULE,committed_remote_read,[ReadEvidence],60000),
+    {?NS,_,_,RemoteReads} = lists:keyfind(?NS,1,SelectorDependencies),
+    ?assert(quod_read_set:valid_pairs(RemoteReads)),
+    ?assert(lists:any(fun
+        ({{Symbol,2},_}) -> quod_wire_term:symbol_names(Symbol) =:= {ok,[<<"diet">>]};
+        (_) -> false
+    end,RemoteReads)),
     ?assertEqual(ReadBytes, maps:get(request_bytes, ReadEvidence)),
     ?assertEqual(ReadSignature, maps:get(signature, ReadEvidence)),
     ?assertEqual(
@@ -2529,9 +2646,9 @@ remote_four_scope_chain_recovers_empty_routes(Config) ->
                 end),
     try
         ok = wait_route_demand(Asker, TargetIdentity, 500),
-        ok = install_chain_target_generation(Config, 2),
+        ok = install_chain_target_generation(Config),
         ok = wait_route_demand(Asker, ThirdIdentity, 500),
-        ok = install_chain_third_generation(Config, 2),
+        ok = install_chain_third_generation(Config),
         ?assertMatch(
            {ok, [#{'X' := _}], _},
            receive
@@ -2547,8 +2664,8 @@ remote_four_scope_chain_recovers_empty_routes(Config) ->
     after
         %% Restore complete generations even if the assertion failed so this
         %% suite never leaves a hidden route dependency for later cleanup.
-        _ = install_chain_target_generation(Config, 3),
-        _ = install_chain_third_generation(Config, 3)
+        _ = install_chain_target_generation(Config),
+        _ = install_chain_third_generation(Config)
     end.
 
 wait_route_demand(_Peer, Identity, 0) ->
@@ -2567,30 +2684,18 @@ wait_route_demand(Peer, Identity, Retries) ->
             wait_route_demand(Peer, Identity, Retries - 1)
     end.
 
-install_chain_target_generation(Config, Epoch) ->
-    Asker = ?config(asker, Config),
-    case peer:call(
-           Asker, quod_ct, install_directory_generation,
-           [?config(target_pub, Config), ?config(target_addr, Config),
-            [{?NS, ?config(target_anchor, Config), validator},
-             {?FOURTH_NS, ?config(fourth_anchor, Config), validator},
-             {?ROOT_NS, ?config(network_id, Config), validator}],
-            Epoch, 1]) of
-        {ok, _} -> ok;
-        Other -> Other
-    end.
+install_chain_target_generation(Config) ->
+    enrollment_route(?config(asker, Config),
+        ?config(target_pub, Config), ?config(target_addr, Config),
+        [{?NS, ?config(target_anchor, Config), validator},
+         {?FOURTH_NS, ?config(fourth_anchor, Config), validator},
+         {?ROOT_NS, ?config(network_id, Config), validator}]).
 
-install_chain_third_generation(Config, Epoch) ->
-    Asker = ?config(asker, Config),
-    case peer:call(
-           Asker, quod_ct, install_directory_generation,
-           [?config(third_pub, Config), ?config(third_addr, Config),
-            [{?THIRD_NS, ?config(third_anchor, Config), validator},
-             {?NS, ?config(target_anchor, Config), observer}],
-            Epoch, 1]) of
-        {ok, _} -> ok;
-        Other -> Other
-    end.
+install_chain_third_generation(Config) ->
+    enrollment_route(?config(asker, Config),
+        ?config(third_pub, Config), ?config(third_addr, Config),
+        [{?THIRD_NS, ?config(third_anchor, Config), validator},
+         {?NS, ?config(target_anchor, Config), observer}]).
 
 wait_vote_barrier(ProofRef, Phase, Config) ->
     wait_vote_barrier(ProofRef, Phase, Config, 300).
@@ -3115,6 +3220,10 @@ start_node(Name, Port, {Pub, Seed}, Ns, Genesis, Seeds,
     {ok, Peer, _Node} = peer:start(
                           #{name => Name, connection => standard_io,
                             args => ["-pa" | PeerPaths]}),
+    %% These compiled inputs stay fixed for the peer's lifetime. Cache their
+    %% directory listings instead of re-searching every path on each load.
+    InstalledPaths = peer:call(Peer, code, get_path, []),
+    true = peer:call(Peer, code, set_path, [InstalledPaths, cache]),
     lists:foreach(
       fun(Module) ->
           {module, Module} = peer:call(
@@ -3253,13 +3362,12 @@ deep_failure_rules() ->
     [[io_lib:format("deep_failure(~B) :- deep_failure(~B).~n", [N, N - 1])
       || N <- lists:seq(70, 1, -1)],
      "deep_failure(0) :- fail_with_reason(deep_bottom).\n",
-     %% Build the deliberately over-depth reason at proof time.  Canonical
-     %% ledger material is depth-bounded, so embedding that value as a genesis
-     %% literal would test genesis rejection instead of reply truncation.
-     "bounded_reason :- deep_reason_value(63, deep_bottom, Reason), !, "
-     "fail_with_reason(Reason).\n"
+     %% Build the nested reasons at proof time, so the test exercises the
+     %% remote reply rather than a genesis literal.
      "deep_reason :- deep_reason_value(70, deep_bottom, Reason), !, "
      "fail_with_reason(Reason).\n"
      "deep_reason_value(0, Acc, Acc).\n"
      "deep_reason_value(N, Acc, Out) :- N > 0, Next is N - 1, "
      "deep_reason_value(Next, [Acc], Out).\n"].
+
+gui(Goal) -> {'::',<<"quod:gui">>,Goal}.

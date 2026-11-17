@@ -1,0 +1,122 @@
+{
+  "checkpoint": "QUO-65 deferred physical qualification; additive diagnostic preparation/retirement evidence",
+  "production_changes": 0,
+  "repository_test_or_spec_changes": 0,
+  "new_diagnostic_inputs": {
+    "builds": 2,
+    "each_supplied": 92,
+    "unchanged_live": 91,
+    "each_exports": 196,
+    "each_affected_commands_true0": 5,
+    "overrides": "qualification dispatcher only, plus separate PhysicalChecks.cs",
+    "distributable": false
+  },
+  "model": "openai-codex:gpt-6.1-sol",
+  "launcher_requested_effort": "max",
+  "effective_backend_effort": "unexposed",
+  "source_head": "293cf6115c0a6b18315eccdbb42cbca396f443d3",
+  "branch": "worktree/pearl-stone",
+  "tracked_patch_sha256": "c0f9395a9b8fe09abcd71aa13ec9917aae9241bf307a5fc4b0af07e0baa4f998",
+  "main_sha256": "e9c010f71a9c1369fd5b451fe1d7fa275948089b3a96e69fe6d8f21b543fec1e",
+  "reused_core": 189,
+  "reused_server_inputs": 1432,
+  "unchanged_suites_rerun": false,
+  "independent_proofs": {
+    "physical-preparation-check-43-corrected02.json": "d80023e529a85c171ed8f98a9448cbbd1efdfc3a510426c131b392cbbb41bfc0",
+    "physical-discovery-retirement-check-46.json": "b820eada77822820a2ae5ec0025c05ef33a3d419d746840d0438d4442344e704",
+    "closed-headset-api-check-48.json": "829bf985acca246a22bf3274c6eff0c35ef6f19a26edf9b040645f2938381a27",
+    "physical-closure-check-49.json": "553fc66809026ce3ca63c1ef5c3bc313fc1668a5275b433c312f6c3d22bb3e70"
+  },
+  "preparation_protocol_cases": {
+    "native-vive-product01": {
+      "literal_protocol_passed": false,
+      "client_exit": null,
+      "runtime_exit": 0,
+      "server_exit": 0,
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "runtime-stdout": true,
+        "runtime-stderr": true
+      },
+      "error": "Empty: ",
+      "client_timeout": false,
+      "stack_capture_exit": null,
+      "scope": "never a physical-controller acceptance pass"
+    },
+    "native-vive-product02": {
+      "literal_protocol_passed": false,
+      "client_exit": -9,
+      "runtime_exit": 0,
+      "server_exit": 0,
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "runtime-stdout": true,
+        "runtime-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "error": "RuntimeError: Owned window dispatch failed",
+      "client_timeout": false,
+      "stack_capture_exit": null,
+      "scope": "never a physical-controller acceptance pass"
+    },
+    "native-vive-product03": {
+      "literal_protocol_passed": true,
+      "client_exit": 0,
+      "runtime_exit": 0,
+      "server_exit": 0,
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "runtime-stdout": true,
+        "runtime-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "error": null,
+      "client_timeout": false,
+      "stack_capture_exit": null,
+      "scope": "never a physical-controller acceptance pass"
+    },
+    "native-vive-product04": {
+      "literal_protocol_passed": false,
+      "client_exit": null,
+      "runtime_exit": 0,
+      "server_exit": 0,
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "runtime-stdout": true,
+        "runtime-stderr": true
+      },
+      "error": "TimeoutExpired: Command '['/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/bin/monado-ctl']' timed out after 5 seconds",
+      "client_timeout": false,
+      "stack_capture_exit": null,
+      "scope": "never a physical-controller acceptance pass"
+    },
+    "native-vive-product05": {
+      "literal_protocol_passed": true,
+      "client_exit": 0,
+      "runtime_exit": 0,
+      "server_exit": 0,
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "runtime-stdout": true,
+        "runtime-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "error": null,
+      "client_timeout": false,
+      "stack_capture_exit": 0,
+      "scope": "never a physical-controller acceptance pass"
+    }
+  },
+  "physical_acceptance": "UNRUN/deferred: actual controllers-discharged/charging user reply. No90drawsample, valid wand frames, physical gestures, new-payload human pixels, model alignment or comfort. Literal helper passed fields are preparation/retirement only.",
+  "full_m4_accepted": false,
+  "historical_failures": "Both desktop stalls and original production cold valid-head assertion remain failed/unattributed. No broad close review, new consultation or desktop observation1.",
+  "custom_question_routing": "Worker custom PromptForUserInput cell37 remains pending. Host pendingPrompt:null does not resolve it; no supported response/cancel ID or legitimate reply to that separate widget has been supplied. User answered coordinator card24, not worker card37. No spoof/force cancellation/app-state bypass."
+}

@@ -1,0 +1,40 @@
+diff --git a/doc/multiwrite-architecture.md b/doc/multiwrite-architecture.md
+index 14434468..12f269d3 100644
+--- a/doc/multiwrite-architecture.md
++++ b/doc/multiwrite-architecture.md
+@@ -113,6 +113,35 @@ Shared policy readers do not invalidate each other's unchanged selections;
+ an overlapping writer still invalidates readers and writers through the
+ existing installed-change notification.
+ 
++The same committed policy selects `material_limit(proof, heap_bytes, Limit)`
++when an actual proof session starts, for both origin and selected scopes.
++The bootstrap source explicitly selects `unlimited`; an owner may supply a
++nonnegative byte allowance through `material_limit_override/3`. The worker
++checks its existing heap before installing the VM's hard kill limit. Initial
++refusals report `material_limit(proof, heap_bytes, Actual, Limit)`; a later
++VM heap kill retains the VM's measured heap report and the existing monitored
++worker-failure path. The session retains those exact policy reads and joins
++them to the normal OCC set when sealing a material plan. Admission alone does
++not make an untouched scope a transaction participant. A staged increase
++does not enlarge its own running proof, and a policy-changing plan must leave
++a valid final policy. Zero can close the proof lane; there is no repair bypass.
++Local committed-policy selectors do not change their owner's process limit.
++
++Proof scopes, invocations, proxies, answers and distributed savepoints have
++no separate population ceilings in Erlang. Their retained state uses the
++proof's memory allowance and lifetime. Routers retain exact correlations
++under the same caller deadlines without imposing another count quota.
++Participant and dependency vectors preserve every exact identity; canonical
++ordering, uniqueness and complete message bounds still apply. Invocation
++transcripts record every call before execution and share the complete sealed
++plan's encoding bound, rather than an independent component allowance.
++
++Foreign-history verification no longer borrows a proof worker's heap allowance.
++It verifies already accepted material under the existing page, canonical
++encoding and VM-headroom checks; current proof admission policy does not
++re-admit that history. Its existing owner, custody, cancellation and deadline
++mechanisms remain responsible for worker lifetime.
++
+ ## Exact terminal outcome reads
+ 
+ `committed_operation_outcome(Bytes, Status)` reads the current scope's exact

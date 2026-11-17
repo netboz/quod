@@ -1,5 +1,6 @@
 -module(quod_reaction_authority_tests).
 -include_lib("eunit/include/eunit.hrl").
+-import(quod_agent_hosting_tests, [agent/1, agent_ref/2]).
 -include_lib("erlog/src/erlog_int.hrl").
 
 editable_lobby_notification_cannot_borrow_node_authority_test_() ->
@@ -48,7 +49,7 @@ owned_notification_runs_only_as_the_hosted_agent_test_() ->
         quod_agent_hosting_tests:with_host(
           fun(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
               ?assertMatch({ok, _, _}, quod_ct:rp(
-                           Ns, {goal, {agent_hosted, actor, Node, 1, Key}})),
+                           Ns, agent({goal, {agent_hosted, agent_ref(Ns, actor), Node, 1, Key}}))),
               receive
                   {agent_installed, _, _, #{reference := Ref, epoch := 1}, _} -> ok
               after 10000 -> error(authority_agent_not_installed) end,

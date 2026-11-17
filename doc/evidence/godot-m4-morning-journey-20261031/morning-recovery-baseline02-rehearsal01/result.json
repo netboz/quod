@@ -1,0 +1,91 @@
+{
+  "label": "morning-recovery-baseline02-rehearsal01",
+  "passed": false,
+  "physical": false,
+  "native_runtime_started": false,
+  "hardware_queried": false,
+  "display_or_focus_action": false,
+  "manifest": "doc/evidence/godot-m4-morning-journey-20261031/inputs/client-morning-recovery-baseline02-manifest.json",
+  "manifest_sha256": "efb6ce3f03e4d2cedcc3f20766dbf2de014157f0c7654f9e60f7e5df43c994ea",
+  "sources": {
+    "doc/evidence/godot-m4-morning-journey-20261031/rehearse.py": "07e9e155b68a680b320866b739204d3e07e3d38b1d0c2c855fa4238432afdab1",
+    "doc/evidence/godot-m4-morning-journey-20261031/cue_hashes.py": "0cec06be894a6923314910931fe5f606177ba5359dca6521e82aa04dc4e69716",
+    "doc/evidence/godot-m4-vive-physical-20261029/environment.py": "c3a54c8ce4d8360f8711e027d31f7a98f29cf3b9b4436c43a84984cf2c1f20f9",
+    "doc/evidence/godot-m4-vive-physical-20261029/serve.py": "f4cebe56f7939c887333d2fa357dc5df1a2c79cd42f56a3b8cc9bc43305eb96c"
+  },
+  "reader_errors": [],
+  "children": {
+    "server": {
+      "command": [
+        "python3",
+        "-B",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-physical-20261029/serve.py",
+        "morning-recovery-baseline02-rehearsal01-server",
+        "--stage",
+        "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/server-runtime-restoration05",
+        "--profile",
+        "prod",
+        "--qualified"
+      ],
+      "true_exit": 0
+    },
+    "client": {
+      "command": [
+        "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-morning-recovery-baseline02/source/client/godot/dist/quod.x86_64",
+        "--headless",
+        "--audio-driver",
+        "Dummy",
+        "--xr-mode",
+        "off",
+        "--rendering-method",
+        "mobile",
+        "--rendering-driver",
+        "vulkan",
+        "--",
+        "--qualification",
+        "--profile",
+        "/data/quod-m4-vr-ca84d4f8-20261029/private/morning-recovery-baseline02-rehearsal01/identity",
+        "--node",
+        "https://127.0.0.1:42045",
+        "--ca",
+        "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-morning-recovery-baseline02-rehearsal01-server/backend-ca.pem"
+      ],
+      "true_exit": 1
+    }
+  },
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-stdout": true,
+    "client-stderr": true
+  },
+  "build_export_digest_reused": true,
+  "fixture_ready": true,
+  "streams": {
+    "server-stdout.raw": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/morning-recovery-baseline02-rehearsal01/server-stdout.raw",
+      "sha256": "25e408a729ed072ba460d5919dec15e735a35a48af02571bd6f5eaf2215bdb47",
+      "bytes": 129,
+      "public_sha256": "5121b60746516965866e463793e6259659816f1d07646b3fb130250d941619d2"
+    },
+    "client-stdout.raw": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/morning-recovery-baseline02-rehearsal01/client-stdout.raw",
+      "sha256": "4b8c24e4d773034301f73535ce550fb1d1c5495ba9033b8100a50aae89f9d01b",
+      "bytes": 89699,
+      "public_sha256": "d814606a54602be9c275042bb79424610b3dccc2307a17d27f1cc614469179b3"
+    },
+    "client-stderr.raw": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/morning-recovery-baseline02-rehearsal01/client-stderr.raw",
+      "sha256": "63fff6d41515971d6438d165f047127da42273f3883e2a0114561a7e54070bdf",
+      "bytes": 5869,
+      "public_sha256": "e85347ac3b027614f4b85e4bdb07958d4e8590013f5bf81c49004a1c1364ef0b"
+    },
+    "server-stderr.raw": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/morning-recovery-baseline02-rehearsal01/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "elapsed_seconds": 32.26897351900698
+}

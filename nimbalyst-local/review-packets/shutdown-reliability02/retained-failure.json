@@ -1,0 +1,7 @@
+{
+  "packet": "nimbalyst-local/review-packets/shutdown-reliability01",
+  "failure_sha256": "6cf3bfaaa6e1d0a7ac8a1056a0ed9751d3c979b7a298b4f5b1ef89c2bea91583",
+  "manifest_sha256": "93c2b555fc7ba06598ee8d1002bf7798e6fd128e82f80a78f4a80450f6bbb1f1",
+  "archive_sha256": "8d0b3c3aa41de72a2635859e8c8175e39f9e132b17041cdd76b3bdfb8843e08f",
+  "correction": "Restore original archive file modes during extraction into a new exclusively owned reconstruction directory."
+}

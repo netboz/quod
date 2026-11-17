@@ -20,8 +20,7 @@ validate_hosted(
 validate_hosted(_, _, _) -> error.
 
 valid_namespace(Namespace) ->
-    is_binary(Namespace) andalso byte_size(Namespace) > 0 andalso
-        byte_size(Namespace) =< ?DIRECTORY_MAX_NAMESPACE_BYTES.
+    is_binary(Namespace) andalso byte_size(Namespace) > 0.
 
 valid_hosted({Namespace, <<_:256>>, Role, Source})
   when (Role =:= validator orelse Role =:= observer),

@@ -1,0 +1,10 @@
+Error! Failed to eval: 
+{ok,quod_agent_hosting_tests}=compile:file("/m1b/quod_agent_hosting_tests.erl",[export_all,{outdir,"/m1b/ebin"},{i,"/work/include"}]),
+{ok,quod_physics_tests}=compile:file("/work/test/quod_physics_tests.erl",[export_all,{outdir,"/m1b/ebin"},{i,"/work/include"}]),
+{ok,godot_m3b_physics_fixture}=compile:file("/m1b/godot_m3b_physics_fixture.erl",[{outdir,"/m1b/ebin"}]),
+true=code:add_patha("/m1b/ebin"),true=code:add_patha("/m1b/predicates-ebin"),godot_m3b_physics_fixture:start(),halt().
+
+
+Runtime terminating during boot ({undef,[{quod_client_auth,start_link,[#{node_key=><<REDACTED_32_BYTE_BINARY>>,network_id=><<REDACTED_32_BYTE_BINARY>>}],[]},{quod_agent_hosting_tests,with_host,4,[{file,"/m1b/quod_agent_hosting_tests.erl"},{line,1605}]},{quod_physics_tests,with_world,3,[{file,"/work/test/quod_physics_tests.erl"},{line,3267}]},{erl_eval,do_apply,7,[{file,"erl_eval.erl"},{line,920}]},{erl_eval,exprs,6,[{file,"erl_eval.erl"},{line,276}]},{init,start_it,1,[]},{init,start_em,1,[]},{init,do_boot,3,[]}]})
+
+Crash dump is being written to: erl_crash.dump...

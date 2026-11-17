@@ -1,0 +1,72 @@
+{
+  "revision": 3,
+  "applied": false,
+  "compiled_or_executed": false,
+  "files": [
+    {
+      "path": "src/quod_wire_term.erl",
+      "before_sha256": "693a2613a8e79c79094810c7777df846fd2b393d076809fb43faf5b989f2f5ff",
+      "proposed_sha256": "9b08181a111ecdfad0c650c5570f1f1aba30f35e33aa202af3bb8e35279dc14e",
+      "added": 3,
+      "removed": 3
+    },
+    {
+      "path": "src/quod_client_result.erl",
+      "before_sha256": "7196780a64d1d28efaee6e249094b38ed3628f75f3f1fc796d8c93b9bd94d74e",
+      "proposed_sha256": "bfc6d45b626fcacc48f93958fdc9c91795fdc07d8d9a18822bbd58419243a907",
+      "added": 48,
+      "removed": 62
+    },
+    {
+      "path": "src/quod_client_view.erl",
+      "before_sha256": "1126cf38dc14600a2fc3736c5fb20715af233e5450febe7839857984242ed5ec",
+      "proposed_sha256": "9a89fad9275e73f41521cd7738f7dd7a8f8dde6c9db0c1191e01dfc28b2608de",
+      "added": 9,
+      "removed": 18
+    },
+    {
+      "path": "src/quod_client_goal_endpoint.erl",
+      "before_sha256": "4e8ceb6ff917d265ec27643da7963c92ee64abb1b0ea2ce61f5b1f9bf4360e2a",
+      "proposed_sha256": "c5cb2d7c36ed261cb8bfb900f93050903a4e91e5f436de55d9680085cee6325d",
+      "added": 5,
+      "removed": 11
+    },
+    {
+      "path": "include/quod_client_goal_limits.hrl",
+      "before_sha256": "77b41a6cdb682a35433c01814eee99501edb8f38b93acff5e5cdaf119589f7b4",
+      "proposed_sha256": "3f247d09272dcfa1ac3904f734ca6766579eb8273901495f3d85b2d0d4646f9b",
+      "added": 0,
+      "removed": 8
+    },
+    {
+      "path": "src/quod_client_goal_router.erl",
+      "before_sha256": "96362eb7980b1a79e308d5ed9baea29613239a70af2d120f11e667630235def4",
+      "proposed_sha256": "5c7cf90e295b91bd008c4bbbfd3163e7506b1abbb035e01d70cb0dd79aee926d",
+      "added": 23,
+      "removed": 18
+    },
+    {
+      "path": "src/quod_terrain_wire.erl",
+      "before_sha256": "43f6d82f6565d888552e0a1bacac1c72a4ec31e16f39bdd0c8b7a0fbcb8c83d9",
+      "proposed_sha256": "d831af9ae3114b6635df33a9d178d274c9d6fcd73a41d60b196419bd360a9934",
+      "added": 2,
+      "removed": 39
+    },
+    {
+      "path": "src/quod_physics.erl",
+      "before_sha256": "39792fb4a50c149e20550ce6070d18df4e8568b5b1e5c9e379b8190e3aa8659b",
+      "proposed_sha256": "be812d304da32461b175c3190246239bed22068e92aecc7b3d4c3561aa4844aa",
+      "added": 6,
+      "removed": 16
+    },
+    {
+      "path": "client/src/simulation.js",
+      "before_sha256": "acf145eb7e5541cb780ef54bbcb3282621c1383f017cac2919a36249c68a5bb0",
+      "proposed_sha256": "81ac3c65f35e69e04619ff752123ff1aa1887da3776cf94e52919d4cd570ce7e",
+      "added": 6,
+      "removed": 9
+    }
+  ],
+  "added": 102,
+  "removed": 184
+}

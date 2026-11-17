@@ -1,0 +1,10 @@
+PASS enabled action create-key
+PASS enabled action connect
+PASS enabled action register
+PASS enabled action prepare
+PASS enabled action setup
+PASS ordinary first landing raster retained before selection or scrolling
+PASS ordinary signed setup installs current navigation and world
+PASS ordinary first landing exposes the usable current-world region without destination scrolling
+PASS ordinary landing does not select account tools on the user's behalf
+{"passed": true, "failure": null, "children": {"server": 0, "client-space-experience": 0}, "native_inputs": 0}

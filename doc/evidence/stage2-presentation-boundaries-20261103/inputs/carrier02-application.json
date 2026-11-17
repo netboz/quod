@@ -1,0 +1,10 @@
+{
+  "authorization": "inputs/carrier02-user-authorization.json",
+  "exact_patch": "proposals-carrier02/carrier-custody.patch",
+  "true_exit": 0,
+  "stdout_eof": true,
+  "stderr_eof": true,
+  "stdout": "",
+  "stderr": "",
+  "before_and_after_hashes_verified": true
+}

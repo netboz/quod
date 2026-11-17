@@ -1,0 +1,75 @@
+m3-fresh: WARNING: xdg-toplevel-icon protocol not found! Cannot set window icon.
+m3-fresh:      at: init (platform/linuxbsd/wayland/wayland_thread.cpp:5642)
+m3-fresh: Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+m3-fresh: OpenGL API 3.3.0 NVIDIA 615.71.09 - Compatibility - Using Device: NVIDIA - NVIDIA GeForce RTX 4090
+m3-fresh: 
+m3-fresh: PASS enabled action create-key
+m3-fresh: M1B_STATE {"state":"offline","busy":true,"pending":null,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Create or import a key offline, then connect. Active keys use private files; encrypted backups have a separate passphrase."}
+m3-fresh: M1B_STATE {"state":"offline","busy":false,"pending":0,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Identity saved durably. The active key is protected by private filesystem permissions. Export an encrypted backup separately."}
+m3-fresh: PASS offline durable identity created
+m3-fresh: PASS enabled action connect
+m3-fresh: M1B_STATE {"state":"offline","busy":true,"pending":0,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Identity saved durably. The active key is protected by private filesystem permissions. Export an encrypted backup separately."}
+m3-fresh: M1B_STATE {"state":"offline","busy":true,"pending":0,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"Authenticating the exact saved key\u2026"}
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 40662)
+Traceback (most recent call last):
+  File "/usr/lib/python3.14/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/server.py", line 500, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/server.py", line 488, in handle_one_request
+    method()
+    ~~~~~~^^
+  File "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/journey.py", line 83, in do_POST
+    self.forward()
+    ~~~~~~~~~~~~^^
+  File "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/journey.py", line 103, in forward
+    connection.request(self.command, self.path, body, headers)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/http/client.py", line 1386, in request
+    self._send_request(method, url, body, headers, encode_chunked)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/http/client.py", line 1432, in _send_request
+    self.endheaders(body, encode_chunked=encode_chunked)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/http/client.py", line 1381, in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/http/client.py", line 1141, in _send_output
+    self.send(msg)
+    ~~~~~~~~~^^^^^
+  File "/usr/lib/python3.14/http/client.py", line 1085, in send
+    self.connect()
+    ~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/client.py", line 1520, in connect
+    super().connect()
+    ~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/client.py", line 1051, in connect
+    self.sock = self._create_connection(
+                ~~~~~~~~~~~~~~~~~~~~~~~^
+        (self.host,self.port), self.timeout, self.source_address)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/socket.py", line 874, in create_connection
+    raise exceptions[0]
+  File "/usr/lib/python3.14/socket.py", line 859, in create_connection
+    sock.connect(sa)
+    ~~~~~~~~~~~~^^^^
+ConnectionRefusedError: [Errno 111] Connection refused
+----------------------------------------
+m3-fresh: M1B_STATE {"state":"offline","busy":false,"pending":0,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"An error occurred while sending the request."}
+m3-fresh: System.Exception: real challenge and authenticated network: An error occurred while sending the request.
+m3-fresh:    at ExportChecks.Check(Boolean yes, String name) in /home/yan/.cache/quod-m3b-artifacts/quod-m3b-client-development02/source/client/godot/tests/ExportChecks.cs:line 20
+m3-fresh:    at ExportChecks.Begin(Main application) in /home/yan/.cache/quod-m3b-artifacts/quod-m3b-client-development02/source/client/godot/tests/ExportChecks.cs:line 64
+m3-fresh: {"state":"offline","busy":false,"public_key":"806Vs5goINdAtGlWvQu2jSbz0twRFqtbM6R6piH0Pgg","network":null,"human":null,"setup":null,"pending":0,"world_accepted":false,"live_sockets":0,"ignored_projections":0,"question_receiver_ready":null,"current_location":null,"assignment_revision":null,"physical_selection":null,"physical_tick":null,"scene_count":0,"operation_available":null,"operation_status":null,"status":"An error occurred while sending the request."}
+Traceback (most recent call last):
+  File "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/journey.py", line 277, in <module>
+    raise RuntimeError('Export qualification phase failed: ' + phase)
+RuntimeError: Export qualification phase failed: m3-fresh

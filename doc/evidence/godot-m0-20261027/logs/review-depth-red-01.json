@@ -1,0 +1,32 @@
+{
+  "command": [
+    "docker",
+    "run",
+    "--rm",
+    "--init",
+    "--volume",
+    "/tmp/quod-m0-r1-gates-04/source:/work:ro",
+    "--volume",
+    "/tmp/quod-m0-review-depth-01:/review",
+    "--workdir",
+    "/work",
+    "--env",
+    "ERL_FLAGS=+S 4:4 +SDio 2 +SDcpu 2",
+    "--entrypoint",
+    "/usr/bin/env",
+    "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+    "erl",
+    "-noshell",
+    "-pa",
+    "/review",
+    "/work/_build/test/lib/quod/ebin",
+    "-eval",
+    "\"/review/quod_dtx_endpoint_tests.beam\" = code:which(quod_dtx_endpoint_tests), case eunit:test(quod_dtx_endpoint_tests, [verbose]) of ok -> halt(0); _ -> halt(1) end."
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-27T19:16:22Z",
+  "elapsed_seconds": 1.2693085670471191,
+  "child_exit": 1,
+  "timed_out": false,
+  "error_diagnostics": 0
+}

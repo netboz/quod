@@ -1,0 +1,55 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-m4-morning-journey-20261031/build.py",
+    "morning-result-baseline01",
+    "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/engine/clean02/godot.linuxbsd.template_release.x86_64.mono"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 0,
+  "timed_out": false,
+  "driver_inputs": {
+    "CueCompositionChecks.cs": "7c3ad2e1254f9419f0f712bba984a5cd0b71f28c4dcaa300f0f82163550750e6",
+    "MorningJourneyChecks.cs": "e9d69943fc7cbb3207c742c3961c997b2936f0313fc10a67aa38d2d2a1536bd2",
+    "MorningJourneyGuide.cs": "e9659101b28a539c93e046113ef4c032e6aec439b914f533b670dc3698e9b36c",
+    "PhysicalChecks.cs": "a6d05294c17bf90e762946929f4c1fc3358954cea6517d654148746a88c3af7e",
+    "ViveLookCue.cs": "aecd70b8755fa7beaa783d460424a7e018e001a2bd067c776cd10a56a97777e3",
+    "application.py": "0292113cbb2947f8ef97e07e3167d38b4a280f16bf3c52cddddcac06810f0ebc",
+    "binding_checks.py": "396b987ed08a59e3441463555a5bba2c8561fbcb2913fec427839e1dada3727e",
+    "build.py": "8b2ae9c82cad05efd74585f9017ffb66f50af3890c75691540f28f6d9cbfb0ec",
+    "cue_hashes.py": "0cec06be894a6923314910931fe5f606177ba5359dca6521e82aa04dc4e69716",
+    "launch.py": "cb75175532885dd3963b19706e9269e843d80ebb461165482d7958d0d70acbef",
+    "launch_checks.py": "01eef50448502ac5feefcd70763dcfb93baf275cbc13d9c744e6e8ac663db308",
+    "prepare_composition.py": "3c66a150ee507358aaf631621568dc543ad627985e1a3ac0b90e346b884666e0",
+    "qualify.py": "3b8bdfb90b9345b504f209a878e1bd0487cb4bff645960eeebd91f319f9f3e02",
+    "rehearse.py": "d1443f3c698fdc25537f0c0bf63c34c5ac8b27df45899eece472448b32c7dd92",
+    "run.py": "2f8b3a5d2df48848bd4f520724984a11f553bb5b6b8a647810c5f323647a649e"
+  },
+  "start_utc": "2026-10-31T02:33:21Z",
+  "elapsed_seconds": 25.496657848358154,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/morning-result-baseline01-build/stdout.raw",
+      "sha256": "f7c7c5e554c40de32cf4d670029263734e1afa1650778c464fb7d2d0722a932c",
+      "bytes": 1161
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/morning-result-baseline01-build/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-morning-journey-20261031/logs/morning-result-baseline01-build-stdout.log",
+      "sha256": "f7c7c5e554c40de32cf4d670029263734e1afa1650778c464fb7d2d0722a932c",
+      "bytes": 1161
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-morning-journey-20261031/logs/morning-result-baseline01-build-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

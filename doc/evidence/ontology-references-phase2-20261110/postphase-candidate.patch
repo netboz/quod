@@ -1,0 +1,199 @@
+diff --git a/client/src/signed-client.js b/client/src/signed-client.js
+index f94c618f..a09bce33 100644
+--- a/client/src/signed-client.js
++++ b/client/src/signed-client.js
+@@ -93,7 +93,7 @@ export async function personalGoal(identity, { human, agent, key, target, goal }
+     agentAnchor: typeof agent.anchor === 'string' ? fromB64url(agent.anchor) : agent.anchor,
+     agentInstanceText: agent.instanceText, mode: 'execute', notAfterMs: expires, goal: anchored })
+   const request = goalRequestBytes(identity, { mode: 'read', agent: human,
+-    goal: `${renderTerm(compound('personal_instruction_accept', [binary(targetBytes), variable('Signature')]))}.` })
++    goal: `${renderTerm(compound('::', [binary(encoder.encode('quod:user')), compound('personal_instruction_accept', [binary(targetBytes), variable('Signature')])]))}.` })
+   const signature = new Uint8Array(await identity.provider.sign(request))
+   options.signal?.throwIfAborted()
+   const row = await operationRow(identity, request, signature)
+@@ -107,9 +107,9 @@ export async function personalGoal(identity, { human, agent, key, target, goal }
+ export async function resolvePersonalInstruction(identity, human, id, options = {}) {
+   options.signal?.throwIfAborted()
+   const request = goalRequestBytes(identity, { mode: 'read', agent: human,
+-    goal: `${renderTerm(compound('personal_instruction_lookup', [
++    goal: `${renderTerm(compound('::', [binary(encoder.encode('quod:user')), compound('personal_instruction_lookup', [
+       binary(typeof id === 'string' ? fromB64url(id) : id), variable('Bytes'), variable('Signature'),
+-    ]))}.` })
++    ])]))}.` })
+   const signature = new Uint8Array(await identity.provider.sign(request))
+   options.signal?.throwIfAborted()
+   return (options.post || postJson)('/api/agents/instructions/outcomes',
+diff --git a/client/test/godot-m1a.acceptance.mjs b/client/test/godot-m1a.acceptance.mjs
+index 818e0371..e1bc1023 100644
+--- a/client/test/godot-m1a.acceptance.mjs
++++ b/client/test/godot-m1a.acceptance.mjs
+@@ -6,10 +6,10 @@ import { createInterface } from 'node:readline'
+ import { authenticateKey, readSystemOntologies, signedGoal, personalGoal, resolvePersonalInstruction } from '../src/signed-client.js'
+ import { memoryOperationJournal } from '../src/operation-journal.js'
+ import { fromB64url } from '../src/key-provider.js'
+-import { compound, variable, atom, renderTerm } from '../src/prolog-term.js'
+-import { readTerm } from '../src/prolog-read.js'
++import { compound, variable, atom, list, renderTerm } from '../src/prolog-term.js'
++import { readList } from '../src/prolog-read.js'
+ import { anchoredGoal, singleBinding } from '../src/world.js'
+-import { operationSubject, readOperations, operationGoal } from '../src/gui-operation.js'
++import { operationSubject } from '../src/gui-operation.js'
+ import { readCodeState } from '../src/prolog-edit.js'
+ 
+ globalThis.crypto ??= webcrypto
+@@ -49,7 +49,7 @@ assert.deepEqual(catalogue.map(row=>row.namespace).sort(),['quod:agent','quod:co
+ const tools = {namespace:'quod:gui',anchor:fromB64url(config.gui)}
+ const target = owner.reference
+ const query = (who,ref,goal)=>signedGoal(who.identity,{mode:'read',agent:who.reference,goal:anchoredGoal(ref,goal)})
+-const stateGoal = compound('account_setup_state',[variable('State')])
++const stateGoal = compound('::',[atom('quod:user'),compound('account_setup_state',[variable('State')])])
+ const before = singleBinding(await query(owner,target,stateGoal),'State')
+ assert.equal((await query(other,target,stateGoal)).result,'fail')
+ const deniedSources = [target,{namespace:'quod:user',anchor:fromB64url(config.user_class)}]
+@@ -61,7 +61,7 @@ const sourceHashes = []
+ for (const namespace of ['quod:gui','quod:controllers','quod:space']) {
+   const row = catalogue.find(row=>row.namespace===namespace)
+   const source = await readCodeState(publicReader.identity,publicReader.reference,{tools,target:{namespace,anchor:fromB64url(row.anchor)}})
+-  assert(!source.includes(target.namespace),'Public source enumerated private accounts')
++  assert(!source.includes(target.namespace),"Public source enumerated the user's ontology")
+   assert(!source.includes(config.users[0].public_key))
+   sourceHashes.push({namespace,sha256:createHash('sha256').update(source).digest('hex')})
+ }
+@@ -70,30 +70,43 @@ const key = fromB64url(config.personal_key)
+ const subject = operationSubject(target,'entity',atom('me'))
+ async function offered() {
+   const reply = await query(owner,target,compound('gui_operations',[subject,variable('Offers')]))
+-  return readOperations(singleBinding(reply,'Offers'),subject)[0]
++  const offers = readList(singleBinding(reply,'Offers'))
++  assert.equal(offers.length,1)
++  const offer = offers[0]
++  assert.equal(offer.functor,'operation_view'); assert.equal(offer.args.length,9)
++  const [name,exact,revision,,token,fields,control,,availability] = offer.args
++  assert.equal(renderTerm(exact),renderTerm(subject)); assert.equal(availability.value,'requires_input')
++  assert.equal(revision.value.length,32); assert.equal(token.value.length,32)
++  assert.equal(fields.type,'list'); assert.equal(fields.tail,null)
++  return {name,revision,fields,control}
+ }
+ const journal = memoryOperationJournal(), retained = []
+ const durable = {list:()=>journal.list(),delete:id=>journal.delete(id),replace:(...args)=>journal.replace(...args),
+   put:async row=>{retained.push(row);await journal.put(row)}}
+-async function submit(form,draft) {
+-  const reply = await personalGoal(owner.identity,{human:target,agent,key,target,goal:operationGoal(form,draft)},{journal:durable})
++async function submit(form,fields) {
++  const goal = renderTerm(compound('gui_operation',[subject,form.name,form.revision,form.control,fields,variable('Results')]))+'.'
++  const reply = await personalGoal(owner.identity,{human:target,agent,key,target,goal},{journal:durable})
+   assert.equal(reply.result,'ok','An uncertain operation must be resolved, never resubmitted')
+   await barrier('settle',{request:lastRequest})
+   return reply
+ }
+ const form = await offered()
+-assert.equal(form.name,'controller_settings'); assert.equal(form.values.controller_reset,'false')
+-const save = await submit(form,form.values)
++assert.equal(form.name.value,'controller_settings')
++const resets = form.fields.items.filter(field=>field.args[0].value==='controller_reset')
++assert.equal(resets.length,1); assert.equal(resets[0].args[1].value,'false')
++const save = await submit(form,form.fields)
+ const fresh = await offered()
+-const reset = await submit(fresh,{...fresh.values,controller_reset:'true'})
++const reset = await submit(fresh,list(fresh.fields.items.map(field=>field.args[0].value==='controller_reset'
++  ? compound('field',[field.args[0],atom('true')]) : field)))
+ assert.notDeepEqual(save.bindings,reset.bindings)
+ // Reconnect from the same key, with no original device journal. Original
+ // instruction associations and results are queried at their existing owner.
+ const reconnected = {...owner,identity:await authenticateKey(owner.provider)}
+ const mutationsBefore = writes
+-for (const row of [retained[0],retained.at(-1)]) {
++for (const [row,original] of [[retained[0],save],[retained.at(-1),reset]]) {
+   const recovered = await resolvePersonalInstruction(reconnected.identity,target,row.instruction)
+   assert.equal(recovered.result,'operation_outcome'); assert.equal(recovered.status,'committed')
++  assert.deepEqual(recovered.bindings,original.bindings)
+ }
+ assert.equal(writes,mutationsBefore)
+ assert.equal(singleBinding(await query(reconnected,target,stateGoal),'State'),before)
+diff --git a/client/test/personal-agent.test.js b/client/test/personal-agent.test.js
+index 5b25d145..519cb042 100644
+--- a/client/test/personal-agent.test.js
++++ b/client/test/personal-agent.test.js
+@@ -26,7 +26,7 @@ test('human signs one exact instruction; a lost reply is only resolved', async (
+   await assert.rejects(personalGoal(who, input, { journal, post: async (url, body) => {
+     calls.push(url)
+     assert.equal(url, '/api/agents/instructions')
+-    assert.match(decoded(body), /personal_instruction_accept/)
++    assert.match(decoded(body), /'::'\(<<"quod:user">>,personal_instruction_accept\(/)
+     const [saved] = await journal.list()
+     assert.equal(saved.request, body.request)
+     assert.equal(saved.signing_key, b64url(who.provider.publicKey))
+@@ -36,7 +36,7 @@ test('human signs one exact instruction; a lost reply is only resolved', async (
+   const result = await resolveSignedOperations(who, { journal, post: async (url, body) => {
+     calls.push(url)
+     assert.equal(url, '/api/agents/instructions/outcomes')
+-    assert.match(decoded(body), /personal_instruction_lookup/)
++    assert.match(decoded(body), /'::'\(<<"quod:user">>,personal_instruction_lookup\(/)
+     return terminal
+   } })
+   assert.deepEqual(result[0].reply.bindings, [{ Ref: 'original' }])
+diff --git a/doc/evidence/ontology-references-phase2-20261110/results.jsonl b/doc/evidence/ontology-references-phase2-20261110/results.jsonl
+index 6ad5c96d..fc31c401 100644
+--- a/doc/evidence/ontology-references-phase2-20261110/results.jsonl
++++ b/doc/evidence/ontology-references-phase2-20261110/results.jsonl
+@@ -46,3 +46,6 @@
+ {"name": "client-final-02-spaces", "command": ["/usr/bin/python3", "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/ontology-references-phase2-20261110/client-journey.py", "client-final-02-spaces-journey", "spaces"], "started": "2026-11-10T10:02:50.492297+00:00", "ended": "2026-11-10T10:03:24.573040+00:00", "exit_code": 0, "log": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/ontology-references-phase2-20261110/client-final-02-spaces.log"}
+ {"name": "client-final-02-navigation", "command": ["/usr/bin/python3", "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/ontology-references-phase2-20261110/client-journey.py", "client-final-02-navigation-journey", "navigation"], "started": "2026-11-10T10:03:24.601882+00:00", "ended": "2026-11-10T10:04:28.307146+00:00", "exit_code": 0, "log": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/ontology-references-phase2-20261110/client-final-02-navigation.log"}
+ {"name": "client-final-02-local-backup", "command": ["python3", "client/godot-tests/local.py", "--export", "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64", "--phase", "crypto", "--evidence", "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/ontology-references-phase2-20261110/client-final-02-local-backup-journey", "--private", "/tmp/pearl-phase2-local-backup-final-02"], "started": "2026-11-10T10:04:28.335744+00:00", "ended": "2026-11-10T10:04:31.067274+00:00", "exit_code": 0, "log": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/ontology-references-phase2-20261110/client-final-02-local-backup.log"}
++{"name": "postphase-javascript-01", "command": ["npm", "--prefix", "client", "test"], "started": "2026-11-10T13:10:34.914563+00:00", "ended": "2026-11-10T13:10:36.521065+00:00", "exit_code": 0, "log": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/ontology-references-phase2-20261110/postphase-javascript-01.log"}
++{"name": "postphase-https-01", "command": ["rebar3", "as", "test", "eunit", "--generator=quod_lifecycle_single_path_tests:m1a_seven_foundations_test_"], "started": "2026-11-10T13:10:39.478325+00:00", "ended": "2026-11-10T13:11:22.676357+00:00", "exit_code": 1, "log": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/ontology-references-phase2-20261110/postphase-https-01.log"}
++{"name": "postphase-https-02", "command": ["rebar3", "as", "test", "eunit", "--generator=quod_lifecycle_single_path_tests:m1a_seven_foundations_test_"], "started": "2026-11-10T13:11:34.080358+00:00", "ended": "2026-11-10T13:12:12.209609+00:00", "exit_code": 0, "log": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/ontology-references-phase2-20261110/postphase-https-02.log"}
+diff --git a/nimbalyst-local/plans/accounts-by-reference.md b/nimbalyst-local/plans/accounts-by-reference.md
+index fda03948..cc460778 100644
+--- a/nimbalyst-local/plans/accounts-by-reference.md
++++ b/nimbalyst-local/plans/accounts-by-reference.md
+@@ -2,7 +2,7 @@
+ planStatus:
+   planId: plan-accounts-by-reference
+   title: Space class lives only in quod:space; user ontologies assert instances of it
+-  status: in-review
++  status: in-development
+   planType: system-design
+   priority: high
+   owner: Yan
+@@ -15,7 +15,7 @@ planStatus:
+     - signup
+   created: "2026-11-08"
+   startDate: "2026-11-09"
+-  updated: "2026-11-10T10:05:38.546261+00:00"
++  updated: "2026-11-10T13:10:24.035489+00:00"
+   progress: 83
+ ---
+ 
+@@ -769,6 +769,18 @@ full EUnit is not clean. The plan is ready for review at the Phase 2 boundary.
+ No Phase 2 commit, version bump, deployment, refound or live edit has occurred.
+ Work stops here for Yan's go.
+ 
++**Post-phase HTTPS gate repair:** Yan authorized continuing on 2026-11-10
++with the remaining browser-driver failure, followed by a separate patch-only
++version bump. The HTTPS proof driver now reads setup at the class owner and
++submits the exact offered revision, control and field terms through the existing
++operation endpoint. Its save/reset and original-result recovery obligations are
++retained; presentation parsing remains covered by the signed Godot journeys.
++The shared signed client calls the two instruction predicates at `quod:user`.
++No browser renderer or enrollment adapter migration is included. Focused and
++clean gate verification remain pending. Earlier failed campaigns stay retained.
++The release review will pause for a switch to Astra High before any operational
++work; deployment, refound and live edits still require Yan's explicit go.
++
+ ## 1. Rulings
+ 
+ Yan, 2026-11-08:
+diff --git a/test/quod_lifecycle_single_path_tests.erl b/test/quod_lifecycle_single_path_tests.erl
+index 7ba025ae..39fc5dfd 100644
+--- a/test/quod_lifecycle_single_path_tests.erl
++++ b/test/quod_lifecycle_single_path_tests.erl
+@@ -1406,7 +1406,7 @@ m1a_drive_https(Port) ->
+                 #{<<"phase">>:=<<"settle">>,<<"request">>:=Encoded} ->
+                     Bytes = base64:decode(Encoded,#{mode=>urlsafe,padding=>false}),
+                     {ok,#{goal_text:=Text,parser_version:=Parser}} = quod_client_goal:decode(Bytes),
+-                    {ok,#{goal:={{'$quod_symbol',<<"personal_instruction_accept">>},TargetBytes,_}}} =
++                    {ok,#{goal:={'::',<<"quod:user">>,{{'$quod_symbol',<<"personal_instruction_accept">>},TargetBytes,_}}}} =
+                         quod_client_goal_parser:parse(Text,Parser),
+                     {ok,#{operation_ref:=Operation,request:=#{agent_namespace:=Ns}}} =
+                         quod_client_goal:request_identity(TargetBytes),

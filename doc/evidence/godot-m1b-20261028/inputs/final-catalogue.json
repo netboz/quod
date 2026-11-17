@@ -1,0 +1,54 @@
+{
+  "api_response": {
+    "height": 17,
+    "network_id": "i2-jCICWEL4L2zhzNwCc3HegeYW3O9S24pMUV3QCqJ8",
+    "ontologies": [
+      {
+        "namespace": "quod:agent",
+        "anchor": "6l57_5SmV3J01eEX9Js0dhKa5u78_CIoqamoA6PPAl0"
+      },
+      {
+        "namespace": "quod:controllers",
+        "anchor": "znrRmYUpsF6gzVyby4u0MdOcTQGgWHyPz8167dgMiKE"
+      },
+      {
+        "namespace": "quod:gui",
+        "anchor": "O42Wd--ed9Es40PCOMJIrkYcGDFq6Y210qXUgbUI3Xw"
+      },
+      {
+        "namespace": "quod:node",
+        "anchor": "JnIl9flfwqUseynvVeChkscXbZpWoQ99xnFx1ey_h6o"
+      },
+      {
+        "namespace": "quod:space",
+        "anchor": "zYp1-BL4-AvC7XkHu_VrIPNVnVX1187_mVstTrAHj4s"
+      },
+      {
+        "namespace": "quod:user",
+        "anchor": "J7C_tf8H2NgXv0t5YQ4Y6tcbYvCECbRZV7mR6OLVLfI"
+      }
+    ]
+  },
+  "bootstrap_root": {
+    "namespace": "quod:root",
+    "anchor": "i2-jCICWEL4L2zhzNwCc3HegeYW3O9S24pMUV3QCqJ8"
+  },
+  "shared_foundations": 7,
+  "registered_service_rows": 6,
+  "fixture": "final-04 metadata-only; qualified production objects, runtime not recompiled",
+  "dynamic_material_instances": {
+    "node_actors": 1,
+    "humans": 0,
+    "personal_agents": 0,
+    "spaces": 0
+  },
+  "journey_fixture_counts_separate": {
+    "fixture": "final-03",
+    "node_actors": 1,
+    "humans": 3,
+    "personal_agents": 3,
+    "initial_spaces": 3
+  },
+  "root_identity_contract": "src/quod_ontology.erl:282; network_identity is Root genesis anchor",
+  "reader_correction": "Corrects only the evidence reader; seven means bootstrap Root plus six registered services, as already specified by M1a."
+}

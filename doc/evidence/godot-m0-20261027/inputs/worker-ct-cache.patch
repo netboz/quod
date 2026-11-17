@@ -1,0 +1,13 @@
+--- a/test/quod_ask_SUITE.erl
++++ b/test/quod_ask_SUITE.erl
+@@ -3136,6 +3136,10 @@
+     {ok, Peer, _Node} = peer:start(
+                           #{name => Name, connection => standard_io,
+                             args => ["-pa" | PeerPaths]}),
++    %% These compiled inputs stay fixed for the peer's lifetime. Cache their
++    %% directory listings instead of re-searching every path on each load.
++    InstalledPaths = peer:call(Peer, code, get_path, []),
++    true = peer:call(Peer, code, set_path, [InstalledPaths, cache]),
+     lists:foreach(
+       fun(Module) ->
+           {module, Module} = peer:call(

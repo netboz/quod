@@ -1,0 +1,318 @@
+{
+  "freeze_verified": true,
+  "scope_accepted": false,
+  "source_label": "applied-presentation01",
+  "proposal_revision": 2,
+  "files": 998,
+  "archive_sha256": "60bfc30714d2e105e038054430d1b9c312be7702d1232d357c70515ec74c59da",
+  "manifest_sha256": "6613faac6565b681b0ffa3de1e7e0d765d4f92ecb042cfc597e535055defb61d",
+  "archive_bytes": 24074240,
+  "production_delta": {
+    "paths": [
+      {
+        "path": "src/quod_voxel.erl",
+        "before_sha256": "17628ddf16fab2dbcd12f08e9a6ca30e52404207b3936a12b65c5f97770e5251",
+        "current_sha256": "af39b9b1c30bf1a44007efe706231b9811ebd4d828fd2a4d5f25e0f4d53029e2",
+        "added": 2,
+        "removed": 1
+      },
+      {
+        "path": "src/quod_physics.erl",
+        "before_sha256": "6d7c32892a3c61a213cf57543de849527de2a0d3db61878b40b3d52c55d43b44",
+        "current_sha256": "39792fb4a50c149e20550ce6070d18df4e8568b5b1e5c9e379b8190e3aa8659b",
+        "added": 2,
+        "removed": 2
+      },
+      {
+        "path": "priv/ontologies/common_predicates.pl",
+        "before_sha256": "c259025ea150516913c57acd23f92d80a726812c8f9468862ce5da41df2636ef",
+        "current_sha256": "27a23b8d3d34e2f9e04316e9d2b101d92befbd039c623d293b4488a7da46a049",
+        "added": 13,
+        "removed": 34
+      },
+      {
+        "path": "priv/ontologies/gui_scene.pl",
+        "before_sha256": "a83631a318f930b1253ccf1efd1808d51c994a1068dfcaaf4ff03b83ff528cf7",
+        "current_sha256": "6b29795ad6705b19ab1a0089b8628100afe3a48d4a09637c73415982781f56e6",
+        "added": 28,
+        "removed": 76
+      },
+      {
+        "path": "priv/ontologies/quod_gui.pl",
+        "before_sha256": "6aaa3237226b3a36d87834a4739284898e259973229a8782d2330e27bc116766",
+        "current_sha256": "012da0f37e94ab5ab5a4a26e4ea38e422cad9b650d30bc00a7e8d02c4b81f6db",
+        "added": 5,
+        "removed": 2
+      },
+      {
+        "path": "priv/ontologies/gui_tools.pl",
+        "before_sha256": "a7ff7b5e609bd051f3feb043256252d19929f354e9d975bc9bcd58cab6761b9e",
+        "current_sha256": "ea0d5ee6b08cdd29e3ad517cb880e3b09ea913766aef9f24d8ccf450137329c8",
+        "added": 7,
+        "removed": 31
+      },
+      {
+        "path": "priv/ontologies/lobby_worlds.pl",
+        "before_sha256": "9b8388b039bee05bc8a8464dfc6a729c2c8dfd9447cb9cf913c87374a628f66b",
+        "current_sha256": "bf7bba8d4aff998ab47512e0c24e0cd29339f366c9704cceaf2d1b2120bd359b",
+        "added": 3,
+        "removed": 11
+      },
+      {
+        "path": "client/src/marks.js",
+        "before_sha256": "5875005f8ae052f00dd0a1989c20473a329c91c240d231f0d55777fcaa7c9283",
+        "current_sha256": "c2e1ba644420ea03e48a51860e6c9a9e5c7d66cd8c4206f8a6a98a2319ff80b8",
+        "added": 6,
+        "removed": 2
+      },
+      {
+        "path": "client/src/voxel-profile.js",
+        "before_sha256": "54d0f96260868b126a968efddee9172e14507cfe0c1105085f29047e48c3b2f4",
+        "current_sha256": "0cd2e36293bdfea9f7c8c9717926e9feece3fac76b7f40493d6474938f5e54b6",
+        "added": 1,
+        "removed": 1
+      },
+      {
+        "path": "client/src/glb-profile.js",
+        "before_sha256": "32c39657bdeb87f3517aa187572b39aac88278b1c338a7043475d9933e2f14f2",
+        "current_sha256": "1bda5816156cf5d61d8c350a20a81aced1e0207c999f9c087ccb4ef646ca15dd",
+        "added": 1,
+        "removed": 1
+      }
+    ],
+    "added": 68,
+    "removed": 161,
+    "net": -93
+  },
+  "runs": {
+    "baseline-signed02": {
+      "passed": false,
+      "failure": "RuntimeError: fixture ended before readiness",
+      "children": {
+        "server": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true
+      },
+      "reader_errors": []
+    },
+    "diagnostic-signed01": {
+      "passed": false,
+      "failure": "AssertionError: client failure",
+      "children": {
+        "server": 0,
+        "client": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "reader_errors": []
+    },
+    "baseline-signed03": {
+      "passed": false,
+      "failure": "AssertionError: client failure",
+      "children": {
+        "server": 0,
+        "client": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "reader_errors": []
+    },
+    "diagnostic-signed04": {
+      "passed": false,
+      "failure": "AssertionError: client failure",
+      "children": {
+        "server": 0,
+        "client": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "reader_errors": []
+    },
+    "baseline-signed01": {
+      "passed": false,
+      "failure": "RuntimeError: fixture ended before readiness",
+      "children": {
+        "server": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true
+      },
+      "reader_errors": []
+    },
+    "diagnostic-signed02": {
+      "passed": false,
+      "failure": "RuntimeError: fixture ended before readiness",
+      "children": {
+        "server": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true
+      },
+      "reader_errors": []
+    },
+    "diagnostic-signed03": {
+      "passed": false,
+      "failure": "AssertionError: client failure",
+      "children": {
+        "server": 0,
+        "client": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "reader_errors": []
+    },
+    "candidate-signed01": {
+      "passed": false,
+      "failure": "AssertionError: client failure",
+      "children": {
+        "server": 0,
+        "client": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "reader_errors": []
+    },
+    "owner02": {
+      "passed": true,
+      "true_exit": 0,
+      "log_complete_after_child_wait": true,
+      "elapsed_seconds": 7.5592685639985575
+    },
+    "baseline01-import": {
+      "passed": true,
+      "true_exit": 0,
+      "log_complete_after_child_wait": true,
+      "elapsed_seconds": 2.884838611000305
+    },
+    "candidate01-restore": {
+      "passed": true,
+      "true_exit": 0,
+      "log_complete_after_child_wait": true,
+      "elapsed_seconds": 1.8637695069992333
+    },
+    "browser01": {
+      "passed": false,
+      "true_exit": 1,
+      "log_complete_after_child_wait": true,
+      "elapsed_seconds": 0.19526406499971927
+    },
+    "reply-baseline01": {
+      "passed": false,
+      "true_exit": 1,
+      "log_complete_after_child_wait": true,
+      "elapsed_seconds": 1.249829790000149
+    },
+    "native01-import": {
+      "passed": true,
+      "true_exit": 0,
+      "log_complete_after_child_wait": true,
+      "elapsed_seconds": 2.781213647998811
+    },
+    "native01-restore": {
+      "passed": true,
+      "true_exit": 0,
+      "log_complete_after_child_wait": true,
+      "elapsed_seconds": 2.0248877220001305
+    },
+    "browser02": {
+      "passed": true,
+      "true_exit": 0,
+      "log_complete_after_child_wait": true,
+      "elapsed_seconds": 0.15422187600051984
+    },
+    "browser03": {
+      "passed": true,
+      "true_exit": 0,
+      "log_complete_after_child_wait": true,
+      "elapsed_seconds": 0.09008400400125538
+    },
+    "candidate01-build": {
+      "passed": true,
+      "true_exit": 0,
+      "log_complete_after_child_wait": true,
+      "elapsed_seconds": 5.788323589000356
+    },
+    "owner01": {
+      "passed": false,
+      "true_exit": 1,
+      "log_complete_after_child_wait": true,
+      "elapsed_seconds": 7.651703059000283
+    },
+    "baseline01-restore": {
+      "passed": true,
+      "true_exit": 0,
+      "log_complete_after_child_wait": true,
+      "elapsed_seconds": 1.8593919380000443
+    },
+    "candidate01-import": {
+      "passed": true,
+      "true_exit": 0,
+      "log_complete_after_child_wait": true,
+      "elapsed_seconds": 2.8735145940008806
+    },
+    "owner03": {
+      "passed": true,
+      "true_exit": 0,
+      "log_complete_after_child_wait": true,
+      "elapsed_seconds": 7.617413090998525
+    },
+    "resource-owner01": {
+      "passed": true,
+      "true_exit": 0,
+      "log_complete_after_child_wait": true,
+      "elapsed_seconds": 1.5078845200005162
+    },
+    "baseline01-build": {
+      "passed": true,
+      "true_exit": 0,
+      "log_complete_after_child_wait": true,
+      "elapsed_seconds": 5.477332337999542
+    },
+    "native01-build": {
+      "passed": true,
+      "true_exit": 0,
+      "log_complete_after_child_wait": true,
+      "elapsed_seconds": 5.524328506000529
+    },
+    "native-adapter01": {
+      "passed": true,
+      "true_exit": 0,
+      "log_complete_after_child_wait": true,
+      "elapsed_seconds": 3.139512296000248
+    }
+  },
+  "large_signed_display_accepted": false,
+  "unapplied_proposals": [
+    "nested-goal-owner",
+    "presentation-reply-owner"
+  ],
+  "whole_tree_acceptance": false,
+  "private_state_and_credentials_included": false,
+  "package_release_or_deploy": false,
+  "prior_composition_freeze_unchanged": true,
+  "head": "293cf6115c0a6b18315eccdbb42cbca396f443d3"
+}

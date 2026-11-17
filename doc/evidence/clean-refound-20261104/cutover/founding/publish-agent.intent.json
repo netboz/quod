@@ -1,0 +1,18 @@
+{
+  "allocation": "ccfd8752-0031-73d9-f811-131ffe6467f9",
+  "expression": "quod_foundation_operator:publish(<<\"quod:agent\">>,binary:decode_hex(<<\"5CB98E9AAA4F1A63B70EA9B4EFE08172DA79F6B94764E77A5BB62B2E6F997282\">>),false)",
+  "command_argv": [
+    "nomad",
+    "alloc",
+    "exec",
+    "-i=false",
+    "-t=false",
+    "-address=http://192.168.1.10:4646",
+    "-task",
+    "quod",
+    "ccfd8752-0031-73d9-f811-131ffe6467f9",
+    "/opt/quod/bin/quod",
+    "eval",
+    "binary_to_list(base64:encode(iolist_to_binary(json:encode(begin quod_foundation_operator:publish(<<\"quod:agent\">>,binary:decode_hex(<<\"5CB98E9AAA4F1A63B70EA9B4EFE08172DA79F6B94764E77A5BB62B2E6F997282\">>),false) end))))."
+  ]
+}

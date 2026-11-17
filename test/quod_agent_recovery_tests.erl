@@ -1,5 +1,6 @@
 -module(quod_agent_recovery_tests).
 -include_lib("eunit/include/eunit.hrl").
+-import(quod_agent_hosting_tests, [agent/1, agent_ref/2]).
 
 host_loss_drains_more_than_executor_capacity_without_collapsing_test_() ->
     {timeout, 90, fun() -> with_recovery_peer(20, fun(Ctx) ->
@@ -128,17 +129,18 @@ prepare_assignments(Count, Ctx = #{namespace := Ns, node := Node,
     1 = erlang:trace(Runtime, true, [call]),
     try
         lists:foreach(fun({#{instance := I, old_key := OldKey}, AgentFacts}) ->
-            commit(Ns, conjunction([{assertz, F} || F <- AgentFacts] ++
-                [{goal, {agent_hosted, I, Old, 1, OldKey}}]))
+            commit(Ns, conjunction([quod_ct:source_assertion({instance_of,hosted_actor,I}) |
+                [{assertz, F} || F <- AgentFacts]] ++
+                [agent({goal, {agent_hosted, agent_ref(Ns, I), Old, 1, OldKey}})]))
         end, lists:zip(Assignments, Facts)),
         NodeNs = element(2, Node),
-        Report = {report_agent_observation, {'_'}, Old, 1, {'_'}, {'_'}, {'_'}, {'_'}},
-        Prepare = {prepare_agent_and_converge, {'_'}, Old, 1, Node, {'_'}},
+        Report = agent({report_agent_observation, agent_ref(Ns, {'_'}), Old, 1, {'_'}, {'_'}, {'_'}, {'_'}}),
+        Prepare = agent({prepare_agent_and_converge, agent_ref(Ns, {'_'}), Old, 1, Node, {'_'}}),
         commit(NodeNs, conjunction([{assertz, {can_execute_for, Ns, Anchor, G}}
                                     || G <- [Report, Prepare]])),
         lists:foreach(fun(#{instance := I, key := Key}) ->
             Goal = {node_authorized_goal, Ns, Anchor,
-                    {prepare_agent_and_converge, I, Old, 1, Node, Key}},
+                    agent({prepare_agent_and_converge, agent_ref(Ns, I), Old, 1, Node, Key})},
             {ok, Bytes, Signature} = quod_node_actor:signed_goal(execute, Goal,
                 crypto:strong_rand_bytes(32), quod_time:now_ms() + 10000),
             ?assertMatch({ok, _, {normalized, {committed, [_], {transaction, Ns, Anchor, _}}}},

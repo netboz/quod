@@ -1,0 +1,41 @@
+[
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "space"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 751665,
+    "before_pid": 751665,
+    "after_pid": 751665
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "Return"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 751665,
+    "before_pid": 751665,
+    "after_pid": 751665
+  },
+  {
+    "command": [
+      "wtype",
+      "-k",
+      "F24"
+    ],
+    "child_exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "owned_pid": 751665,
+    "before_pid": 751665,
+    "after_pid": 751665
+  }
+]

@@ -1,0 +1,45 @@
+{
+  "preserved_original_entries": 21325,
+  "missing_original_entries": 0,
+  "changed_existing_paths": [
+    "client/godot-tests/Program.cs",
+    "client/godot-tests/desktop_input.py",
+    "client/godot-tests/journey.py",
+    "client/godot/Core/Scene.cs",
+    "client/godot/Core/SignedView.cs",
+    "client/godot/Main.cs",
+    "client/godot/OperationsPanel.cs",
+    "client/godot/README.md",
+    "client/godot/ScenePanel.cs",
+    "client/godot/tests/ExportChecks.cs",
+    "client/godot/tests/ExportLifecycle.cs",
+    "client/godot/tests/SpaceChecks.cs",
+    "doc/physics-native.md",
+    "doc/spaces.md",
+    "priv/ontologies/user_instance.pl",
+    "src/quod_client_view.erl",
+    "test/quod_lifecycle_single_path_tests.erl"
+  ],
+  "expected_worker_changes": 17,
+  "coordinator_prompt_preserved": true,
+  "source_scope": {
+    "production_added": 527,
+    "production_removed": 56,
+    "production_net": 471,
+    "tests_added": 425,
+    "tests_removed": 18,
+    "tests_net": 407,
+    "specifications_added": 30,
+    "specifications_removed": 1,
+    "specifications_net": 29,
+    "inherited_coordination_net": 7,
+    "relocations": 0
+  },
+  "idle_worker_and_queue_empty_verified": true,
+  "disposable_m3b_containers_remaining": 0,
+  "direct_visual_inspection": [
+    "final-navigation-final03/recursive-scene.png",
+    "physics-final03/physics.png"
+  ],
+  "no_tests_rerun": true
+}

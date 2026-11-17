@@ -1,0 +1,46 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-m4-vive-focus-recipient-20261030/recipient_checks.py"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 0,
+  "timed_out": false,
+  "driver_inputs": {
+    "freeze_hashes.py": "0ed17289e6b1e57c09aaae3decdeaf22883e1f3752aedbfb6642f28cd9fda9de",
+    "prepare.py": "3d6b56b5104c37547a7c0bbbcb6992dc1bdc6f5abe8f341e3066b2226959e776",
+    "recipient_checks.py": "cfb3596528133fc3a3004bafd1565d3cabc024661b52af5712966998d9b82af3",
+    "replay_parser.py": "27727b4dde9408666c71dcbbfb12c981939862f415f97f4a763083b09fbea50a",
+    "run.py": "baa3d1a56ee14b25d3d23d72acce134400b8d13c0066e0ec8af3fd57388443f8",
+    "external-inputs/focus_events.py": "a7b584c8b137b5617b89a98e57f6f42e895d3247278b4c3de52b595ecbea5889",
+    "external-inputs/focus_checks.py": "b36a2136611930d8ba8ddc4a08574cb953bffd0e4babbf2b9700f310f6b92738",
+    "external-inputs/focus-fixtures.json": "9a7381c85625a875726e9f229b0ce8b67b8695bb9dd41391679febf5f8f2a76a"
+  },
+  "start_utc": "2026-10-30T12:56:35Z",
+  "elapsed_seconds": 0.06452584266662598,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/focus-recipient-checks01/stdout.raw",
+      "sha256": "51530d9514249e61a9f31299f7d91e5ab4d95ac46f474263d9ec3c41d5bba844",
+      "bytes": 5010
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/focus-recipient-checks01/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-focus-recipient-20261030/logs/focus-recipient-checks01-stdout.log",
+      "sha256": "51530d9514249e61a9f31299f7d91e5ab4d95ac46f474263d9ec3c41d5bba844",
+      "bytes": 5010
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-focus-recipient-20261030/logs/focus-recipient-checks01-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

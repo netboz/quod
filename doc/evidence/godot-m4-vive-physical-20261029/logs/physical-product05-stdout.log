@@ -1,0 +1,36 @@
+M4_PHYSICAL_STARTUP_WANDS 2
+PASS enabled action create-key
+PASS enabled action connect
+PASS physical fixture authenticates the exact owned network
+PASS enabled action register
+PASS physical fixture retains its original signed human
+PASS enabled action prepare
+PASS enabled action setup
+PASS physical fixture has no unknown original operation
+PASS enabled action start-xr
+M4_VIVE_GUI start-xr
+PASS ordinary signed-in Start OpenXR attaches the real owner
+M4_VIVE_RECORDED ready
+M4_VIVE_PRODUCT_READY
+M4_VIVE_FIRST_DRAW
+M4_PHYSICAL_APPLICATION_READY
+M4_VIVE_HEAD True:High
+M4_VIVE_POSE left missing/missing
+M4_VIVE_POSE right missing/missing
+M4_VIVE_RECORDED status
+M4_VIVE_GUI offered-operation
+M4_VIVE_GUI disconnect
+M4_VIVE_GUI connect
+M4_VIVE_RECORDED status
+M4_VIVE_GUI start-xr
+PASS ordinary Start OpenXR reenters the existing native session
+M4_VIVE_RECORDED restarted
+M4_VIVE_RECORDED status
+PASS enabled action stop-xr
+M4_VIVE_GUI stop-xr
+PASS real adapter stop retires every source subscription and capture
+M4_VIVE_RECORDED stopped
+M4_VIVE_RECORDED finished
+M4_VIVE_PRODUCT_FINISHED
+M4_VIVE_RECORDED observer-retired
+{"label": "native-vive-product05", "started_utc": "2026-10-29T19:05:32Z", "diagnostic": true, "hardware": true, "synthetic_input": false, "driver_inputs": {"PhysicalChecks.cs": "7de73e525a93220673450acb24e4faa4ffac3d41e25cbcaa6106cf4643fe9fc8", "build.py": "7fa203569ca2462b86b624b5c5d27eae16937e5701432c9d3a66784b802f26f4", "check_builds.py": "748cf2fa9de2f9683c0577f102f1268b716829c4c04fb66eb057ad30e74cd1af", "environment.py": "c3a54c8ce4d8360f8711e027d31f7a98f29cf3b9b4436c43a84984cf2c1f20f9", "godot_m3b_fixture.erl": "c895246b8d4df73560cc042b0ff459b4f33bb46a8870aa52bc4330c3817db769", "godot_m3b_physics_fixture.erl": "06b764596bf6aaa4e58549a21d56ae10b56f60f9891d38e4ef8c74601da7392d", "inventory.py": "2e2211415eb28889defe7f8e7281ccb022852c4191d4e790d346f0cadb876aa0", "manual_run.py": "08df30b590f09ffdc24f8aa4fc7b1a0a61637adb14d0f1c653c565c9e08dc89f", "physical.py": "d5d9b98230b72125fba87a75acd08675e14b2e1b177813361b58559548393547", "run.py": "860a082e115d37d86b18b0f588412bbbbff63f65757aa63e9acd358cf8e573eb", "serve.py": "f4cebe56f7939c887333d2fa357dc5df1a2c79cd42f56a3b8cc9bc43305eb96c", "doc/evidence/godot-m4-r2-20261029/private_vive.py": "e85993e8196ffbf2f4d2e0cd318c36a158be4c0de54b11391c7bacdc9594593c", "doc/evidence/godot-m4-vr-20261029/vive_display.py": "987d616c5425003e74bd261c1a9de346c4d734ff69e72201c687eb59a79bed76"}, "client_manifest": {"path": "doc/evidence/godot-m4-vive-physical-20261029/inputs/client-physical02-manifest.json", "sha256": "11ab8d929946e566d5645bcb9e629db8a6ab50cf0537b723ad686dd4fe9316f3"}, "engine_sha256": "02310d903099bada10c86cedc90bbc11ef0bec8254d6e607d1a53f6150ab0268", "reader_errors": [], "manual_bound_seconds": 1800, "normal_close_watchdog_seconds": 60, "passed": true, "commands": [{"command": ["hyprctl", "dispatch", "hl.dsp.focus({window=\"address:0x557166a80680\"})"], "exit": 0, "stdout": "ok\n", "stderr": ""}, {"diagnostic_instruction": "status", "utc": "2026-10-29T19:06:57Z"}, {"diagnostic_instruction": "status", "utc": "2026-10-29T19:30:51Z"}, {"diagnostic_instruction": "restart", "utc": "2026-10-29T19:32:26Z"}, {"diagnostic_instruction": "status", "utc": "2026-10-29T19:33:50Z"}, {"diagnostic_instruction": "stop", "utc": "2026-10-29T19:34:55Z"}, {"diagnostic_instruction": "finish", "utc": "2026-10-29T19:35:14Z"}, {"command": ["hyprctl", "dispatch", "hl.dsp.window.close({window=\"address:0x557166a80680\"})"], "exit": 0, "stdout": "ok\n", "stderr": ""}], "server_command": ["python3", "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-physical-20261029/serve.py", "native-vive-product05-server", "--stage", "/tmp/quod-m3b-8b352c53/m3b-gates01/source", "--profile", "prod", "--qualified"], "endpoint": {"port": 37775, "network": "r7mljH38R0J9w16bErpeqZc33geKNeCxNne9T4yrRyg", "control_port": 43915, "ca": "/m1b/backend-ca.pem"}, "runtime_command": ["bwrap", "--die-with-parent", "--new-session", "--ro-bind", "/", "/", "--dev-bind", "/dev", "/dev", "--bind", "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product05", "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product05", "--bind", "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product05/steam-config", "/home/yan/.local/share/Steam/config", "--chdir", "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product05", "--", "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/bin/monado-service"], "runtime_manifest_sha256": "a6fe164702281f786bcc9c3a4e1951d8fedade04bd56570ce503c6f62ebee538", "startup_inventory": {"command": ["/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-compatible02-install/bin/monado-ctl"], "exit": 0, "enum_header_sha256": "47631574ba6eb1397aea6d902e25a3300390bee2290c2e3e2c93ebdbb225fbe4", "named_enum": "XRT_DEVICE_VIVE_WAND", "derived_value": 4, "wand_devices": 2, "streams": {"stdout": {"sha256": "263cdae456a20e8e590c453581b032fa420fd992cdfc7e8cddfc28fc34390c46", "bytes": 236}, "stderr": {"sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "bytes": 0}}}, "client_command": ["/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-physical02/source/client/godot/dist/quod.x86_64", "--display-driver", "wayland", "--audio-driver", "Dummy", "--xr-mode", "on", "--rendering-method", "mobile", "--rendering-driver", "vulkan", "--", "--qualification", "--profile", "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product05/identity", "--node", "https://127.0.0.1:37775", "--ca", "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-native-vive-product05-server/backend-ca.pem"], "product_ready": true, "owned_window_address": "0x557166a80680", "stack_capture_exit": 0, "client_exit": 0, "runtime_exit": 0, "server_exit": 0, "eof": {"server-stdout": true, "server-stderr": true, "runtime-stdout": true, "runtime-stderr": true, "client-stdout": true, "client-stderr": true}, "original_calibration_unchanged": true, "runtime_processes_after": [], "product_finished": true, "diagnostics": [], "api_dump": {"path": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product05/api-dump.raw", "sha256": "a3f8e60fcb2b238eafe5683ef6cfa71480d80bcf78e1c01ac099e9dac74a7770", "bytes": 875866754, "scope": "call entries and arguments only; no returned-status or pixel claim"}}

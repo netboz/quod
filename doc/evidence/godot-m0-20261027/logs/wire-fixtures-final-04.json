@@ -1,0 +1,14 @@
+{
+  "command": [
+    "env",
+    "M0_BACKUP=/tmp/quod-godot-m0-backup-final.json",
+    "node",
+    "doc/evidence/godot-m0-20261027/wire-fixtures.mjs"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-27T15:06:37Z",
+  "elapsed_seconds": 1.2779417037963867,
+  "child_exit": 0,
+  "timed_out": false,
+  "error_diagnostics": 0
+}

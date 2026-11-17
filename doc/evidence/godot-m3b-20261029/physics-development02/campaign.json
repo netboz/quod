@@ -1,0 +1,18 @@
+{
+  "server_command": [
+    "python3",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m3b-20261029/serve.py",
+    "physics-development02-server",
+    "--stage",
+    "/tmp/quod-m3b-8b352c53/m3b-preflight01/source",
+    "--profile",
+    "test",
+    "--qualified",
+    "--physics"
+  ],
+  "passed": false,
+  "native_input": [],
+  "failure": "Physics fixture ended before readiness",
+  "stop_error": "[Errno 32] Broken pipe",
+  "server_child_exit": 1
+}

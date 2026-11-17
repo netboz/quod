@@ -1,0 +1,48 @@
+{
+  "command": [
+    "/usr/bin/python3",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-headset-cue-20261030/build.py",
+    "headset-cue01",
+    "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/engine/clean02/godot.linuxbsd.template_release.x86_64.mono"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "bound_seconds": 2100,
+  "driver_inputs": {
+    "build.py": "b2b5113754811501509b16382ef0ef40f7aa877a6acb0ecf380e9d9e7c1b479f",
+    "cache.py": "07a42d20e6ec55f2a650359e0c33bd0a8c43f902abe8f53a60f1163ea98f8f90",
+    "run_build.py": "709d09312391fb94f33af0690d1a650ab6f3a64b83bb326dee3aaa0f7da3ff82"
+  },
+  "reader_errors": [],
+  "offline_build_only": true,
+  "native_runtime_started": false,
+  "functional_application_started": false,
+  "explicit_completion": true,
+  "timed_out": false,
+  "completion": {
+    "passed": true,
+    "inputs": 94,
+    "outputs": 196,
+    "stage": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-headset-cue01"
+  },
+  "true_child_exit": 0,
+  "eof": {
+    "stdout": true,
+    "stderr": true
+  },
+  "elapsed_seconds": 28.405917533997126,
+  "streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/headset-cue-build01/stdout.raw",
+      "sha256": "e3f1296043841651357a311714e668d1e69709b81c857542558b8d4eda0b7465",
+      "bytes": 1125,
+      "sanitized_sha256": "e3f1296043841651357a311714e668d1e69709b81c857542558b8d4eda0b7465"
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/headset-cue-build01/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "sanitized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "passed": true
+}

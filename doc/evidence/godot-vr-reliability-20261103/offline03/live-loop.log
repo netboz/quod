@@ -1,0 +1,13 @@
+test_expired_interaction_marker_is_not_reported_ready (__main__.LiveChecks.test_expired_interaction_marker_is_not_reported_ready) ... ok
+test_interaction_without_visual_admission_is_not_ready (__main__.LiveChecks.test_interaction_without_visual_admission_is_not_ready) ... ok
+test_normal_close_rechecks_same_absolute_deadline (__main__.LiveChecks.test_normal_close_rechecks_same_absolute_deadline) ... ok
+test_rendering_report_does_not_claim_visual_or_interaction_admission (__main__.LiveChecks.test_rendering_report_does_not_claim_visual_or_interaction_admission) ... ok
+test_stopped_batch_cannot_report_interaction_ready (__main__.LiveChecks.test_stopped_batch_cannot_report_interaction_ready) ... ok
+test_uncertain_finish_is_fenced_before_io (__main__.LiveChecks.test_uncertain_finish_is_fenced_before_io) ... ok
+test_visible_stereo_keeps_original_preparation_bound (__main__.LiveChecks.test_visible_stereo_keeps_original_preparation_bound) ... ok
+test_visual_then_interaction_never_restarts_participant_interval (__main__.LiveChecks.test_visual_then_interaction_never_restarts_participant_interval) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.003s
+
+OK

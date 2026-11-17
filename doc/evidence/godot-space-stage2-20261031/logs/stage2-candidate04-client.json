@@ -1,0 +1,46 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-space-stage2-20261031/rehearse.py",
+    "stage2-candidate04-headless",
+    "--manifest",
+    "doc/evidence/godot-space-stage2-20261031/inputs/client-stage2-candidate04-manifest.json"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 1,
+  "timed_out": false,
+  "driver_inputs": {
+    "build.py": "ba530c48fcb1a83b3b83f652a83c2ea586fad4635237432fc80cea7e55f53d79",
+    "hashes.py": "c8149c62d70aed27070c685507cdb54ee9b4dfe429fabb37e3b5903c7300e9b1",
+    "rehearse.py": "3f9d5b3bc2e2baffcc85a8ce00c96b088f9948241dbe3f09b883947b467822e2",
+    "run.py": "bb083951b41f9578d6ec35bd5fc6e51eb645475936642f1b9e2b725e138a4479",
+    "serve.py": "d1f50ba2e5c2a9bbb8303fbdc8f5cbe8ca12a1fe961d0cdf216ef05c8dc549fa"
+  },
+  "start_utc": "2026-10-31T14:41:16Z",
+  "elapsed_seconds": 90.80667400360107,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/stage2-candidate04-client/stdout.raw",
+      "sha256": "c959eb14347806a5817bd05f9d8dd965a23c03b18d9745531b1b170b9dcd41ce",
+      "bytes": 1157
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/stage2-candidate04-client/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031/logs/stage2-candidate04-client-stdout.log",
+      "sha256": "c959eb14347806a5817bd05f9d8dd965a23c03b18d9745531b1b170b9dcd41ce",
+      "bytes": 1157
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031/logs/stage2-candidate04-client-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

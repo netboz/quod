@@ -7,15 +7,14 @@
 
 run() ->
     quod_gui_stage1_tests:with_forms(fun(C) ->
-        quod_space_creation_tests:with_models(C,fun() -> run_browser(C) end)
+        run_browser(C)
     end).
 
 run_browser(C = #{namespace := Ns, directory := Dir, storage := Storage}) ->
         Anchor = quod_simplex:genesis_hash(Ns),
         [edit(Ns,{assertz,Fact}) || Fact <- [
             {rendering_vocabulary,<<"creation-rendering">>,quod_simplex:genesis_hash(<<"creation-rendering">>)},
-            {lobby_provisioning,me,{linked,{ontology_ref,Ns,Anchor}}},
-            {lobby_space,room,[playing]}, {entity_scene,personal,{'_'},hidden},
+            {':-',{account_navigation,{entity_ref,Ns,Anchor,room},[playing]},true}, {entity_scene,personal,{'_'},hidden},
             {space_member,room,{entity_ref,Storage,quod_simplex:genesis_hash(Storage),<<"foreign-display">>}}]],
         [edit(Storage,{assertz,Fact}) || Fact <- [
             {':-',{instance_of,space,<<"foreign-display">>},true},
@@ -53,7 +52,7 @@ browser(Port,C) ->
             true = port_command(Port,<<"ok\n">>), browser(Port,C);
         {Port,{data,{eol,Line}}} -> io:format("~s~n",[Line]), browser(Port,C);
         {Port,{data,{noeol,Line}}} -> io:format("~s",[Line]), browser(Port,C);
-        {local_proof_waiting,Proof} ->
+        {local_proof_waiting, Proof, _} ->
             case erase(conflict_edit) of undefined -> ok; {Owner,Goal} -> edit(Owner,Goal) end,
             Proof ! release, browser(Port,C);
         {Port,{exit_status,0}} -> ok;
@@ -100,7 +99,7 @@ control(<<"verify">>,_,C=#{namespace:=Ns}) ->
 hold_creation(#{storage:=Ns},Edit) ->
     true = quod_reg:reg({host_test,local_proof}), put(conflict_edit,Edit),
     [Original={':-',{gui_form,Form,Fields,{submit,Control,Goal,Metadata}},Body}] =
-        [Rule || Rule={':-',{gui_form,_,_,_},_} <- quod_prolog:read_terms("priv/ontologies/space_gui.pl")],
+        [Rule || Rule={':-',{gui_form,_,_,_},_} <- quod_prolog:read_terms("priv/ontologies/quod_space.pl")],
     Held = {':-',{gui_form,Form,Fields,{submit,Control,{',',Goal,test_local_wait},Metadata}},Body},
     put(conflict_forms,{Original,Held}), edit(Ns,{retract,Original}), edit(Ns,{assertz,Held}).
 

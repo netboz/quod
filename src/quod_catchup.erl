@@ -37,21 +37,18 @@ identity and the historical certifying committee, never the serving peer.
 -export([start_link/2, contact/1, contacts/2, pull/5, read_blocks/3, stats/1,
          channel/1, encode_frame/2, decode_frame/2,
          finality_begin/3, finality_block/2, verify_finality/4, verify_forward_group/5,
-         open_history_transfer/3, transfer_open/3, transfer_page/2, transfer_begin/6, transfer_accept/3,
+         open_history_transfer/3, transfer_open/3, transfer_page/3, transfer_begin/6, transfer_accept/3,
          range_begin/7, range_accept/5, range_context/1, range_delta/1,
          evidence_open/4, evidence_begin/3, evidence_accept/4, evidence_result/1,
          catch_up/7]).
 -export_type([finality_cursor/0, transfer/0, transfer_sender/0, range_receiver/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -ifdef(TEST).
--export([contact_candidates/3, test_recovery_state/1, test_hold_next_reader/3]).
+-export([contact_candidates/3, test_recovery_state/1, test_hold_next_reader/3,
+         test_transfer_page/3, test_transfer_parts/2]).
 -endif.
 
 -define(REQ_TIMEOUT_MS,  8000).
--define(MAX_BLOCKS,      ?QUOD_MAX_FOREIGN_PAGE_ENTRIES).
--define(RESP_BUDGET,     ?QUOD_MAX_FOREIGN_PAGE_BYTES).
-                                         %% frame MUST fit quod_link's 1 MiB cap (it EXITs the link on a
-                                         %% larger frame), so we leave headroom for the envelope
 
 -record(client_pull, {
           from :: gen_server:from() | none,
@@ -78,7 +75,7 @@ identity and the historical certifying committee, never the serving peer.
 -record(transfer, {binding, last, next, projection, index, mode, stage, delta,
                     entries = [], finality = pending}).
 -opaque transfer() :: #transfer{}.
--record(transfer_sender, {next, last, current = none, pending = none, selections = range,
+-record(transfer_sender, {next, last, current = none, pending = [], selections = range,
                           known_root = none}).
 -opaque transfer_sender() :: #transfer_sender{}.
 -record(range_receiver, {binding, to, mode, stage, context, projection, index, delta,
@@ -199,28 +196,30 @@ channel(Ns) when is_binary(Ns) ->
     term_to_binary({catchup, Ns}, [deterministic]).
 
 -doc "Encode one catch-up frame; committed entries travel only as their canonical blobs.".
--spec encode_frame(binary(), term()) -> binary().
+-spec encode_frame(binary(), term()) -> {ok, binary()} | {error, term()}.
 encode_frame(Ns, Term) when is_binary(Ns) ->
-    {ok, Term, _} = decode_wire_term(Term, 0),
-    {ok, Inner} = quod_safe_term:encode_canonical(
-                    Term, ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
-    {ok, Outer} = quod_safe_term:encode_canonical(
-      {catchup, 3, Ns, Inner},
-      ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
-    Outer.
+    case decode_wire_term(Term, 0) of
+        {ok, Term, _} ->
+            case quod_safe_term:encode_canonical(Term, ?QUOD_LINK_PAYLOAD_CAPACITY) of
+                {ok, Inner} -> quod_safe_term:encode_canonical(
+                                 {catchup, 3, Ns, Inner}, ?QUOD_LINK_PAYLOAD_CAPACITY);
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
+    end.
 
 -doc "Decode one existing catch-up frame, returning its inner encoded byte count.".
 -spec decode_frame(binary(), binary()) ->
           {ok, term(), non_neg_integer()} | {error, term()}.
 decode_frame(Ns, Payload)
   when is_binary(Ns), is_binary(Payload),
-       byte_size(Payload) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
-    case quod_safe_term:decode_wrapped(Payload, ?QUOD_TRANSPORT_MAX_FRAME_BYTES) of
+       byte_size(Payload) =< ?QUOD_LINK_PAYLOAD_CAPACITY ->
+    case quod_safe_term:decode_wrapped(Payload, ?QUOD_LINK_PAYLOAD_CAPACITY) of
         {ok, {catchup, 3, Ns, Bin}}
           when is_binary(Bin),
-               byte_size(Bin) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
+               byte_size(Bin) =< ?QUOD_LINK_PAYLOAD_CAPACITY ->
             case quod_safe_term:decode_wrapped(
-                   Bin, ?QUOD_TRANSPORT_MAX_FRAME_BYTES) of
+                   Bin, ?QUOD_LINK_PAYLOAD_CAPACITY) of
                 {ok, WireTerm} ->
                     decode_wire_term(WireTerm, byte_size(Bin));
                 {error, _} ->
@@ -244,13 +243,13 @@ decode_wire_term(
    Continuation, <<_:128>> = Next} = Term, Bytes)
   when is_integer(Height), Height >= 0 ->
     case Grant =/= Next andalso valid_transfer_continuation(Continuation)
-         andalso valid_transfer_parts(Parts, 0, 0) of
+         andalso valid_transfer_parts(Parts) of
         true -> {ok, Term, Bytes};
         false -> {error, bad_frame}
     end;
 decode_wire_term(
   {history_error3, <<_:128>> = Grant, <<_:128>>, Reason, <<_:128>> = Next} = Term, Bytes)
-  when Grant =/= Next, (Reason =:= not_ready orelse Reason =:= server_error) ->
+  when Grant =/= Next, (Reason =:= not_ready orelse Reason =:= server_error orelse Reason =:= frame_unrepresentable) ->
     {ok, Term, Bytes};
 decode_wire_term(_Term, _Bytes) ->
     {error, bad_frame}.
@@ -277,18 +276,18 @@ valid_transfer_continuation({<<_:128>>, Sequence}) -> is_integer(Sequence) andal
 valid_transfer_continuation(_) -> false.
 
 %% Read already-verified material for the derived foreign projection. This
-%% bounded work unit is not a history transport or a certificate verifier.
+%% local read is not a history transport or a certificate verifier.
 -spec read_blocks(quod_ledger_store:handle(), non_neg_integer(), log_index()) ->
           {ok, [quod_ledger:entry_artifact()], log_index()} | {error, term()}.
 read_blocks(Store, From0, To) ->
     From = max(1, From0),
     try
         LastI = quod_ledger_store:last(Store),
-        To1 = lists:min([To, LastI, From + ?MAX_BLOCKS - 1]),
+        To1 = min(To, LastI),
         {ok, Es} = measure_serve_stage(
                      serve_range_read,
                      fun() -> quod_ledger_store:read_range(Store, From, To1, all) end),
-        {ok, cap_bytes(Es, 0), LastI}
+        {ok, Es, LastI}
     catch _:R -> {error, R}
     end.
 
@@ -353,7 +352,8 @@ authority_rows(Index, KnownEra, Era) ->
     quod_dtx_phase_index:authority_path(Index, KnownEra, Era).
 
 serve_transfer_pages(Store, Cursor, Owner, Token, Sequence, Deadline, Gate) ->
-    case transfer_page(Store, Cursor) of
+    case transfer_page(Store, Cursor,
+                       {quod_ledger_store:namespace(Store), {Token, Sequence + 1}}) of
         {ok, Parts, Next} ->
             Continuation = case Next of done -> done; _ -> {Token, Sequence + 1} end,
             Owner ! {reader_result, Token, self(),
@@ -385,20 +385,6 @@ observe_serve_stage(Stage, Result, StartedNative) ->
 serve_stage_result({ok, _}) -> ok;
 serve_stage_result({error, _}) -> failed.
 
-%% Keep one bounded materializer work unit, including at least one legal
-%% material entry. Transport separately pages proof groups with its cursor.
-cap_bytes([], _Acc) -> [];
-cap_bytes([E | Rest], Acc) ->
-    EntryBytes = case E of
-        Bytes when is_binary(Bytes) -> Bytes;
-        _ -> {ok, Bytes} = quod_ledger:encode_entry(E), Bytes
-    end,
-    Acc1 = Acc + byte_size(EntryBytes),
-    case Acc =:= 0 orelse Acc1 =< ?RESP_BUDGET of
-        true  -> [E | cap_bytes(Rest, Acc1)];
-        false -> []
-    end.
-
 -doc """
 Capture a material range for the existing reader. The last selected archive
 group is completed even if it extends beyond To; certified material cannot be
@@ -409,37 +395,97 @@ network round trip for every historical transaction.
 transfer_open(Store, From, To) when is_integer(From), From > 0, is_integer(To), To >= From ->
     #transfer_sender{next = From, last = min(To, quod_ledger_store:last(Store))}.
 
--doc "Produce a bounded page without restarting its proof cursor; retain one lookahead item.".
--spec transfer_page(quod_ledger_store:handle(),
-                    transfer_sender() | done) ->
+-doc "Page one retained proof cursor against its complete consumer frame.".
+-spec transfer_page(quod_ledger_store:handle(), transfer_sender() | done,
+                    unlimited | {binary(), {binary(), pos_integer()}}) ->
           {ok, [term()], transfer_sender() | done} | {error, term()}.
-transfer_page(_Store, done) -> {ok, [], done};
-transfer_page(Store, State) -> transfer_page(Store, State, [], 0, 0).
+transfer_page(_Store, done, _Context) -> {ok, [], done};
+transfer_page(Store, State, Context) ->
+    case page_allowances(Store, Context) of
+        {ok, Allowances} -> transfer_page(Store, State, Allowances, [], 0);
+        {error, _} = Error -> Error
+    end.
 
-transfer_page(Store, State = #transfer_sender{pending = Pending}, Acc, Count, Size) ->
-    Next = case Pending of
-        none -> next_transfer_part(Store, State);
-        _ -> {ok, Pending, State#transfer_sender{pending = none}}
-    end,
-    case Next of
+page_allowances(_Store, unlimited) -> {ok, {unlimited, unlimited}};
+page_allowances(Store, {Ns, Continuation}) ->
+    Height = quod_ledger_store:last(Store),
+    case {page_part_allowance(Ns, Height, Continuation),
+          page_part_allowance(Ns, Height, done)} of
+        {{ok, More}, {ok, Done}} -> {ok, {More, Done}};
+        {{error, Why}, _} -> {error, Why};
+        {_, {error, Why}} -> {error, Why}
+    end.
+
+%% The envelope includes the actual namespace, height and continuation integer.
+%% Fixed-width request/grant values have identical encoded sizes for every value.
+%% Measure the nonempty list wrapper once; each part contributes its ETF body.
+page_part_allowance(Ns, Height, Continuation) ->
+    Sample = {history_page3, <<0:128>>, <<0:128>>, [end_group], Height,
+              Continuation, <<1:128>>},
+    {ok, <<131, Body/binary>>} = quod_safe_term:encode_canonical(end_group, unlimited),
+    case encode_frame(Ns, Sample) of
+        {ok, Frame} -> {ok, page_capacity() - byte_size(Frame) + byte_size(Body)};
+        {error, too_large} -> {error, frame_unrepresentable};
+        {error, _} = Error -> Error
+    end.
+
+transfer_page(Store, State, Allowances = {More, _Done}, Acc, Size) ->
+    case take_transfer_part(Store, State) of
         done -> {ok, lists:reverse(Acc), done};
         {ok, Part, State1} ->
-            case quod_safe_term:encode_canonical(Part, ?RESP_BUDGET) of
-                {ok, Encoded} when Count < ?MAX_BLOCKS, Size + byte_size(Encoded) =< ?RESP_BUDGET ->
-                    transfer_page(Store, State1, [Part | Acc], Count + 1,
-                                  Size + byte_size(Encoded));
-                {ok, _} -> {ok, lists:reverse(Acc), State1#transfer_sender{pending = Part}};
-                {error, _} -> {error, transfer_part_too_large}
+            Added = part_body_size(Part),
+            case More =:= unlimited orelse Size + Added =< More of
+                true -> transfer_page(Store, State1, Allowances, [Part | Acc], Size + Added);
+                false -> finish_page(Store, State1, Allowances, Acc, [Part], Size + Added)
             end
     end.
 
-next_transfer_part(_Store, #transfer_sender{current = none, selections = []}) -> done;
-next_transfer_part(Store, S = #transfer_sender{current = none, selections = [{Kind, Height} | Rest]}) ->
+%% A terminal envelope is smaller than a continuation envelope. Retain only
+%% the lookahead which could still complete that terminal frame. If it cannot,
+%% emit the already representable prefix and retain every read part exactly once.
+finish_page(Store, State, Allowances = {_More, Done}, Prefix, Tail, Size) ->
+    case Done =:= unlimited orelse Size =< Done of
+        false -> deferred_page(State, Prefix, Tail);
+        true ->
+            case take_transfer_part(Store, State) of
+                done -> {ok, lists:reverse(Prefix) ++ lists:reverse(Tail), done};
+                {ok, Part, State1} ->
+                    finish_page(Store, State1, Allowances, Prefix, [Part | Tail],
+                                Size + part_body_size(Part))
+            end
+    end.
+
+deferred_page(_State, [], _Tail) -> {error, frame_unrepresentable};
+deferred_page(State = #transfer_sender{pending = Pending}, Prefix, Tail) ->
+    {ok, lists:reverse(Prefix),
+     State#transfer_sender{pending = lists:reverse(Tail) ++ Pending}}.
+
+part_body_size(Part) ->
+    {ok, <<131, Body/binary>>} = quod_safe_term:encode_canonical(Part, unlimited),
+    byte_size(Body).
+
+take_transfer_part(Store, State = #transfer_sender{pending = []}) ->
+    next_transfer_part(Store, State);
+take_transfer_part(_Store, State = #transfer_sender{pending = [Part | Rest]}) ->
+    {ok, Part, State#transfer_sender{pending = Rest}}.
+
+transfer_complete(#transfer_sender{pending = [], current = none, selections = []}) -> true;
+transfer_complete(#transfer_sender{pending = [], current = none, selections = range,
+                                    next = Next, last = Last}) -> Next > Last;
+transfer_complete(_) -> false.
+
+next_transfer_part(Store, State) ->
+    case transfer_complete(State) of
+        true -> done;
+        false -> transfer_part(Store, State)
+    end.
+
+transfer_part(Store, S = #transfer_sender{current = none, selections = [{Kind, Height} | Rest]}) ->
     {ok, Entry} = quod_ledger_store:read_at(Store, Height),
     {ok, Block} = entry_block(Entry),
     {ok, {evidence, Kind, Height}, S#transfer_sender{
         current = {evidence_entry, Entry, quod_ledger:block_ref(Block)}, selections = Rest}};
-next_transfer_part(Store, S = #transfer_sender{current = {evidence_entry, Entry, Ref}}) ->
+transfer_part(Store, S = #transfer_sender{current = {evidence_entry, Entry, Ref}}) ->
     Height = quod_ledger:entry_index(Entry),
     {ok, Bytes} = quod_ledger:encode_entry(Entry),
     Next = case Height =:= 1 orelse S#transfer_sender.known_root =:= {Height, element(3, Ref)} of
@@ -448,7 +494,7 @@ next_transfer_part(Store, S = #transfer_sender{current = {evidence_entry, Entry,
                  {evidence_proof, Cursor, Ref}
     end,
     {ok, {entry, Bytes}, S#transfer_sender{current = Next}};
-next_transfer_part(Store, S = #transfer_sender{current = {evidence_proof, Cursor, Ref}}) ->
+transfer_part(Store, S = #transfer_sender{current = {evidence_proof, Cursor, Ref}}) ->
     case quod_ledger_store:proof_next(Store, Cursor) of
         {ok, Bytes, NextCursor} ->
             {ok, Block} = quod_ledger:decode_block(Bytes, wrapped),
@@ -459,14 +505,12 @@ next_transfer_part(Store, S = #transfer_sender{current = {evidence_proof, Cursor
             {ok, {proof, Bytes}, S#transfer_sender{current = Next}};
         done -> error(incomplete_selected_witness)
     end;
-next_transfer_part(_Store, S = #transfer_sender{current = evidence_end}) ->
+transfer_part(_Store, S = #transfer_sender{current = evidence_end}) ->
     {ok, end_group, S#transfer_sender{current = none}};
-next_transfer_part(_Store, #transfer_sender{current = none, selections = range, next = Next, last = Last})
-  when Next > Last -> done;
-next_transfer_part(Store, S = #transfer_sender{current = none, next = First}) ->
+transfer_part(Store, S = #transfer_sender{current = none, next = First}) ->
     {ok, Last, Cursor} = quod_ledger_store:transfer_cursor(Store, First),
     {ok, {group, First, Last}, S#transfer_sender{next = Last + 1, current = Cursor}};
-next_transfer_part(Store, S = #transfer_sender{current = Cursor}) ->
+transfer_part(Store, S = #transfer_sender{current = Cursor}) ->
     case quod_ledger_store:transfer_next(Store, Cursor) of
         done -> {ok, end_group, S#transfer_sender{current = none}};
         {ok, Part, Next} -> {ok, Part, S#transfer_sender{current = Next}}
@@ -500,7 +544,7 @@ neither. The stage/source lifetime is the enclosing worker callback.
 -spec transfer_accept(transfer(), [{entry | proof, binary()}], more | done) ->
           {more, transfer()} | {done, map()} | {error, term()}.
 transfer_accept(T, Parts, End) when End =:= more; End =:= done ->
-    case valid_transfer_parts(Parts, 0, 0) of
+    case valid_transfer_parts(Parts) of
         true ->
             case transfer_parts(Parts, T, quod_transaction:decode_context()) of
                 {ok, T1, _Decoded} when End =:= more -> {more, T1};
@@ -511,14 +555,10 @@ transfer_accept(T, Parts, End) when End =:= more; End =:= done ->
     end;
 transfer_accept(_, _, _) -> {error, malformed_transfer_page}.
 
-valid_transfer_parts([], _Count, _Bytes) -> true;
-valid_transfer_parts([Part | Rest], Count, Size) when Count < ?MAX_BLOCKS ->
-    case valid_transfer_part(Part) andalso quod_safe_term:encode_canonical(Part, ?RESP_BUDGET) of
-        {ok, Encoded} when Size + byte_size(Encoded) =< ?RESP_BUDGET ->
-            valid_transfer_parts(Rest, Count + 1, Size + byte_size(Encoded));
-        _ -> false
-    end;
-valid_transfer_parts(_, _, _) -> false.
+valid_transfer_parts([]) -> true;
+valid_transfer_parts([Part | Rest]) ->
+    valid_transfer_part(Part) andalso valid_transfer_parts(Rest);
+valid_transfer_parts(_) -> false.
 
 valid_transfer_part({Kind, Bytes}) when Kind =:= entry; Kind =:= proof -> is_binary(Bytes);
 valid_transfer_part({group, First, Last}) ->
@@ -613,7 +653,7 @@ range_accept(R = #range_receiver{height = Height, projection = P}, Parts, Remote
             %% Authentication reuse belongs only to this bounded page. It is
             %% not retained in either cursor and cannot become authority for
             %% committee, reference, freshness or finality decisions.
-            case valid_transfer_parts(Parts, 0, 0) of
+            case valid_transfer_parts(Parts) of
                 false -> {error, malformed_transfer_page, R};
                 true ->
                     case consume_range_parts(Parts, R#range_receiver{height = RemoteHeight},
@@ -850,7 +890,7 @@ evidence_begin(Identity, Authority, Selection) ->
 -spec evidence_accept(term(), [term()], non_neg_integer(), more | done) -> {ok, term()} | {error, term()}.
 evidence_accept(R = #evidence_receiver{height = OldHeight, complete = false}, Parts, Height, End)
   when is_integer(Height), Height >= 0, (OldHeight =:= none orelse OldHeight =:= Height) ->
-    case valid_transfer_parts(Parts, 0, 0) andalso (End =:= more orelse End =:= done) of
+    case valid_transfer_parts(Parts) andalso (End =:= more orelse End =:= done) of
         true ->
             case consume_evidence(Parts, R#evidence_receiver{height = Height}, quod_transaction:decode_context()) of
                 {ok, Next = #evidence_receiver{active = none, entry = Entry}, _}
@@ -1033,7 +1073,8 @@ catch_up(_, _, _, _, _, _, _) -> {error, bad_catchup_options}.
 
 catch_up_loop(Binding, Fetch, Sink, View = #{owner := Owner, projection := Projection},
               From, MaxHeight, Stage) ->
-    To = From + ?MAX_BLOCKS - 1,
+    %% The existing range owner captures its actual last committed entry.
+    To = ?QUOD_SCOPE_WIRE_MAX_UINT64,
     Deadline = quod_time:mono_ms() + ?REQ_TIMEOUT_MS,
     Range = range_begin(Binding, To, materialized, Stage, View, Projection,
                         maps:get(history_index, Projection)),
@@ -1137,6 +1178,12 @@ handle_call(stats, _From, S) ->
 handle_call(Request, _From, S) -> test_call(Request, S).
 
 -ifdef(TEST).
+test_transfer_page(Store, Sender, Allowances) ->
+    transfer_page(Store, Sender, Allowances, [], 0).
+
+test_transfer_parts(Parts, Allowances) ->
+    transfer_page(undefined, #transfer_sender{next = 1, last = 0, pending = Parts},
+                  Allowances, [], 0).
 test_call(test_recovery_state, S) ->
     {reply, #{openings => S#s.openings, contacts => S#s.contacts,
               bindings => maps:map(
@@ -1152,18 +1199,26 @@ test_call(test_recovery_state, S) ->
                                operation => R#reader.operation, sequence => R#reader.sequence,
                                started_ms => R#reader.started_ms} end,
                 S#s.inflight)}, S};
+test_call({test_page_capacity, Bytes}, S)
+  when is_integer(Bytes), Bytes > 0, Bytes =< ?QUOD_LINK_PAYLOAD_CAPACITY ->
+    put({?MODULE, page_capacity}, Bytes), {reply, ok, S};
 test_call({test_hold_next_reader, Point, TestPid}, S)
   when (Point =:= before_read orelse Point =:= after_result), is_pid(TestPid) ->
     put({?MODULE, reader_gate}, {Point, TestPid}),
     {reply, ok, S};
 test_call(_, S) -> {reply, {error, unknown_call}, S}.
 
-take_reader_gate() -> erase({?MODULE, reader_gate}).
-reader_gate(Point, {Point, TestPid}, Op) ->
+page_capacity() ->
+    case get({?MODULE, page_capacity}) of undefined -> ?QUOD_LINK_PAYLOAD_CAPACITY; N -> N end.
+take_reader_gate() -> {erase({?MODULE, reader_gate}), page_capacity()}.
+reader_gate(Point, {Gate, Capacity}, Op) ->
+    put({?MODULE, page_capacity}, Capacity), hold_reader(Point, Gate, Op).
+hold_reader(Point, {Point, TestPid}, Op) ->
     TestPid ! {reader_held, self(), Op, Point},
     receive {release_reader, Op} -> ok end;
-reader_gate(_, _, _) -> ok.
+hold_reader(_, _, _) -> ok.
 -else.
+page_capacity() -> ?QUOD_LINK_PAYLOAD_CAPACITY.
 test_call(_, S) -> {reply, {error, unknown_call}, S}.
 take_reader_gate() -> none.
 reader_gate(_, _, _) -> ok.
@@ -1322,6 +1377,8 @@ spawn_reader(Ns, Token, Query, Deadline, Row, S) ->
                  end,
         case Result of
             ok -> ok;
+            {error, frame_unrepresentable} = Error ->
+                Owner ! {reader_result, Token, self(), Error};
             {error, _} -> Owner ! {reader_result, Token, self(), {error, not_ready}}
         end
     end, [link, {monitor, [{tag, {page_worker_down, Token}}]}]),

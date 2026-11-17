@@ -1,0 +1,44 @@
+ID            = quod
+Name          = quod
+Submit Date   = 2026-11-12T18:16:03+01:00
+Type          = service
+Priority      = 50
+Datacenters   = qengho
+Namespace     = default
+Node Pool     = default
+Status        = running
+Periodic      = false
+Parameterized = false
+
+Summary
+Task Group  Queued  Starting  Running  Failed  Complete  Lost  Unknown
+quod-cloud  0       1         1        2       259       2     0
+quod-node   0       1         7        0       1048      2     0
+
+Latest Deployment
+ID          = ac1ec815
+Status      = failed
+Description = Failed due to progress deadline
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-cloud  2        2       1        1          2026-11-12T17:36:30Z
+quod-node   8        3       2        1          2026-11-12T18:36:49+01:00
+
+Allocations
+ID        Node ID   Task Group  Version  Desired  Status    Created     Modified
+051bce92  c8f9edef  quod-node   263      run      pending   20m2s ago   3m44s ago
+bd1f9f83  e37f93bb  quod-cloud  263      run      pending   20m21s ago  7s ago
+699a95d8  75b1a578  quod-node   263      run      running   20m25s ago  20m3s ago
+0b86dbb9  e37f93bb  quod-cloud  263      run      running   20m51s ago  20m22s ago
+f07874a8  3e390ebd  quod-node   263      run      running   20m51s ago  20m27s ago
+894e5ec7  3e390ebd  quod-node   262      stop     complete  2d2h ago    20m50s ago
+5c3dc309  c8f9edef  quod-node   262      run      running   2d2h ago    2d2h ago
+79e708b6  75b1a578  quod-node   262      run      running   2d2h ago    2d2h ago
+82b9e126  3e390ebd  quod-node   262      run      running   2d2h ago    2d2h ago
+01a44092  75b1a578  quod-node   262      run      running   2d2h ago    2d2h ago
+b5429a83  e37f93bb  quod-cloud  262      stop     complete  2d2h ago    20m19s ago
+ba7b7689  75b1a578  quod-node   262      stop     complete  2d2h ago    20m24s ago
+540dc54d  e37f93bb  quod-cloud  262      stop     complete  2d2h ago    20m49s ago
+16596607  3e390ebd  quod-node   262      run      running   2d2h ago    2d2h ago
+fee67940  c8f9edef  quod-node   262      stop     complete  2d2h ago    20m1s ago

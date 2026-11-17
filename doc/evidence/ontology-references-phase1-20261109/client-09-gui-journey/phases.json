@@ -1,0 +1,90 @@
+[
+  {
+    "phase": "fresh",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--verbose",
+      "--xr-mode",
+      "off",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/pearl-client-dlel0pop/client/identity",
+      "--node",
+      "https://127.0.0.1:41811"
+    ],
+    "child_exit": -9,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "elapsed_seconds": 8.450304019999749,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "reset",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--verbose",
+      "--xr-mode",
+      "off",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/pearl-client-dlel0pop/client/identity",
+      "--node",
+      "https://127.0.0.1:41811"
+    ],
+    "child_exit": -9,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "elapsed_seconds": 5.9079785520007135,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "m4-live",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--verbose",
+      "--xr-mode",
+      "off",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/pearl-client-dlel0pop/client/identity",
+      "--node",
+      "https://127.0.0.1:41811"
+    ],
+    "child_exit": 0,
+    "expected_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "elapsed_seconds": 5.086268825994921,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "final",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--verbose",
+      "--xr-mode",
+      "off",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/pearl-client-dlel0pop/client/identity",
+      "--node",
+      "https://127.0.0.1:41811"
+    ],
+    "child_exit": 0,
+    "expected_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "elapsed_seconds": 28.272181870001077,
+    "godot_error_diagnostics": true,
+    "passed": false
+  }
+]

@@ -1,0 +1,238 @@
+--- a/src/erlog_int.erl
++++ b/src/erlog_int.erl
+@@ -218,9 +218,8 @@
+     %% fresh logical invocation.  A transaction restores its parent depth on
+     %% every exit, so a nonzero value can only come from an enclosing scope.
+     St1 = St0#est{cps=[],bs=Bs,vn=Vn,
+-		  fail_reasons=[],fail_reason_count=0,
+-		  fail_reasons_truncated=false,
+-		  fail_boundaries=0},			%Update state
++		  fail_reasons=[],
++		  fail_reasons_truncated=false},			%Update state
+     prove_body([{call,Goal1}], St1).
+ 
+ %% set_failure_reason_policy(Policy, State) -> State.
+@@ -229,14 +228,14 @@
+ %% will use outside the interpreter.  The callback receives the COMPLETE
+ %% newest-first stack and returns true only when that stack is admissible.  It
+ %% is installed before a proof starts; changing policy under retained reasons
+-%% would invalidate the count/truncation invariant.
++%% would invalidate the truncation invariant.
+ 
+ set_failure_reason_policy(native,
+-			  #est{fail_reasons=[],fail_reason_count=0,
++			  #est{fail_reasons=[],
+ 			       fail_reasons_truncated=false}=St) ->
+     St#est{fail_reason_policy=native};
+ set_failure_reason_policy({Mod,Fun}=Policy,
+-			  #est{fail_reasons=[],fail_reason_count=0,
++			  #est{fail_reasons=[],
+ 			       fail_reasons_truncated=false}=St)
+   when is_atom(Mod), is_atom(Fun) ->
+     case failure_stack_allowed([], Policy) andalso
+@@ -260,24 +259,22 @@
+ add_failure_reason(fail_reasons_truncated, St) ->
+     mark_failure_reasons_truncated(St);
+ add_failure_reason(Reason,
+-		   #est{fail_reasons=Reasons,fail_reason_count=Count,
++		   #est{fail_reasons=Reasons,
+ 			fail_reasons_truncated=true,
+ 			fail_reason_policy=Policy}=St) ->
+     Candidate = [Reason|Reasons],
+-    case Count < ?ERLOG_MAX_FAILURE_REASONS andalso
+-	 failure_stack_allowed(Candidate, Policy) of
+-	true -> St#est{fail_reasons=Candidate,fail_reason_count=Count+1};
++    case failure_stack_allowed(Candidate, Policy) of
++	true -> St#est{fail_reasons=Candidate};
+ 	false -> St
+     end;
+ add_failure_reason(Reason,
+-		   #est{fail_reasons=Reasons,fail_reason_count=Count,
++		   #est{fail_reasons=Reasons,
+ 			fail_reason_policy=Policy}=St) ->
+     Candidate = [Reason|Reasons],
+     Reserved = [fail_reasons_truncated|Candidate],
+-    case Count < ?ERLOG_MAX_FAILURE_REASONS - 1 andalso
+-	 failure_stack_allowed(Reserved, Policy) of
++    case failure_stack_allowed(Reserved, Policy) of
+ 	true ->
+-	    St#est{fail_reasons=Candidate,fail_reason_count=Count+1};
++	    St#est{fail_reasons=Candidate};
+ 	false ->
+ 	    mark_failure_reasons_truncated(St)
+     end.
+@@ -294,38 +291,25 @@
+ mark_failure_reasons_truncated(#est{fail_reasons_truncated=true}=St) ->
+     St;
+ mark_failure_reasons_truncated(#est{fail_reasons=Reasons,
+-				    fail_reason_count=Count,
+ 				    fail_reason_policy=Policy}=St) ->
+     Marked = [fail_reasons_truncated|Reasons],
+-    true = Count < ?ERLOG_MAX_FAILURE_REASONS,
+     true = failure_stack_allowed(Marked, Policy),
+-    St#est{fail_reasons=Marked,fail_reason_count=Count+1,
++    St#est{fail_reasons=Marked,
+ 	   fail_reasons_truncated=true}.
+ 
+ valid_failure_reason(Reason) ->
+     erlog:vars_in(Reason) =:= [] andalso portable_failure_reason(Reason).
+ 
+ failure_stack_allowed(Reasons, native) ->
+-    valid_native_failure_stack(Reasons, 0) andalso
+-	erlang:external_size(Reasons) =< ?ERLOG_MAX_FAILURE_REASONS_BYTES;
++    valid_failure_stack_shape(Reasons);
+ failure_stack_allowed(Reasons, {Mod,Fun}) ->
+-    valid_failure_stack_shape(Reasons, 0) andalso
+-	try Mod:Fun(Reasons) =:= true catch _:_ -> false end.
+-
+-valid_native_failure_stack([Reason|Reasons], Count)
+-  when Count < ?ERLOG_MAX_FAILURE_REASONS ->
+-    erlang:external_size(Reason) =< ?ERLOG_MAX_FAILURE_REASON_BYTES andalso
+-	valid_failure_reason(Reason) andalso
+-	valid_native_failure_stack(Reasons, Count+1);
+-valid_native_failure_stack([], _Count) -> true;
+-valid_native_failure_stack(_, _Count) -> false.
+-
+-valid_failure_stack_shape([Reason|Reasons], Count)
+-  when Count < ?ERLOG_MAX_FAILURE_REASONS ->
+-    valid_failure_reason(Reason) andalso
+-	valid_failure_stack_shape(Reasons, Count+1);
+-valid_failure_stack_shape([], _Count) -> true;
+-valid_failure_stack_shape(_, _Count) -> false.
++    valid_failure_stack_shape(Reasons) andalso
++        try Mod:Fun(Reasons) =:= true catch _:_ -> false end.
++
++valid_failure_stack_shape([Reason|Reasons]) ->
++    valid_failure_reason(Reason) andalso valid_failure_stack_shape(Reasons);
++valid_failure_stack_shape([]) -> true;
++valid_failure_stack_shape(_) -> false.
+ 
+ portable_failure_reason(T) when is_atom(T); is_number(T); is_binary(T) -> true;
+ portable_failure_reason([]) -> true;
+@@ -593,14 +577,11 @@
+ predicate_failure_boundary({get_fail_reasons,_Reasons}, St) ->
+     St;
+ predicate_failure_boundary(Goal,
+-			   #est{cps=Cps,fail_boundaries=Count}=St) ->
++			   #est{cps=Cps}=St) ->
+     case internal_predicate(Goal) of
+ 	true -> St;
+-	false when Count < ?ERLOG_MAX_FAILURE_BOUNDARIES ->
+-	    St#est{cps=[#cp{type=predicate_failure,data=Goal}|Cps],
+-		   fail_boundaries=Count+1};
+ 	false ->
+-	    mark_failure_reasons_truncated(St)
++	    St#est{cps=[#cp{type=predicate_failure,data=Goal}|Cps]}
+     end.
+ 
+ add_predicate_failure_reason(Goal, St) ->
+--- a/src/erlog_int.hrl
++++ b/src/erlog_int.hrl
+@@ -25,13 +25,6 @@
+ -define(IS_ATOMIC(T), (not (is_tuple(T) orelse (is_list(T) andalso T /= [])))).
+ -define(IS_FUNCTOR(T), (is_tuple(T) andalso (tuple_size(T) >= 2) andalso is_atom(element(1, T)))).
+ 
+-%% Failure diagnostics are transient interpreter state. Keep the complete stack
+-%% comfortably below users such as quod's 1 MiB proof-answer frame.
+--define(ERLOG_MAX_FAILURE_REASON_BYTES, 4096).
+--define(ERLOG_MAX_FAILURE_REASONS_BYTES, 32768).
+--define(ERLOG_MAX_FAILURE_REASONS, 256).
+--define(ERLOG_MAX_FAILURE_BOUNDARIES, 256).
+-
+ %% Define the interpreter state record.
+ -record(est, {cps,				%Choice points
+ 	      bs,				%Bindings
+@@ -39,11 +32,9 @@
+ 	      db,				%Database
+ 	      fs,				%Flags
+ 	      fail_reasons = [],		%Newest explicit failure reason first
+-	      fail_reason_count = 0,		%Explicit + automatic entries retained above
+ 	      fail_reasons_truncated = false,	%Whether omissions are represented
+-	      fail_boundaries = 0,		%Diagnostic boundaries created this proof
+ 	      %% Application-owned admission for the complete reason stack.  The
+-	      %% default uses Erlog's native portable-term bounds; embedders may
++	      %% default checks native portable terms; embedders may
+ 	      %% install a stricter wire-compatible policy without Erlog depending
+ 	      %% on their codec.
+ 	      fail_reason_policy = native,
+--- a/test/erlog_failure_reasons_tests.erl
++++ b/test/erlog_failure_reasons_tests.erl
+@@ -122,14 +122,13 @@
+     {fail, Final} = prove(Goal),
+     ?assertEqual([], Final#est.fail_reasons).
+ 
+-successful_call_boundaries_are_capped_test() ->
+-    Goal = conjunction(lists:duplicate(?ERLOG_MAX_FAILURE_BOUNDARIES + 50,
++successful_call_boundaries_are_retained_test() ->
++    Goal = conjunction(lists:duplicate(256 + 50,
+                                        {atom, ok})),
+     {succeed, Final} = prove(Goal),
+     Boundaries = [Cp || #cp{type=predicate_failure}=Cp <- Final#est.cps],
+-    ?assertEqual(?ERLOG_MAX_FAILURE_BOUNDARIES, length(Boundaries)),
+-    ?assertEqual(?ERLOG_MAX_FAILURE_BOUNDARIES, Final#est.fail_boundaries),
+-    ?assert(Final#est.fail_reasons_truncated).
++    ?assertEqual(306, length(Boundaries)),
++    ?assertNot(Final#est.fail_reasons_truncated).
+ 
+ non_ground_reason_is_error_test() ->
+     ?assertMatch({erlog_error, instantiation_error, _},
+@@ -139,30 +138,24 @@
+     ?assertMatch({erlog_error, {domain_error, failure_reason, _}, _},
+                  catch prove({fail_with_reason, self()})).
+ 
+-oversized_reason_is_truncated_test() ->
+-    Reason = binary:copy(<<"x">>, ?ERLOG_MAX_FAILURE_REASON_BYTES + 1),
++large_reason_is_preserved_test() ->
++    Reason = binary:copy(<<"x">>, 4096 + 1),
+     {fail, Final} = prove({fail_with_reason, Reason}),
+-    ?assertEqual([fail_reasons_truncated], Final#est.fail_reasons),
+-    ?assertEqual(1, Final#est.fail_reason_count).
++    ?assertEqual([Reason], Final#est.fail_reasons).
+ 
+-outer_frames_survive_an_inner_truncation_test() ->
+-    Oversized = binary:copy(<<"x">>, ?ERLOG_MAX_FAILURE_REASON_BYTES + 1),
++outer_frames_preserve_a_large_inner_reason_test() ->
++    Oversized = binary:copy(<<"x">>, 4096 + 1),
+     Inner = erlog_int:add_failure_reason(Oversized, state()),
+     Outer = erlog_int:add_failure_reason({outer, failed}, Inner),
+-    ?assertEqual([{outer, failed}, fail_reasons_truncated],
+-                 Outer#est.fail_reasons),
+-    ?assertEqual(2, Outer#est.fail_reason_count).
++    ?assertEqual([{outer, failed}, Oversized], Outer#est.fail_reasons).
+ 
+-total_reason_stack_is_bounded_test() ->
++total_reason_stack_is_preserved_test() ->
+     Reason = binary:copy(<<"x">>, 4000),
+     Final = lists:foldl(
+               fun(N, St) -> erlog_int:add_failure_reason({reason, N, Reason}, St) end,
+               state(), lists:seq(1, 10)),
+-    ?assert(erlang:external_size(Final#est.fail_reasons) =<
+-                ?ERLOG_MAX_FAILURE_REASONS_BYTES),
+-    ?assert(Final#est.fail_reason_count =< ?ERLOG_MAX_FAILURE_REASONS),
+-    ?assert(Final#est.fail_reasons_truncated),
+-    ?assert(lists:member(fail_reasons_truncated, Final#est.fail_reasons)).
++    ?assertEqual([{reason, N, Reason} || N <- lists:seq(10, 1, -1)], Final#est.fail_reasons),
++    ?assertNot(Final#est.fail_reasons_truncated).
+ 
+ custom_stack_policy_truncates_at_creation_test() ->
+     St0 = erlog_int:set_failure_reason_policy(
+@@ -170,7 +163,7 @@
+     St1 = erlog_int:add_failure_reason(first, St0),
+     St2 = erlog_int:add_failure_reason(second, St1),
+     ?assertEqual([fail_reasons_truncated, first], St2#est.fail_reasons),
+-    ?assertEqual(2, St2#est.fail_reason_count),
++
+     ?assert(St2#est.fail_reasons_truncated).
+ 
+ remote_merge_preserves_order_and_bounds_test() ->
+@@ -181,8 +174,8 @@
+     ?assertMatch({ok, _}, erlog_int:merge_failure_reasons([Opaque], Local)),
+     ?assertEqual(error, erlog_int:merge_failure_reasons([{'Unbound'}], Local)),
+     ?assertEqual(error, erlog_int:merge_failure_reasons([self()], Local)),
+-    Oversized = binary:copy(<<"x">>, ?ERLOG_MAX_FAILURE_REASON_BYTES + 1),
+-    ?assertEqual(error, erlog_int:merge_failure_reasons([Oversized], Local)).
++    Oversized = binary:copy(<<"x">>, 4096 + 1),
++    ?assertMatch({ok, _}, erlog_int:merge_failure_reasons([Oversized], Local)).
+ 
+ prove(Goal) -> erlog_int:prove_goal(Goal, state()).
+ 

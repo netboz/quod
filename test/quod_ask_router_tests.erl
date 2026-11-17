@@ -305,7 +305,7 @@ command_correlation_generation_and_no_reply_commands_test() ->
       fun(Router, TestPid, TargetKey, Binding, Handle,
           RequestLink, ReturnLink) ->
           InvocationId = id(31),
-          Selection = {tx_selection, none, [], ordinary},
+          Selection = {tx_selection, none, [], ordinary, read_write},
           {ok, RequestId} = quod_ask_router:command(
                               Handle, 20000,
                               {invoke_open, InvocationId, Selection,
@@ -332,7 +332,7 @@ command_correlation_generation_and_no_reply_commands_test() ->
                                {protocol_error, request_binding}}),
                 _ = receive_command(request)
             end,
-            lists:seq(1, ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE + 4)),
+            lists:seq(1, 128 + 4)),
 
           BatchIds = [id(77)],
           {ok, BatchRequest} = quod_ask_router:command(
@@ -473,7 +473,7 @@ cancelled_command_discards_late_event_test() ->
           stop_link(ReturnLink)
       end).
 
-scope_close_bypasses_full_pending_limit_test() ->
+scope_close_cleans_up_many_pending_commands_test() ->
     with_open_scope(
       fun(Router, _TestPid, _TargetKey, Binding, Handle,
           RequestLink, ReturnLink) ->
@@ -485,11 +485,11 @@ scope_close_bypasses_full_pending_limit_test() ->
                 {scope_command, Binding, _CommandSeq, RequestId, 1000,
                  {invoke_next, _, 1}} = receive_command(request)
             end,
-            lists:seq(1, ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE)),
-          ?assertEqual(
-             {error, pending_request_limit},
-             quod_ask_router:command(
-               Handle, 1000, {invoke_next, id(100), 1})),
+            lists:seq(1, 128)),
+          {ok, AdditionalRequest} = quod_ask_router:command(
+              Handle, 1000, {invoke_next, id(129), 1}),
+          {scope_command, Binding, _, AdditionalRequest, 1000,
+           {invoke_next, _, 1}} = receive_command(request),
 
           ok = quod_ask_router:close(Handle, 0),
           {scope_command, Binding, _CloseSeq, _CloseRequestId, 0,
@@ -760,21 +760,18 @@ identity_probe_owner_and_request_link_cleanup_test() ->
           await_probe_count(Router, 0)
       end).
 
-identity_probes_share_owner_admission_bound_test() ->
+identity_probes_retain_one_owner_across_many_targets_test() ->
     with_identity_router(
       fun(Router, _TestPid, _OriginKey, _TargetKey) ->
           Results = [quod_ask_router:identify(
                        Router, endpoint(), namespace(N), 30000)
                      || N <- lists:seq(
-                                  1, ?QUOD_MAX_ROUTER_SCOPES_PER_OWNER)],
+                                  1, 9)],
           ?assert(lists:all(fun(Result) -> is_pending(Result, Router) end,
                            Results)),
-          ?assertEqual(
-             {error, owner_scope_limit},
-             quod_ask_router:identify(
-               Router, endpoint(), <<"quod:probe-overflow">>, 30000)),
+
           Stats = quod_ask_router:test_stats(Router),
-          ?assertEqual(?QUOD_MAX_ROUTER_SCOPES_PER_OWNER,
+          ?assertEqual(9,
                        maps:get(probes, Stats)),
           ?assertEqual(0, maps:get(scopes, Stats))
       end).
@@ -792,7 +789,7 @@ identity_probe_budget_is_a_cleanup_deadline_test() ->
           ?assertEqual(0, maps:get(probes, quod_ask_router:test_stats(Router)))
       end).
 
-owner_proof_shape_bound_rejects_before_open_test() ->
+owner_opens_many_scopes_for_the_same_proof_test() ->
     with_router(
       fun(Router, _TestPid, OriginKey, TargetKey) ->
           Results = [quod_ask_router:ensure_scope(
@@ -802,20 +799,11 @@ owner_proof_shape_bound_rejects_before_open_test() ->
                          binding(OriginKey, TargetKey, N,
                                  namespace(N), N),
                          proof_id(1)), node, 1000)
-                     || N <- lists:seq(1, ?QUOD_MAX_ROUTER_SCOPES_PER_OWNER)],
+                     || N <- lists:seq(1, 9)],
           ?assert(lists:all(fun(Result) -> is_pending(Result, Router) end,
                            Results)),
-          ?assertEqual(
-             {error, owner_scope_limit},
-             quod_ask_router:ensure_scope(
-               Router, endpoint(),
-               setelement(
-                 4,
-                 binding(OriginKey, key(2), 100,
-                         <<"quod:overflow">>, 100),
-                 proof_id(1)),
-               node, 1000)),
-          ?assertEqual(?QUOD_MAX_ROUTER_SCOPES_PER_OWNER,
+
+          ?assertEqual(9,
                        maps:get(scopes, quod_ask_router:test_stats(Router)))
       end).
 
@@ -829,9 +817,8 @@ router_population_has_no_peer_or_node_quota() ->
     SilentOpen = fun(_NodeKey, _Endpoint, _Channel) -> make_ref() end,
     {ok, Router} = quod_ask_router:test_start_link(OriginKey, SilentOpen),
     unlink(Router),
-    %% Sixty-five owners with eight scopes each exceed both deleted defaults:
-    %% sixteen scopes per peer and 512 scopes per router. Every scope still
-    %% belongs to an exact monitored proof owner and obeys that proof's shape.
+    %% Every scope belongs to an exact monitored proof owner, even across
+    %% a large population sharing the same peer and router.
     OwnerCount = 65,
     Owners =
         [begin
@@ -843,7 +830,7 @@ router_population_has_no_peer_or_node_quota() ->
                         binding(OriginKey, TargetKey, N, namespace(N), N),
                         proof_id(OwnerN))
                   end || Slot <- lists:seq(
-                                   1, ?QUOD_MAX_ROUTER_SCOPES_PER_OWNER)],
+                                   1, 9)],
              batch_owner(Router, self(), Bindings)
          end || OwnerN <- lists:seq(1, OwnerCount)],
     try
@@ -857,7 +844,7 @@ router_population_has_no_peer_or_node_quota() ->
               after 5000 -> error(global_fill_timeout)
               end
           end, Owners),
-        Expected = OwnerCount * ?QUOD_MAX_ROUTER_SCOPES_PER_OWNER,
+        Expected = OwnerCount * 9,
         ?assertEqual(Expected,
                      maps:get(scopes, quod_ask_router:test_stats(Router))),
         FilledStats = quod_ask_router:test_stats(Router),
@@ -967,6 +954,21 @@ finalize_cleanly_detaches_scope_at_one_router_boundary_test() ->
           end,
           stop_link(RequestLink)
       end).
+
+stopped_proof_releases_owner_and_stale_stop_cannot_touch_successor_test() ->
+    with_open_scope(fun(Router,_TestPid,TargetKey,Binding,_Handle,RequestLink,ReturnLink) ->
+        ok = quod_ask_router:finalize(Router,proof_id(1)),
+        _ = receive_command(request),
+        ok = quod_ask_router:stop(Router,proof_id(1)),
+        ?assertEqual(0,maps:get(owners,quod_ask_router:test_stats(Router))),
+        Next = binding(origin_key(Binding),TargetKey,2,<<"quod:next">>,12),
+        _ = pending_ref(quod_ask_router:ensure_scope(Router,endpoint(),Next,node,30000),Router),
+        ok = quod_ask_router:stop(Router,proof_id(1)),
+        ?assertMatch(#{owners := 1,scopes := 1},quod_ask_router:test_stats(Router)),
+        ok = quod_ask_router:stop(Router,proof_id(2)),
+        ?assertMatch(#{owners := 0,scopes := 0},quod_ask_router:test_stats(Router)),
+        stop_link(RequestLink), stop_link(ReturnLink)
+    end).
 
 finalize_detects_dead_link_before_queued_down_is_consumed_test() ->
     with_open_scope(

@@ -1,0 +1,21 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.08s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+module 'quod_material_admission_tests'
+  quod_material_admission_tests: policy_is_authored_and_ambiguous_values_fail_closed_test...*timed out*
+in function code_server:call/1 (code_server.erl, line 163)
+in call from code:ensure_loaded/1 (code.erl, line 578)
+in call from error_handler:undefined_function/3 (error_handler.erl, line 86)
+in call from quod_trace:start_owned_span/5 (/home/yan/src/quod_worktrees/pearl-stone/src/quod_trace.erl, line 88)
+in call from quod_trace:with_span/6 (/home/yan/src/quod_worktrees/pearl-stone/src/quod_trace.erl, line 75)
+in call from quod_proof_session:open_first/6 (/home/yan/src/quod_worktrees/pearl-stone/src/quod_proof_session.erl, line 777)
+in call from quod_proof_session:run_first/3 (/home/yan/src/quod_worktrees/pearl-stone/src/quod_proof_session.erl, line 763)
+in call from quod_material_admission:select_policy/3 (/home/yan/src/quod_worktrees/pearl-stone/src/quod_material_admission.erl, line 46)
+undefined
+=======================================================
+  Failed: 0.  Skipped: 0.  Passed: 0.
+One or more tests were cancelled.
+===> Error running tests

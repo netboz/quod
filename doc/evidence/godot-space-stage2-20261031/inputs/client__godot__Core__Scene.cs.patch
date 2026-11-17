@@ -1,0 +1,17 @@
+--- client/godot/Core/Scene.cs before
+
++++ client/godot/Core/Scene.cs
+
+@@ -83,7 +83,10 @@
+
+             if (a[6].Kind != "atom" || a[6].Name != "depicts_nothing") {
+                 var depicts = a[6].Require("depicts", 3);
+                 if (depicts[0].TextValue.Length == 0 || depicts[1].Kind != "binary" || depicts[1].Bytes.Length != 32) throw new FormatException("Missing exact depicted history.");
+-                subject = Term.Call("entity_ref", depicts);
++                var local=depicts[2];
++                subject = local.Name=="ontology_ref" && local.Args.Length==2 &&
++                    local.Args[0].ToString()==depicts[0].ToString() && local.Args[1].ToString()==depicts[1].ToString()
++                    ? local : Term.Call("entity_ref", depicts);
+             }
+             if (transform.Body != null && subject == null) throw new FormatException("A body occurrence requires an exact subject.");
+             return new SceneMark(id, kind, sizes, parent, transform, colour, label, subject, term.ToString());

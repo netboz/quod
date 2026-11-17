@@ -1,0 +1,14 @@
+{
+  "reason": "Native trace confirms logical Z / physical W under the actual desktop layout; production scene used logical W. No movement occurred. Campaign deliberately stopped; not qualified.",
+  "command": [
+    "ydotool",
+    "key",
+    "17:0"
+  ],
+  "child_exit": 0,
+  "stdout": "",
+  "stderr": "",
+  "owned_pid": 345579,
+  "signal": "SIGKILL",
+  "scope": "Exact disposable physics-development05 exported client only"
+}

@@ -65,7 +65,7 @@ already share their controllers with spatial presentation.
 [lobby_instance.pl](../priv/ontologies/lobby_instance.pl) obtains GUI views
 through an anchored vocabulary reference. This is existing usage, not the
 scope or required entry point of the GUI framework. The
-[Prolog eidolon library](../priv/ontologies/quod_prolog_eidolons.pl) associates
+[Prolog eidolon library](../priv/ontologies/gui_tools.pl) associates
 a subject, tool ontology and form without transferring ownership of the subject.
 These are the paths to generalize for component-associated forms.
 
@@ -86,29 +86,47 @@ Its section 6.1 prescribes a direct domain change in the submission transaction.
 The event-based submission requested here revises that proposed default; the
 transaction boundaries and consequences are explicit below.
 
-## Entities, Eidolons and marks
+## Eidolons
 
-Use plain descriptions alongside the current source names:
+Approved by Yan on 2026-11-16.
 
-| Source term | Plain meaning | GUI example |
-| --- | --- | --- |
-| Class | A reusable semantic kind, linked by `isa/2` | `text_box`, `slider`, `form` |
-| Instance or entity | A particular thing in an owning ontology, declared with `instance_of(Class, Instance)` | The `name_input` control in a particular settings form |
-| Eidolon or recipe | A reusable way to represent a subject for a purpose and style | A settings panel, or a rotary appearance for a numeric control |
-| Mark | One visual occurrence in a view, described by `mark/7` | A panel surface or the visible dial of a knob |
-| `depicts` | The link from a mark to its semantic subject | The dial points to its exact ontology and `angle_input` instance |
+**Eidolon.** One way a thing looks. A different look is a different Eidolon.
+There are no styles.
 
-An Eidolon is the recipe; a mark is one visual occurrence. A control instance
-may have several representations and appear in several places without becoming
-several independent controls. Conversely, several decorative marks may depict
-one control. A renderer mesh name is never the domain identity.
+**A class lists its Eidolons.** Each has a name and says what it is for: the
+thing is seen from outside, it is edited, the viewer is inside it. Edition
+is an Eidolon like any other.
+
+**Which one I see.** My own choice if I made one, otherwise the instance's
+choice, otherwise the class's default. The default may be none.
+
+**Where each is stored.** The class default with the class. The instance's
+choice on the instance. My choice in my own ontology, never on the instance.
+
+**"Show as"** is in the pie of the thing I am looking at. It lists the
+Eidolons for what I am looking at, plus "Default". It changes only what I
+see.
+
+**A new Eidolon appears by itself.** An Eidolon added to a class shows in
+the pies with nothing else to change. A wedge has a caption, an icon and the
+name of its Eidolon. A caption is one short word.
+
+*Recipe* and *mark* are words of the code only, not concepts.
+
+In the code, `class_eidolon(Class, Purpose, Name, Recipe)` declares one
+Eidolon: its class, what it is for (`playing` seen from outside, `edition`,
+`interior`), its name, and the recipe that draws it. Its caption and icon
+are `attribute(eidolon(Class, Purpose, Name), label, Caption)` and
+`attribute(eidolon(Class, Purpose, Name), image, Icon)`. A recipe returns
+marks; `depicts` links each mark to the exact thing it shows. A renderer
+mesh name is never the thing's identity.
 
 The current path is grounded in
 [common class recipe discovery](../priv/ontologies/common_predicates.pl),
-[rendering descriptors](../priv/ontologies/quod_rendering.pl),
-[workspace recipe output](../priv/ontologies/quod_prolog_eidolons.pl) and
+[rendering descriptors](../priv/ontologies/gui_scene.pl),
+[workspace recipe output](../priv/ontologies/gui_tools.pl) and
 [client decoding](../client/src/world.js). `class_eidolon/4` associates a class,
-purpose and style with an exact recipe; `entity_eidolons/2` discovers choices.
+purpose and name with an exact recipe; `entity_eidolons/2` discovers them.
 The existing recipe can return a semantic `workspace(...)`, so not every GUI
 control needs to become an independent 3D mark. The rendering ontology already
 names `gui_eidolon` alongside model and surface representations.
@@ -127,13 +145,40 @@ by the client adapter. A reusable binding between a semantic form and a chosen
 surface/placement is a concrete gap to close in the existing rendering model;
 do not claim it is already implemented or invent a competing scene graph.
 
+## Rain
+
+Approved by Yan on 2026-11-16.
+
+A surface can show a text as rain. Any class's Eidolon can use it; the Matrix
+walls of a space are its first user.
+
+The text stands on the surface in columns of letters. The letters stay in
+place and light falls down each column. The surface's colour is the colour of
+the lit letters, its emission their brightness, its opacity how dark the
+surface is between them.
+
+In the code, rain is one more texture of a surface, beside the pictures:
+`texture(<<"rain">>, Text, glyph(Height))`. `Height` is the height of a letter
+in millimetres. `Text` is `text(Binary)`, the text itself, or
+`source(ontology_ref(Namespace, Anchor))`, the whole Prolog source of that
+ontology. The client reads a named source once, with the read the Source panel
+uses and under the same source policy, and again only when that ontology
+changes. A viewer who may not read the source sees no rain.
+
+Rain falls along the mark's own up-down axis. A face that looks up or down
+shows none.
+
+How the rain moves is the client's drawing of rain, the same for every user of
+it. No shader code and no URL travel in a mark.
+
 ## Ownership proposal
 
 Extend `quod:gui` for semantic controls, typed values, composition, validation
-contracts and reusable form rules. Propose `quod:gui:eidolons` for shared
-component appearances, using the existing separation
-between domain meaning and representation seen in materials and Prolog tools.
-Reuse `quod:rendering`, `quod:modelling` and `quod:measure`. Do not create an
+contracts and reusable form rules. The seven-foundation composition also owns
+shared appearances, exact measurement, rendering/model descriptors and portable
+inspection recipes in `quod:gui`; see the
+[foundation contract](godot-foundation-contract.md). Domain meaning and
+representation remain separate declarations under that owner. Do not create an
 ontology or runtime process for each widget. Catalogue entries and source access
 follow [system ontology ACLs](system-ontology-acls.md).
 
@@ -146,8 +191,8 @@ The client controller owns unsubmitted edits, focus, pointer capture and
 temporary validation feedback. The renderer owns meshes, textures and local
 feedback. Session/runtime owners supply authenticated delivery and observations
 of connection lifecycle, without becoming a second domain engine. Private
-preferences belong in an authorized user ontology; `quod:human_user` remains
-shared vocabulary.
+preferences belong in an authorized user ontology; `quod:user` holds shared
+human vocabulary and private signup receipts under its source policy.
 
 ```mermaid
 flowchart TD
@@ -264,10 +309,10 @@ An arbitrary string supplied by the client is not proof of committed submission.
 ### Automatic agent binding
 
 Derive the default human recipient from the existing authenticated proof context.
-The [signup rules](../priv/ontologies/quod_signup.pl) found a personal ontology
+The [signup rules](../priv/ontologies/quod_user.pl) found a personal ontology
 with `instance_of(human_user, me)` and `agent_key(me, Key, active)`, returning
 `agent_instance_ref(Namespace, Anchor, me)`. The shared
-[human vocabulary](../priv/ontologies/quod_human_user.pl) declares
+[human vocabulary](../priv/ontologies/quod_user.pl) declares
 `isa(human_user, agent)`. The browser creates the signing key; enrollment links
 it to this instance. Key creation or a login session alone is not enrollment.
 
@@ -563,6 +608,7 @@ GUI milestone includes this common suite, rather than stopping at a textbox demo
 | Continuous input | Slider and rotary knob | Shared range, step, unit and numeric-entry alternative |
 | Structured display | Basic table/list view | Stable row IDs, selection, bounded data projection |
 | Transient UI | Menu and dialog | Open/close, cancel, focus restoration and accessible exit |
+| Device-filled input | Viewer pose | Never drawn; the client that shows the form fills it at submission with where the eyes are and the level direction they look along, or `none` without a head |
 
 Each supported class needs semantic schema, instance projection, desktop and
 spatial adaptation, and behavior tests. A selectable list, for example, must not
@@ -581,7 +627,7 @@ Rotary knobs adjust values; their circular appearance does not turn them into
 push buttons or radio choices.
 
 Sliders need a range, unit, step and visible value, with an alternative for
-precise entry. Reuse `quod:measure` for domain quantities. Dragging changes a
+precise entry. Reuse `quod:gui`'s exact measurement algebra for domain quantities. Dragging changes a
 local draft; the ontology determines which explicit event submits a meaningful
 change. Do not commit every render frame or pointer sample.
 

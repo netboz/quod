@@ -1,6 +1,6 @@
 // One signed read's bindings become marks this client can draw.
 //
-// `quod:rendering` is the authority on what a descriptor may contain; this is the
+// `quod:gui` is the authority on what a descriptor may contain; this is the
 // Babylon adapter's half of the contract — which renderer-neutral kind becomes
 // which mesh, and which field name becomes which parameter. It recognises what
 // it can draw and refuses everything else, so an unknown kind, an unknown
@@ -12,7 +12,7 @@
 
 import { readList } from './prolog-read.js'
 
-// kind -> the fields it takes, in the order quod:rendering declares them.
+// kind -> the fields it takes, in the order quod:gui declares them.
 const GEOMETRY = Object.freeze({
   box: ['width', 'height', 'depth'],
   sphere: ['diameter'],
@@ -88,6 +88,10 @@ function readMark(term) {
   })
 }
 
+function allowance(term) {
+  return term?.type === 'atom' && term.value === 'unlimited' ? Infinity : whole(term, 'resource allowance')
+}
+
 function readTerrain(term) {
   const [profile, palette, view, resources] = args(term, 'terrain_geometry', 4)
   oneOf(profile, ['qvt1'], 'terrain profile')
@@ -99,7 +103,7 @@ function readTerrain(term) {
     previous = value
     return Object.freeze([value, readMaterial(surface)])
   })
-  const limits = args(resources, 'resources', 5).map(n => whole(n, 'terrain allowance'))
+  const limits = args(resources, 'resources', 5).map(allowance)
   if (limits.some(n => n <= 0)) throw new Error('invalid terrain allowance')
   const viewDistance = args(view, 'view_distance', 3).map(n => whole(n, 'view distance'))
   if (viewDistance[0] <= 0 || viewDistance[1] <= 0 || viewDistance[2] < viewDistance[1] ||
@@ -125,7 +129,7 @@ function readMesh(term) {
   const origin = args(pivot, 'pivot', 3).map(n => whole(n, 'asset pivot'))
   const [direction] = args(facing, 'front', 1)
   const front = oneOf(direction, ['-z', '+z', '+x', '-x'], 'asset front')
-  const allowed = args(resources, 'resources', 7).map(n => whole(n, 'mesh allowance'))
+  const allowed = args(resources, 'resources', 7).map(allowance)
   if (allowed.some(n => n <= 0)) throw new Error('invalid mesh allowance')
   return Object.freeze({ digest, profile: 'gltf2-static-v1', scale: permille / 1000,
     bounds: Object.freeze(bounds), pivot: Object.freeze(origin), front,
@@ -168,7 +172,7 @@ function readTransform(term) {
 }
 
 function readMaterial(term) {
-  const [colour, metallic, roughness, emission, bindings] = args(term, 'surface', 5)
+  const [colour, metallic, roughness, emission, opacity, bindings] = args(term, 'surface', 6)
   if (bindings.type !== 'list' || bindings.tail !== null) throw new Error('expected texture bindings')
   const slots = new Set()
   const textures = bindings.items.map(binding => {
@@ -186,14 +190,14 @@ function readMaterial(term) {
     return Object.freeze({ slot, digest, repeat: Object.freeze(repeat) })
   })
   return Object.freeze({ colour: readColour(colour), metallic: fraction(metallic),
-    roughness: fraction(roughness), emission: fraction(emission), textures: Object.freeze(textures) })
+    roughness: fraction(roughness), emission: fraction(emission), opacity: fraction(opacity), textures: Object.freeze(textures) })
 }
 
 export function readImageAsset(asset) {
   const [hash, mime] = args(asset, 'asset', 2)
   const digest = binaryValue(hash, 'texture digest')
   if (!/^[0-9a-f]{64}$/.test(digest)) throw new Error('invalid texture SHA-256')
-  oneOf(mime, ['image/jpeg'], 'texture media type')
+  oneOf(mime, ['image/png', 'image/jpeg'], 'image media type')
   return digest
 }
 

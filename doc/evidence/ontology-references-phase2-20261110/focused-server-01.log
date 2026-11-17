@@ -1,0 +1,82 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+     ┌─ src/quod_wire_term.erl:
+     │
+ 416 │  collect_goal_symbols({'$quod_symbol', Name}, Acc, Owner) when is_binary(Name) ->
+     │                                                    ╰── Warning: variable 'Owner' is unused
+
+     ┌─ src/quod_wire_term.erl:
+     │
+ 418 │  collect_goal_symbols(Tuple, _Acc, Owner)
+     │                                    ╰── Warning: variable 'Owner' is unused
+
+     ┌─ src/quod_wire_term.erl:
+     │
+ 447 │  collect_goal_symbols(_Goal, Acc, Owner) ->
+     │                                   ╰── Warning: variable 'Owner' is unused
+
+     ┌─ src/quod_wire_term.erl:
+     │
+ 480 │  collect_opaque_goal_positions(_Name, _Tuple, Acc, Owner) ->
+     │                                                    ╰── Warning: variable 'Owner' is unused
+
+     ┌─ src/quod_wire_term.erl:
+     │
+ 489 │  collect_clause_symbol(_Tuple, _Position, _Acc, Owner) ->
+     │                                                 ╰── Warning: variable 'Owner' is unused
+
+     ┌─ src/quod_wire_term.erl:
+     │
+ 516 │  collect_goal_positions(_Tuple, [], Acc, Owner) ->
+     │                                          ╰── Warning: variable 'Owner' is unused
+
+     ┌─ src/quod_wire_term.erl:
+     │
+ 529 │  replace_goal_symbols({'$quod_symbol', Name}, Owner) ->
+     │                                               ╰── Warning: variable 'Owner' is unused
+
+     ┌─ src/quod_wire_term.erl:
+     │
+ 558 │  replace_goal_symbols(Goal, Owner) ->
+     │                             ╰── Warning: variable 'Owner' is unused
+
+     ┌─ src/quod_wire_term.erl:
+     │
+ 564 │  replace_clause_symbol(Tuple, _Position, Owner) ->
+     │                                          ╰── Warning: variable 'Owner' is unused
+
+
+      ┌─ src/quod_physics.erl:
+      │
+ 1183 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                               ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ src/quod_physics.erl:
+      │
+ 1183 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ src/quod_physics.erl:
+      │
+ 1183 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                                       ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+    ┌─ test/quod_catchup_verify_tests.erl:
+    │
+ 53 │  entry_with_data(Entry, Data) ->
+    │  ╰── Warning: function entry_with_data/2 is unused
+
+
+===> Compiling test/quod_gui_menu_tests.erl failed
+    ┌─ test/quod_gui_menu_tests.erl:
+    │
+ 48 │          IconBytes = read(C,{'::',<<"quod:gui">>,{gui_asset,Digest,<<"image/png">>,{0}}),
+    │                                                                                        ╰── syntax error before: ')'
+
+

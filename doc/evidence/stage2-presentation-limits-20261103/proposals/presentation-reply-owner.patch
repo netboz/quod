@@ -1,0 +1,263 @@
+--- a/src/quod_wire_term.erl
++++ b/src/quod_wire_term.erl
+@@ -140,16 +140,16 @@
+     {error, bad_term}.
+ 
+ -doc "Encode canonical named bindings under the caller's owning byte allowance.".
+--spec encode_bindings(map(), non_neg_integer()) ->
++-spec encode_bindings(map(), non_neg_integer() | unlimited) ->
+           {ok, binary()} | {error, bad_term | invalid_result | too_large}.
+ encode_bindings(Bindings, MaxBytes) when is_map(Bindings),
+-                                        is_integer(MaxBytes), MaxBytes >= 0 ->
++                                        (MaxBytes =:= unlimited orelse (is_integer(MaxBytes) andalso MaxBytes >= 0)) ->
+     case binding_pairs(Bindings) of
+         {ok, Pairs} ->
+             case valid_bindings(Pairs, none) of
+                 true ->
+                     case encode_canonical(Pairs) of
+-                        {ok, Blob} when byte_size(Blob) =< MaxBytes -> {ok, Blob};
++                        {ok, Blob} when MaxBytes =:= unlimited; byte_size(Blob) =< MaxBytes -> {ok, Blob};
+                         {ok, _} -> {error, too_large};
+                         {error, _} = Error -> Error
+                     end;
+--- a/src/quod_client_result.erl
++++ b/src/quod_client_result.erl
+@@ -55,7 +55,7 @@
+ -type read_outcome() :: {answers, non_neg_integer(), [binary()]} |
+         fail | {failed, binary()} | {error, public_error()}.
+ 
+--doc "Normalize one target-engine result and enforce the aggregate reply cap.".
++-doc "Normalize one admitted target-engine result without a second allocation policy.".
+ -spec normalize(quod_client_goal:evidence(), term()) -> result().
+ normalize(Evidence, {read, Dependencies, Raw}) ->
+     case valid_dependencies(Dependencies, none) of
+@@ -135,7 +135,7 @@
+                     {solution, <<_:256>> = CursorId, Bindings, Height})
+   when is_map(Bindings), is_integer(Height), Height >= 0,
+        Height =< ?MAX_UINT64 ->
+-    case encode_binding(Evidence, Bindings, ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES) of
++    case encode_binding(Evidence, Bindings) of
+         {ok, Blob} -> {ok, {solution, CursorId, Height, Blob}};
+         Error -> Error
+     end;
+@@ -175,29 +175,28 @@
+     end.
+ 
+ bounded_error({read, Dependencies, _}, Reason) ->
+-    %% Valid dependencies are bounded by both scope count and namespace size;
+-    %% their error envelope always fits the aggregate reply limit.
++    %% Preserve dependency withdrawal even when the result itself is invalid.
+     {read, Dependencies, {error, Reason}};
+ bounded_error(_, Reason) -> {error, Reason}.
+ 
+ encode_bindings(Evidence, Bindings) ->
+-    encode_bindings(Evidence, Bindings, ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES, []).
+-
+-encode_bindings(_Evidence, [], _Remaining, Acc) ->
++    encode_bindings(Evidence, Bindings, []).
++
++encode_bindings(_Evidence, [], Acc) ->
+     {ok, lists:reverse(Acc)};
+-encode_bindings(Evidence, [Bindings | Rest], Remaining, Acc) ->
+-    case encode_binding(Evidence, Bindings, Remaining) of
++encode_bindings(Evidence, [Bindings | Rest], Acc) ->
++    case encode_binding(Evidence, Bindings) of
+         {ok, Blob} ->
+-            encode_bindings(Evidence, Rest, Remaining - byte_size(Blob), [Blob | Acc]);
++            encode_bindings(Evidence, Rest, [Blob | Acc]);
+         Error -> Error
+     end;
+-encode_bindings(_Evidence, _Bindings, _Remaining, _Acc) ->
++encode_bindings(_Evidence, _Bindings, _Acc) ->
+     error.
+ 
+-encode_binding(Evidence, Bindings, Remaining) when is_map(Bindings) ->
++encode_binding(Evidence, Bindings) when is_map(Bindings) ->
+     case quod_client_goal:named_bindings(Evidence, Bindings) of
+         {ok, Named} ->
+-            case quod_wire_term:encode_bindings(Named, Remaining) of
++            case quod_wire_term:encode_bindings(Named, unlimited) of
+                 {ok, Blob} -> {ok, Blob};
+                 {error, too_large} -> {error, result_too_large};
+                 {error, _} -> error
+@@ -205,7 +204,7 @@
+         {error, _} ->
+             error
+     end;
+-encode_binding(_Evidence, _Bindings, _Remaining) ->
++encode_binding(_Evidence, _Bindings) ->
+     error.
+ 
+ normalize_outcome({transaction, Ns, <<_:256>>, <<_:256>>} = Ref)
+@@ -268,24 +267,17 @@
+           {ok, binary()} |
+           {error, result_too_large | invalid_result}.
+ encode(Result) ->
+-    Blob = term_to_binary(Result, [deterministic]),
+-    case byte_size(Blob) =< ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES of
+-        false -> {error, result_too_large};
+-        true ->
+-            case valid_result(Result) of
+-                true -> {ok, Blob};
+-                false -> {error, invalid_result}
+-            end
++    case valid_result(Result) of
++        true -> {ok, term_to_binary(Result, [deterministic])};
++        false -> {error, invalid_result}
+     end.
+ 
+ -doc "Decode, revalidate, and require canonical normalized-result bytes.".
+ -spec decode(term()) ->
+           {ok, result()} |
+           {error, result_too_large | invalid_result}.
+-decode(Blob)
+-  when is_binary(Blob),
+-       byte_size(Blob) =< ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES ->
+-    case quod_safe_term:decode(Blob, ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES) of
++decode(Blob) when is_binary(Blob) ->
++    case quod_safe_term:decode(Blob, byte_size(Blob)) of
+         {ok, Result} ->
+             case valid_result(Result) andalso
+                  term_to_binary(Result, [deterministic]) =:= Blob of
+@@ -295,8 +287,6 @@
+         {error, _} ->
+             {error, invalid_result}
+     end;
+-decode(Blob) when is_binary(Blob) ->
+-    {error, result_too_large};
+ decode(_Blob) ->
+     {error, invalid_result}.
+ 
+@@ -506,8 +496,9 @@
+ -doc "Decode one named binding already carried by the bounded client reply.".
+ -spec decode_binding(term()) ->
+           {ok, [{binary(), term()}]} | {error, bad_term | invalid_result | too_large}.
+-decode_binding(Blob) ->
+-    quod_wire_term:decode_bindings(Blob, ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES).
++decode_binding(Blob) when is_binary(Blob) ->
++    quod_wire_term:decode_bindings(Blob, byte_size(Blob));
++decode_binding(_) -> {error, bad_term}.
+ 
+ committed_json(Ref = {transaction, _, _, _}) -> outcome_ref_json(Ref);
+ committed_json({group_outcome, Ref, Height, Slots}) ->
+--- a/src/quod_client_view.erl
++++ b/src/quod_client_view.erl
+@@ -777,19 +777,15 @@
+         _ -> Message0
+     end,
+     Encoded = iolist_to_binary(json:encode(Message)),
+-    case byte_size(Encoded) =< ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES of
+-        true ->
+-            case Message of
+-                %% Quiet views still own a live signed lease. Only an admitted
+-                %% projection bounds the transport idle window; the existing
+-                %% absolute expiry and revocation paths remain authoritative.
+-                #{type := projection,expires_ms := Expiry} ->
+-                    {[{set_options,#{idle_timeout => max(0,binary_to_integer(Expiry)-quod_time:now_ms())}},
+-                      {text,Encoded}],S};
+-                _ -> {reply,{text,Encoded},S}
+-            end;
+-        false -> {reply, {close, 1009, <<"simulation projection exceeds reply encoding limit">>}, release(S)}
+-    end.
++    case Message of
++        %% Allocation belongs to the admitted proof and authored resources.
++        %% Quiet views retain their original signed lease.
++        #{type := projection,expires_ms := Expiry} ->
++            {[{set_options,#{idle_timeout => max(0,binary_to_integer(Expiry)-quod_time:now_ms())}},
++              {text,Encoded}],S};
++        _ -> {reply,{text,Encoded},S}
++    end.
++
+ decimal(N) -> integer_to_binary(N).
+ b64(B) -> base64:encode(B, #{mode => urlsafe, padding => false}).
+ 
+@@ -862,9 +858,6 @@
+                                 question => quod_client_goal_parser:value_text(Question),
+                                 descriptor => quod_client_goal_parser:value_text(Descriptor)},
+                             Encoded = iolist_to_binary(json:encode(Message)),
+-                            case byte_size(Encoded) =< ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES of
+-                                false -> gui_reply(From,{error,unsupported_presentation},S);
+-                                true ->
+                                     TimerResult = try {ok,erlang:start_timer(Bound-Now,self(),{gui_resource,Token})}
+                                                   catch error:badarg -> error end,
+                                     case TimerResult of
+@@ -874,7 +867,6 @@
+                                             {reply,{text,Encoded},S#{gui_resources => Resources#{Token => Resource}}};
+                                         error -> gui_reply(From,{error,invalid_presentation_deadline},S)
+                                     end
+-                            end
+                     end;
+                 none -> gui_reply(From,{error,presentation_capacity},S)
+             end;
+--- a/src/quod_client_goal_endpoint.erl
++++ b/src/quod_client_goal_endpoint.erl
+@@ -21,11 +21,6 @@
+ -define(DOMAIN, quod_client_goal_endpoint).
+ -define(VERSION, 1).
+ -define(CHANNEL, quod_client_goal_v1).
+-
+--if(?QUOD_CLIENT_GOAL_MAX_ENVELOPE_BYTES >=
+-    ?QUOD_TRANSPORT_MAX_FRAME_BYTES).
+--error("client-goal endpoint envelope must stay below the transport frame bound").
+--endif.
+ 
+ -type request_id() :: <<_:?QUOD_CLIENT_GOAL_REQUEST_ID_BITS>>.
+ -type cursor_id() :: <<_:256>>.
+@@ -64,7 +59,7 @@
+             Envelope = term_to_binary(
+                          {?DOMAIN, ?VERSION, InnerBlob}, [deterministic]),
+             case byte_size(Envelope) =<
+-                 ?QUOD_CLIENT_GOAL_MAX_ENVELOPE_BYTES of
++                 ?QUOD_TRANSPORT_MAX_FRAME_BYTES of
+                 true -> {ok, Envelope};
+                 false -> too_large()
+             end;
+@@ -85,9 +80,9 @@
+ 
+ decode(Envelope, Direction)
+   when is_binary(Envelope),
+-       byte_size(Envelope) =< ?QUOD_CLIENT_GOAL_MAX_ENVELOPE_BYTES ->
++       byte_size(Envelope) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
+     case quod_safe_term:decode(
+-           Envelope, ?QUOD_CLIENT_GOAL_MAX_ENVELOPE_BYTES) of
++           Envelope, ?QUOD_TRANSPORT_MAX_FRAME_BYTES) of
+         {ok, {?DOMAIN, ?VERSION, InnerBlob} = Outer}
+           when is_binary(InnerBlob) ->
+             case term_to_binary(Outer, [deterministic]) =:= Envelope of
+@@ -111,7 +106,7 @@
+ 
+ decode_inner(InnerBlob, Direction) ->
+     case quod_safe_term:decode(
+-           InnerBlob, ?QUOD_CLIENT_GOAL_MAX_ENVELOPE_BYTES) of
++           InnerBlob, ?QUOD_TRANSPORT_MAX_FRAME_BYTES) of
+         {ok, Inner} ->
+             case term_to_binary(Inner, [deterministic]) =:= InnerBlob of
+                 false -> protocol_error(non_canonical);
+@@ -167,8 +162,7 @@
+     end.
+ 
+ valid_result_blob(Blob) ->
+-    is_binary(Blob) andalso
+-        byte_size(Blob) =< ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES.
++    is_binary(Blob).
+ 
+ validate_request(
+   {submit, RequestId, RequestBytes, Signature, CursorId, TraceCarrier}) ->
+--- a/include/quod_client_goal_limits.hrl
++++ b/include/quod_client_goal_limits.hrl
+@@ -28,13 +28,9 @@
+          4 + ?QUOD_CLIENT_AGENT_INSTANCE_TEXT_BYTES +
+          1 + 1 + 8 + 4 + ?QUOD_CLIENT_GOAL_TEXT_BYTES)).
+ 
+-%% One complete signed-client reply is deliberately a single bounded frame.
+-%% Large nondeterministic reads use the existing cursor instead of growing a
+-%% second multi-frame result stream.  The envelope allowance covers the fixed
+-%% endpoint wrapper, trace/correlation fields, and deterministic ETF framing.
++%% Legacy terrain resource packing quota; its remaining callers are separately
++%% identified for retirement. Ordinary signed results/views have no subquota.
+ -define(QUOD_CLIENT_GOAL_MAX_REPLY_BYTES, (512 * 1024)).
+--define(QUOD_CLIENT_GOAL_MAX_ENVELOPE_BYTES,
+-        (?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES + (16 * 1024))).
+ 
+ %% Node-wide signed-goal routing owns only volatile, exactly monitored
+ %% correlations/workers. Population is not an admission policy; byte, term,

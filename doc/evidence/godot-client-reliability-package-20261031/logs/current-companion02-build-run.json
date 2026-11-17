@@ -1,0 +1,53 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-client-reliability-package-20261031/build_companion.py",
+    "current-companion02"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 0,
+  "timed_out": false,
+  "driver_inputs": {
+    "build_companion.py": "1be5e3367019c1fa16431c806902c5202f74102b470e724947a6c4c1fe354298",
+    "hashes.py": "f48668ba090ad89d00c994eb479a0ce9c92c935f9f5555ea4b711afb134f1955",
+    "inspect_package.py": "51412d7c1157f00a4576ad6e0822e010de3a0c47ab39894eb68267550a3bf52e",
+    "isolation.py": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8",
+    "isolation_probe.py": "1fb50d4ce055cf7ed93ed36e5db31a636b89387512b792c64d138588d84475bc",
+    "journey.py": "85942ebdc20d980f177785659eb879ef2e1a0ff7c08955a8c024f90b0b7d92cc",
+    "ordinary_launch.py": "7140354863b67923bf859d69db9755619b8566d5f04043e5585df7a1b26a89fa",
+    "package_checks.py": "02453fa8af5957497b7b82ec7b00ef3d2871bfb974aff880cb8b79787414e521",
+    "prepare.py": "1a9b192b9fbe663325fcf11a1de806f787a3a1a262c11fe0c8031254f514bcff",
+    "run.py": "20ace533ea6238853b692dde4a651472517e4bf91a4cacdd966f348fc37b1afd",
+    "schema_check.py": "1380466ad5106fc94f6eae767b391288f69328e3fbdb38bc1edfe547cfaab90e",
+    "serve.py": "b74299ffd289ed13adb032cbc31f7a0849f4d54f2b4f1d1e01333abed69ac007",
+    "shutdown.py": "a5b92031d2487ad6ed227587b76f7ae5325177c5904c7c2ea257d5a45d39093b",
+    "package.py": "e43ddf3de584c3313da081d4bbe3dcf05744af84b97d070e892a1b8d8744f16f"
+  },
+  "start_utc": "2026-10-31T20:22:26Z",
+  "elapsed_seconds": 30.178330183029175,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/current-companion02-build-run/stdout.raw",
+      "sha256": "427f368021df83a002d28b36201e5720a94bf66639338dd76e18430379836ab6",
+      "bytes": 1059
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/current-companion02-build-run/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-client-reliability-package-20261031/logs/current-companion02-build-run-stdout.log",
+      "sha256": "427f368021df83a002d28b36201e5720a94bf66639338dd76e18430379836ab6",
+      "bytes": 1059
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-client-reliability-package-20261031/logs/current-companion02-build-run-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

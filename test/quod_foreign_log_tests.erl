@@ -1,6 +1,7 @@
 -module(quod_foreign_log_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("retired_remaining_sizes.hrl").
 -include_lib("opentelemetry/include/otel_span.hrl").
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
@@ -158,6 +159,19 @@ foreign_stream_case(Carriers, Mode) ->
         _ -> S2
     end,
     Snapshot = quod_ledger_store:snapshot(Store),
+    %% A measured fixture allowance exercises the retained continuation through
+    %% the existing complete-frame owner without constructing a multi-GB file.
+    PageCapacity = case Mode of
+        complete ->
+            {ok, FullParts, done} = quod_catchup:transfer_page(Store,
+                quod_catchup:transfer_open(Store, 1, quod_ledger_store:last(Store)), unlimited),
+            Half = lists:sublist(FullParts, length(FullParts) div 2),
+            {ok, Frame} = quod_catchup:encode_frame(Ns,
+                {history_page3, <<0:128>>, <<0:128>>, Half,
+                 quod_ledger_store:last(Store), {<<0:128>>, 1}, <<1:128>>}),
+            byte_size(Frame);
+        _ -> unlimited
+    end,
     Test = self(),
     Fetch = fun(_Peer, _Endpoint, _Ns, Query, Deadline, Consume) ->
         {ok, Read} = quod_ledger_store:open_ro_snapshot(Snapshot),
@@ -177,7 +191,14 @@ foreign_stream_case(Carriers, Mode) ->
                              end;
                          {continue, Token, Sequence} -> fixture_resume(Token, Sequence)
                      end,
-            {ok, Parts, Next} = quod_catchup:transfer_page(Read, Sender),
+            Framing = case PageCapacity of
+                unlimited -> unlimited;
+                _ ->
+                    put({quod_catchup, page_capacity}, PageCapacity),
+                    NextSequence = case Query of {continue, _, Q} -> Q + 1; _ -> 1 end,
+                    {Ns, {<<0:128>>, NextSequence}}
+            end,
+            {ok, Parts, Next} = quod_catchup:transfer_page(Read, Sender, Framing),
             Continue = fixture_continue(Query, Next),
             Test ! {foreign_stream_fetch, Query, Continue, Deadline},
             H = quod_ledger_store:last(Read),
@@ -191,7 +212,7 @@ foreign_stream_case(Carriers, Mode) ->
                         _ -> {ok, Consumed, H, Continue}
                     end
             end
-        after quod_ledger_store:close(Read) end
+        after erase({quod_catchup, page_capacity}), quod_ledger_store:close(Read) end
     end,
     Cache = filename:join(Dir, "cache"),
     Owner = start_owner_opts(Cache, Fetch, #{page_timeout_ms => 15000}),
@@ -3384,12 +3405,12 @@ bad_accepted_entry_hint_is_inert_and_falls_back_to_certified_fetch_test() ->
         end
     end).
 
-authenticated_bootstrap_candidates_are_bounded_and_peer_unique_test() ->
+authenticated_bootstrap_candidates_are_complete_and_peer_unique_test() ->
     Dir = temp_dir("bootstrap-bounds"),
     Pid = start_owner(
             Dir, fun(_, _, _, _, _, _) -> {error, unavailable} end),
     Identity = {unique_ns(), key(95)},
-    Limit = 2 * ?MAX_VALIDATORS,
+    Limit = 2 * ?LEGACY_MAX_VALIDATORS,
     try
         lists:foreach(
           fun(N) ->
@@ -3397,9 +3418,8 @@ authenticated_bootstrap_candidates_are_bounded_and_peer_unique_test() ->
                 Identity, {key(1000 + N), {"127.0.0.1", 20000 + N}})
           end, lists:seq(1, Limit + 1)),
         Stats1 = quod_foreign_log:stats(),
-        ?assertEqual(Limit, maps:get(bootstrap_candidates, Stats1)),
+        ?assertEqual(Limit + 1, maps:get(bootstrap_candidates, Stats1)),
         ?assertEqual(Limit + 1, maps:get(bootstrap_accepted, Stats1)),
-        ?assertEqual(1, maps:get(bootstrap_evicted, Stats1)),
 
         %% Re-observing one authenticated peer replaces its endpoint; it
         %% cannot consume another source slot for the same identity.
@@ -3407,12 +3427,12 @@ authenticated_bootstrap_candidates_are_bounded_and_peer_unique_test() ->
         Replacement = {"127.0.0.1", 29999},
         quod_foreign_log:observe_candidate(Identity, {Peer, Replacement}),
         {ok, Selected} = quod_foreign_log:route_hints(Identity, []),
-        ?assert(length(Selected) =< ?MAX_VALIDATORS),
+        ?assertEqual(Limit + 1, length(Selected)),
         ?assertEqual(length(Selected),
                      length(lists:usort([K || {K, _} <- Selected]))),
         ?assertEqual([{Peer, [Replacement]}],
                      [Row || Row = {K, _} <- Selected, K =:= Peer]),
-        ?assertEqual(Limit,
+        ?assertEqual(Limit + 1,
                      maps:get(bootstrap_candidates,
                               quod_foreign_log:stats()))
     after
@@ -3508,7 +3528,7 @@ byte_large_verified_cache_reopens_through_canonical_pages_test() ->
                         {evidence, KnownEra, Selection} -> fixture_evidence_sender(Read, KnownEra, Selection);
                         {continue, Token, Sequence} -> fixture_resume(Token, Sequence)
                     end,
-                    {ok, Parts, Next} = quod_catchup:transfer_page(Read, Sender),
+                    {ok, Parts, Next} = quod_catchup:transfer_page(Read, Sender, unlimited),
                     Continuation = fixture_continue(Query, Next),
                     Height = quod_ledger_store:last(Read),
                     {ok, Consume(Parts, Height, Continuation), Height, Continuation}
@@ -3541,7 +3561,7 @@ byte_large_verified_cache_reopens_through_canonical_pages_test() ->
     CacheNs = quod_foreign_log:cache_namespace(Identity),
     CacheLog = filename:join(
                  quod_ledger_store:ns_dir(CacheDir, CacheNs), "log.0001"),
-    ?assert(filelib:file_size(CacheLog) > ?QUOD_MAX_FOREIGN_PAGE_BYTES),
+    ?assert(filelib:file_size(CacheLog) > ?LEGACY_QUOD_MAX_FOREIGN_PAGE_BYTES),
     NoFetch = fun(_, _, _, _, _, _) -> {error, network_used} end,
     Pid2 = start_owner(CacheDir, NoFetch),
     try
@@ -3791,7 +3811,7 @@ bootstrap_hints_preserve_current_committee_contacts_test() ->
               quod_foreign_log:observe_candidate(
                 Identity,
                 {key(3000 + N), {"127.0.0.1", 22000 + N}})
-          end, lists:seq(1, 2 * ?MAX_VALIDATORS)),
+          end, lists:seq(1, 2 * ?LEGACY_MAX_VALIDATORS)),
         {ok, Candidates} = quod_foreign_log:route_hints(Identity, []),
         ?assertEqual(
            [OldLive, OldHistorical],
@@ -3803,9 +3823,8 @@ bootstrap_hints_preserve_current_committee_contacts_test() ->
            lists:sort([Old, New]),
            lists:sort([Key || {Key, _Endpoints} <- Candidates])),
         Stats = quod_foreign_log:stats(),
-        ?assertEqual(2 * ?MAX_VALIDATORS,
-                     maps:get(bootstrap_candidates, Stats)),
-        ?assertEqual(2, maps:get(bootstrap_evicted, Stats))
+        ?assertEqual(2 * ?LEGACY_MAX_VALIDATORS + 2,
+                     maps:get(bootstrap_candidates, Stats))
     after
         stop_owner(Pid),
         _ = file:del_dir_r(Dir)
@@ -5316,7 +5335,7 @@ local_restart_readiness_reconfirms_same_prefix_once_test() ->
     Owner = start_owner(CacheDir, fun(_, _, _, _, _, _) -> error(network_used) end),
     %% The existing borrowed-source fixture owns a real archive and verifier
     %% view. These two registrations model its installed local identity/KB.
-    Table = ets:new(binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>),
+    Table = ets:new(binary_to_atom(quod_simplex:genesis_table_name(Ns)),
                     [named_table, protected]),
     true = ets:insert(Table, {anchor, Anchor}),
     true = quod_reg:reg({quod_prolog, Ns}),
@@ -6360,7 +6379,12 @@ identity_current_bootstrap_fails_over_before_certified_routes_test() ->
     RightFetch = chain_fetch(Ns, maps:get(chain, Fixture)),
     Fetch =
         fun(Peer, GivenEndpoint, RequestedNs, Query, Deadline, Consume) ->
-                    {From, _To} = fixture_query_extent(Query),
+            TestPid ! {bootstrap_route_waiting, FetchTag, Peer, self()},
+            receive {release_bootstrap_route, FetchTag} -> ok
+            after max(0, Deadline - quod_time:mono_ms()) ->
+                error(bootstrap_route_not_released)
+            end,
+            {From, _To} = fixture_query_extent(Query),
             TestPid ! {bootstrap_route_fetch, FetchTag, Peer, From},
             case {Peer, GivenEndpoint} of
                 {Wrong, Endpoint} -> {error, retry};
@@ -6371,13 +6395,41 @@ identity_current_bootstrap_fails_over_before_certified_routes_test() ->
         end,
     Dir = temp_dir("identity-current-route-failover"),
     Pid = start_owner(Dir, Fetch),
+    {Caller, Monitor} = spawn_monitor(fun() ->
+        Result = quod_foreign_log:current(
+                   route_candidates([{Wrong, Endpoint}, {Right, Endpoint}]),
+                   Identity, 5000),
+        TestPid ! {bootstrap_current_result, FetchTag, Result}
+    end),
     try
+        Children = maps:from_list([
+            receive
+                {bootstrap_route_waiting, FetchTag, Peer, Child} -> {Peer, Child}
+            after 2000 -> error({bootstrap_route_not_started, Peer})
+            end || Peer <- [Wrong, Right]]),
+        #{active := #{worker := Worker}} =
+            maps:get(Identity, quod_foreign_log:test_lifecycle_state()),
+        %% Probes run concurrently. Observe the failed discovery result in
+        %% the real collector before allowing the valid proof to complete.
+        %% Spawn order alone does not establish this test's required order.
+        {Result, FirstCall} = with_confirmation_edge_trace(Worker, fun() ->
+            maps:get(Wrong, Children) ! {release_bootstrap_route, FetchTag},
+            FailedCall = receive
+                {bootstrap_route_fetch, FetchTag, Wrong, From} -> {Wrong, From}
+            after 2000 -> error(bootstrap_failure_not_delivered)
+            end,
+            _ = receive_confirmation_edge_state(
+                  Worker, FetchTag, Wrong, {error, retry}),
+            maps:get(Right, Children) ! {release_bootstrap_route, FetchTag},
+            receive
+                {bootstrap_current_result, FetchTag, Current} -> {Current, FailedCall}
+            after 5000 -> error(bootstrap_current_not_completed)
+            end
+        end),
         ?assertMatch(
            {ok, #{identity := Identity, committee := [Right]}},
-           quod_foreign_log:current(
-             route_candidates([{Wrong, Endpoint}, {Right, Endpoint}]),
-             Identity, 5000)),
-        Calls = collect_bootstrap_route_fetches(FetchTag, []),
+           Result),
+        Calls = [FirstCall | collect_bootstrap_route_fetches(FetchTag, [])],
         ?assertMatch([{Wrong, {evidence, genesis, tip}},
                       {Right, {evidence, genesis, tip}} | _], Calls),
         %% After the genesis page certifies Right for Endpoint, the conflicting
@@ -6385,6 +6437,8 @@ identity_current_bootstrap_fails_over_before_certified_routes_test() ->
         ?assertEqual(
            1, length([ok || {Peer, _} <- Calls, Peer =:= Wrong]))
     after
+        exit(Caller, kill),
+        erlang:demonitor(Monitor, [flush]),
         stop_owner(Pid),
         _ = file:del_dir_r(Dir)
     end.
@@ -6443,8 +6497,11 @@ material_network_dependency_stops_route_failover_test() ->
              ++ integer_to_list(erlang:unique_integer([positive]))),
     {ok, Peer, _Node} = peer:start(
                           #{name => Name, connection => standard_io,
-                            args => ["-pa" | code:get_path()]}),
+                            args => ["-setcookie", atom_to_list(erlang:get_cookie())]}),
     try
+        %% rebar3's escript paths are virtual and cannot be installed in a peer VM.
+        Paths = [Path || Path <- code:get_path(), filelib:is_dir(Path)],
+        true = peer:call(Peer, code, set_path, [Paths]),
         %% Explicit parent loads do not reorder code:get_path(). Bind the
         %% fresh VM to the same test and production beams, even when a
         %% focused runner inherited an older build directory on its path.
@@ -6454,7 +6511,8 @@ material_network_dependency_stops_route_failover_test() ->
                          peer:call(Peer, code, load_abs,
                                    [filename:rootname(Beam)])),
             ?assertEqual(Beam, peer:call(Peer, code, which, [Module]))
-        end, [?MODULE, quod_foreign_log, quod_catchup, quod_ct]),
+        end, [?MODULE, erlog_int, quod_prolog, quod_erlog_db_local_prove,
+              quod_foreign_log, quod_catchup, quod_ct]),
         ?assertEqual(
            ok,
            peer:call(
@@ -7294,8 +7352,8 @@ maximal_material_and_compact_witness_fit_transfer_page_test() ->
     Ns = <<"foreign:frame-bound">>,
     Payload = largest_payload(Ns),
     {ok, PayloadBytes} = quod_ledger:encoded_payload_size(Payload),
-    ?assert(PayloadBytes =< ?MAX_BLOCK_BYTES),
-    Signatures = lists:sort([{key(I), <<I:512>>} || I <- lists:seq(1, ?MAX_VALIDATORS)]),
+    ?assert(PayloadBytes =< ?LEGACY_MAX_BLOCK_BYTES),
+    Signatures = lists:sort([{key(I), <<I:512>>} || I <- lists:seq(1, ?LEGACY_MAX_VALIDATORS)]),
     Era = <<7:256>>, Root = {Era, 0, <<1:256>>},
     {ok, Material} = quod_ledger:new_block({Era, 1}, Root, 2, Payload, 0),
     {ok, Carrier} = quod_ledger:new_block({Era, 2}, quod_ledger:block_ref(Material), 2, empty, 0),
@@ -7306,9 +7364,9 @@ maximal_material_and_compact_witness_fit_transfer_page_test() ->
     Parts = [{group, 2, 2}, {entry, Blob},
              {proof, quod_ledger:block_bytes(Carrier)},
              {proof, quod_ledger:block_bytes(Material)}, end_group],
-    Frame = quod_catchup:encode_frame(
+    {ok, Frame} = quod_catchup:encode_frame(
               Ns, {history_page3, <<1:128>>, <<2:128>>, Parts, 2, done, <<3:128>>}),
-    ?assert(byte_size(Frame) < ?QUOD_MAX_FOREIGN_PAGE_BYTES),
+    ?assert(byte_size(Frame) =< ?QUOD_LINK_PAYLOAD_CAPACITY),
     ?assertMatch({ok, {history_page3, _, _, Parts, 2, done, _}, _},
                  quod_catchup:decode_frame(Ns, Frame)).
 
@@ -7705,7 +7763,7 @@ fixture_evidence_parts(Ns, Chain, KnownEra, Selection) ->
     end.
 
 fixture_evidence_pages(Store, Sender, Pages) ->
-    case quod_catchup:transfer_page(Store, Sender) of
+    case quod_catchup:transfer_page(Store, Sender, unlimited) of
         {ok, Parts, done} -> lists:append(lists:reverse([Parts | Pages]));
         {ok, Parts, Next} -> fixture_evidence_pages(Store, Next, [Parts | Pages])
     end.
@@ -7748,10 +7806,10 @@ fixture_transfer_parts(Entry) ->
 
 fixture_transfer_page([], Acc, _) -> {lists:reverse(Acc), []};
 fixture_transfer_page([Part | Rest] = Parts, Acc, Bytes) ->
-    {ok, Encoded} = quod_safe_term:encode_canonical(Part, ?QUOD_MAX_FOREIGN_PAGE_BYTES),
+    {ok, Encoded} = quod_safe_term:encode_canonical(Part, ?LEGACY_QUOD_MAX_FOREIGN_PAGE_BYTES),
     Size = byte_size(Encoded),
-    case length(Acc) < ?QUOD_MAX_FOREIGN_PAGE_ENTRIES andalso
-         Bytes + Size =< ?QUOD_MAX_FOREIGN_PAGE_BYTES of
+    case length(Acc) < ?LEGACY_QUOD_MAX_FOREIGN_PAGE_ENTRIES andalso
+         Bytes + Size =< ?LEGACY_QUOD_MAX_FOREIGN_PAGE_BYTES of
         true -> fixture_transfer_page(Rest, [Part | Acc], Bytes + Size);
         false -> {lists:reverse(Acc), Parts}
     end.
@@ -8122,7 +8180,7 @@ ref({Ns, Anchor}, Slot, Seed) ->
     Ref.
 
 largest_payload(Ns) ->
-    largest_payload(Ns, 0, ?MAX_BLOCK_BYTES).
+    largest_payload(Ns, 0, ?LEGACY_MAX_BLOCK_BYTES).
 
 largest_payload(Ns, Low, High) when Low + 1 >= High ->
     {ok, Payload} = payload(Ns, Low),
@@ -8134,7 +8192,7 @@ largest_payload(Ns, Low, High) ->
         {error,too_large} = Error -> Error
     end,
     case SizeResult of
-        {ok, Size} when Size =< ?MAX_BLOCK_BYTES ->
+        {ok, Size} when Size =< ?LEGACY_MAX_BLOCK_BYTES ->
             largest_payload(Ns, Mid, High);
         _ ->
             largest_payload(Ns, Low, Mid)
@@ -8478,3 +8536,10 @@ current_feed_advance_between_first_proof_and_matching_quorum_keeps_job_test() ->
     after
         stop_owner(Owner), Link ! close, _ = file:del_dir_r(Dir)
     end.
+
+all_authored_route_endpoints_keep_order_and_shape_test() ->
+    Routes = [{<<1:256>>, [{"first", 1001}, {"second", 1002}, {"third", 1003}]}],
+    ?assert(quod_foreign_log:valid_route_candidates(Routes)),
+    ?assertNot(quod_foreign_log:valid_route_candidates(Routes ++ Routes)),
+    ?assertNot(quod_foreign_log:valid_route_candidates([{<<1:256>>, [{"first", 1001}, {"first", 1001}]}])),
+    ?assertNot(quod_foreign_log:valid_route_candidates([{<<1:256>>, [{"first", 0}]}])).

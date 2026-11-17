@@ -1,0 +1,7 @@
+{
+  "chunk_id": "27fa5a",
+  "wall_time_seconds": 0.375362186,
+  "exit_code": 0,
+  "original_token_count": 135,
+  "output": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"structured\\\":{\\\"windowHours\\\":24,\\\"totalThreads\\\":1,\\\"threads\\\":[{\\\"actor\\\":\\\"Yan Guiborat\\\",\\\"title\\\":\\\"M4 \u2014 Operate Godot spaces with desktop and OpenXR controls\\\",\\\"issueKey\\\":\\\"QUO-65\\\",\\\"itemIds\\\":[\\\"tsk_01M5YNM08XZDSB9AERHSBMCPYZ\\\"],\\\"state\\\":\\\"in-review\\\",\\\"lastActivityAt\\\":1793250700730,\\\"agentDriven\\\":false}],\\\"sameItem\\\":[],\\\"waitingOnYou\\\":[],\\\"youHandedOff\\\":[],\\\"truncated\\\":false},\\\"summary\\\":\\\"1 recent work thread across 1 actor lane; 0 shared-item signals.\\\"}\"}],\"isError\":false}\n"
+}

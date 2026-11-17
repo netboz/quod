@@ -1,0 +1,66 @@
+{
+  "passed": true,
+  "original_campaign_outer_exit": 1,
+  "original_source_unchanged_flag": false,
+  "original_failure_retained": true,
+  "provider_or_app_rerun": false,
+  "original_result": {
+    "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-client-policy-20261031/answer-policy-release02-result.json",
+    "sha256": "8528b09f313d4a2188985d896f97d68549a0877b095ba34a7d1854de728f7ded"
+  },
+  "source_manifest": {
+    "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-client-policy-20261031/inputs/answer-policy-release02-source-manifest.json",
+    "sha256": "982168c88e71d5fa1473dd8fab449c99660d38fc08bb20e79b323e4b6554769e"
+  },
+  "all_live_authored_inputs_unchanged": 1432,
+  "derived_source_outputs": {
+    "rebar.lock": {
+      "input_sha256": "09f364a859950d3cf2aeece1e56c14f8fd6cbbd4b7cda2a4de4e83888b9df01b",
+      "generated_sha256": "6e768714a501546673ca1b7a2cd0f30e7cb5043fca28ac0ec4009333c87ca9d9"
+    }
+  },
+  "removed_checkout_entries": [
+    "erlang_qq",
+    "erlog",
+    "hocon",
+    "quic",
+    "typerefl"
+  ],
+  "all_other_lock_entries_and_metadata_identical": true,
+  "exact_dependency_sources_and_links_checked": true,
+  "parser_command": [
+    "docker",
+    "run",
+    "--rm",
+    "--network",
+    "none",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/policy-release-reconciliation01:/evidence:ro",
+    "-e",
+    "ERL_FLAGS=+S 4:4 +SDio 2 +SDcpu 2",
+    "--entrypoint",
+    "erl",
+    "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+    "-noshell",
+    "-eval",
+    "\n{ok,[{Version,Before}|Metadata]}=file:consult(\"/evidence/input.lock\"),\n{ok,[{Version,After}|Metadata]}=file:consult(\"/evidence/generated.lock\"),\nExpected=[<<\"erlang_qq\">>,<<\"erlog\">>,<<\"hocon\">>,<<\"quic\">>,<<\"typerefl\">>],\nExpected=lists:sort([N || {N,{git,_,{ref,_}},_} <- Before]),\nAfter=[Entry || Entry <- Before, not lists:member(element(1,Entry),Expected)],\nio:format(\"LOCK_RECONCILED before=~B after=~B removed=~B metadata=identical~n\",[length(Before),length(After),length(Expected)]),\nhalt(0).\n"
+  ],
+  "parser_true_exit": 0,
+  "private": "/data/quod-m4-vr-ca84d4f8-20261029/private/policy-release-reconciliation01",
+  "streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/policy-release-reconciliation01/stdout.raw",
+      "sha256": "5819b3dee992628b3c731c19b53f72fd58f2dbc53127059910db9f6621e4722f",
+      "bytes": 64
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/policy-release-reconciliation01/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "digest_cache": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/policy-release-reconciliation01/computed-hashes.json",
+    "sha256": "7438ad9cf9e9199872796e40784d312619449e71fe03d770a37e532d387aae7b"
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "passed": false,
+  "reader_errors": [],
+  "host_input_or_focus_action": false,
+  "software_Control_signals": true,
+  "no_headset_or_runtime": true,
+  "companion_not_distributed": true,
+  "manifest_sha256": "b89c9b9cf2fe76825f3e1d9c0b5093bb2ba3a1262436084d2908febca6898d8e",
+  "failure": "AssertionError: ",
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-initial-stdout": true,
+    "client-initial-stderr": true
+  },
+  "streams": {
+    "server-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/visibility-package-journey01/server-stdout.raw",
+      "sha256": "f6927fba95d743d9a30c1055f2b637fac179ffe80df0e7501d68952029060f30",
+      "bytes": 129
+    },
+    "client-initial-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/visibility-package-journey01/client-initial-stdout.raw",
+      "sha256": "48e619bff56412f77669e5fa062e6347b77f661ef1930fecc0bbf16ec8dc0071",
+      "bytes": 120969
+    },
+    "server-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/visibility-package-journey01/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "client-initial-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/visibility-package-journey01/client-initial-stderr.raw",
+      "sha256": "1496e1a8474cbe7af9088ede8822e8be9dc71cb1a7d819e6a6fa6b371c161d72",
+      "bytes": 4557
+    }
+  },
+  "native_input_count": 0,
+  "children": {
+    "server": {
+      "true_exit": 0
+    },
+    "client-initial": {
+      "true_exit": 1
+    }
+  }
+}

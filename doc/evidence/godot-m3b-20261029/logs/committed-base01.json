@@ -1,0 +1,16 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-m3b-20261029/prepare-base.py"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T02:12:38Z",
+  "elapsed_seconds": 110.33234000205994,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/tmp/quod-m3b-8b352c53/private/logs/committed-base01.log",
+  "raw_sha256": "6252693696f97e588d422a5c08635b9b7225067cef0af2796b39d8b023b7e5e2",
+  "sanitized_sha256": "6252693696f97e588d422a5c08635b9b7225067cef0af2796b39d8b023b7e5e2",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

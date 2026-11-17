@@ -1,0 +1,55 @@
+{
+  "reported_compositor": {
+    "branch": "v0.56.2",
+    "commit": "efb50993780079460b0cbed1363e2166a2de1d9f",
+    "version": "0.56.2",
+    "dirty": false,
+    "commit_message": "[gha] Nix: update inputs",
+    "commit_date": "Wed Aug 5 14:13:21 2026",
+    "tag": "v0.56.2",
+    "commits": "7661",
+    "buildAquamarine": "0.15.1",
+    "buildHyprlang": "0.6.8",
+    "buildHyprutils": "0.14.2",
+    "buildHyprcursor": "0.1.13",
+    "buildHyprgraphics": "0.5.1",
+    "systemAquamarine": "0.15.1",
+    "systemHyprlang": "0.6.8",
+    "systemHyprutils": "0.14.2",
+    "systemHyprcursor": "0.1.13",
+    "systemHyprgraphics": "0.5.1",
+    "abiHash": "efb50993780079460b0cbed1363e2166a2de1d9f_aq_0.15_hu_0.14_hg_0.5_hc_0.1_hlg_0.6",
+    "flags": []
+  },
+  "primary_sources": {
+    "src/managers/EventManager.cpp": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/downloads/hyprland-efb509-event-manager.cpp",
+      "sha256": "eea605dfe5ce09e1f92a67ec478bf61a19894c6e0ee3302c0393521a2ee9540d",
+      "bytes": 6479,
+      "git_blob": "4863a8b894e0f2eb04111c37e329dd44af349bf0",
+      "url": "https://raw.githubusercontent.com/hyprwm/Hyprland/efb50993780079460b0cbed1363e2166a2de1d9f/src/managers/EventManager.cpp"
+    },
+    "src/Compositor.cpp": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/downloads/hyprland-efb509-compositor.cpp",
+      "sha256": "74833ecbf0e2b6f8ad84345ac0716a3295a0e347420a188be0ab4f6a684af7c0",
+      "bytes": 38550,
+      "git_blob": "1d2d8b9320ab667da633289900f1bbfff0155706",
+      "url": "https://raw.githubusercontent.com/hyprwm/Hyprland/efb50993780079460b0cbed1363e2166a2de1d9f/src/Compositor.cpp"
+    },
+    "src/desktop/state/FocusState.cpp": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/downloads/hyprland-efb509-focus-state.cpp",
+      "sha256": "9b971362bba97f200f0ef786237deed6b7b863066590d243cac11787e2a56ebd",
+      "bytes": 12700,
+      "git_blob": "172da082eccc91c6a4ce8a164f730868c65c3938",
+      "url": "https://raw.githubusercontent.com/hyprwm/Hyprland/efb50993780079460b0cbed1363e2166a2de1d9f/src/desktop/state/FocusState.cpp"
+    }
+  },
+  "tree_index_sha256": "6a3c73d60029171fcb235a215151602a3882687ad20545aa8c547bf0a6e24655",
+  "format": "event>>data followed by newline; data capped1024 bytes by provider",
+  "event": "activewindowv2; lowercase hexadecimal uintptr without0x; empty means no focused window",
+  "path": "XDG_RUNTIME_DIR/hypr/HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock",
+  "ordering": "Socket connected before initial owner snapshot; FIFO events never discarded or overwritten by snapshot. No provider subscription acknowledgement or cross-socket snapshot barrier/sequence is exposed.",
+  "prepared_listener_armed": false,
+  "closed_case10_extension": "UNRUN: instruction81 arrived after normal retirement.",
+  "web_documentation_failure": "web open https://wiki.hypr.land/IPC/ returned404; retained primary pinned source was used instead."
+}

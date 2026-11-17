@@ -1,0 +1,20 @@
+[
+  {
+    "path": "/home/yan/src/quod_worktrees/pearl-stone/_build/m3a-retained/gates06-native-target.tar.gz",
+    "sha256": "74e91b671016b79558b26f2e7d254c71016861fcccd9b8273a907ee61553f5c4",
+    "bytes": 323998162,
+    "original_uid": 0,
+    "current_uid": 1000,
+    "logical_path_preserved": true,
+    "content_bytes_unchanged": true
+  },
+  {
+    "path": "/home/yan/src/quod_worktrees/pearl-stone/_build/m3a-retained/gates06-native-target-manifest.json",
+    "sha256": "3730b0b539345dc850cfb1a3bc473a4db7a651df83b1a8e7918682bd869f21ee",
+    "bytes": 414705,
+    "original_uid": 0,
+    "current_uid": 1000,
+    "logical_path_preserved": true,
+    "content_bytes_unchanged": true
+  }
+]

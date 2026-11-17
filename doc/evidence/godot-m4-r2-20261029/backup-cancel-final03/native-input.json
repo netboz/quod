@@ -1,0 +1,50 @@
+[
+  {
+    "command": [
+      "hyprctl",
+      "dispatch",
+      "hl.dsp.cursor.move({x=2893,y=580})"
+    ],
+    "child_exit": 0,
+    "stdout": "ok\n",
+    "stderr": "",
+    "owned_pid": 941690,
+    "before_pid": 941690,
+    "after_pid": 941690,
+    "target_geometry": {
+      "address": "0x557166774780",
+      "at": [
+        2583,
+        415
+      ],
+      "size": [
+        620,
+        250
+      ]
+    }
+  },
+  {
+    "command": [
+      "ydotool",
+      "click",
+      "0xC0"
+    ],
+    "child_exit": 0,
+    "stdout": "c0 110\n",
+    "stderr": "",
+    "owned_pid": 941690,
+    "before_pid": 941690,
+    "after_pid": 941690,
+    "target_geometry": {
+      "address": "0x557166774780",
+      "at": [
+        2583,
+        415
+      ],
+      "size": [
+        620,
+        250
+      ]
+    }
+  }
+]

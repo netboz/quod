@@ -1,0 +1,542 @@
+-module(quod_client_result).
+-moduledoc """
+One closed signed-client proof result shared by local HTTP execution
+and the node-to-node signed-goal endpoint.
+
+Engine bindings are converted once to the signed request's binary variable
+names and encoded with the shared canonical binding codec. Proof answer policy
+owns answer allocation; remote delivery retains complete transport admission.
+Failure stacks reuse the existing
+bounded failure-reason codec. The transport therefore never carries arbitrary
+Erlang result terms, and the HTTP layer has only one renderer regardless of
+where the proof ran.
+""".
+
+-include("quod_proof_limits.hrl").
+
+-export([normalize/2, normalize_error/1, encode/1, decode/1,
+         decode_binding/1,
+         observe_outcome_unknown/3, report_outcome_unknown/3,
+         http_normalized/2, http_error/1, binding_json/1, outcome_ref_json/1, committed_json/1]).
+-export_type([result/0]).
+
+-define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
+
+-type transaction_ref() ::
+        {transaction, binary(), <<_:256>>, <<_:256>>}.
+-type group_ref() ::
+        {group, binary(), <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>}.
+-type operation_ref() ::
+        {operation, binary(), <<_:256>>, binary(), <<_:256>>}.
+-type participant_slot() ::
+        {{binary(), <<_:256>>}, pos_integer(), non_neg_integer()}.
+-type outcome() :: transaction_ref() |
+        {group_outcome, group_ref(), pos_integer(), [participant_slot()]} |
+        {operation_outcome, operation_ref(), list()}.
+-type public_error() ::
+        read_only | target_unavailable | ontology_rebuilding | ontology_busy |
+        cursor_not_found | cursor_not_ready | cursor_busy | invalid_action |
+        non_backtrackable_action | conflict_retry | proof_unavailable |
+        result_too_large | independent_requires_signed_request |
+        independent_nesting | independent_mixed_writes |
+        independent_scope_required |
+        {invalid_material_policy, founding | plan | proof} |
+        {material_limit, founding | plan | proof, atom(), non_neg_integer(), non_neg_integer()} |
+        {effect_custody_limit, prepared_bytes, non_neg_integer(), non_neg_integer()}.
+-type result() ::
+        {read, [{binary(), <<_:256>>, non_neg_integer()}], read_outcome()} |
+        {answers, non_neg_integer(), [binary()]} |
+        {solution, <<_:256>>, non_neg_integer(), binary()} |
+        stopped | fail | {failed, binary()} |
+        {committed, [binary()], outcome()} |
+        {pending, transaction_ref() | group_ref() | operation_ref()} |
+        {error, public_error()}.
+-type read_outcome() :: {answers, non_neg_integer(), [binary()]} |
+        fail | {failed, binary()} | {error, public_error()}.
+
+-doc "Normalize one admitted target-engine result without a second allocation policy.".
+-spec normalize(quod_client_goal:evidence(), term()) -> result().
+normalize(Evidence, {read, Dependencies, Raw}) ->
+    case valid_dependencies(Dependencies, none) of
+        true ->
+            Outcome = normalize(Evidence, Raw),
+            case valid_read_outcome(Outcome) of
+                true -> validated({read, Dependencies, Outcome});
+                false -> validated({read, Dependencies, {error, proof_unavailable}})
+            end;
+        false -> {read, [], {error, proof_unavailable}}
+    end;
+normalize(Evidence, Raw) ->
+    case normalize_unvalidated(Evidence, Raw) of
+        {ok, Result} -> validated(Result);
+        error -> {error, proof_unavailable}
+    end.
+
+-doc "Normalize one engine or transport error through the shared public vocabulary.".
+-spec normalize_error(term()) -> {error, public_error()}.
+normalize_error(Reason) ->
+    {error, public_error(Reason)}.
+
+-doc "Report the raw outcome_unknown shape and ignore every other result.".
+-spec observe_outcome_unknown(atom(), atom(), term()) -> ok.
+observe_outcome_unknown(
+  Producer, Cause, {error, {outcome_unknown, Ref}}) ->
+    report_outcome_unknown(Producer, Cause, Ref);
+observe_outcome_unknown(_Producer, _Cause, _Result) ->
+    ok.
+
+-doc "Record one client-visible uncertain result without exposing identities as metric labels.".
+-spec report_outcome_unknown(atom(), atom(), term()) -> ok.
+report_outcome_unknown(Producer, Cause, Ref) ->
+    %% Reporting must never become a dependency of the result path it observes.
+    try
+        case outcome_ref_log_fields(Ref) of
+            {ok, Kind, Ns, Id} ->
+                ok = quod_metrics:count_client_outcome_unknown(Producer),
+                logger:warning(
+                  "quod: client-visible outcome_unknown producer=~p cause=~p kind=~p namespace=~p id=~ts",
+                  [Producer, Cause, Kind, Ns,
+                   binary:encode_hex(Id, lowercase)]),
+                ok;
+            error ->
+                ok
+        end
+    catch _:_ -> ok
+    end.
+
+outcome_ref_log_fields(
+  {transaction, Ns, <<_:256>>, <<_:256>> = TxId})
+  when is_binary(Ns), byte_size(Ns) > 0 ->
+    {ok, transaction, Ns, TxId};
+outcome_ref_log_fields(
+  {group, Ns, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>> = GroupId})
+  when is_binary(Ns), byte_size(Ns) > 0 ->
+    {ok, group, Ns, GroupId};
+outcome_ref_log_fields(
+  {operation, Ns, <<_:256>>, AgentRef, <<_:256>> = OperationId})
+  when is_binary(Ns), byte_size(Ns) > 0 ->
+    case quod_agent_ref:valid_principal({agent, AgentRef}) of
+        true -> {ok, operation, Ns, OperationId};
+        false -> error
+    end;
+outcome_ref_log_fields(_Ref) ->
+    error.
+
+normalize_unvalidated(Evidence, {ok, Bindings, Height})
+  when is_list(Bindings), is_integer(Height), Height >= 0,
+       Height =< ?MAX_UINT64 ->
+    case encode_bindings(Evidence, Bindings) of
+        {ok, Blobs} -> {ok, {answers, Height, Blobs}};
+        Error -> Error
+    end;
+normalize_unvalidated(Evidence,
+                    {solution, <<_:256>> = CursorId, Bindings, Height})
+  when is_map(Bindings), is_integer(Height), Height >= 0,
+       Height =< ?MAX_UINT64 ->
+    case encode_binding(Evidence, Bindings) of
+        {ok, Blob} -> {ok, {solution, CursorId, Height, Blob}};
+        Error -> Error
+    end;
+normalize_unvalidated(_Evidence, {ok, stopped}) ->
+    {ok, stopped};
+normalize_unvalidated(_Evidence, fail) ->
+    {ok, fail};
+normalize_unvalidated(_Evidence, {fail, Reasons}) when is_list(Reasons) ->
+    case quod_wire_term:encode_failure_reasons(Reasons) of
+        {ok, Blob} -> {ok, {failed, Blob}};
+        {error, _} -> error
+    end;
+normalize_unvalidated(Evidence, {ok, Bindings, Outcome})
+  when is_list(Bindings) ->
+    case {encode_bindings(Evidence, Bindings), normalize_outcome(Outcome)} of
+        {{ok, Blobs}, {ok, PublicOutcome}} ->
+            {ok, {committed, Blobs, PublicOutcome}};
+        _ ->
+            error
+    end;
+normalize_unvalidated(_Evidence, {error, {outcome_unknown, Ref}}) ->
+    case valid_outcome_ref(Ref) of
+        true -> {ok, {pending, Ref}};
+        false -> error
+    end;
+normalize_unvalidated(_Evidence, {error, Reason}) ->
+    {ok, normalize_error(Reason)};
+normalize_unvalidated(_Evidence, _Raw) ->
+    error.
+
+validated(Result) ->
+    case valid_result(Result) of
+        true -> Result;
+        false -> invalid_result(Result)
+    end.
+
+invalid_result({read, Dependencies, _}) ->
+    {read, Dependencies, {error, proof_unavailable}};
+invalid_result(_) -> {error, proof_unavailable}.
+
+encode_bindings(Evidence, Bindings) ->
+    encode_bindings(Evidence, Bindings, []).
+
+encode_bindings(_Evidence, [], Acc) ->
+    {ok, lists:reverse(Acc)};
+encode_bindings(Evidence, [Bindings | Rest], Acc) ->
+    case encode_binding(Evidence, Bindings) of
+        {ok, Blob} ->
+            encode_bindings(Evidence, Rest, [Blob | Acc]);
+        Error -> Error
+    end;
+encode_bindings(_Evidence, _Bindings, _Acc) ->
+    error.
+
+encode_binding(Evidence, Bindings) when is_map(Bindings) ->
+    case quod_client_goal:named_bindings(Evidence, Bindings) of
+        {ok, Named} ->
+            case quod_wire_term:encode_bindings(Named, unlimited) of
+                {ok, Blob} -> {ok, Blob};
+                {error, _} -> error
+            end;
+        {error, _} ->
+            error
+    end;
+encode_binding(_Evidence, _Bindings) ->
+    error.
+
+normalize_outcome({transaction, Ns, <<_:256>>, <<_:256>>} = Ref)
+  when is_binary(Ns), byte_size(Ns) > 0 ->
+    {ok, Ref};
+normalize_outcome(
+  #{ref := {group, Ns, <<_:256>> = Anchor, <<_:256>> = Coordinator,
+           <<_:256>> = Admission, <<_:256>> = GroupId} = Ref,
+    height := Height, participant_slots := Slots})
+  when is_binary(Ns), byte_size(Ns) > 0,
+       is_integer(Height), Height > 0, Height =< ?MAX_UINT64 ->
+    case valid_participant_slots(Slots) of
+        true ->
+            _ = {Anchor, Coordinator, Admission, GroupId},
+            {ok, {group_outcome, Ref, Height, Slots}};
+        false ->
+            error
+    end;
+normalize_outcome({operation_outcome, Ref, Rows} = Outcome) ->
+    case valid_operation_ref(Ref) andalso quod_operation_vector:result_rows(Rows) =/= error of
+        true -> {ok, Outcome};
+        false -> error
+    end;
+normalize_outcome(_Outcome) ->
+    error.
+
+public_error(read_only) -> read_only;
+public_error(no_such_namespace) -> target_unavailable;
+public_error(wrong_genesis_anchor) -> target_unavailable;
+public_error(rebuilding) -> ontology_rebuilding;
+public_error(busy) -> ontology_busy;
+public_error(cursor_not_found) -> cursor_not_found;
+public_error(cursor_not_ready) -> cursor_not_ready;
+public_error(cursor_busy) -> cursor_busy;
+public_error(invalid_action) -> invalid_action;
+public_error(non_backtrackable_action) -> non_backtrackable_action;
+public_error(conflict_retry) -> conflict_retry;
+public_error(result_too_large) -> result_too_large;
+public_error({too_large, result}) -> result_too_large;
+public_error(independent_requires_signed_request) -> independent_requires_signed_request;
+public_error(independent_nesting) -> independent_nesting;
+public_error(independent_mixed_writes) -> independent_mixed_writes;
+public_error(independent_scope_required) -> independent_scope_required;
+public_error(Reason)
+  when element(1, Reason) =:= material_limit;
+       element(1, Reason) =:= invalid_material_policy ->
+    case quod_scope_wire:valid_public_error(Reason) of
+        true -> Reason;
+        false -> proof_unavailable
+    end;
+public_error({effect_custody_limit, prepared_bytes, _, _} = Reason) ->
+    case quod_scope_wire:valid_public_error(Reason) of
+        true -> Reason;
+        false -> proof_unavailable
+    end;
+public_error(_Reason) -> proof_unavailable.
+
+-doc "Encode one canonical normalized result.".
+-spec encode(result()) ->
+          {ok, binary()} |
+          {error, invalid_result}.
+encode(Result) ->
+    case valid_result(Result) of
+        true -> {ok, term_to_binary(Result, [deterministic])};
+        false -> {error, invalid_result}
+    end.
+
+-doc "Decode, revalidate, and require canonical normalized-result bytes.".
+-spec decode(term()) ->
+          {ok, result()} |
+          {error, invalid_result}.
+%% The enclosing endpoint or admitted local caller owns byte allocation.
+decode(Blob) when is_binary(Blob) ->
+    case quod_safe_term:decode(Blob, byte_size(Blob)) of
+        {ok, Result} ->
+            case valid_result(Result) andalso
+                 term_to_binary(Result, [deterministic]) =:= Blob of
+                true -> {ok, Result};
+                false -> {error, invalid_result}
+            end;
+        {error, _} ->
+            {error, invalid_result}
+    end;
+decode(_Blob) ->
+    {error, invalid_result}.
+
+valid_result({read, Dependencies, Outcome}) ->
+    valid_dependencies(Dependencies, none) andalso valid_read_outcome(Outcome);
+valid_result({answers, Height, Blobs}) ->
+    valid_uint64(Height) andalso valid_binding_blobs(Blobs);
+valid_result({solution, <<_:256>>, Height, Blob}) ->
+    valid_uint64(Height) andalso valid_binding_blob(Blob);
+valid_result(stopped) -> true;
+valid_result(fail) -> true;
+valid_result({failed, ReasonsBlob}) ->
+    case quod_wire_term:decode_failure_reasons(ReasonsBlob) of
+        {ok, _Reasons} -> true;
+        {error, _} -> false
+    end;
+valid_result({committed, Blobs, Outcome}) ->
+    valid_binding_blobs(Blobs) andalso valid_normalized_outcome(Outcome);
+valid_result({pending, Ref}) -> valid_outcome_ref(Ref);
+valid_result({error, Reason}) -> valid_public_error(Reason);
+valid_result(_) -> false.
+
+valid_read_outcome({answers, _, _} = Outcome) -> valid_result(Outcome);
+valid_read_outcome(fail) -> true;
+valid_read_outcome({failed, _} = Outcome) -> valid_result(Outcome);
+valid_read_outcome({error, _} = Outcome) -> valid_result(Outcome);
+valid_read_outcome(_) -> false.
+
+valid_dependencies([], _) -> true;
+valid_dependencies([{Ns, <<_:256>>, Height} | Rest], Previous)
+  when is_binary(Ns), byte_size(Ns) > 0,
+       byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES,
+       (Previous =:= none orelse Previous < Ns) ->
+    valid_uint64(Height) andalso valid_dependencies(Rest, Ns);
+valid_dependencies(_, _) -> false.
+
+valid_binding_blobs([]) -> true;
+valid_binding_blobs([Blob | Rest]) ->
+    valid_binding_blob(Blob) andalso valid_binding_blobs(Rest);
+valid_binding_blobs(_) -> false.
+
+valid_binding_blob(Blob) ->
+    case decode_binding(Blob) of
+        {ok, _Pairs} -> true;
+        {error, _} -> false
+    end.
+
+valid_normalized_outcome(Ref = {transaction, _, _, _}) ->
+    valid_transaction_ref(Ref);
+valid_normalized_outcome({group_outcome, Ref, Height, Slots}) ->
+    valid_group_ref(Ref) andalso valid_positive_slot(Height) andalso
+        valid_participant_slots(Slots);
+valid_normalized_outcome({operation_outcome, Ref, Rows}) ->
+    valid_operation_ref(Ref) andalso quod_operation_vector:result_rows(Rows) =/= error;
+valid_normalized_outcome(_) -> false.
+
+valid_outcome_ref(Ref = {transaction, _, _, _}) -> valid_transaction_ref(Ref);
+valid_outcome_ref(Ref = {group, _, _, _, _, _}) -> valid_group_ref(Ref);
+valid_outcome_ref(Ref = {operation, _, _, _, _}) -> valid_operation_ref(Ref);
+valid_outcome_ref(_) -> false.
+
+valid_transaction_ref(
+  {transaction, Ns, <<_:256>>, <<_:256>>}) ->
+    is_binary(Ns) andalso byte_size(Ns) > 0;
+valid_transaction_ref(_) -> false.
+
+valid_group_ref(
+  {group, Ns, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>}) ->
+    is_binary(Ns) andalso byte_size(Ns) > 0;
+valid_group_ref(_) -> false.
+
+valid_operation_ref(
+  {operation, Ns, <<_:256>>, AgentRef, <<_:256>>}) ->
+    is_binary(Ns) andalso byte_size(Ns) > 0 andalso
+        quod_agent_ref:valid_principal({agent, AgentRef});
+valid_operation_ref(_) -> false.
+
+valid_participant_slots(Slots) ->
+    valid_participant_slots(Slots, none, 0).
+
+valid_participant_slots([], _Previous, Count) -> Count >= 2;
+valid_participant_slots(
+  [{{Ns, <<_:256>>} = Identity, Slot, Generation} | Rest], Previous, Count)
+  when is_binary(Ns), byte_size(Ns) > 0,
+       (Previous =:= none orelse Previous < Identity),
+       is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64,
+       is_integer(Generation), Generation >= 0, Generation =< ?MAX_UINT64 ->
+    valid_participant_slots(Rest, Identity, Count + 1);
+valid_participant_slots(_, _Previous, _Count) -> false.
+
+valid_uint64(Value) ->
+    is_integer(Value) andalso Value >= 0 andalso Value =< ?MAX_UINT64.
+
+valid_positive_slot(Value) -> valid_uint64(Value) andalso Value > 0.
+
+valid_public_error(Reason)
+  when element(1, Reason) =:= material_limit;
+       element(1, Reason) =:= invalid_material_policy ->
+    quod_scope_wire:valid_public_error(Reason);
+valid_public_error({effect_custody_limit, prepared_bytes, _, _} = Reason) ->
+    quod_scope_wire:valid_public_error(Reason);
+valid_public_error(Reason) ->
+    Reason =:= read_only orelse Reason =:= target_unavailable orelse
+        Reason =:= ontology_rebuilding orelse Reason =:= ontology_busy orelse
+        Reason =:= cursor_not_found orelse Reason =:= cursor_not_ready orelse
+        Reason =:= cursor_busy orelse
+        Reason =:= invalid_action orelse
+        Reason =:= non_backtrackable_action orelse
+        Reason =:= conflict_retry orelse
+        Reason =:= proof_unavailable orelse Reason =:= result_too_large orelse
+        Reason =:= independent_requires_signed_request orelse
+        Reason =:= independent_nesting orelse
+        Reason =:= independent_mixed_writes orelse
+        Reason =:= independent_scope_required.
+
+-doc "Render one already-normalized local or forwarded result.".
+-spec http_normalized(quod_client_goal:evidence(), result()) ->
+          {pos_integer(), map()}.
+http_normalized(Evidence, {read, Dependencies, Outcome}) ->
+    {Status, Body} = http_normalized(Evidence, Outcome),
+    {Status, Body#{dependencies =>
+        [#{ns => Ns, genesis_anchor => b64url(Anchor), height => integer_to_binary(Height)}
+         || {Ns, Anchor, Height} <- Dependencies]}};
+http_normalized(Evidence, {answers, Height, Blobs}) ->
+    {200, evidence_json(
+            Evidence,
+            #{result => ok, height => Height,
+              bindings => render_bindings(Blobs)})};
+http_normalized(Evidence, {solution, CursorId, Height, Blob}) ->
+    {200, evidence_json(
+            Evidence,
+            #{result => solution, cursor => b64url(CursorId),
+              height => Height, bindings => render_bindings([Blob])})};
+http_normalized(Evidence, stopped) ->
+    {200, evidence_json(Evidence, #{result => stopped})};
+http_normalized(Evidence, fail) ->
+    {200, evidence_json(Evidence, #{result => fail})};
+http_normalized(Evidence, {failed, ReasonsBlob}) ->
+    {ok, Reasons} = quod_wire_term:decode_failure_reasons(ReasonsBlob),
+    {200, evidence_json(
+            Evidence,
+            #{result => fail,
+              reasons => [quod_explorer_http:prolog_text(R) || R <- Reasons]})};
+http_normalized(Evidence, {committed, Blobs, Outcome}) ->
+    {200, evidence_json(
+            Evidence,
+            (committed_json(Outcome))#{result => ok,
+                                       bindings => render_bindings(Blobs)})};
+http_normalized(Evidence, {pending, Ref}) ->
+    {202, evidence_json(Evidence,
+                        (outcome_ref_json(Ref))#{result => pending})};
+http_normalized(_Evidence, {error, _Reason} = Error) ->
+    http_error(Error).
+
+-doc "Render one already-normalized public error without fabricated request evidence.".
+-spec http_error({error, public_error()}) -> {pos_integer(), map()}.
+http_error({error, read_only}) ->
+    {409, #{error => read_only}};
+http_error({error, target_unavailable}) ->
+    {503, #{error => signed_target_unavailable}};
+http_error({error, ontology_rebuilding}) ->
+    {503, #{error => ontology_rebuilding}};
+http_error({error, ontology_busy}) ->
+    {503, #{error => ontology_busy}};
+http_error({error, cursor_not_found}) ->
+    {404, #{error => cursor_not_found}};
+http_error({error, cursor_not_ready}) ->
+    {409, #{error => cursor_not_ready}};
+http_error({error, cursor_busy}) ->
+    {409, #{error => cursor_busy}};
+http_error({error, invalid_action}) ->
+    {400, #{error => invalid_action}};
+http_error({error, non_backtrackable_action}) ->
+    {400, #{error => non_backtrackable_action}};
+http_error({error, conflict_retry}) ->
+    {409, #{error => conflict_retry}};
+http_error({error, result_too_large}) ->
+    %% Delivery failed after execution; retain the original request for recovery.
+    {503, #{error => result_too_large}};
+http_error({error, {invalid_material_policy, Kind}}) ->
+    {500, #{error => invalid_material_policy, kind => Kind}};
+http_error({error, {material_limit, Kind, Resource, Actual, Limit}}) ->
+    {413, #{error => material_limit, kind => Kind, resource => Resource,
+            actual => integer_to_binary(Actual), limit => integer_to_binary(Limit)}};
+http_error({error, {effect_custody_limit, prepared_bytes, Actual, Limit}}) ->
+    {413, #{error => effect_custody_limit, resource => prepared_bytes,
+            actual => integer_to_binary(Actual), limit => integer_to_binary(Limit)}};
+http_error({error, independent_requires_signed_request}) ->
+    {400, #{error => independent_requires_signed_request}};
+http_error({error, independent_nesting}) ->
+    {400, #{error => independent_nesting}};
+http_error({error, independent_mixed_writes}) ->
+    {400, #{error => independent_mixed_writes}};
+http_error({error, independent_scope_required}) ->
+    {400, #{error => independent_scope_required}};
+http_error({error, proof_unavailable}) ->
+    {503, #{error => proof_unavailable}}.
+
+render_bindings(Blobs) ->
+    [begin {ok, Pairs} = decode_binding(Blob), binding_json(Pairs) end || Blob <- Blobs].
+
+-doc "Render verified named bindings identically for live and recovered results.".
+-spec binding_json([{binary(), term()}]) -> #{binary() => binary()}.
+binding_json(Pairs) ->
+    maps:from_list([{Name, quod_client_goal_parser:value_text(Value)}
+                   || {Name, Value} <- Pairs]).
+
+-doc "Decode one named binding already carried by the admitted client reply.".
+-spec decode_binding(term()) ->
+          {ok, [{binary(), term()}]} | {error, bad_term | invalid_result}.
+decode_binding(Blob) when is_binary(Blob) ->
+    quod_wire_term:decode_bindings(Blob, byte_size(Blob));
+decode_binding(_) -> {error, bad_term}.
+
+committed_json(Ref = {transaction, _, _, _}) -> outcome_ref_json(Ref);
+committed_json({group_outcome, Ref, Height, Slots}) ->
+    (outcome_ref_json(Ref))#{height => Height,
+                             participant_slots =>
+                                 [participant_slot_json(S) || S <- Slots]};
+committed_json({operation_outcome, Ref, Rows}) ->
+    (outcome_ref_json(Ref))#{aggregate => quod_operation_vector:aggregate(Rows),
+                           targets => [operation_result_json(Row) || Row <- Rows]}.
+
+operation_result_json({_Target, {committed, Ref}}) ->
+    (outcome_ref_json(Ref))#{status => committed};
+operation_result_json({_Target, {{rejected, Reason}, Ref}}) ->
+    (outcome_ref_json(Ref))#{status => rejected, reason => Reason}.
+
+outcome_ref_json({transaction, Ns, Anchor, TxId}) ->
+    #{ns => Ns, anchor => hex(Anchor), tx_id => hex(TxId)};
+outcome_ref_json(
+  {group, Ns, Anchor, Coordinator, Admission, GroupId}) ->
+    #{ns => Ns, anchor => hex(Anchor), coordinator => hex(Coordinator),
+      coordinator_admission => hex(Admission), group_id => hex(GroupId)};
+outcome_ref_json(
+  {operation, Ns, Anchor, AgentRef, OperationId}) ->
+    #{ns => Ns, anchor => hex(Anchor), agent => agent_json(AgentRef),
+      operation_id => b64url(OperationId)}.
+
+agent_json(AgentRef) ->
+    {ok, #{identity := {AgentNs, AgentAnchor}, reference := Reference}} =
+        quod_agent_ref:decode(AgentRef),
+    #{kind => agent,
+      identity => #{ns => AgentNs, anchor => hex(AgentAnchor)},
+      reference => quod_explorer_http:prolog_text(Reference),
+      reference_wire => b64url(AgentRef)}.
+
+participant_slot_json({{Ns, Anchor}, Slot, Generation}) ->
+    #{ns => Ns, anchor => hex(Anchor), height => Slot,
+      generation => Generation}.
+
+evidence_json(#{request_digest := Digest,
+                request := #{operation_id := OperationId}}, Result) ->
+    Result#{request_digest => b64url(Digest),
+            operation_id => b64url(OperationId)}.
+
+hex(Bytes) -> binary:encode_hex(Bytes, lowercase).
+b64url(Bytes) -> base64:encode(Bytes, #{mode => urlsafe, padding => false}).

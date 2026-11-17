@@ -1,0 +1,27 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+module 'quod_space_tests'
+  quod_space_tests: -ordinary_travel_atomic_test_/0-fun-3-...[0.957 s] ok
+  quod_space_tests: -space_semantics_and_recovery_test_/0-fun-6-...[1.569 s] ok
+  quod_space_tests: -competing_exclusive_admissions_test_/0-fun-12- (gallery)...[0.302 s] ok
+  quod_space_tests: -competing_exclusive_admissions_test_/0-fun-12- (catalogue)...[0.301 s] ok
+  quod_space_tests: -distinct_owner_authorization_test_/0-fun-3- (gallery)...=WARNING REPORT==== 4-Nov-2026::19:37:29.219213 ===
+quod_prolog[host-test-agent]: can_invoke refused a top-level goal at pinned height 9
+[0.876 s] ok
+  quod_space_tests: -distinct_owner_authorization_test_/0-fun-3- (catalogue)...=WARNING REPORT==== 4-Nov-2026::19:37:30.103032 ===
+quod_prolog[host-test-agent]: can_invoke refused a top-level goal at pinned height 9
+[0.871 s] ok
+  quod_space_tests: -ordinary_placement_rollback_and_recovery_test_/0-fun-4-...[0.625 s] ok
+  quod_space_tests: -ordinary_placement_committed_permissions_test_/0-fun-2-...[1.391 s] ok
+  quod_space_tests: -ordinary_placement_policy_conflicts_test_/0-fun-4- (source)...[0.326 s] ok
+  quod_space_tests: -ordinary_placement_policy_conflicts_test_/0-fun-4- (destination)...[0.302 s] ok
+  quod_space_tests: -same_ontology_ordinary_placement_test_/0-fun-1-...[0.469 s] ok
+  quod_space_tests: -ordinary_placement_and_shared_display_projection_test_/0-fun-13-...[1.318 s] ok
+  quod_space_tests: -physical_placement_requires_its_body_pose_test_/0-fun-1-...[0.419 s] ok
+  [done in 9.765 s]
+=======================================================
+  All 13 tests passed.

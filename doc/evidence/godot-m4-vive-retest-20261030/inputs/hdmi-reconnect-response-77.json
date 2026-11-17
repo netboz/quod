@@ -1,0 +1,23 @@
+{
+  "rootFunctionsCell": "46",
+  "completed": true,
+  "raw": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"answers\":{\"vive_hdmi_reconnect\":{\"type\":\"singleSelect\",\"selectedId\":\"reconnected\"}},\"respondedBy\":\"desktop\",\"respondedAt\":1793357681007}"
+      }
+    ],
+    "isError": false
+  },
+  "answer": {
+    "answers": {
+      "vive_hdmi_reconnect": {
+        "type": "singleSelect",
+        "selectedId": "reconnected"
+      }
+    },
+    "respondedBy": "desktop",
+    "respondedAt": 1793357681007
+  }
+}

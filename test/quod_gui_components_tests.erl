@@ -17,6 +17,12 @@ remaining_controls_preserve_binding_and_atomic_refusal_test_() ->
             quod_lobby_tests:assert_read_has_no_io(fun() ->
                 lists:foreach(fun(_) -> ?assertMatch({ok,[_],_},read(Ctx,Ns,Bind(Values))) end,[first,repeated])
             end),
+            {ok, [#{<<"V0">> := Picture}], _} = read(Ctx, Ns, {attribute,picture,image,{0}}),
+            commit(Ctx,Ns,{transaction,{',',{retract,{attribute,picture,image,Picture}},
+                                          {assertz,{attribute,picture,image,none}}}}),
+            ?assertMatch({fail,_},read(Ctx,Ns,{gui_schema,extra,{0},{1}})),
+            commit(Ctx,Ns,{transaction,{',',{retract,{attribute,picture,image,none}},
+                                          {assertz,{attribute,picture,image,Picture}}}}),
             lists:foreach(fun(Bad) ->
                 ?assertMatch({ok,_,{normalized,{failed,_}}},quod_lobby_tests:submit(Ctx,execute,
                     scope(Ns,{transaction,{',',{assertz,bad_table_write},Bind(Bad)}}))),
@@ -390,7 +396,14 @@ exercise(Ctx, Ns) ->
         {assertz, {gui_children, tuning, [level, settings]}}])),
     ?assertMatch({fail, _}, read(Ctx, Ns, {gui_schema, settings, {0}, {1}})).
 
-source(File) -> quod_prolog:read_terms(filename:join(code:priv_dir(quod), "ontologies/" ++ File)).
+source(File) ->
+    case File of
+        "gui_measure.pl" -> quod_ct:gui_terms();
+        "gui_scene.pl" -> quod_ct:gui_terms();
+        "gui_tools.pl" -> quod_ct:gui_terms();
+        "quod_gui.pl" -> quod_ct:gui_terms();
+        _ -> quod_prolog:read_terms(filename:join(code:priv_dir(quod), "ontologies/" ++ File))
+    end.
 fixture() -> quod_prolog:read_terms("test/fixtures/gui-components.pl").
 scope(Ns, Goal) -> {'::', Ns,
     {',', {current_ontology_identity, Ns, quod_simplex:genesis_hash(Ns)}, Goal}}.

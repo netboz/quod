@@ -292,7 +292,7 @@ with_node_generation(Height, RootFacts, Fun) ->
     try quod_ct:with_network_identity(key(254), fun() ->
         with_directory_and_control(fun() ->
             %% The proof gate is owned by the same named table as a real root.
-            RootTable = ets:new('quod_simplex_genesis_quod:root', [named_table, set]),
+            RootTable = ets:new(binary_to_atom(quod_simplex:genesis_table_name(<<"quod:root">>), utf8), [named_table, set]),
             Signer = maps:get(signer, F), Pub = maps:get(pubkey, Signer),
             true = ets:insert(RootTable,
                 [{anchor, key(254)}, {proof_gate, true, 1, [], Pub, [Pub], key(2), #{}}]),

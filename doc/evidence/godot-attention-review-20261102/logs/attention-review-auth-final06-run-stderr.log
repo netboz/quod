@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-attention-review-20261102/signed.py", line 7, in <module>
+    os.umask(0o077);root=Path.cwd();ev=Path(__file__).resolve().parent;label=sys.argv[1];m=json.loads(Path(sys.argv[2]).read_text());server_stage=Path(sys.argv[3]);assert m['passed'] and not m['distributable']
+                                                                                                                                                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

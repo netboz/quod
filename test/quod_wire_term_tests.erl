@@ -1,5 +1,51 @@
 -module(quod_wire_term_tests).
 -include_lib("eunit/include/eunit.hrl").
+-include("retired_remaining_sizes.hrl").
+
+self_scoped_symbols_use_the_same_admission_walk_test() ->
+    S = fun(B) -> {'$quod_symbol', B} end,
+    Head = <<"wire_self_", (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    Data = S(<<"wire_self_data">>),
+    Selectors = [<<"wire:owner">>, 'wire:owner', "wire:owner",
+                 {':', wire, owner}, S(<<"wire:owner">>),
+                 {S(<<":">>), S(<<"wire">>), S(<<"owner">>)}],
+    lists:foreach(fun(Selector) ->
+        Goal = {'::', Selector, {S(Head), Data}},
+        {ok, Names} = quod_wire_term:goal_symbol_names(Goal, <<"wire:owner">>),
+        ?assert(lists:member(Head, Names)),
+        ?assertNot(lists:member(<<"wire_self_data">>, Names)),
+        {ok, {'::', _, {Callable, Data}}} =
+            quod_wire_term:materialize_goal_symbols(Goal, <<"wire:owner">>),
+        ?assert(is_atom(Callable))
+    end, Selectors).
+
+foreign_scope_defers_inner_symbols_even_when_nested_test() ->
+    S = fun(B) -> {'$quod_symbol', B} end,
+    Name = <<"wire_foreign_", (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    Inner = {'::', <<"wire:owner">>, {S(Name), S(<<"wire_foreign_data">>)}},
+    Goal = {S(<<"::">>), <<"wire:foreign">>, Inner},
+    {ok, Names} = quod_wire_term:goal_symbol_names(Goal, <<"wire:owner">>),
+    ?assertNot(lists:member(Name, Names)),
+    ?assertEqual({ok, {'::', <<"wire:foreign">>, Inner}},
+        quod_wire_term:materialize_goal_symbols(Goal, <<"wire:owner">>)),
+    ?assertError(badarg, binary_to_existing_atom(Name, utf8)),
+    {ok, {'::', _, {Callable, _}}} =
+        quod_wire_term:materialize_goal_symbols(Inner, <<"wire:owner">>),
+    ?assert(is_atom(Callable)).
+
+opaque_rule_clause_heads_remain_executable_test() ->
+    S=fun(B)->{'$quod_symbol',B} end,
+    Head= <<"wire_editor_rule_",(integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    Body= <<"wire_editor_body_",(integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    Data=S(<<"wire_editor_opaque_data">>),
+    Rule={S(<<":-">>),{S(Head),Data},{S(Body),Data}},
+    lists:foreach(fun(Operation)->
+        {ok,Materialized}=quod_wire_term:materialize_goal_symbols({S(Operation),Rule}),
+        {_,{':-',{HeadAtom,Data},{BodyAtom,Data}}}=Materialized,
+        ?assert(is_atom(HeadAtom)),?assert(is_atom(BodyAtom)),
+        ?assertEqual(Head,atom_to_binary(HeadAtom,utf8)),
+        ?assertEqual(Body,atom_to_binary(BodyAtom,utf8))
+    end,[<<"asserta">>,<<"assertz">>,<<"retract">>,<<"retractall">>]).
 -include_lib("erlog/src/erlog_int.hrl").
 
 roundtrip_existing_terms_test() ->
@@ -189,9 +235,10 @@ transaction_other_arity_keeps_data_opaque_test() ->
         ?assertError(badarg, binary_to_existing_atom(Name, utf8))
     end, [transaction, {'$quod_symbol', <<"transaction">>}]).
 
-depth_limit_test() ->
+deep_value_roundtrip_test() ->
     Deep = lists:foldl(fun(_, Acc) -> [Acc] end, ok, lists:seq(1, 70)),
-    ?assertEqual({error, bad_term}, quod_wire_term:encode(Deep)).
+    {ok, Wire} = quod_wire_term:encode(Deep),
+    ?assertEqual({ok, Deep}, quod_wire_term:decode(Wire)).
 
 flat_list_spine_does_not_consume_depth_test() ->
     Flat = lists:seq(1, 1000),
@@ -226,16 +273,16 @@ real_erlog_failure_stack_roundtrips_canonically_test() ->
                  quod_wire_term:decode_failure_reasons(Blob)),
     ?assertEqual(Blob, canonical_failure_reasons(Reasons)).
 
-quod_policy_bounds_the_real_erlog_stack_before_encoding_test() ->
+quod_policy_preserves_the_real_erlog_stack_before_encoding_test() ->
     {ok, Native0} = erlog_int:new(erlog_db_dict, null),
     St0 = erlog_int:set_failure_reason_policy(
             {quod_wire_term, valid_failure_reason_stack}, Native0),
     St1 = lists:foldl(
             fun(_, St) -> erlog_int:add_failure_reason(refused, St) end,
-            St0, lists:seq(1, ?ERLOG_MAX_FAILURE_REASONS + 20)),
+            St0, lists:seq(1, ?LEGACY_ERLOG_MAX_FAILURE_REASONS + 20)),
     CountBounded = St1#est.fail_reasons,
-    ?assertEqual(?ERLOG_MAX_FAILURE_REASONS, length(CountBounded)),
-    ?assertEqual(fail_reasons_truncated, hd(CountBounded)),
+    ?assertEqual(?LEGACY_ERLOG_MAX_FAILURE_REASONS + 20, length(CountBounded)),
+    ?assertNot(lists:member(fail_reasons_truncated, CountBounded)),
     ?assert(quod_wire_term:valid_failure_reason_stack(CountBounded)),
     {ok, CountBlob} = quod_wire_term:encode_failure_reasons(CountBounded),
     ?assertEqual(
@@ -243,23 +290,22 @@ quod_policy_bounds_the_real_erlog_stack_before_encoding_test() ->
        quod_wire_term:decode_failure_reasons(CountBlob)),
 
     %% Native ETF counts this high-arity reason below 4 KiB, while the
-    %% atom-safe wire form is above it. The installed policy truncates at the
-    %% creation seam instead of letting scope completion or Decision reject it.
+    %% atom-safe wire form is above it. Both representations preserve the reason.
     CanonicallyLarge = list_to_tuple(lists:duplicate(1200, a)),
     ?assert(erlang:external_size(CanonicallyLarge) =<
-                ?ERLOG_MAX_FAILURE_REASON_BYTES),
+                ?LEGACY_ERLOG_MAX_FAILURE_REASON_BYTES),
     St2 = erlog_int:add_failure_reason(CanonicallyLarge, St0),
-    ?assertEqual([fail_reasons_truncated], St2#est.fail_reasons),
+    ?assertEqual([CanonicallyLarge], St2#est.fail_reasons),
     ?assert(quod_wire_term:valid_failure_reason_stack(
               St2#est.fail_reasons)).
 
 failure_reason_count_and_shape_bounds_are_exact_test() ->
-    AtCount = lists:duplicate(?ERLOG_MAX_FAILURE_REASONS, refused),
+    AtCount = lists:duplicate(?LEGACY_ERLOG_MAX_FAILURE_REASONS, refused),
     ?assertMatch({ok, _}, quod_wire_term:encode_failure_reasons(AtCount)),
-    ?assertEqual(
-       {error, too_large},
+    ?assertMatch(
+       {ok, _},
        quod_wire_term:encode_failure_reasons([refused | AtCount])),
-    ?assertNot(quod_wire_term:valid_failure_reason_stack(
+    ?assert(quod_wire_term:valid_failure_reason_stack(
                  [refused | AtCount])),
     ?assertEqual(
        {error, bad_term},
@@ -272,24 +318,24 @@ failure_reason_count_and_shape_bounds_are_exact_test() ->
        quod_wire_term:encode_failure_reasons([ok | improper_tail])).
 
 failure_reason_canonical_byte_bounds_are_exact_test() ->
-    AtReason = reason_binary_at_wire_size(?ERLOG_MAX_FAILURE_REASON_BYTES),
+    AtReason = reason_binary_at_wire_size(?LEGACY_ERLOG_MAX_FAILURE_REASON_BYTES),
     ?assertMatch(
        {ok, _}, quod_wire_term:encode_failure_reasons([AtReason])),
-    ?assertEqual(
-       {error, too_large},
+    ?assertMatch(
+       {ok, _},
        quod_wire_term:encode_failure_reasons(
          [<<AtReason/binary, 0>>])),
 
     AtStack = failure_reason_stack_at_wire_limit(),
     {ok, AtLimitBlob} = quod_wire_term:encode_failure_reasons(AtStack),
-    ?assertEqual(?ERLOG_MAX_FAILURE_REASONS_BYTES,
+    ?assertEqual(?LEGACY_ERLOG_MAX_FAILURE_REASONS_BYTES,
                  byte_size(AtLimitBlob)),
     ?assertEqual({ok, AtStack},
                  quod_wire_term:decode_failure_reasons(AtLimitBlob)),
     Prefix = lists:droplast(AtStack),
     Last = lists:last(AtStack),
-    ?assertEqual(
-       {error, too_large},
+    ?assertMatch(
+       {ok, _},
        quod_wire_term:encode_failure_reasons(
          Prefix ++ [<<Last/binary, 0>>])).
 
@@ -325,13 +371,13 @@ reason_binary_at_wire_size(Size) ->
     Binary.
 
 failure_reason_stack_at_wire_limit() ->
-    MaxReason = reason_binary_at_wire_size(?ERLOG_MAX_FAILURE_REASON_BYTES),
+    MaxReason = reason_binary_at_wire_size(?LEGACY_ERLOG_MAX_FAILURE_REASON_BYTES),
     Prefix = lists:duplicate(7, MaxReason),
     BaseSize = reason_stack_wire_size(Prefix ++ [<<>>]),
-    Growth = ?ERLOG_MAX_FAILURE_REASONS_BYTES - BaseSize,
+    Growth = ?LEGACY_ERLOG_MAX_FAILURE_REASONS_BYTES - BaseSize,
     true = Growth >= 0,
     Last = binary:copy(<<"s">>, Growth),
-    true = reason_wire_size(Last) =< ?ERLOG_MAX_FAILURE_REASON_BYTES,
+    true = reason_wire_size(Last) =< ?LEGACY_ERLOG_MAX_FAILURE_REASON_BYTES,
     Reasons = Prefix ++ [Last],
-    ?ERLOG_MAX_FAILURE_REASONS_BYTES = reason_stack_wire_size(Reasons),
+    ?LEGACY_ERLOG_MAX_FAILURE_REASONS_BYTES = reason_stack_wire_size(Reasons),
     Reasons.

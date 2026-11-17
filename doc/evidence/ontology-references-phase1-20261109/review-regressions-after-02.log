@@ -1,0 +1,77 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1581 │              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+      │                                                ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 2211 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 2211 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                         ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;31mF[0m
+Failures:
+
+  1) quod_physics_tests:-live_source_missing_space_admission_test_/0-fun-9-/0
+[0;31m     Failure/Error: ?assertMatch({ ok , _ , { normalized , { committed , _ , _ } } }, brief ( Accepted ))
+       expected: = { ok , _ , { normalized , { committed , _ , _ } } }
+            got: {normalized,
+                     {committed,
+                         [<<131,104,1,97,5>>],
+                         {group_outcome,
+                             {group,<<"host-test-node">>,
+                                 <<180,144,169,161,248,82,181,46,14,81,18,78,
+                                   108,59,28,66,12,104,194,94,198,133,18,119,
+                                   15,15,149,45,209,6,245,167>>,
+                                 <<43,12,172,87,102,2,6,181,205,139,210,38,22,
+                                   216,139,60,128,128,0,192,197,200,208,130,
+                                   231,12,175,137,75,213,45,39>>,
+                                 <<129,233,2,177,239,20,169,132,102,63,141,219,
+                                   159,217,7,149,220,27,180,133,178,149,54,178,
+                                   210,60,62,181,7,53,105,106>>,
+                                 <<220,178,79,55,77,140,30,48,17,232,118,173,
+                                   37,200,110,16,134,37,113,211,162,164,121,
+                                   200,147,161,178,148,159,55,185,23>>},
+                             3,
+                             [{{<<"host-test-node">>,
+                                <<180,144,169,161,248,82,181,46,14,81,18,78,
+                                  108,59,28,66,12,104,194,94,198,133,18,119,
+                                  15,15,149,45,209,6,245,167>>},
+                               3,1},
+                              {{<<"live-catalogue">>,
+                                <<105,253,173,218,112,163,146,7,128,158,219,
+                                  121,136,245,40,57,203,253,120,24,31,76,27,
+                                  223,61,74,183,226,216,89,202,247>>},
+                               14,3},
+                              {{<<"live-catalogue-objects">>,
+                                <<75,166,242,65,101,162,168,8,98,183,194,136,
+                                  113,41,15,199,72,110,115,191,46,91,37,190,
+                                  188,168,29,47,210,133,246,10>>},
+                               3,3},
+                              {{<<"quod:space">>,
+                                <<181,194,134,46,211,15,44,181,120,175,183,
+                                  238,191,66,2,21,168,190,182,103,219,180,145,
+                                  36,72,253,22,196,221,193,158,235>>},
+                               3,1}]}}}[0m
+[0;36m     %% eunit_proc.erl:379:in `eunit_proc:with_timeout/3`[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_F6FF3ABB2AAD6EF4
+[0m
+[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_F6FF3ABB2AAD6EF4
+[0m
+
+Finished in 8.224 seconds
+[0;31m77 tests, 1 failures
+[0m===> Error running tests

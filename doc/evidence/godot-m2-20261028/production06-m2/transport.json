@@ -1,0 +1,209 @@
+{
+  "certificate_command": [
+    "openssl",
+    "req",
+    "-x509",
+    "-newkey",
+    "rsa:2048",
+    "-nodes",
+    "-keyout",
+    "/home/yan/.cache/quod-m2-artifacts/private/production06-m2/proxy-key.pem",
+    "-out",
+    "/home/yan/.cache/quod-m2-artifacts/private/production06-m2/proxy-ca.pem",
+    "-days",
+    "1",
+    "-subj",
+    "/CN=127.0.0.1",
+    "-addext",
+    "subjectAltName=IP:127.0.0.1",
+    "-addext",
+    "basicConstraints=critical,CA:TRUE"
+  ],
+  "certificate_child_exit": 0,
+  "origin": "https://127.0.0.1:43053",
+  "expected_hostname": "127.0.0.1",
+  "ca_sha256": "5f706a16a818c3c0730aecb8fe7a3016d2986cbeb5c9beb8cb19fc58e1879943",
+  "backend_ca_sha256": "7a105d1c6b82f93c07727330dfe16d19821cad45fe6f928760cd91b04c9a647a",
+  "certificate_validation": true,
+  "drops": {
+    "signup": 1,
+    "setup": 1,
+    "instruction": 0
+  },
+  "question_faults": {
+    "question_reply_lost": 0,
+    "question_unknown_error": 0
+  },
+  "projection_injections": {
+    "duplicate_projection": 7,
+    "late_after_refresh": 2,
+    "prior_socket_projection": 1
+  },
+  "requests": [
+    {
+      "method": "POST",
+      "route": "/api/auth/challenge",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": null,
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/auth/complete",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": null,
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/ontologies/system",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": null,
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/read",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "fail",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/execute",
+      "status": 200,
+      "flow": "signup",
+      "request_sha256": "b3fc0f46bd949c071b49aa6dec4fa348c01d5954755b04eb0994015afe1356d7",
+      "reply_lost": true,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/outcomes",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "operation_outcome",
+      "outcome_status": "committed",
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/read",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/read",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/execute",
+      "status": 200,
+      "flow": "setup",
+      "request_sha256": "4dea5c784177f0f2104a7f2732fd47088a57880b094a442d4ef02872c0bec97c",
+      "reply_lost": true,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/outcomes",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "operation_outcome",
+      "outcome_status": "committed",
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/read",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/read",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/execute",
+      "status": 200,
+      "flow": "receiver",
+      "request_sha256": "fca7656876452eb14ebb86ef4ca62eb3de6a430a7ec9ec8aa704448326a705ba",
+      "reply_lost": false,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/read",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/goals/read",
+      "status": 200,
+      "flow": null,
+      "request_sha256": null,
+      "reply_lost": false,
+      "result": "ok",
+      "outcome_status": null,
+      "aggregate": null
+    }
+  ]
+}

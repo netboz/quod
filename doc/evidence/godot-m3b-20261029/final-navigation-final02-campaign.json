@@ -1,0 +1,90 @@
+{
+  "server_command": [
+    "python3",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m3b-20261029/serve.py",
+    "final-navigation-final02-server",
+    "--stage",
+    "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+    "--profile",
+    "prod",
+    "--qualified"
+  ],
+  "client": "final02",
+  "passed": true,
+  "commands": [
+    {
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m3b-20261029/run.py",
+        "--timeout",
+        "900",
+        "final-navigation-final02-journey",
+        "--",
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m3b-20261029/inputs/final-navigation-final02-drivers/journey.py",
+        "--journey",
+        "navigation",
+        "--export",
+        "/home/yan/.cache/quod-m3b-artifacts/quod-m3b-client-final02/source/client/godot/dist/quod.x86_64",
+        "--backend-port",
+        "37249",
+        "--backend-ca",
+        "/home/yan/.cache/quod-m3b-artifacts/private/quod-m3b-live-final-navigation-final02-server/backend-ca.pem",
+        "--control-port",
+        "38059",
+        "--network",
+        "CJI73ALVQ7ZpgWvXCjxUSieDa4DqVZZLeIgYSWNd8Bc",
+        "--evidence",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m3b-20261029/final-navigation-final02",
+        "--private",
+        "/home/yan/.cache/quod-m3b-artifacts/private/final-navigation-final02",
+        "--desktop"
+      ],
+      "child_exit": 0
+    },
+    {
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m3b-20261029/run.py",
+        "--timeout",
+        "900",
+        "final-navigation-final02-backup-import",
+        "--",
+        "env",
+        "M3_ROUTE=/home/yan/.cache/quod-m3b-artifacts/private/final-navigation-final02/route.json",
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m3b-20261029/inputs/final-navigation-final02-drivers/local.py",
+        "--phase",
+        "backup-import",
+        "--export",
+        "/home/yan/.cache/quod-m3b-artifacts/quod-m3b-client-final02/source/client/godot/dist/quod.x86_64",
+        "--journey-private",
+        "/home/yan/.cache/quod-m3b-artifacts/private/final-navigation-final02",
+        "--node",
+        "https://127.0.0.1:37249",
+        "--ca",
+        "/home/yan/.cache/quod-m3b-artifacts/private/quod-m3b-live-final-navigation-final02-server/backend-ca.pem",
+        "--evidence",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m3b-20261029/final-navigation-final02-backup-import",
+        "--private",
+        "/home/yan/.cache/quod-m3b-artifacts/private/final-navigation-final02-backup-import",
+        "--desktop"
+      ],
+      "child_exit": 0
+    }
+  ],
+  "driver_inputs": {
+    "doc/evidence/godot-m3b-20261029/campaign.py": "43534b730e92899feaf4dc3b153ee17aeef9096b98c3e4131022ae04d4d55111",
+    "client/godot-tests/journey.py": "c42b11e172bc018a109a8c672df07f801f2e01ea2c6918116373e93256776399",
+    "client/godot-tests/local.py": "ccc309776c51126ad4215735680f8ae843afc5c2575b6b014a82e634d6a27067",
+    "client/godot-tests/desktop_input.py": "8ae06b2a0f0e6c30b76636b5a0590f48370c66ba7f256c70e15426d279f18d26"
+  },
+  "retained_drivers": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m3b-20261029/inputs/final-navigation-final02-drivers",
+  "endpoint": {
+    "port": 37249,
+    "network": "CJI73ALVQ7ZpgWvXCjxUSieDa4DqVZZLeIgYSWNd8Bc",
+    "control_port": 38059,
+    "ca": "/m1b/backend-ca.pem"
+  },
+  "server_child_exit": 0
+}

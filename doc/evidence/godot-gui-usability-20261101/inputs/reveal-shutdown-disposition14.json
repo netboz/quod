@@ -1,0 +1,42 @@
+{
+  "signed13": "whole failure: explicit reveal ran while visible; target1157 vs viewport856; actual primary977..1025",
+  "source_cause": "GUI ontology resolves default column layout; adapter excluded column forms from field scroll/trailing-action composition",
+  "correction": "same column ordering with only trailing contiguous actions outside field scroll; row/grid unchanged",
+  "signed14": {
+    "whole_passed": false,
+    "stored_checks": 62,
+    "children": {
+      "server": {
+        "true_exit": 0
+      },
+      "client-gui-signed": {
+        "explicit_completion": true,
+        "completion_monotonic": 143545.614662138,
+        "true_exit": -15
+      }
+    },
+    "eof": {
+      "server-stdout": true,
+      "server-stderr": true,
+      "client-gui-signed-stdout": true,
+      "client-gui-signed-stderr": true
+    },
+    "post_completion_trigger": {
+      "wrapper_returncode": null,
+      "received_EOF": []
+    },
+    "capture": {
+      "original60s_no_EOF_trigger": true,
+      "attempted": true,
+      "inspected": true,
+      "alive_at_trigger": true,
+      "thread_count": 41,
+      "true_exit": 0,
+      "invocation_sha256": "018f10b2f3b4512e08bb636910b75365325959172c8a870aea876b5751926c9d",
+      "stack_sha256": "abd0f1c186b0eef4d9575a058f9eaea8e7133d6cc2a6372a24a73bada728b2e2"
+    }
+  },
+  "stack_limit": "gdb exits0 but sandbox executable/shared-library symbol loading failed; main/native stacks unresolved, no causal close attribution",
+  "result_raster_limit": "committed-result captured during view withdrawal; later actual native result gesture passed, but raster is not accepted-result visual evidence",
+  "next_distinct_observation": "wait existing notifications for actual accepted visible result before raster; preserve unchanged original bounds and no close policy correction"
+}

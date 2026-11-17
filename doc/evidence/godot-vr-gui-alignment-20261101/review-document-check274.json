@@ -1,0 +1,17 @@
+{
+  "missing_links": [],
+  "requirement_count": 45,
+  "unique_requirement_count": 45,
+  "production_exact_stat_changes_after_receipt": [],
+  "documents": {
+    "doc/evidence/godot-vr-gui-alignment-20261101/conformance-review-274.md": {
+      "sha256": "5b956d3330a5b15fbcf79cfd88e2dbb09c08dbf7d103c96bdcdfdbea91c89844",
+      "bytes": 39150
+    },
+    "nimbalyst-local/handoffs/godot-vr-gui-spec-alignment-result-273.md": {
+      "sha256": "94cec13149836b76b520dd180ef3ce72e9273b71559798209bd16a5663531148",
+      "bytes": 5484
+    }
+  },
+  "checks_are_document_links_and_source_stat_keys_only": true
+}

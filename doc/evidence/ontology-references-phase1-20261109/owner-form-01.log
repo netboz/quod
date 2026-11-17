@@ -1,0 +1,528 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+      ┌─ src/quod_physics.erl:
+      │
+ 1183 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                               ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ src/quod_physics.erl:
+      │
+ 1183 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ src/quod_physics.erl:
+      │
+ 1183 │      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      │                                                                       ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+     ┌─ src/quod_wire_term.erl:
+     │
+ 416 │  collect_goal_symbols({'$quod_symbol', Name}, Acc, Owner) when is_binary(Name) ->
+     │                                                    ╰── Warning: variable 'Owner' is unused
+
+     ┌─ src/quod_wire_term.erl:
+     │
+ 418 │  collect_goal_symbols(Tuple, _Acc, Owner)
+     │                                    ╰── Warning: variable 'Owner' is unused
+
+     ┌─ src/quod_wire_term.erl:
+     │
+ 447 │  collect_goal_symbols(_Goal, Acc, Owner) ->
+     │                                   ╰── Warning: variable 'Owner' is unused
+
+     ┌─ src/quod_wire_term.erl:
+     │
+ 480 │  collect_opaque_goal_positions(_Name, _Tuple, Acc, Owner) ->
+     │                                                    ╰── Warning: variable 'Owner' is unused
+
+     ┌─ src/quod_wire_term.erl:
+     │
+ 489 │  collect_clause_symbol(_Tuple, _Position, _Acc, Owner) ->
+     │                                                 ╰── Warning: variable 'Owner' is unused
+
+     ┌─ src/quod_wire_term.erl:
+     │
+ 516 │  collect_goal_positions(_Tuple, [], Acc, Owner) ->
+     │                                          ╰── Warning: variable 'Owner' is unused
+
+     ┌─ src/quod_wire_term.erl:
+     │
+ 529 │  replace_goal_symbols({'$quod_symbol', Name}, Owner) ->
+     │                                               ╰── Warning: variable 'Owner' is unused
+
+     ┌─ src/quod_wire_term.erl:
+     │
+ 558 │  replace_goal_symbols(Goal, Owner) ->
+     │                             ╰── Warning: variable 'Owner' is unused
+
+     ┌─ src/quod_wire_term.erl:
+     │
+ 564 │  replace_clause_symbol(Tuple, _Position, Owner) ->
+     │                                          ╰── Warning: variable 'Owner' is unused
+
+
+    ┌─ test/quod_catchup_verify_tests.erl:
+    │
+ 53 │  entry_with_data(Entry, Data) ->
+    │  ╰── Warning: function entry_with_data/2 is unused
+
+
+     ┌─ test/quod_gui_hud_tests.erl:
+     │
+ 105 │  node_executed(Ns,Goal) ->
+     │  ╰── Warning: function node_executed/2 is unused
+
+
+    ┌─ test/quod_physics_coordinates_tests.erl:
+    │
+ 56 │      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    │                               ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    ┌─ test/quod_physics_coordinates_tests.erl:
+    │
+ 56 │      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    ┌─ test/quod_physics_coordinates_tests.erl:
+    │
+ 56 │      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    │                                       ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1547 │              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+      │                                                ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 2175 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 2175 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                         ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+[0;31mF[0m[0;31mF[0m[0;31mF[0m[0;31mF[0m[0;31mF[0m[0;31mF[0m[0;31mF[0m[0;31mF[0m[0;31mF[0m[0;31mF[0m[0;31mF[0m[0;31mF[0m[0;31mF[0m[0;31mF[0m[0;32m.[0m[0;32m.[0m[0;32m.[0m[0;31mF[0m=WARNING REPORT==== 9-Nov-2026::17:42:03.642946 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 5
+=WARNING REPORT==== 9-Nov-2026::17:42:04.265193 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 5
+=WARNING REPORT==== 9-Nov-2026::17:42:04.514615 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 6
+=WARNING REPORT==== 9-Nov-2026::17:42:04.742929 ===
+quod_prolog[gui:responsible]: can_invoke refused a top-level goal at pinned height 10
+[0;32m.[0m=WARNING REPORT==== 9-Nov-2026::17:42:07.052425 ===
+quod_prolog[host-test-agent]: can_invoke refused a top-level goal at pinned height 11
+[0;32m.[0m
+Failures:
+
+  1) quod_gui_operations_tests:-prebound_creation_output_is_refused_test_/0-fun-1-/0
+[0;31m     Failure/Error: {error,
+                        {badmatch,{error,{already_started,<0.8448.0>}}},
+                        [{quod_space_creation_tests,'-with_spaces/3-fun-2-',
+                             3,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_space_creation_tests.erl"},
+                              {line,212}]},
+                         {quod_agent_hosting_tests,with_host,4,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"},
+                              {line,1651}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,369}]}]}
+[0m[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_74738E267996DE21
+[0m
+  2) quod_gui_operations_tests:-execution_preserves_authored_output_aliases_test_/0-fun-5-/0
+[0;31m     Failure/Error: {error,
+                        {badmatch,{error,{already_started,<0.8557.0>}}},
+                        [{quod_space_creation_tests,'-with_spaces/3-fun-2-',
+                             3,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_space_creation_tests.erl"},
+                              {line,212}]},
+                         {quod_agent_hosting_tests,with_host,4,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"},
+                              {line,1651}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,369}]}]}
+[0m[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_FCE41BF127674027
+[0m
+  3) quod_gui_operations_tests:-transported_bound_goal_preserves_named_creation_result_test_/0-fun-6-/0
+[0;31m     Failure/Error: {error,
+                        {badmatch,{error,{already_started,<0.8664.0>}}},
+                        [{quod_space_creation_tests,'-with_spaces/3-fun-2-',
+                             3,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_space_creation_tests.erl"},
+                              {line,212}]},
+                         {quod_agent_hosting_tests,with_host,4,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"},
+                              {line,1651}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,369}]}]}
+[0m[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_A2823B7BF1902FB6
+[0m
+  4) quod_gui_operations_tests:-offered_creation_and_instance_operation_test_/0-fun-14-/0
+[0;31m     Failure/Error: {error,
+                        {badmatch,{error,{already_started,<0.8770.0>}}},
+                        [{quod_space_creation_tests,'-with_spaces/3-fun-2-',
+                             3,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_space_creation_tests.erl"},
+                              {line,212}]},
+                         {quod_agent_hosting_tests,with_host,4,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"},
+                              {line,1651}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,369}]}]}
+[0m[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_6E84BCC4BCA0606B
+[0m
+  5) quod_gui_operations_tests:-binding_refuses_invalid_or_changed_contract_test_/0-fun-5-/0
+[0;31m     Failure/Error: {error,
+                        {badmatch,{error,{already_started,<0.8877.0>}}},
+                        [{quod_space_creation_tests,'-with_spaces/3-fun-2-',
+                             3,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_space_creation_tests.erl"},
+                              {line,212}]},
+                         {quod_agent_hosting_tests,with_host,4,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"},
+                              {line,1651}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,369}]}]}
+[0m[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_3BABC28C1C03D268
+[0m
+  6) quod_gui_operations_tests:-foreign_recipe_compiles_at_owner_and_executes_at_storage_test_/0-fun-5-/0
+[0;31m     Failure/Error: {error,
+                        {badmatch,{error,{already_started,<0.8984.0>}}},
+                        [{quod_space_creation_tests,'-with_spaces/3-fun-2-',
+                             3,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_space_creation_tests.erl"},
+                              {line,212}]},
+                         {quod_agent_hosting_tests,with_host,4,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"},
+                              {line,1651}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,369}]}]}
+[0m[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_E4C3A4B85D638590
+[0m
+  7) quod_gui_operations_tests:-malformed_outputs_and_ambiguous_offers_are_refused_test_/0-fun-5-/0
+[0;31m     Failure/Error: {error,
+                        {badmatch,{error,{already_started,<0.9091.0>}}},
+                        [{quod_space_creation_tests,'-with_spaces/3-fun-2-',
+                             3,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_space_creation_tests.erl"},
+                              {line,212}]},
+                         {quod_agent_hosting_tests,with_host,4,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"},
+                              {line,1651}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,369}]}]}
+[0m[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_17966B21BCB6304D
+[0m
+  8) quod_gui_operations_tests:-discovery_is_read_only_even_in_execute_test_/0-fun-3-/0
+[0;31m     Failure/Error: {error,
+                        {badmatch,{error,{already_started,<0.9198.0>}}},
+                        [{quod_space_creation_tests,'-with_spaces/3-fun-2-',
+                             3,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_space_creation_tests.erl"},
+                              {line,212}]},
+                         {quod_agent_hosting_tests,with_host,4,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"},
+                              {line,1651}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,369}]}]}
+[0m[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_5414B86B54D68257
+[0m
+  9) quod_gui_menu_tests:-default_pie_for_an_instance_test_/0-fun-11-/0
+[0;31m     Failure/Error: {error,
+                        {badmatch,{error,{already_started,<0.9305.0>}}},
+                        [{quod_space_creation_tests,'-with_spaces/3-fun-2-',
+                             3,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_space_creation_tests.erl"},
+                              {line,212}]},
+                         {quod_agent_hosting_tests,with_host,4,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"},
+                              {line,1651}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,369}]}]}
+[0m[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_4DB97BD6567D7884
+[0m
+  10) quod_gui_menu_tests:-space_pie_overrides_the_default_test_/0-fun-21-/0
+[0;31m     Failure/Error: {error,
+                        {badmatch,{error,{already_started,<0.9413.0>}}},
+                        [{quod_space_creation_tests,'-with_spaces/3-fun-2-',
+                             3,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_space_creation_tests.erl"},
+                              {line,212}]},
+                         {quod_agent_hosting_tests,with_host,4,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"},
+                              {line,1651}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,369}]}]}
+[0m[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_2A2D8B435B44D857
+[0m
+  11) quod_gui_menu_tests:-interior_boundary_uses_the_exterior_recipes_test_/0-fun-10-/0
+[0;31m     Failure/Error: {error,
+                        {badmatch,{error,{already_started,<0.9521.0>}}},
+                        [{quod_space_creation_tests,'-with_spaces/3-fun-2-',
+                             3,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_space_creation_tests.erl"},
+                              {line,212}]},
+                         {quod_agent_hosting_tests,with_host,4,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"},
+                              {line,1651}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,369}]}]}
+[0m[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_2761C7FD149C8307
+[0m
+  12) quod_gui_menu_tests:-unplaced_agent_pie_offers_the_ways_in_test_/0-fun-11-/0
+[0;31m     Failure/Error: {error,
+                        {badmatch,{error,{already_started,<0.9629.0>}}},
+                        [{quod_space_creation_tests,'-with_spaces/3-fun-2-',
+                             3,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_space_creation_tests.erl"},
+                              {line,212}]},
+                         {quod_agent_hosting_tests,with_host,4,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"},
+                              {line,1651}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,369}]}]}
+[0m[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_9DBB340C1B9CED88
+[0m
+  13) quod_gui_menu_tests:-menu_view_socket_projects_the_pie_test_/0-fun-3-/0
+[0;31m     Failure/Error: {error,
+                        {badmatch,{error,{already_started,<0.9737.0>}}},
+                        [{quod_space_creation_tests,'-with_spaces/3-fun-2-',
+                             3,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_space_creation_tests.erl"},
+                              {line,212}]},
+                         {quod_agent_hosting_tests,with_host,4,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"},
+                              {line,1651}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,369}]}]}
+[0m[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_A67E0EDC961BDF6D
+[0m
+  14) quod_gui_menu_tests:-overflow_nests_under_more_and_keeps_pins_test_/0-fun-22-/0
+[0;31m     Failure/Error: {error,
+                        {badmatch,{error,{already_started,<0.9845.0>}}},
+                        [{quod_space_creation_tests,'-with_spaces/3-fun-2-',
+                             3,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_space_creation_tests.erl"},
+                              {line,212}]},
+                         {quod_agent_hosting_tests,with_host,4,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"},
+                              {line,1651}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,369}]}]}
+[0m[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_8D41C3C7D4D090D5
+[0m
+  15) quod_gui_question_tests:-live_opening_commits_question_hud_and_presentation_together_test_/0-fun-39-/0
+[0;31m     Failure/Error: {error,
+                        {badmatch,{error,{already_started,<0.11583.0>}}},
+                        [{quod_gui_question_tests,
+                             '-live_opening_commits_question_hud_and_presentation_together_test_/0-fun-38-',
+                             1,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_gui_question_tests.erl"},
+                              {line,193}]},
+                         {quod_agent_hosting_tests,with_host,4,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"},
+                              {line,1651}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,369}]}]}
+[0m[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_83810C3BEF7BB986
+[0m
+
+Finished in 12.732 seconds
+[0;31m20 tests, 15 failures
+[0m===> Error running tests

@@ -1,0 +1,96 @@
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action create-key
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action connect
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action register
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action prepare
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action setup
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS completed setup is disclosed separately while the working task remains primary
+PASS actual signed initial raster retained
+PASS actual product reveals the native target without diagnostic scrolling: create-operations
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS one native pointer gesture reaches exactly one existing button
+PASS native pointer releases its existing capture
+PASS actual signed choose-storage raster retained
+PASS actual product reveals the native target without diagnostic scrolling: operation-storage
+PASS one native pointer gesture reaches exactly one existing button
+PASS native pointer releases its existing capture
+PASS the actual offered-choice popup opens
+PASS actual signed popup-operation-storage raster retained
+PASS the desktop popup owns a real native window and its own content viewport
+<private fixture/client diagnostic>
+PASS one native popup selection reaches the original choice owner
+<private fixture/client diagnostic>
+PASS actual product reveals the native target without diagnostic scrolling: operation-class
+PASS one native pointer gesture reaches exactly one existing button
+PASS native pointer releases its existing capture
+PASS the actual offered-choice popup opens
+PASS actual signed popup-operation-class raster retained
+PASS the desktop popup owns a real native window and its own content viewport
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS one native popup selection reaches the original choice owner
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS actual signed create-form raster retained
+PASS signed authored label and actual submission role select the primary action
+PASS the selected authored task has one visible title rather than a hidden dropdown caption
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>

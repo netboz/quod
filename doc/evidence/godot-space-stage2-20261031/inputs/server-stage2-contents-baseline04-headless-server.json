@@ -1,0 +1,208 @@
+{
+  "command": [
+    "docker",
+    "run",
+    "--rm",
+    "-i",
+    "--init",
+    "--user",
+    "1000:1000",
+    "--network",
+    "host",
+    "--name",
+    "quod-m4-live-stage2-contents-baseline04-headless-server",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/server-runtime-restoration05:/work:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone:/code:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031:/evidence:ro",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-stage2-contents-baseline04-headless-server:/m1b",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-stage2-contents-baseline04-headless-server/tmp:/tmp",
+    "-w",
+    "/work",
+    "-e",
+    "QUOD_M3B_PRIVATE=/m1b",
+    "-e",
+    "ERL_FLAGS=+S 4:4 +SDio 2 +SDcpu 2",
+    "--entrypoint",
+    "/bin/sh",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/stage2-owner-final02/lib:/compiler:ro",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-stage2-contents-baseline04-headless-server/common_predicates.pl:/work/_build/prod/lib/quod/priv/ontologies/common_predicates.pl:ro",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-stage2-contents-baseline04-headless-server/common_predicates.pl:/work/priv/ontologies/common_predicates.pl:ro",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-stage2-contents-baseline04-headless-server/quod_space.pl:/work/_build/prod/lib/quod/priv/ontologies/quod_space.pl:ro",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-stage2-contents-baseline04-headless-server/quod_space.pl:/work/priv/ontologies/quod_space.pl:ro",
+    "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+    "-c",
+    "exec erl -noshell -pa /work/_build/prod/lib/*/ebin /work/_build/test/lib/quod/test -eval \"$1\"",
+    "sh",
+    "{ok,quod_client_view}=compile:file(\"/m1b/quod_client_view.erl\",[{outdir,\"/m1b/ebin\"},{i,\"/code/include\"}]),\ntrue=code:add_patha(\"/compiler/erlog/ebin\"),\n\n{ok,quod_agent_hosting_tests}=compile:file(\"/m1b/quod_agent_hosting_tests.erl\",[export_all,{outdir,\"/m1b/ebin\"},{i,\"/work/include\"}]),\n{ok,quod_physics_tests}=compile:file(\"/work/test/quod_physics_tests.erl\",[export_all,{outdir,\"/m1b/ebin\"},{i,\"/work/include\"}]),\n{ok,godot_m3b_physics_fixture}=compile:file(\"/m1b/godot_m3b_physics_fixture.erl\",[{outdir,\"/m1b/ebin\"}]),\ntrue=code:add_patha(\"/m1b/ebin\"),true=code:add_patha(\"/m1b/predicates-ebin\"),godot_m3b_physics_fixture:start(),halt().\n"
+  ],
+  "stage": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/server-runtime-restoration05",
+  "profile": "prod",
+  "runtime_recompiled": true,
+  "executed_current_sources": {
+    "src/quod_client_auth.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031/inputs/stage2-contents-baseline04-headless-server-quod_client_auth.erl",
+      "sha256": "919c55738448d003810ecd59eb4f7f8ac9ce8d396ef9d57a1c3cceb1499d9ad5",
+      "compiled_object_sha256": "a4325fcc4249ad2d1871e665787f9d1cd27e004c53d12d262dbda89d80885c91",
+      "actual_qualification": "doc/evidence/godot-space-stage2-20261031/inputs/stage2-owner-final02.json",
+      "qualification_sha256": "bdfa1af0038fe1201a5729648135108aaebb96188c9d59a88abe2f4f0809ff52"
+    },
+    "src/quod_wire_term.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031/inputs/stage2-contents-baseline04-headless-server-quod_wire_term.erl",
+      "sha256": "693a2613a8e79c79094810c7777df846fd2b393d076809fb43faf5b989f2f5ff",
+      "compiled_object_sha256": "3f377b838eded1326091d1937e85614ef667892ccbe34e7028533df842ca4311",
+      "actual_qualification": "doc/evidence/godot-space-stage2-20261031/inputs/stage2-owner-final02.json",
+      "qualification_sha256": "bdfa1af0038fe1201a5729648135108aaebb96188c9d59a88abe2f4f0809ff52"
+    },
+    "src/predicates/quod_ask.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031/inputs/stage2-contents-baseline04-headless-server-quod_ask.erl",
+      "sha256": "e40c7ccf2b2f61ebaf0647d6961b19a9b381cbdbed10cfa34724acc76ff74fc5",
+      "compiled_object_sha256": "bc65c1f62890c0793150974af19cdcea82905a4143ab143b8f9636f1b49fd1b2",
+      "actual_qualification": "doc/evidence/godot-space-stage2-20261031/inputs/stage2-owner-final02.json",
+      "qualification_sha256": "bdfa1af0038fe1201a5729648135108aaebb96188c9d59a88abe2f4f0809ff52"
+    },
+    "src/quod_ontology_name.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031/inputs/stage2-contents-baseline04-headless-server-quod_ontology_name.erl",
+      "sha256": "bade11fb98953f68ffaf63cd29f599189692c52b32ab943b8597bda2e87e6e9f",
+      "compiled_object_sha256": "51448778f3c2ce985d9152c00e06625a2e45f90cb2453fe1f9cde81d831813d8",
+      "actual_qualification": "doc/evidence/godot-space-stage2-20261031/inputs/stage2-owner-final02.json",
+      "qualification_sha256": "bdfa1af0038fe1201a5729648135108aaebb96188c9d59a88abe2f4f0809ff52"
+    },
+    "src/quod_client_view.erl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031/inputs/stage2-contents-baseline04-headless-server-quod_client_view.erl",
+      "sha256": "6b23f6992f2e8f4aadfa9258e05b6c625a9a4b82e5c775e222a1107a0f31cbc2",
+      "mode": 33188
+    },
+    "priv/ontologies/common_predicates.pl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031/inputs/stage2-contents-baseline04-headless-server-common_predicates.pl",
+      "sha256": "3d391ada5249cdb65da39bf2b55bc5679cf2be7d2384bb3d587078b13ef50bc9",
+      "mode": 33188
+    },
+    "priv/ontologies/quod_space.pl": {
+      "saved_source": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031/inputs/stage2-contents-baseline04-headless-server-quod_space.pl",
+      "sha256": "2fd737f7e949bb931ea36ce24ebb12823e8184fd05cdd6b04e27c6b2ad569c38",
+      "mode": 33188
+    }
+  },
+  "worker_session": "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
+  "factory_adapter": {
+    "original_sha256": "749de71b7c5278fd2924854d5104528e2b038904a9744255abfadcff4d15d8a9",
+    "adapted_sha256": "b5078b85a20efa3e9a4fb33bfe59d5bb53da80631b11800087bddcd028ed2137",
+    "exact_replacements": [
+      {
+        "before": "_ = file:del_dir_r(Dir),\n    ok.",
+        "after": "ok.",
+        "reason": "Preserve private disposable fixture storage after stopping all owners; never include its credentials in source snapshots."
+      },
+      {
+        "before": "{ok, Journal} = quod_effect_journal:start_link(#{data_dir => Dir}),",
+        "after": "ok = application:set_env(quod, effect_journal_data_dir, Dir),\n    {ok, Journal} = quod_effect_journal:start_link(),",
+        "reason": "Existing production journal configuration and start_link/0; start_link/1 is TEST-only."
+      }
+    ],
+    "physics_host_adapter": {
+      "original_sha256": "b22524db9a33a08462663343723065d49874e78e996a66bc2d867de45e802d4c",
+      "adapted_sha256": "5a800976f7615ab5fe938002d580aae9267b96c01c26ae9c7130f515ef8d059a",
+      "exact_replacements": [
+        {
+          "before": "ok = file:del_dir_r(Dir),\n            Value;",
+          "after": "Value;",
+          "reason": "Retain private disposable fixture stores."
+        },
+        {
+          "before": "{ok, Auth} = quod_client_auth:start_link(#{network_id => <<42:256>>, node_key => Pub}),",
+          "after": "{ok, Auth} = quod_client_auth:start_link(),",
+          "reason": "Use production start_link/0; the existing desired root identity and node_pubkey configuration supply these same identities."
+        }
+      ],
+      "reason": "Retain fixture stores and materialize the dispatcher plus its declared predicate-module artifact set in a private writable directory; the existing helper installs its own test beam there."
+    },
+    "copied_runtime_outputs": {
+      "quod_predicates.beam": "9619e231620349983667a8f43e8ab56ecd864287639b9ea137399cfe75b12bf6",
+      "quod_agent_predicates.beam": "3902d38a3c3e39f416c64285c643f85688866e158acabdc1853e3a4c5094d6e6",
+      "quod_agent_work_predicates.beam": "4963ac821b31a19c0d825647797ca93eba25d930167d427ce4864a3eb2491110",
+      "quod_committee_predicates.beam": "f72587521f2a4378f95f841cbe81556fe47aa68653b46d0bcf5794ff0e47c367",
+      "quod_directory_predicates.beam": "5beee60e793d88afcdf1b0b2288e10875f12ad5888b117fbbe50e141ca870efc",
+      "quod_gui_predicates.beam": "eb2e24401f0170074e01c1bc176edfc0cc8c366f165dde8425b5d1ee5120d5ef",
+      "quod_ontology_predicates.beam": "adb4d1de0cb67b0f46156c5b2461a18d303d6de3ff66834a0453c087acc696e9",
+      "quod_physics_predicates.beam": "1f431d3a0410e4908890b8f0c3249b0634d406d49d806a99301ac6bd704562df",
+      "quod_runtime_predicates.beam": "da74a2894f47a5dc271b55645ecf1f82198be3237bc2421216b2d761df794926"
+    },
+    "predicate_module_source_bindings": {
+      "src/predicates/quod_agent_predicates.erl": "f2d6dc55014000269a91140cac8f0a29160415991661a300996b135d87979cd3",
+      "src/predicates/quod_agent_work_predicates.erl": "a7981499f2eb5e860125a955966788f56f3e3be49afd97233cf9ca57f7d22ed5",
+      "src/predicates/quod_committee_predicates.erl": "fc762b2d0b00ba48af0d5568cb3824a0815d9c4bb8e203c77fdfbcc9729ae7e6",
+      "src/predicates/quod_directory_predicates.erl": "3352607e064f2869e0ebfe3717543482e6e4543d8cbd587eb58cb769ac5ea5bb",
+      "src/predicates/quod_gui_predicates.erl": "cfb3a81dc2f7b5ee1099783edc9a9ad811d027165799328e220b22fc761b8fe8",
+      "src/predicates/quod_ontology_predicates.erl": "3b850bf6765530ac08a20bf24ca1c5de5deb3cebb0374cdbd924d60bf542c122",
+      "src/predicates/quod_physics_predicates.erl": "e0ff850700a0e6ce0b76c139160479d0ec4fc0441f8245840e300b8b8b909f5b",
+      "src/predicates/quod_runtime_predicates.erl": "967058d2f40166b2d75718fffbea901869b62001ae3ed817665a47343beeae57"
+    },
+    "compiler_library": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/stage2-owner-final02/lib",
+      "header_sha256": "fc2290033440d71447bb0b19eac04e81de1998438cfc225082e9200ac9595f20",
+      "qualification": "doc/evidence/godot-space-stage2-20261031/inputs/stage2-owner-final02.json",
+      "runtime_objects_from_readonly_stage05": true
+    }
+  },
+  "driver_sources": {
+    "serve.py": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031/inputs/stage2-contents-baseline04-headless-server-serve.py",
+      "sha256": "9690bf098e3bbe4735e53ad7fed8a0a5b6acdd3748620d83b4525e8c1b31a8f2"
+    },
+    "godot_m3b_fixture.erl": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031/inputs/stage2-contents-baseline04-headless-server-godot_m3b_fixture.erl",
+      "sha256": "c895246b8d4df73560cc042b0ff459b4f33bb46a8870aa52bc4330c3817db769"
+    },
+    "godot_m3b_physics_fixture.erl": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031/inputs/stage2-contents-baseline04-headless-server-godot_m3b_physics_fixture.erl",
+      "sha256": "06b764596bf6aaa4e58549a21d56ae10b56f60f9891d38e4ef8c74601da7392d"
+    }
+  },
+  "private_raw_log": "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-stage2-contents-baseline04-headless-server/server-raw.log",
+  "child_exit": 0,
+  "elapsed_seconds": 71.46921602899965,
+  "affected_compiled_outputs": {
+    "ebin/quod_client_auth.beam": {
+      "sha256": "a4325fcc4249ad2d1871e665787f9d1cd27e004c53d12d262dbda89d80885c91",
+      "bytes": 12744
+    },
+    "ebin/quod_wire_term.beam": {
+      "sha256": "3f377b838eded1326091d1937e85614ef667892ccbe34e7028533df842ca4311",
+      "bytes": 14388
+    },
+    "ebin/quod_agent_hosting_tests.beam": {
+      "sha256": "ed73de3bcb19cd7ad92b7abae737504b7007794c05e417fc42106d8141aa357b",
+      "bytes": 101008
+    },
+    "ebin/quod_client_view.beam": {
+      "sha256": "adb4f53061003e7b537fc6360adf003414cc45c7cc7fcc3746111f1f6c87e40a",
+      "bytes": 34992
+    },
+    "ebin/quod_ask.beam": {
+      "sha256": "bc65c1f62890c0793150974af19cdcea82905a4143ab143b8f9636f1b49fd1b2",
+      "bytes": 42388
+    },
+    "ebin/godot_m3b_physics_fixture.beam": {
+      "sha256": "600a03cf6ab7984ab3f00ecfba31fab5caa035943e7aebc28567d90cd886564e",
+      "bytes": 8800
+    },
+    "ebin/quod_physics_tests.beam": {
+      "sha256": "bd3b75efeb67ea39d246cca912be64dfad6398ac32c17d9220dc8ab87e6ab98d",
+      "bytes": 484204
+    },
+    "ebin/quod_ontology_name.beam": {
+      "sha256": "51448778f3c2ce985d9152c00e06625a2e45f90cb2453fe1f9cde81d831813d8",
+      "bytes": 1532
+    }
+  }
+}

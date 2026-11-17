@@ -1,0 +1,15 @@
+{
+  "command": [
+    "env",
+    "-u",
+    "LD_LIBRARY_PATH",
+    "-u",
+    "LD_PRELOAD",
+    "node",
+    "client/godot-tests/backup-interop.mjs",
+    "/tmp/quod-m1b-crypto-03-private/exported-backup.json"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 0.25477301700084354
+}

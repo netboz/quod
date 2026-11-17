@@ -1,0 +1,15 @@
+PASS enabled action create-key
+PASS enabled action connect
+PASS ordinary signed Connect uses the fresh fixture trust
+PASS enabled action register
+PASS enabled action prepare
+PASS enabled action setup
+PASS ordinary current interior is reachable before any helper selection or scroll
+PASS fresh ordinary space has no manufactured contents
+PASS authorized same-ontology fixture offers a non-space instance form and two visual occurrences
+PASS existing signed owner creates one independent pending request
+PASS existing signed owner creates one independent pending request
+PASS exact visible occurrence is reachable before native picking
+PASS one native pick selects the exact occurrence and semantic subject without travel
+PASS offered ontology action form binds to the selected visual and exact subject
+{"passed": false, "failure": "AssertionError: ", "children": {"server": 0, "client-initial": 1}, "native_inputs": 0}

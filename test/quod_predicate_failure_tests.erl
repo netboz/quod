@@ -1,11 +1,26 @@
 -module(quod_predicate_failure_tests).
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
--include("quod_ingress_limits.hrl").
 
 %% These contracts cannot be violated by signed ingress: it creates the scope
 %% and staging authority itself. Exercise their real overlay owners directly,
 %% rather than adding a public way to forge those private values.
+authored_clause_request_preserves_values_and_aliases_test() ->
+    with_state(fun(Base) ->
+        St = overlay(Base, #{}),
+        Clause = {':-', {related, {10}, {11}}, {pair, {10}, {11}}},
+        Action = {create_ontology, <<"clause:test">>, [{terms, [Clause]}]},
+        {Handle, Bound} = quod_erlog_db_local_prove:register_action_request(St, Action, prepared),
+        {Renamed, _, _} = erlog_int:term_instance(Action, 1000),
+        ?assertEqual({ok, prepared}, quod_erlog_db_local_prove:action_request(Bound, Handle, Renamed)),
+        [ ?assertEqual(error, quod_erlog_db_local_prove:action_request(Bound, Handle,
+            {create_ontology, <<"clause:test">>, [{terms, [Changed]}]})) || Changed <-
+            [{':-', {related, fixed, {11}}, {pair, fixed, {11}}},
+             {':-', {related, {10}, {10}}, {pair, {10}, {10}}},
+             {':-', {related, {10}, {11}}, {pair, {11}, {10}}}]],
+        ?assertEqual(error, quod_erlog_db_local_prove:action_request(Bound, make_ref(), Renamed))
+    end).
+
 physics_private_contracts_test() ->
     with_state(fun(Base) ->
         Read = quod_predicates:set_context(overlay(Base,
@@ -89,12 +104,6 @@ committee_refusal_reasons_test() ->
             {remove,Key},proof_state(Base),#{})),
         ?assertMatch({fail,_},quod_proof_session:run_first(
             {remove,<<2:256>>},proof_state(Base),#{}))
-    end),
-    Facts = [{peer_admitted,<<I:256>>,<<"host">>,1,<<I:256>>}
-             || I <- lists:seq(1,?MAX_VALIDATORS)],
-    with_state(Facts,fun(Base) ->
-        assert_reason(committee_full,quod_proof_session:run_first(
-            {admit,<<0:256>>,<<"host">>,1},proof_state(Base),#{}))
     end).
 
 missing_ontology_anchor_reason_test() ->

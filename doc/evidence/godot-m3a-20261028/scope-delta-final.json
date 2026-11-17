@@ -1,0 +1,323 @@
+{
+  "head": "69196a36caeeb06e6ee07982f1ab1988d7c16b43",
+  "metric": "Physical lines; all active new files included; evidence/generated/private stores excluded",
+  "groups": {
+    "specifications": {
+      "added": 199,
+      "removed": 36,
+      "files": [
+        "doc/godot-foundation-contract.md",
+        "doc/gui-implementation-plan.md",
+        "doc/physics-native.md",
+        "doc/runtime-and-agents.md",
+        "doc/spaces.md"
+      ],
+      "net": 163
+    },
+    "preexisting-coordination": {
+      "added": 2,
+      "removed": 2,
+      "files": [
+        "nimbalyst-local/handoffs/godot-m3a-prompt.md"
+      ],
+      "net": 0
+    },
+    "production": {
+      "added": 1175,
+      "removed": 537,
+      "files": [
+        "priv/ontologies/common_predicates.pl",
+        "priv/ontologies/gui_instance.pl",
+        "priv/ontologies/gui_scene.pl",
+        "priv/ontologies/lobby_instance.pl",
+        "priv/ontologies/lobby_worlds.pl",
+        "priv/ontologies/quod_physics.pl",
+        "priv/ontologies/quod_space.pl",
+        "priv/ontologies/user_instance.pl",
+        "priv/ontologies/voxel_world_view.pl",
+        "src/quod_client_view.erl",
+        "src/quod_committed_projection.erl",
+        "src/quod_physics.erl",
+        "src/quod_physics_coordinates.erl",
+        "src/quod_predicates.erl",
+        "src/quod_runtime.erl",
+        "priv/ontologies/geometry_schema.pl",
+        "priv/ontologies/gui_forms.pl",
+        "src/quod_physics_frames.erl"
+      ],
+      "net": 638
+    },
+    "tests": {
+      "added": 808,
+      "removed": 85,
+      "files": [
+        "test/quod_agent_predicates_tests.erl",
+        "test/quod_common_primitives_tests.erl",
+        "test/quod_ct.erl",
+        "test/quod_gui_examples_tests.erl",
+        "test/quod_gui_operations_tests.erl",
+        "test/quod_gui_stage1_tests.erl",
+        "test/quod_lifecycle_single_path_tests.erl",
+        "test/quod_lobby_tests.erl",
+        "test/quod_personal_agent_tests.erl",
+        "test/quod_physics_coordinates_tests.erl",
+        "test/quod_physics_tests.erl",
+        "test/quod_space_creation_tests.erl",
+        "test/quod_space_tests.erl"
+      ],
+      "net": 723
+    },
+    "archive": {
+      "added": 5,
+      "removed": 0,
+      "files": [
+        "outdated/ontologies/prolog/m3a-space-entity-pose.pl"
+      ],
+      "net": 5
+    }
+  },
+  "files": {
+    "doc/godot-foundation-contract.md": {
+      "kind": "tracked change",
+      "added": 24,
+      "removed": 4,
+      "sha256": "fc917e4ebc5820fd2b2d6c75649869f77762f914389785d4b0757b31205cfe95"
+    },
+    "doc/gui-implementation-plan.md": {
+      "kind": "tracked change",
+      "added": 16,
+      "removed": 7,
+      "sha256": "cca6c3309e03856cb98205e59d5edbecdb0e7366a6e0bad0bdd5d39268c4b930"
+    },
+    "doc/physics-native.md": {
+      "kind": "tracked change",
+      "added": 83,
+      "removed": 3,
+      "sha256": "ac11fb27931170add7b32e7e2dec38f1fd766e182f5217c33abc80a41eec1eda"
+    },
+    "doc/runtime-and-agents.md": {
+      "kind": "tracked change",
+      "added": 15,
+      "removed": 1,
+      "sha256": "4c6aa48b098b7d0ba18de4ee760ff403666af7cc279ab3af6e5370cf6850de4a"
+    },
+    "doc/spaces.md": {
+      "kind": "tracked change",
+      "added": 61,
+      "removed": 21,
+      "sha256": "75d8552232cfbd0ecc76d5eed40b6c8aa324ca6f998dc12f74282c8246237122"
+    },
+    "nimbalyst-local/handoffs/godot-m3a-prompt.md": {
+      "kind": "tracked change",
+      "added": 2,
+      "removed": 2,
+      "sha256": "21acf3d8ad99f3893d811cb49c4eb194478368d08b63ba357247268a271e63b8"
+    },
+    "priv/ontologies/common_predicates.pl": {
+      "kind": "tracked change",
+      "added": 42,
+      "removed": 2,
+      "sha256": "9bfb65f34ccf794408cf7f56bcc795430812a0c25abc5c722d7320ecdb68c123"
+    },
+    "priv/ontologies/gui_instance.pl": {
+      "kind": "tracked change",
+      "added": 19,
+      "removed": 311,
+      "sha256": "3ba66deb9d36308a783b61583b260b82783de36b1b9fd729d9b23d8ce95107c0"
+    },
+    "priv/ontologies/gui_scene.pl": {
+      "kind": "tracked change",
+      "added": 9,
+      "removed": 1,
+      "sha256": "ff972d8136bc4355c985b232c6ee21ff7f44c3c1484a089aab976e4c7ccfa617"
+    },
+    "priv/ontologies/lobby_instance.pl": {
+      "kind": "tracked change",
+      "added": 4,
+      "removed": 4,
+      "sha256": "57be0ddfc8d134da10e374bc493d8e4e6940c4f740ab3e4dc86861fe6a724a0a"
+    },
+    "priv/ontologies/lobby_worlds.pl": {
+      "kind": "tracked change",
+      "added": 4,
+      "removed": 4,
+      "sha256": "9b8388b039bee05bc8a8464dfc6a729c2c8dfd9447cb9cf913c87374a628f66b"
+    },
+    "priv/ontologies/quod_physics.pl": {
+      "kind": "tracked change",
+      "added": 287,
+      "removed": 115,
+      "sha256": "b24718fe4ee6f8c7aff9644dc3580d36cb2963e08cb936a3af0b119d0af7c439"
+    },
+    "priv/ontologies/quod_space.pl": {
+      "kind": "tracked change",
+      "added": 232,
+      "removed": 65,
+      "sha256": "ac3fcb0037edf7372cee133c81b5bbaca3a77311f3db3fea7b354d2005339024"
+    },
+    "priv/ontologies/user_instance.pl": {
+      "kind": "tracked change",
+      "added": 44,
+      "removed": 5,
+      "sha256": "cf1bc315213bf679df3259ff8deaaeaca973dcaf65d25769ae2587c8ad7570ab"
+    },
+    "priv/ontologies/voxel_world_view.pl": {
+      "kind": "tracked change",
+      "added": 1,
+      "removed": 1,
+      "sha256": "9b8a5505d68bf1399aced9b867acf88a39be2fefa3366a3a757a5e758c31cf8e"
+    },
+    "src/quod_client_view.erl": {
+      "kind": "tracked change",
+      "added": 7,
+      "removed": 4,
+      "sha256": "ac8921585c51dc43dcc870bdeb35306a3f59022d0b57afa9fa77609126b8d0c9"
+    },
+    "src/quod_committed_projection.erl": {
+      "kind": "tracked change",
+      "added": 2,
+      "removed": 1,
+      "sha256": "7bf344a53737254e18753379ed7b263601eea31447b55ad2b0a38df5dc188013"
+    },
+    "src/quod_physics.erl": {
+      "kind": "tracked change",
+      "added": 2,
+      "removed": 1,
+      "sha256": "6d7c32892a3c61a213cf57543de849527de2a0d3db61878b40b3d52c55d43b44"
+    },
+    "src/quod_physics_coordinates.erl": {
+      "kind": "tracked change",
+      "added": 17,
+      "removed": 1,
+      "sha256": "93c98ac2f9c4d9f539260ca6f58b4658f71bb345b270267f78f850d5beef84c5"
+    },
+    "src/quod_predicates.erl": {
+      "kind": "tracked change",
+      "added": 20,
+      "removed": 5,
+      "sha256": "92de63bfb2d605a1255ed5f886a73b3e1ec972db135c6bf0bb9b158b25ed9e93"
+    },
+    "src/quod_runtime.erl": {
+      "kind": "tracked change",
+      "added": 44,
+      "removed": 17,
+      "sha256": "ff5f390a36425031c40d9168b64e52ef3d31ccd801e2c87137278966eb7f87ca"
+    },
+    "test/quod_agent_predicates_tests.erl": {
+      "kind": "tracked change",
+      "added": 19,
+      "removed": 0,
+      "sha256": "569015a22ddb94c13a967fa4383292af48368971556871a4fff9474ae4b2412f"
+    },
+    "test/quod_common_primitives_tests.erl": {
+      "kind": "tracked change",
+      "added": 21,
+      "removed": 0,
+      "sha256": "c26b933dbd89998468defd48fb6282fff1a97012890aa129ae7bcc8910e8dee7"
+    },
+    "test/quod_ct.erl": {
+      "kind": "tracked change",
+      "added": 23,
+      "removed": 1,
+      "sha256": "84f91e14936f2f979cabac5d57035ef446b01301696ff94c43aeefad2af692ac"
+    },
+    "test/quod_gui_examples_tests.erl": {
+      "kind": "tracked change",
+      "added": 4,
+      "removed": 2,
+      "sha256": "5637df5797acb3ad7770474fdb24f650d7442c84af9a5720a21a540e1238d2aa"
+    },
+    "test/quod_gui_operations_tests.erl": {
+      "kind": "tracked change",
+      "added": 2,
+      "removed": 2,
+      "sha256": "71cfb80ec3572bd30ba3e220f05f2a1a42f87661b13a6be808892961a8adb73f"
+    },
+    "test/quod_gui_stage1_tests.erl": {
+      "kind": "tracked change",
+      "added": 1,
+      "removed": 1,
+      "sha256": "8f3b5b7832a6afe35050f4ba3a9b6b3e5e3447f94da860f4916761a6061ddc6f"
+    },
+    "test/quod_lifecycle_single_path_tests.erl": {
+      "kind": "tracked change",
+      "added": 192,
+      "removed": 14,
+      "sha256": "93fc89dfb16130d90038f3a3cf4e7f2e2c429954b5e203c14fdf37d8211524d9"
+    },
+    "test/quod_lobby_tests.erl": {
+      "kind": "tracked change",
+      "added": 46,
+      "removed": 31,
+      "sha256": "3bf6dacdddca35c13049dadfd35b3b551af38febd2d6acc454a94f5e3bfc48bb"
+    },
+    "test/quod_personal_agent_tests.erl": {
+      "kind": "tracked change",
+      "added": 9,
+      "removed": 8,
+      "sha256": "2190fd9294b2d56f21247871ef5cf9e572870d8619f00cf8470d22664ec9db9e"
+    },
+    "test/quod_physics_coordinates_tests.erl": {
+      "kind": "tracked change",
+      "added": 28,
+      "removed": 0,
+      "sha256": "8a3f053cccaf8ad6f845192e1f5b7853de7ee610a454c245f598ec2ba0528038"
+    },
+    "test/quod_physics_tests.erl": {
+      "kind": "tracked change",
+      "added": 405,
+      "removed": 18,
+      "sha256": "89232954ce606b03dc4803009f60bbe6f1b699fb84d29b8fee7ff1897f5282b1"
+    },
+    "test/quod_space_creation_tests.erl": {
+      "kind": "tracked change",
+      "added": 3,
+      "removed": 0,
+      "sha256": "abad63b64630bb3c5fa5c2e38d83376becbddf2d6e831d899a5d5f36ede32d55"
+    },
+    "test/quod_space_tests.erl": {
+      "kind": "tracked change",
+      "added": 55,
+      "removed": 8,
+      "sha256": "e7a3c56ecc8deea87bbad407e13809d3e1b398679c7b89c9d349bd64735b36d3"
+    },
+    "outdated/ontologies/prolog/m3a-space-entity-pose.pl": {
+      "kind": "new file",
+      "added": 5,
+      "removed": 0,
+      "sha256": "50b54a43c34fe3c2407307372de2d9e3c4cb9820a6cbce0ba629a84e6e487375"
+    },
+    "priv/ontologies/geometry_schema.pl": {
+      "kind": "new file",
+      "added": 93,
+      "removed": 0,
+      "sha256": "90975d5382ebaaaeeb006ec0796207726a42201b590023eaf13cfc97c0329b54"
+    },
+    "priv/ontologies/gui_forms.pl": {
+      "kind": "new file",
+      "added": 297,
+      "removed": 0,
+      "sha256": "6f4623cd25ced128b0813cfdb5356154726483f0992dbf83ee87e19bb1d3b9e2"
+    },
+    "src/quod_physics_frames.erl": {
+      "kind": "new file",
+      "added": 51,
+      "removed": 0,
+      "sha256": "9fca5aa05c60b5ae11e49c595e3ebfe5151a2d5599566611e90fc64695be3332"
+    }
+  },
+  "framework_relocation": {
+    "gui_forms_existing_lines": 289,
+    "geometry_schema_existing_lines": 67,
+    "total_existing_lines": 356,
+    "gui_forms_new_file_lines": 297,
+    "geometry_schema_new_file_lines": 93,
+    "new_file_overhead_lines": 34,
+    "meaning": "Already counted in active production +/-; relocation is not a reduction",
+    "prior_inputs": [
+      "preflight45-source.json",
+      "preflight46-source.json"
+    ]
+  },
+  "archived_original_lines": 5
+}

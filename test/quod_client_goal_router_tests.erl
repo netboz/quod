@@ -2,6 +2,7 @@
 -moduledoc false.
 
 -include_lib("eunit/include/eunit.hrl").
+-include("quod_transport_limits.hrl").
 
 -define(PEER, <<16#41:256>>).
 -define(ENDPOINT, {{127, 0, 0, 1}, 4567}).
@@ -612,3 +613,78 @@ stop_router(Router) ->
         true -> gen_server:stop(Router);
         false -> ok
     end.
+
+remote_large_result_preserves_exact_correlation_test() ->
+    {ok, Payload} = quod_wire_term:encode_bindings(
+        #{<<"X">> => binary:copy(<<$x>>, (1024 * 1024))}, unlimited),
+    Ref = {transaction, <<"quod:test">>, <<1:256>>, <<2:256>>},
+    lists:foreach(fun({Cursor, Result}) ->
+        with_router(fun(Router, Link, Fixture) ->
+            Caller = submit_async(Router, Fixture, Cursor, 1000),
+            {Request, _} = sent_request(Link),
+            ok = quod_client_goal_router:test_send_result(Link, Request, Result),
+            Frame = target_frame(Link),
+            {ok, Response} = quod_client_goal_endpoint:decode_response(Frame),
+            Id = quod_client_goal_endpoint:request_id(Request),
+            {ok, Encoded} = quod_client_result:encode(Result),
+            Expected = case Cursor of none -> {result, Id, Encoded};
+                _ -> {cursor_result, Id, Cursor, Encoded} end,
+            ?assertEqual(Expected, Response),
+            Router ! {quod_message, {?PEER, Link}, quod_client_goal_endpoint:channel(), Frame},
+            receive {Caller, {ok, _, {normalized, Result}}} -> ok
+            after 1000 -> error(large_result_missing) end,
+            case Cursor of
+                none -> ok;
+                _ ->
+                    await_stats(Router, #{correlations => 0, routes => 1}),
+                    Stopper = cursor_async(Router, Cursor, stop, 1000),
+                    {{cursor, StopId, Cursor, stop}, _} = sent_request(Link),
+                    {ok, Stopped} = quod_client_result:encode(stopped),
+                    respond(Router, Link, {cursor_result, StopId, Cursor, Stopped}),
+                    receive {Stopper, {ok, _, {normalized, stopped}}} -> ok
+                    after 1000 -> error(cursor_stop_result_missing) end
+            end,
+            await_stats(Router, #{correlations => 0, routes => 0}),
+            assert_released_lease(Link, Router)
+        end)
+    end, [{none, {answers, 7, [Payload]}},
+          {<<9:256>>, {solution, <<9:256>>, 7, Payload}},
+          {none, {committed, [Payload], Ref}}]).
+
+target_encoding_keeps_outcome_and_distinguishes_invalid_from_size_test() ->
+    Parent = self(), Link = spawn(fun() -> link_loop(Parent) end),
+    Ref = {transaction, <<"quod:test">>, <<1:256>>, <<2:256>>},
+    Request = {submit, <<8:128>>, <<>>, <<0:512>>, none, []},
+    try
+        lists:foreach(fun({Result, Expected}) ->
+            ok = quod_client_goal_router:test_send_result(Link, Request, Result),
+            {ok, {result, <<8:128>>, Blob}} = quod_client_goal_endpoint:decode_response(target_frame(Link)),
+            ?assertEqual({ok, Expected}, quod_client_result:decode(Blob))
+        end, [{{pending, Ref}, {pending, Ref}},
+              {{committed, [], Ref}, {committed, [], Ref}},
+              {{answers, 7, [<<"not canonical">>]}, {error, proof_unavailable}},
+              {{error, {material_limit, proof, answer_bytes, 10, 9}},
+               {error, {material_limit, proof, answer_bytes, 10, 9}}}]),
+        ok = quod_client_goal_router:test_send_response(Link, {error, <<8:128>>, invalid_signature}),
+        ?assertEqual({ok, {error, <<8:128>>, invalid_signature}},
+                     quod_client_goal_endpoint:decode_response(target_frame(Link)))
+    after Link ! stop end.
+
+late_large_reply_cannot_restore_cancelled_correlation_test() ->
+    with_router(fun(Router, Link, Fixture) ->
+        Caller = submit_async(Router, Fixture, none, 1000),
+        {Request, _} = sent_request(Link),
+        Monitor = monitor(process, Caller), exit(Caller, kill),
+        receive {'DOWN', Monitor, process, Caller, killed} -> ok
+        after 1000 -> error(caller_not_cancelled) end,
+        await_stats(Router, #{correlations => 0, routes => 0}),
+        {ok, Payload} = quod_wire_term:encode_bindings(
+            #{<<"X">> => binary:copy(<<$x>>, (1024 * 1024))}, unlimited),
+        ok = quod_client_goal_router:test_send_result(Link, Request, {answers, 7, [Payload]}),
+        Router ! {quod_message, {?PEER, Link}, quod_client_goal_endpoint:channel(), target_frame(Link)},
+        ?assertMatch(#{correlations := 0, routes := 0}, quod_client_goal_router:test_stats(Router))
+    end).
+
+target_frame(Link) ->
+    receive {link_frame, Link, Frame} -> Frame
+    after 1000 -> error(target_response_missing) end.

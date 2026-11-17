@@ -20,6 +20,6 @@ attribute(apply, label, <<"Apply">>).
 attribute(rows, headings, [<<"Channel">>, <<"Value">>]).
 attribute(rows, multiple, true).
 attribute(rows, options, [option(row(a), [<<"Alpha">>, <<"10">>]), option(row(b), [<<"Beta">>, <<"20">>])]).
-attribute(picture, image, asset(<<"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">>, <<"image/jpeg">>)).
-attribute(apply, image, asset(<<"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">>, <<"image/jpeg">>)).
+attribute(picture, image, image(asset(<<"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">>, <<"image/jpeg">>), resources(1024, 4096))).
+attribute(apply, image, image(asset(<<"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">>, <<"image/jpeg">>), resources(1024, 4096))).
 gui_form(extra, [field(rows, Rows), field(note, Note), field(flag, Flag)], submit(apply, entered(Rows, Note, Flag))).

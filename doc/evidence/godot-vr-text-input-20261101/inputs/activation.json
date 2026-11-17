@@ -1,0 +1,19 @@
+{
+  "session": "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
+  "model": "openai-codex:gpt-6-astra",
+  "effective_backend_effort": "unexposed",
+  "head": "293cf6115c0a6b18315eccdbb42cbca396f443d3",
+  "branch": "worktree/pearl-stone",
+  "index_empty": true,
+  "radar": {
+    "explicit_project": true,
+    "nested_isError": false,
+    "true_exit": 0,
+    "signals": 0
+  },
+  "initial_failures": [
+    "sandbox tracker ESRCH three reads; host route completed0",
+    "progress glob included nonnumeric suffix; exact regex filter corrected"
+  ],
+  "inbox": "full two actual bodies read; list-only not consumption"
+}

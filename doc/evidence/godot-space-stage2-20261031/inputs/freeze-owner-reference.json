@@ -1,0 +1,5 @@
+{
+  "source": "doc/evidence/godot-m4-menu-20261031/freeze_small.py",
+  "sha256": "0caab9ad26b7807548c55ce3d180f9a7adb78f80285525aa47b9689554e9ee7d",
+  "same_owner_pattern": "small additive binary patch plus changed/new contents archive; separate copied inherited files; real new-delta materialization; one immutable object store; no old source links or API content"
+}

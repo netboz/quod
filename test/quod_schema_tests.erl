@@ -44,8 +44,8 @@ defaults_test() ->
     ?assertEqual(30000,           deep(C, [explorer, read_budget_ms])),
     B = content1(C),
     ?assertEqual(create,          maps:get(mode, B)),
-    ?assertEqual(64,              maps:get(max_proof_workers, B)),
-    ?assertEqual(64,              maps:get(max_scope_workers, B)),
+    ?assertEqual(unlimited, maps:get(max_proof_workers, B)),
+    ?assertEqual(unlimited, maps:get(max_scope_workers, B)),
     ?assertEqual(300000,           maps:get(proof_timeout_ms, B)),
     ?assertEqual(30000,           maps:get(transaction_ttl_ms, B)),
     ?assertEqual(25,              maps:get(batch_window_ms, B)),
@@ -129,6 +129,41 @@ removed_ask_scope_config_names_rejected_test_() ->
                     "ask_step_timeout_ms"]].
 
 %% --- boot wiring: load_config generates + exposes the node identity ------
+
+boot_client_certificate_matches_advertised_ip_test_() ->
+    [{Address, fun() ->
+        _ = application:load(quod),
+        Saved = application:get_all_env(quod),
+        Names = ["QUOD_CONF", "HOCON_ENV_OVERRIDE_PREFIX", "QUOD_NODE__IP"],
+        Os = [{Name, os:getenv(Name)} || Name <- Names],
+        Dir = tmp_dir(),
+        try
+            os:unsetenv("QUOD_NODE__IP"),
+            Path = write_boot_conf(Dir, ""),
+            ok = file:write_file(Path, ["node.ip = \"", Address, "\"\n"], [append]),
+            os:putenv("QUOD_CONF", Path),
+            _ = quod_app:load_config(),
+            ?assertEqual({ok, {Address, 14999}}, application:get_env(quod, node_addr)),
+            {ok, IdentityDir} = application:get_env(quod, identity_dir),
+            {ok, #{cert := Cert, key := Key}} = quod_client_tls:ensure(IdentityDir),
+            {ok, Ip} = inet:parse_address(Address),
+            ?assert(public_key:pkix_verify_hostname(Cert, [{ip, Ip}])),
+            ?assertNot(public_key:pkix_verify_hostname(Cert, [{ip, {192,0,2,99}}])),
+            ?assert(public_key:pkix_verify_hostname(Cert, [{dns_id, "localhost"}])),
+            {ok, #{cert := ReloadedCert, key := ReloadedKey}} =
+                quod_client_tls:ensure(IdentityDir),
+            ?assertEqual(Cert, ReloadedCert),
+            ?assertEqual(crypto:hash(sha256, public_key:der_encode('ECPrivateKey', Key)),
+                         crypto:hash(sha256, public_key:der_encode('ECPrivateKey', ReloadedKey)))
+        after
+            CurrentKeys = [Key || {Key, _} <- application:get_all_env(quod)],
+            SavedKeys = [Key || {Key, _} <- Saved],
+            _ = [application:unset_env(quod, Key) || Key <- CurrentKeys -- SavedKeys],
+            _ = [application:set_env(quod, Key, Value) || {Key, Value} <- Saved],
+            _ = [restore_os_env(Name, Value) || {Name, Value} <- Os],
+            _ = file:del_dir_r(Dir)
+        end
+    end} || Address <- ["192.0.2.27", "2001:db8::27"]].
 
 local_vault_boot_does_not_require_https_provider_test() ->
     _ = application:load(quod),
@@ -324,8 +359,8 @@ build_ns_config_no_genesis_hash_test() ->
                 genesis_file => <<"">>, data_dir => <<"">>, genesis_hash => <<"">>},
     {_, NsCfg} = quod_app:build_ns_config(Content),
     ?assertNot(maps:is_key(genesis_hash, NsCfg)),
-    ?assertEqual(64, maps:get(max_proof_workers, NsCfg)),
-    ?assertEqual(64, maps:get(max_scope_workers, NsCfg)),
+    ?assertEqual(unlimited, maps:get(max_proof_workers, NsCfg)),
+    ?assertEqual(unlimited, maps:get(max_scope_workers, NsCfg)),
     ?assertEqual(300000, maps:get(proof_timeout_ms, NsCfg)),
     ?assertEqual(30000, maps:get(transaction_ttl_ms, NsCfg)),
     ?assertEqual(25, maps:get(batch_window_ms, NsCfg)),
@@ -377,3 +412,18 @@ reset_boot_env() ->
     os:unsetenv("HOCON_ENV_OVERRIDE_PREFIX"),
     application:unset_env(quod, consensus_owner_tracing),
     clear_identity_env().
+
+worker_allowances_keep_explicit_finite_configuration_test() ->
+    Bin = <<"content=[{namespace=\"quod:test\", max_proof_workers=3, max_scope_workers=2}]">>,
+    B = content1(check(Bin)),
+    ?assertEqual(3, maps:get(max_proof_workers, B)),
+    ?assertEqual(2, maps:get(max_scope_workers, B)),
+    {_, Config} = quod_app:build_ns_config(B),
+    ?assertEqual(3, maps:get(max_proof_workers, Config)),
+    ?assertEqual(2, maps:get(max_scope_workers, Config)),
+    ?assertEqual(unlimited, quod_prolog:worker_allowance(max_proof_workers, unlimited)),
+    ?assertEqual(1, quod_prolog:worker_allowance(max_scope_workers, 1)),
+    ?assertError({bad_config, {max_proof_workers, 0}},
+                 quod_prolog:worker_allowance(max_proof_workers, 0)),
+    ?assertError({bad_config, {proof_timeout_ms, unlimited}},
+                 quod_prolog:positive_limit(proof_timeout_ms, unlimited)).

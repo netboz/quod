@@ -133,11 +133,10 @@ new_block({Era, View}, Parent, Height, Payload, Timestamp) ->
         true ->
             case encode_payload(Payload) of
                 {ok, PayloadWire} ->
-                    case {quod_safe_term:encode_canonical(PayloadWire, ?MAX_BLOCK_BYTES),
-                          quod_safe_term:encode_canonical(
-                            {quod_block, 3, Era, View, Parent, Height, PayloadWire, Timestamp},
-                            ?QUOD_MAX_CANONICAL_BLOCK_BYTES)} of
-                        {{ok, _}, {ok, Bytes}} ->
+                    case quod_safe_term:encode_canonical(
+                           {quod_block, 3, Era, View, Parent, Height, PayloadWire, Timestamp},
+                           unlimited) of
+                        {ok, Bytes} ->
                             {ok, #block{era = Era, slot = View, parent = Parent, height = Height,
                                         payload = Payload, timestamp = Timestamp,
                                         block_bytes = Bytes}};
@@ -187,7 +186,7 @@ encoded_payload_size(Payload) ->
     case encode_payload(Payload) of
         {ok, PayloadWire} ->
             case quod_safe_term:encode_canonical(
-                   PayloadWire, ?MAX_BLOCK_BYTES) of
+                   PayloadWire, unlimited) of
                 {ok, Bytes} -> {ok, byte_size(Bytes)};
                 {error, _} -> error
             end;
@@ -222,9 +221,9 @@ decode_block(Bytes, SymbolMode, Context)
 decode_block(_Bytes, _SymbolMode, _Context) -> {error, bad_block}.
 
 block_envelope(Bytes)
-  when is_binary(Bytes), byte_size(Bytes) =< ?QUOD_MAX_CANONICAL_BLOCK_BYTES ->
-    case {quod_safe_term:validate_canonical(Bytes, ?QUOD_MAX_CANONICAL_BLOCK_BYTES),
-          quod_safe_term:decode(Bytes, ?QUOD_MAX_CANONICAL_BLOCK_BYTES)} of
+  when is_binary(Bytes) ->
+    case {quod_safe_term:validate_canonical(Bytes, unlimited),
+          quod_safe_term:decode(Bytes, unlimited)} of
         {ok, {ok, {quod_block, 3, Era, View, Parent, Height, Payload, Timestamp} = Wire}} ->
             case valid_position(Era, View, Parent, Timestamp) andalso
                  valid_height(Era, Height, Payload) of
@@ -413,7 +412,7 @@ mint_artifact(Bytes, View, Block) ->
 
 encode_entry_term(Term) ->
     case quod_safe_term:encode_canonical(
-           Term, ?QUOD_TRANSPORT_MAX_FRAME_BYTES) of
+           Term, ?QUOD_LINK_PAYLOAD_CAPACITY) of
         {ok, Bytes} -> {ok, Bytes};
         {error, _} -> {error, bad_entry}
     end.
@@ -461,9 +460,9 @@ entry_envelope(Bytes, Mode, Context) ->
     end.
 
 entry_wire(Bytes) when is_binary(Bytes),
-                       byte_size(Bytes) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
-    case {quod_safe_term:validate_canonical(Bytes, ?QUOD_TRANSPORT_MAX_FRAME_BYTES),
-          quod_safe_term:decode(Bytes, ?QUOD_TRANSPORT_MAX_FRAME_BYTES)} of
+                       byte_size(Bytes) =< ?QUOD_LINK_PAYLOAD_CAPACITY ->
+    case {quod_safe_term:validate_canonical(Bytes, ?QUOD_LINK_PAYLOAD_CAPACITY),
+          quod_safe_term:decode(Bytes, ?QUOD_LINK_PAYLOAD_CAPACITY)} of
         {ok, {ok, {quod_entry, 2, I, BlockBytes, CertWire}}}
           when is_integer(I), I >= 1, is_binary(BlockBytes) ->
             {ok, I, BlockBytes, CertWire};
@@ -579,7 +578,7 @@ record_commitment(_, _) -> error.
 encode_finality_head(#cert{} = Cert) ->
     case cert_wire(Cert) of
         {ok, Wire} ->
-            case quod_safe_term:encode_canonical(Wire, ?QUOD_MAX_DTX_BODY_BYTES) of
+            case quod_safe_term:encode_canonical(Wire, unlimited) of
                 {ok, _} = Result -> Result;
                 _ -> {error, bad_finality_head}
             end;
@@ -590,7 +589,7 @@ encode_finality_head(_) -> {error, bad_finality_head}.
 -doc "Decode a canonical head descriptor without creating symbols or asserting finality.".
 -spec decode_finality_head(binary()) -> {ok, #cert{}} | {error, bad_finality_head}.
 decode_finality_head(Bytes) ->
-    case quod_safe_term:decode_wrapped(Bytes, ?QUOD_MAX_DTX_BODY_BYTES) of
+    case quod_safe_term:decode_wrapped(Bytes, unlimited) of
         {ok, Wire} ->
             case decode_cert_wire(Wire, wrapped, none) of
                 {ok, #cert{} = Cert, none} -> {ok, Cert};

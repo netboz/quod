@@ -1,0 +1,11 @@
+{
+  "command": [
+    "bsdtar",
+    "-xf",
+    "/home/yan/.cache/quod-m4-r2-artifacts/runtime/opencv-4.13.0-12-x86_64.pkg.tar.zst",
+    "-C",
+    "/home/yan/.cache/quod-m4-r2-artifacts/runtime/opencv-4.13.0-12"
+  ],
+  "exit": 0,
+  "installation": false
+}

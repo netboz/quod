@@ -1,0 +1,49 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-vr-visual-readiness-20261102/harmless_stop.py"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "driver_inputs": {
+    "owned_commands.py": "60c693b94cc8113263f0238f47337430a18108ac544132bfff8ed3f5ef8aa6a0",
+    "prepare.py": "04e966d9bffe8980bdd151fdb79b98f77671b2c97d07a2ab6b59f33bcda053e2",
+    "test_owned_commands.py": "e6930362b41a3064a3c06602407644b2a7711f2e9e9d80812dd6af2f93ce9701",
+    "live.py": "ecfd79218e8e14a5eb224c304a031cefefa802d365b193a145823bedb5f313ee",
+    "hashes.py": "d6cc9587d196475ca29cadabacdfea1148b7b500d1747e730b08d51bdb4047c7",
+    "test_launch_spec.py": "8333b702d7a864e56de83542ac6c2db77035913e99e9f508b13dc4855cc6621c",
+    "launch_spec.py": "c877be93b092382e746283766191bf3a1c29c8a3d9863b386696c4f1592bd59b",
+    "postmortem280.py": "862a4336f255c44de55af8fd860c3aac4def84af361fde08f0660f12e4494b8b",
+    "VrReady280.cs": "9ea98c4911a1aafddc29909d002ca5f25c732b72cffbe9289361c120be1e2095",
+    "pipe_ownership.py": "9c0c91893306d33ed415170164004cacff276364748564bb481e67aa8b80fa89",
+    "supervision.py": "597ac45e1e1088c988fb72734fddca34aab5016221e1636cee728360a6478678",
+    "godot_m3b_fixture.erl": "bdb10e1a18d12574a7a2a491e46b84e21c436b636adaed0cebb4adbb89c84a69",
+    "godot_m3b_physics_fixture.erl": "443dcc79943d9e235ddfc9556061225b3348d15cf3757501fc895a5de3e05425",
+    "run.py": "20ace533ea6238853b692dde4a651472517e4bf91a4cacdd966f348fc37b1afd",
+    "serve.py": "20e9c82a75895e0bd0bad08fba727c7d43aa6bbfd231983dd36e48d40e84eb44",
+    "build.py": "e220ca8b697b8ee0e66a50498e3dec394dfb10bca9bc8d859fa24042e999502f",
+    "manual_run.py": "361785f53ec1a4b71976e6f67dd329c2b7a1f68cc274938f1f52654d6179f61d"
+  },
+  "bound_seconds": 2100,
+  "reader_errors": [],
+  "child_exit": 0,
+  "eof": {
+    "stdout": true,
+    "stderr": true
+  },
+  "elapsed_seconds": 7.734220266342163,
+  "streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/visual-stop-transport01/stdout.raw",
+      "sha256": "fae5e9998fd999be9d43e9e15ec97fb3900bee478b182630760684b71ff8ad14",
+      "bytes": 107,
+      "sanitized_sha256": "fae5e9998fd999be9d43e9e15ec97fb3900bee478b182630760684b71ff8ad14"
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/visual-stop-transport01/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "sanitized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  }
+}

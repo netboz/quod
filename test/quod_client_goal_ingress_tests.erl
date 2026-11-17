@@ -125,7 +125,7 @@ start_refused_source(Dir, #{identity := Identity = {Ns, Anchor}}, Chain, VoteRef
     Parent = self(),
     {Pid, Monitor} = spawn_monitor(fun() ->
         true = quod_reg:reg({quod_simplex, Ns}),
-        Table = binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
+        Table = binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
         Table = ets:new(Table, [named_table, protected, set]),
         ets:insert(Table, {anchor, Anchor}),
         {ok, Store0} = quod_ledger_store:open(Ns, Dir),
@@ -190,7 +190,7 @@ local_process_uses_signed_ingress_without_a_session(
     application:set_env(quod, node_pubkey, <<16#73:256>>),
     try
         {Bytes, Signature} = signed_read(Ns, ?ANCHOR, KeyPair, Session, <<"lookup(X).">>),
-        ?assertMatch({ok, _, {normalized, {read, _, {answers, 1, [_]}}}},
+        ?assertMatch({ok, _, {normalized, {read, [{Ns,?ANCHOR,1,[]}], {answers, 1, [_]}}}},
                      quod_client_goal_ingress:submit(Bytes, Signature)),
         ?assertEqual({error, invalid_signature},
                      quod_client_goal_ingress:submit(Bytes, <<0:512>>)),
@@ -656,7 +656,7 @@ setup() ->
         brahms => #{}}),
     Ns = <<"signed-read:",
            (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
-    Table = binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
+    Table = binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
     %% Public only inside this fixture: the anchor-race test must mutate the
     %% fake Simplex identity from its EUnit worker process.
     Table = ets:new(Table, [named_table, public, set]),
@@ -745,7 +745,7 @@ unique_symbol(Prefix) ->
 is_anchored_public_cast(
   {'$gen_cast', {public_proof, _Caller, _CallRef, prove_ro, _Goal,
                  {proof_request, _TraceCtx, {agent, _AgentRef},
-                  ?ANCHOR, _RequestAuth, _Deadline, _StartedNative}}}) ->
+                  ?ANCHOR, _RequestAuth, read_write, _Deadline, _StartedNative}}}) ->
     true;
 is_anchored_public_cast(_) ->
     false.

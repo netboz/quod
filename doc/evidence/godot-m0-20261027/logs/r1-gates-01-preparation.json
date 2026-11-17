@@ -1,0 +1,21 @@
+{
+  "campaign": "r1-gates-01",
+  "command": [
+    "python3",
+    "doc/evidence/godot-m0-20261027/gate-campaign.py",
+    "r1-gates-01"
+  ],
+  "child_exit": 1,
+  "failed_phase": "source preparation; no gate ran",
+  "error": "shutil.Error: hocon/etc/symlink-to-cycle.conf: [Errno 2] No such file or directory",
+  "cause": "Dependency source copy dereferenced a deliberately dangling relative test-fixture symlink. Retain the symlink and record its target, without copying compiled inputs.",
+  "unrun": [
+    "native",
+    "eunit",
+    "ct",
+    "xref",
+    "dialyzer"
+  ],
+  "retained_stage": "/tmp/quod-m0-r1-gates-01",
+  "log_limitation": "Preparation was originally run directly through exec_command, before the retained runner was added. Its full traceback is in the session tool transcript; this retrospective record preserves the exact observed terminal exception and true exit. No full standalone log was captured for that one preparation failure."
+}

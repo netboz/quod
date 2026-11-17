@@ -1,0 +1,161 @@
+{
+  "passed": true,
+  "checkpoint": "QUO-65 additive clean private engine provenance",
+  "worker": "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
+  "actual_api_model": "openai-codex:gpt-6.1-sol",
+  "launcher_requested_effort": "max",
+  "effective_backend_effort": "unexposed",
+  "production_test_spec_changes": 0,
+  "clean_source_only_native_build": {
+    "passed": true,
+    "source": "/data/quod-m4-vr-ca84d4f8-20261029/builds/engine-clean02/godot-4.7.2-stable",
+    "binary": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/engine/clean02/godot.linuxbsd.template_release.x86_64.mono",
+    "sha256": "02310d903099bada10c86cedc90bbc11ef0bec8254d6e607d1a53f6150ab0268",
+    "bytes": 98746600,
+    "earlier_patched_sha256": "02310d903099bada10c86cedc90bbc11ef0bec8254d6e607d1a53f6150ab0268",
+    "byte_identical_to_qualified_patched_template": true,
+    "clean_source_only": true,
+    "compiled_inputs_copied": false,
+    "command": [
+      "/usr/bin/python3",
+      "-m",
+      "SCons",
+      "platform=linuxbsd",
+      "target=template_release",
+      "arch=x86_64",
+      "module_mono_enabled=yes",
+      "-j6",
+      "lto=none"
+    ],
+    "original_source_entries": 15214,
+    "patch_sha256": "06e06c0670bc1ebf3b25f6946bdbcbf48ab674d89e90a5d399a9dbca06e31fed"
+  },
+  "actual_full_byte_comparison": {
+    "command": [
+      "cmp",
+      "-s",
+      "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/engine/patched01/godot.linuxbsd.template_release.x86_64.mono",
+      "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/engine/clean02/godot.linuxbsd.template_release.x86_64.mono"
+    ],
+    "true_exit": 0,
+    "identical": true
+  },
+  "official_source_and_actual_patch_application": {
+    "official_archive_sha256": "a18ce0ccec3ecc40b0dd6c4f5132ca934e9fb7c2979717940ff32aee1eb35481",
+    "original_entries": 15214,
+    "full_official_original_path_content_link_modes_verified": true,
+    "actual_patch_check_command": [
+      "git",
+      "apply",
+      "--check",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vr-20261029/godot-4.7.2-openxr-lifetimes.patch"
+    ],
+    "actual_patch_apply_command": [
+      "git",
+      "apply",
+      "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vr-20261029/godot-4.7.2-openxr-lifetimes.patch"
+    ],
+    "patch_sha256": "06e06c0670bc1ebf3b25f6946bdbcbf48ab674d89e90a5d399a9dbca06e31fed",
+    "exact_final_authored_input_deltas": {
+      "modules/openxr/openxr_interface.cpp": {
+        "before": "810451a0284d73ac7e4bc6891001b6d4b8f51f5911b6950c2452234566c16aac",
+        "after": "d18584d80f624ace23daf13d33656c767ee72962725f14d5ad5c77e983ead509"
+      },
+      "modules/openxr/extensions/spatial_entities/openxr_spatial_marker_tracking.cpp": {
+        "before": "3e3bb1e950998f41522798fcb54ccc993854ddc36c2d46f08b18f537fdbd765a",
+        "after": "b3370de44fce43e7204303cf25f7ee8f9eb84f4d66bdbc638e9b1b28a9008e9b"
+      }
+    },
+    "explicit_original_mode_restoration_after_git_apply": {
+      "modules/openxr/openxr_interface.cpp": {
+        "after_git_apply": 384,
+        "official_archive_mode": 420
+      },
+      "modules/openxr/extensions/spatial_entities/openxr_spatial_marker_tracking.cpp": {
+        "after_git_apply": 384,
+        "official_archive_mode": 420
+      }
+    },
+    "complete_patched_input_content_modes_verified": true,
+    "source": "/data/quod-m4-vr-ca84d4f8-20261029/builds/engine-clean02/godot-4.7.2-stable",
+    "outside_every_checkout": true,
+    "compiled_inputs_copied": false,
+    "scope": "New actual full official source extraction and real patch application before a clean build; not a copy of earlier generated native inputs. Git apply creates replacement files under the private077 umask; restore exact recorded official authored-file modes before full verification."
+  },
+  "all_original_authored_input_paths_content_modes_still_verified_after_build": 15214,
+  "scons_cache_path": "",
+  "native_compiler": {
+    "CC": "gcc",
+    "CXX": "g++",
+    "production": false,
+    "debug_symbols": false,
+    "lto": "none",
+    "accesskit": false
+  },
+  "actual_live_toolchain_comparison": {
+    "passed": true,
+    "provider": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/toolchain-inputs01",
+    "captured_paths": 76047,
+    "path_kinds": {
+      "file": 71205,
+      "symlink": 63,
+      "directory": 4779
+    },
+    "differences": [],
+    "scope": "Actual live compiler/tools/dependency/include bytes and recorded modes match the captured provider during the clean build. Conservative include collection, not a claim every captured header is compiled; no OS image or software test rerun."
+  },
+  "python_standard_library_provider": {
+    "passed": true,
+    "python_version": "3.14.7 (main, Aug 10 2026, 07:46:56) [GCC 16.1.1 20260728]",
+    "executable": "/usr/bin/python3",
+    "stdlib": "/usr/lib/python3.14",
+    "paths": 2947,
+    "objects": 2201,
+    "bytes": 106260526,
+    "scope": "Exact captured standard-library/provider bytes plus native module dynamic-library closure, conservative collection; third-party site-packages/user directories excluded. Pinned SCons4.11.1 wheel/compiled tool inputs already retained separately. Not an OS image or claim every stdlib file was used."
+  },
+  "commands": [
+    {
+      "label": "engine-clean-build01",
+      "true_child_exit": 1,
+      "timed_out": false,
+      "elapsed_seconds": 6.330656051635742,
+      "receipt_sha256": "c6cc6eca105eac78bb5d675fde38f06d88e8f4c97ea359cabc6ccd278607f356"
+    },
+    {
+      "label": "engine-clean-build02",
+      "true_child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 903.0245540142059,
+      "receipt_sha256": "fa4a9ba2b210484cbb5430b2b107afdaa92028728ea20980c897db089e4e20b8"
+    },
+    {
+      "label": "toolchain-live-check02",
+      "true_child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 14.964662790298462,
+      "receipt_sha256": "f3d1677c7234571c339f8cdddeaf1e1367f2001901a25bcaaa1612d09d556a0e"
+    },
+    {
+      "label": "python-stdlib-inputs02",
+      "true_child_exit": 0,
+      "timed_out": false,
+      "elapsed_seconds": 2.2184722423553467,
+      "receipt_sha256": "50963b9d2b5a5b2f3c36db662147f1580c357cd90e79e6c30d812c60403e0031"
+    }
+  ],
+  "qualified_native_evidence_reused_by_exact_binary_identity": [
+    "native-sim-baseline01 counterfactual vs native-sim-patched01: same application payload, only engine differs; patched18checks/3adaptercycles/one native session, client/runtime/wrapper0/EOF and no target diagnostics.",
+    "native-fault-reentry01: deliberate output exception true client1 releases session; next exact application on same runtime passes18/client0, runtime/wrapper0/EOF.",
+    "vive-display-observation03: exact same engine in diagnostic observer export, actual human both-lens Quod/green observation and native close0/EOF; zero current valid wand samples, no mapped-gesture/comfort claim."
+  ],
+  "first_failed_clean_attempt": "engine-clean-build01 failed full-mode assertion before compiling: real git apply recreated two text files under private077 umask as0600. Failed source/driver/logs preserved. Separately labelled clean02 restores the recorded original0644 modes explicitly and retains the same full-mode assertion. No product assertion relaxed.",
+  "previous_immutable_boundary": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/quod-godot-m4-vr-handoff-ca84d4f8-20261029-01",
+  "previous_snapshot_sha256": "5af20d5f7b168c53f2eab7d4524862a9db2957169a66879d29b0bdd23ad817fe",
+  "original_desktop_stalls_resolved": false,
+  "cold_hardware_head_assertion_resolved": false,
+  "production_export_physical_controller_accepted": false,
+  "full_M4_accepted": false,
+  "commit": false,
+  "M5": false
+}

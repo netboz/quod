@@ -48,6 +48,8 @@ The typed **external-predicate contract** and the per-run **execution context**
    class registration alone never substitutes for captured dependencies.
 
 The context *kinds* are `proof` (a normal client proof or staged write),
+`operation_guard` (committed read-only policy with following and proof-bound
+or committed-snapshot queries),
 `verdict` (a committee membership re-proof — strictly local),
 `policy_verdict` (a strictly local authorization re-proof with every governed
 bridge disabled), and `reaction` (read-only matching of one `react_on/2`
@@ -63,7 +65,7 @@ declaration). Its selected goal subsequently uses an ordinary `proof` context.
 -export([load_modules/2, valid_manifest/1, descriptor/2]).
 -endif.
 %% context read/write on an #est{}
--export([set_context/2, context/1, local_only/1]).
+-export([set_context/2, context/1, local_only/1, operation_guard_context/1]).
 %% context constructors
 -export([proof_context/3, proof_context/4, verdict_context/2,
          policy_verdict_context/2, reaction_context/2]).
@@ -90,7 +92,7 @@ declaration). Its selected goal subsequently uses an ordinary `proof` context.
                chain   = [] :: [quod_proof_context:identity()],
                executor = undefined :: term()}).
 
--type kind()  :: proof | verdict | policy_verdict | reaction.
+-type kind()  :: proof | operation_guard | verdict | policy_verdict | reaction.
 -type class() :: query | staging | reaction.
 -type dependency() :: none | proof_bound | committed_snapshot | live_observation.
 -type ctx()   :: #qctx{} | undefined.
@@ -358,7 +360,7 @@ dispatch(Goal, Next, St) ->
                 undefined -> erlog_int:erlog_error(
                     {context_violation,Functor,unregistered,ctx_kind(Ctx)},St);
                 {Class, Dependency, Mod, Fun} ->
-                    case allowed(Class, ctx_kind(Ctx)) of
+                    case allowed_dependency(Class, Dependency, ctx_kind(Ctx)) of
                         true  ->
                             ok = record_bridge_use(Functor, Dependency, Ctx, St),
                             Mod:Fun(Goal, Next, St);
@@ -402,11 +404,17 @@ only while matching a reaction declaration.
 -spec allowed(class(), kind() | undefined) -> boolean().
 allowed(_Class,     undefined)   -> false;
 allowed(query,      policy_verdict) -> false;
+allowed(query,      operation_guard) -> false;
 allowed(query,      _Kind)       -> true;
 allowed(staging,    proof)       -> true;
 allowed(staging,    _Kind)       -> false;
 allowed(reaction,   reaction)    -> true;
 allowed(reaction,   _Kind)       -> false.
+
+allowed_dependency(query, proof_bound, operation_guard) -> true;
+allowed_dependency(query, committed_snapshot, operation_guard) -> true;
+allowed_dependency(_, _, operation_guard) -> false;
+allowed_dependency(Class, _, Kind) -> allowed(Class, Kind).
 
 %%%===================================================================
 %%% context: read/write on #est.fs
@@ -424,6 +432,10 @@ context(#est{fs = Fs}) ->
         {?CTX_FLAG, Ctx, _} -> Ctx;
         false               -> undefined
     end.
+
+-doc "Retain the authenticated proof's identity and chain while forbidding live observations and staging.".
+-spec operation_guard_context(ctx()) -> ctx().
+operation_guard_context(#qctx{} = Context) -> Context#qctx{kind = operation_guard}.
 
 -doc "Whether this execution is confined to its local committed ontology.".
 -spec local_only(tuple()) -> boolean().

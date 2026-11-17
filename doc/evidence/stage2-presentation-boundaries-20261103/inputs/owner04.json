@@ -1,0 +1,302 @@
+{
+  "compile_passed": true,
+  "true_exit": 0,
+  "stdout_eof": true,
+  "stderr_eof": true,
+  "source_inputs": {
+    "src/predicates/quod_ask.erl": {
+      "sha256": "7ee405022eeedf3a69e106496b7afabbafedf983eb7ffcffd980da1c1a9aa48e",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_ask.erl"
+    },
+    "src/quod_client_goal_endpoint.erl": {
+      "sha256": "c5cb2d7c36ed261cb8bfb900f93050903a4e91e5f436de55d9680085cee6325d",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_client_goal_endpoint.erl"
+    },
+    "src/quod_client_goal_router.erl": {
+      "sha256": "5c7cf90e295b91bd008c4bbbfd3163e7506b1abbb035e01d70cb0dd79aee926d",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_client_goal_router.erl"
+    },
+    "src/quod_client_result.erl": {
+      "sha256": "0fd9d6eb82212df1bdb5f2d6457d378e82f9f9822b6c1d8c8206890c8943fd2e",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_client_result.erl"
+    },
+    "src/quod_client_view.erl": {
+      "sha256": "9a89fad9275e73f41521cd7738f7dd7a8f8dde6c9db0c1191e01dfc28b2608de",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_client_view.erl"
+    },
+    "src/quod_dtx.erl": {
+      "sha256": "65fc93734dcce71adc2457b3e31b3d1216fd0e73304adca3a42142a7158c5768",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_dtx.erl"
+    },
+    "src/quod_physics.erl": {
+      "sha256": "be812d304da32461b175c3190246239bed22068e92aecc7b3d4c3561aa4844aa",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_physics.erl"
+    },
+    "src/quod_proof_session.erl": {
+      "sha256": "47481ede0cab64605d40d99c8a1df843ea954a41eea32c37687d05e047a418a0",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_proof_session.erl"
+    },
+    "src/quod_scope_session.erl": {
+      "sha256": "62b706bba9f9c8ea9a73bf3721f16739a417115fe2cdc100f0cddec878a0279c",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_scope_session.erl"
+    },
+    "src/quod_scope_wire.erl": {
+      "sha256": "5bc92822bb84dccc7a0f11619c859080ac5abdd054e09e5899f9d99c30079019",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_scope_wire.erl"
+    },
+    "src/quod_terrain_wire.erl": {
+      "sha256": "d831af9ae3114b6635df33a9d178d274c9d6fcd73a41d60b196419bd360a9934",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_terrain_wire.erl"
+    },
+    "src/quod_voxel.erl": {
+      "sha256": "af39b9b1c30bf1a44007efe706231b9811ebd4d828fd2a4d5f25e0f4d53029e2",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_voxel.erl"
+    },
+    "src/quod_wire_term.erl": {
+      "sha256": "9b08181a111ecdfad0c650c5570f1f1aba30f35e33aa202af3bb8e35279dc14e",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_wire_term.erl"
+    },
+    "test/quod_ask_tests.erl": {
+      "sha256": "4f47563a5e8981dd957c80a15a5134b95535010bd876ba6b56c0e080496306a8",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_ask_tests.erl"
+    },
+    "test/quod_client_goal_endpoint_tests.erl": {
+      "sha256": "c448f808e80055c3889cee8daced8c46b104fc3638fc1a3bf3f6a8b9646566fe",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_client_goal_endpoint_tests.erl"
+    },
+    "test/quod_client_goal_router_tests.erl": {
+      "sha256": "15026f500c27f235946d7ed054d2a81e30ab447d74ba923c10afea05d8dd0b52",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_client_goal_router_tests.erl"
+    },
+    "test/quod_client_result_tests.erl": {
+      "sha256": "393f3aaed43ae492cd8b64759dc694ca620c70c3d0df6783bbe928d8f34014ac",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_client_result_tests.erl"
+    },
+    "test/quod_dtx_tests.erl": {
+      "sha256": "40afffda4ad7abd9f04a0a0729be5476d27b4677e9a2c34db3f27ea6acbd8e2d",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_dtx_tests.erl"
+    },
+    "test/quod_material_admission_tests.erl": {
+      "sha256": "1bfa75d329e88077a80c5eb14464bd0663bcab0c3207158d23c58e54870984b6",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_material_admission_tests.erl"
+    },
+    "test/quod_physics_tests.erl": {
+      "sha256": "c2b2ce308976f8df46f9e596cf6cd27f5d63b42273f00117600a8c72058f88e1",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_physics_tests.erl"
+    },
+    "test/quod_proof_answer_tests.erl": {
+      "sha256": "0b11c4ae01cf74f8a6e6287aa879fc3143b1752104e80927193f3209b4d67f67",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_proof_answer_tests.erl"
+    },
+    "test/quod_proof_session_tests.erl": {
+      "sha256": "56c2907c266dbc38b515c3454fbb0e7cac4ea8b186a6529bc699a0378b01caf2",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_proof_session_tests.erl"
+    },
+    "test/quod_scope_session_tests.erl": {
+      "sha256": "6d3957a2369e066fb75ded812baaf78bfac031ad0b4e248dece6da7a80960e26",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_scope_session_tests.erl"
+    },
+    "test/quod_scope_wire_tests.erl": {
+      "sha256": "e75883ca3d99870f1975632d0cd97eecf4d4123675eda8af5ead909c44cdc721",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_scope_wire_tests.erl"
+    },
+    "test/quod_terrain_wire_tests.erl": {
+      "sha256": "c2bf44ea87f3c2c9cf8b53567500f4abbecd777591bd783b0a11565fda654140",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_terrain_wire_tests.erl"
+    },
+    "test/quod_wire_term_tests.erl": {
+      "sha256": "77bfe6b91f6dfa4b7831ee65f8d858b60d98e06d5632b696eed84f09e63902ac",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/quod_wire_term_tests.erl"
+    },
+    "include/quod_transport_limits.hrl": {
+      "sha256": "0221f1df8a41184e7114a53ec61bb6c45528cc93bac3bd0cab637365366c09a3"
+    },
+    "include/quod_ingress_limits.hrl": {
+      "sha256": "62389470e8b035526e2c79723996de3ddae97c39a7a433b9473dcf98742ea33a"
+    },
+    "include/quod_dtx_owner.hrl": {
+      "sha256": "aabb061be7221f0b78ae7cc0e2a061af758328d19df9ecff959310bec34dd8ce"
+    },
+    "include/quod_term_limits.hrl": {
+      "sha256": "affe244d7aa341161b29b1c9eb68c3c830bc12e449058e94c21e7cebfbd3e785"
+    },
+    "include/quod_vm_limits.hrl": {
+      "sha256": "032443e83f6157be144f774d01764dfe2059d6134ed7164f801d78c452a11bd0"
+    },
+    "include/quod_c4_attempt.hrl": {
+      "sha256": "01ada5034fedcfebc909eb6ececf31aed3324b6081ae3d2987c542215342c663"
+    },
+    "include/quod_client_goal_limits.hrl": {
+      "sha256": "3f247d09272dcfa1ac3904f734ca6766579eb8273901495f3d85b2d0d4646f9b"
+    },
+    "include/quod_proof_limits.hrl": {
+      "sha256": "148158d699aabc2a83ff12b916fc92e22dd7bc6968a67d71e7c83d64d2d806f8"
+    },
+    "include/quod_directory_limits.hrl": {
+      "sha256": "a7c360b5cd582ae6e34256a29691431e47447dafdda6d85955b5a3832ba3b4e0"
+    },
+    "include/quod_ledger.hrl": {
+      "sha256": "15b00d149bfee607701f3fd9f6a30ce661008af1ad11539da6e36836d773364d"
+    }
+  },
+  "base_objects": {
+    "quod_c4_attempt.beam": "6be875cfabad2b0a54e2f814d4f998cc85b5e0de9a3180e3e57853d795fa1c34",
+    "quod_ledger.beam": "5aee95f58dabdd3e751579964173a63010ec942780216af660643c0b33ff812f",
+    "quod_peer_route.beam": "a2e8f92c988556d7f59a98f0791bfa30d75915c27913cf83905327b6f4dcab0b",
+    "quod_dtx_current_view.beam": "b461ca94734c102a5bdd518be3da56179aa3f7fc849da85aaf1e800053b6f929",
+    "quod_directory_shape.beam": "c9200b73be6226b01a389b34495495646ff512aea61b811411502179ff6425dd",
+    "quod_resource_basis.beam": "286e5b1bec9bc1769539f18a782f2e076af5c6b6c3053b3e799045a30d40f1f9",
+    "quod_predicates.beam": "c7f4b86b2e4fa9bdbe7baf0b0e44cb96da5e598f070093821d671d2c7dfa3e28",
+    "quod_proof_context.beam": "d904080da2ccfb868ae2538164b702f89ff23c454bca05ba93c554eb255f47ba",
+    "quod_client_auth.beam": "49747c44b0d311835013a802120e7341f49b49322fa69666076fa7d0a975bc56",
+    "quod_dtx_recovery.beam": "65153137460fce89b0404fb123ba0fa9511bbca4504bdaeebd444a0c9d6da1a3",
+    "quod_wire_term.beam": "ad069a6e52a47f1b592df723e02e810e9067dd438e82f0adee42a6e354033895",
+    "quod_client_goal_router.beam": "32f0b0128eb249cd86435dcb9b99ef63727027ccf161711d0f4540b07b7fa612",
+    "quod_dtx.beam": "bb187e12553ecbb5d7c209921488ed2bfc30dfdaf3a2308c406c52f6b78c6aee",
+    "quod_erlog_db_mvcc.beam": "31fd525dc904290b9328f2f31c30b8396f5b4b11040cd04fda78f059ddfe0e0d",
+    "quod_reg.beam": "4ed308ef1cb9240bda3afe87f94de8f793337b41d02a70d18fecfe87f6112f49",
+    "quod_trace.beam": "fee17d7b324eef6617ff2f99363e26eb97defcb33617b26491cf16b6fe1446de",
+    "quod_brahms_sup.beam": "0c72ecbf2ba02e93f7a78d611e174f493f9fc8227f4c41b5cb2e52b3e6554b95",
+    "quod_agent_observer.beam": "e512993dee919221a2505c50d4b48c38ead44b1b138bfcd0875b2c86abcbe454",
+    "quod_app.beam": "54453d240e7fb09bc0f55df4341c1ba1dc8c4c7938d319cf2e8afb8db719785f",
+    "quod_quic.beam": "a19da8c3b79d0ed94ec27900b64b9f656d65717d2791dbfdf6a6f7a279b2a1d2",
+    "quod_agent_ref.beam": "fb056d403e45a1e68df8db828a557f73ceaa59327f4aa1d5dac1f3ef591e8b3e",
+    "quod_terrain_wire.beam": "3d5ec4077f43aae9e9b5a21bc7f35ec80822f71f01a4590c0981ff0a16381ff0",
+    "quod_diff.beam": "0fe98f39cca73647f8c4dc19aa9175e02ce664563a000388bab37db7174e4c0c",
+    "quod_http_listener.beam": "db23122d70c6137b6dde51a6dd2decb33ed4f66b886fb1460b31e8460473b2bd",
+    "quod_selection_basis.beam": "fb7f10faa96497dde798f3002be34ba87539e46d342115ef65ce90663ef8877f",
+    "quod_client_tls.beam": "18fc5bd50dcffe63e3bed70ddad77d5d36d5594f64b60ba577e2bee15bc3637d",
+    "quod_agent_predicates.beam": "93f2877d9ccf26903af7e22e31af69a8b7188c8f679ea9b3fd526c916c280bcf",
+    "quod_log_formatter.beam": "29c0c5b40cd34944d481d5896f9dc3cddf5072f65aac876d60e5c54ea9b2bd69",
+    "quod_effect.beam": "5ac5f17e22665ea28dd14bf89df14272045015e5edd8daad10fd54a61a2bfc11",
+    "quod_directory_control.beam": "0053f83f6c572f94e5041c060b7e2f40d5994320665feb537718eb3605bdc0a9",
+    "quod_foreign_log.beam": "44ca1757212044e692ec56a52979f3d22287920ce95301e943697e64c85db9c1",
+    "quod_process.beam": "9174933d48608cebcc2e6b37f4e3243dbf11f6dfd6be69b1e498044b3622d391",
+    "quod_brahms_population.beam": "a5505d762a43aa7047591a7fc312b2260b61867dd5052d3ab1f544f1aef2bef5",
+    "quod_dtx_phase_index.beam": "570695fd3aa0b499ba887279fbbb4d5c7f261c2d729536513c68d885fc1761a4",
+    "quod_dtx_owner.beam": "2e91a32fd59b4e79e54f8e2d4cda147715fe8df1dfd8a572a928ce82841da8f8",
+    "quod_atomic.beam": "3b94784c49fa347242f6cb6fe560ffed3591c040f11e5c287ed6925d8decb6b0",
+    "quod_physics_predicates.beam": "ab8f494a84031e248002377c055983c8b63953f4ccd560b0dbdfabb692dd4b13",
+    "quod_proof_savepoint.beam": "cb090834b20ebcc18ac8e68f11d579c62e3b40b1ec994a52ed86e37ba75c78d8",
+    "quod_runtime.beam": "76dd18e621c4ae3a873628d507b8b3133108095b1c0030c95c18565a5fd6e303",
+    "quod_applied_certificate.beam": "5a3263e3e25c90811403585d2069bb902901f4d47e660eec8067201001c6ce8b",
+    "quod_ingress_state.beam": "9544498072ed8a773e7528630784679984aa8471370bdfbacc3f357164cbb45f",
+    "quod_committed_projection.beam": "5b1ee15bccb787b2702ba71cbf710bbd02a19ec266799fa7951281cdbac3b69d",
+    "quod_client_view.beam": "75096163252d304d068d6312de44f91a95dfdee6da278f7ec413597dfc56ec2d",
+    "quod_runtime_predicates.beam": "e2b0d8abcf060f0340b482e005c602be2d9150cf8b6e585bdfbf0179baadd057",
+    "quod_explorer_http.beam": "02aeb44ae5a9ee4956a4a376bd7bf819e96d52640b03e90343bca18369e74d7e",
+    "quod_commit_validation.beam": "feabca71183bdaa09feea06c8f31b71797cacec5db6d6646b3de8a0b97fd145b",
+    "quod_simplex.beam": "1c1f0e97d2d32532aa59fc064e794db0dcc89645284c5ba515c84e67b66805fd",
+    "quod_client_http.beam": "40e30b919e8281ca658ac92600db5423ff2016e8fca05d0f6182f432d55ac922",
+    "quod_metrics.beam": "7775b8c8ccc8c3513b70479f989ce35f17612fef039be161c106839af9a2b84b",
+    "quod_transaction.beam": "23e9e5f2ce5b769cc6c3bebcfbc141e9cf874c2d22f1f9b4387380d63832f19b",
+    "quod_proof_scope.beam": "1f290298a540753be7b5a82ecc22ee607302f4fb73a1d4f6f26a690e4cb4c1b8",
+    "quod_ns_sup.beam": "3bc21777fba39e8872a70c69e4d2f2b68855921bb3c83f1e56f4bb9223540164",
+    "quod_sup.beam": "608d79a8650ea983fa994378d8c5bba7a368c63d38055070e8d92ed5ae118658",
+    "quod_namespace_manager.beam": "1809c68415ee85de73a4be0e16e262cd974b6a628be5b919447bda788a2ed063",
+    "quod_client_goal_target.beam": "ebc800a65afb829f7475bca85a824ab68d0f90360276c8f80f6cd308f4bd1e75",
+    "quod_safe_term.beam": "d2ee2d218953ad131c56b04076374746849a8d54b3e661954e8091e307629b7a",
+    "quod_directory_predicates.beam": "e8d0737f03a5a13337f896ccbdb2b78dfbaefe9c780cb398d71513141890da99",
+    "quod_ask.beam": "956f437c5918b3b340216443a42b576ad030e3da1c0de7a389e710d29b2603bf",
+    "quod_consensus_trace.beam": "39daa0ce07dc2271b74081855f6a8e886c2b009402be02ecedf113c14064857e",
+    "quod_client_goal_parser.beam": "6e70906f67a2f5fb581386d829562f24ba75c3b7b64b94cef2321ccdddf30dcf",
+    "quod_material_admission.beam": "1ced9a9336083dd4c62ee8bfebfc0ee3978c616458861c91394c28c6b58131b5",
+    "quod_voxel.beam": "a18d80bb7c1799e4397e6c0f2739531163e8bae9d72f11e6bff2674074e3f8d0",
+    "quod_committee_predicates.beam": "8c6da37a15502837e429a3e29588ad74c06839a5c1da4af2f9fd81d67e39e341",
+    "quod_catchup.beam": "9dc79a5549e7bbff62014a283fa2116617f02ac900a0bae67844f5e776432fdc",
+    "quod_outcome.beam": "25ad1d1f0ba80c662129423b33405253ac088b32c5a33a5291997437bf08ee3c",
+    "quod_physics_native.beam": "ef6350645992943918f96b822632a414bf59f298b33099b56983c269a9d79b52",
+    "quod_schema.beam": "688b33864cf7bdb62b75263ec8c8375b003c1596168bd9ab954c4e3e389e16d4",
+    "quod_dtx_endpoint.beam": "7ba7fccf3238d2548661b4ad364cf7ee9f562d7d30dfa5b9967f8df6aaaf1544",
+    "quod_agent_identity.beam": "6edf3736f45e93552bc458c6f406291eae1a0455d6bfda910e203f55fba07e75",
+    "quod_conn.beam": "8a3434de453dd079456cc9facd42ffce531b7b96462673c142d50965f46e0a0b",
+    "quod_foreign_projection.beam": "5865ae9319b111fcc74d893aba435105a6290e1d923654fcb767585441b2dc86",
+    "quod_transaction_predicates.beam": "dae1ed5f2bcb984e5336fb643be0a928d1f419952003f0cfc36fa63d0d931538",
+    "quod_proof_session.beam": "f54d55524101d44265048eeb477d25af0b53c36ceb144db087de69ab302c85f8",
+    "quod_explorer.beam": "9ef7b6bdcd35d4edaf07450b829bf3216d57506debb9df2cb262d6eb521f1771",
+    "quod_c4_sdk_config.beam": "647cc02c9b2fa43ff9c9c76f79f0f3b0df49c344032c2b5409987c68fb8dccb2",
+    "quod_directory_generation.beam": "f4df995f24051f2b2cb8885e734521f06c0630ef0b00f9d23097300cdadf95ea",
+    "quod_brahms_sampler.beam": "ebe06c8e0982b3581c09972f6d2d503dfc85b9480e7a47a00e0db613d284e20c",
+    "quod_agent_vault.beam": "b5d9cf6d592d200e92ea98e18d948d0c4f079cccb28df6508c2f65a4d3588441",
+    "quod_ask_router.beam": "f39e091a17c5a2b8c6a9099f3b624533db309a4bf5b646763af1c1406dbbb95d",
+    "quod_feed.beam": "1fa99fea5c6202bef8691a4973998615d85df10dc9a57101965a24c570d797db",
+    "quod_agent_work_predicates.beam": "64a93bdd26beec5f6e6b02ec7cbfa221c531bbf221402f09ffe7241b7e845540",
+    "quod_explorer_ws.beam": "ab8329595fc6bca817d6e3443e5b542d9725884a14d4cdd327ff002596328873",
+    "quod_atomic_admission.beam": "397398480bbfd2d7b5d3a3856c7a7b80d191771870370103e7b7aa6db08675ff",
+    "quod_read_set.beam": "0195016d1533ff44b60314fc5bd8e1771d063aa827bf83d8928210343729fcc3",
+    "quod_node_actor.beam": "0abafb4f3bdd4ad813e855777eae24ce0b73e30c0c55e383ab8b1c3b6bf29f3c",
+    "quod_signing_journal.beam": "0b7732b42b6c3a6eabbab1648f40188fc2dec8c325c6a988b687871ea5a8e698",
+    "quod_client_cursor.beam": "c7e4f8fe872fba456a7039db9a1ccdf7e4b2cc79df658ab52aa32283ed936d60",
+    "quod_relay.beam": "edf4323ef59ef32cf5473439eb2b69f5289229b3580d37bac400cacb4c7749fd",
+    "quod_scope_session.beam": "b108826f39b3a813e8c3a2f3126bebe76bba951c8a6801532632fd9853b4b30f",
+    "quod_agent.beam": "d5a513d8d7219780b2c9560a98d83a60196e95ba0dcfe4f76986157c71aaae11",
+    "quod_physics.beam": "d3e2054e4aa80c543f84622037a81a70b1f31ea15e26e65fb0edb13415fe6dac",
+    "quod_time.beam": "f3be889e562b8010744f641dddcc97bdb019be0424a7b96f0bd81fedfb6c90df",
+    "quod_client_goal_ingress.beam": "2f84bb3f20f819f47408c6088c04bd25495e8837e9da5cb38dff993f0f557428",
+    "quod_effect_journal.beam": "686221b0c045ebb48a4ba822f3c398923dd52c30cedffb116ce84f6f377a5213",
+    "quod_operation_vector.beam": "78d6c3b45f61b083ed494a775b71c6d530c4edb0ecc2282d3995ef3099077b43",
+    "quod_attempt_span.beam": "446bffdeb5b9a61fb0d9711a836335569c8f47cb257c111d0e9803d92d834d0a",
+    "quod_ontology_predicates.beam": "66ca853ca9719d21f1debbac596f5c11ae8bad3e400ff8dbafe4d1d704e06188",
+    "quod_client_goal_endpoint.beam": "f7bc3c164ea1bf0aee27f87febdbb89f093110435984af62c6782f0eac8be811",
+    "quod_identity.beam": "fc82be7b58ee7bd3419e17f6a52c4be0c7f48c0971fceea11d2a2a27659b558b",
+    "quod_directory.beam": "43b57d1661f69a6d87cca1632cebf667513b709abedc9d943d984380641ea819",
+    "quod_gui_presentation.beam": "a570666e9af3c67a92f5c5ad8a44e4448b69c780cf8c7ca0a04b81b9de1801e7",
+    "quod_link.beam": "449ed449eb8a82c14ff065db04d08878357bcef7529dcc2dd53355749b72bbdf",
+    "quod_http_headers_h.beam": "55c37cbd342c9ce1d0130970fe8726e9932cc5fd01a3b731cd6e169494e91326",
+    "quod_erlog_db_local_prove.beam": "92d2a7504c6e85a02434cd91a03bebe6d3512f2c1b1d56761d6da7311d8bc643",
+    "quod_ledger_store.beam": "0363a624e1229812242c5f60621bcb7082c5bc238ae5d128f6552d11fdd40683",
+    "quod_durable_term.beam": "8060ba770b62e9520dc3a5dd56211e7f8f8995d092798891814a4847b80ee569",
+    "quod_client.beam": "702e0ed463df30730c836688405f5f316d1b52c9b599c55495f5355615159b70",
+    "quod_client_result.beam": "0c9535d38003511b63937742cd4b645604d3a1efd79b2090d5eb1c0b01544991",
+    "quod_ontology.beam": "bf88460604cd19d86c2e94e31c2f8e4f51ec28be1615ba92c7045bd1cbfb85c6",
+    "quod_ontology_name.beam": "d771eb3cc986035004489969e1cb2cbc9c8e4c887b4fd6949f51692687e491df",
+    "quod_brahms.beam": "a55fd688e55c01e70950dc89b94f5c9f70adb1b98013f2c41ebf10ba575f6cf9",
+    "quod_system_ontology.beam": "c98dd693c301971f4c0a689d4595da431f96851d50991f1804e6e5610a9ceb79",
+    "quod_common_primitives.beam": "c41d8bb87eee8aff7fb6edc796c76102d58a050e5acae9c7a2ec986a87a9ee66",
+    "quod_physics_coordinates.beam": "958076239e4fe54a0756ca4d17b2cd9c3e78d958ce58b1c1d11cde6dcca7229d",
+    "quod_ns.beam": "0832ee36ca01d606929c033cfed3dc0c84bffe53e2218bfb2e150e8914b5bd08",
+    "quod_action_predicates.beam": "13b78d237903a4d426437c383d1b3e653e5a66723a5014a8b69fe3eb4c80decf",
+    "quod_operation.beam": "7f28f2387d41c1a43afc41c950802f4f9f350e67abd2cf8ffe96380aceefc392",
+    "quod_transaction_scope.beam": "2e5d78ddb81a985075fe83d0c8bbd8bbc4ad046cd30b51248876a1d7075d2eef",
+    "quod_proof_continuation.beam": "c7b29e27c84974480627d8cc1a4daef16620b9d83bc459d52c795b3b122c60d9",
+    "quod_scope_wire.beam": "10090cbe9e38213d33a0d23377e623853596f1fdca7de812fc96133c717a937e",
+    "quod_read_certificate.beam": "70aeab2b4789c1e1a418f29f878e7564e967de82ee9ba359d7fada98191d5b4d",
+    "quod_prolog.beam": "0d284b1889d620baae71d85bedab8ad0acf3fe2b555d676ac8c43e19aad9f2bc",
+    "quod_physics_frames.beam": "49b469d6f81e8732e607bc12eba6dd54d7f2ff97539da45678c6f135d2684ae2",
+    "quod_observation.beam": "8879026b24df2ef68a9bf06446b6bb4b1f3c9fb54dc42328d95aff6c393ee0f5",
+    "quod_file.beam": "7bd0eabe32fbd9612bce98fcca78c5774a9231e6d9f95831a0100e062a6a3420",
+    "quod_gui_predicates.beam": "31fac1fd0f4700ecf26133f4ca75ad67a0795eb6abe7bf7ba1dbb5be2e3a60b9",
+    "quod_quorum.beam": "5d96822b7e31f2d3d2e63da817267791fe7ede656867465986dd49a1fb8dabd5",
+    "quod_c4_sampler_observation.beam": "ff938764b36f830ae3beb5a91035c758f836a8fe0bd0aea9d3e22e2e934e93c7",
+    "quod_client_goal.beam": "d5dfb8c0f9e5f97209ec941c6ee8eb54f05f300b10cd0380c0ce57ff8c99b529",
+    "quod_dtx_coordinator.beam": "05b60672ab2cea8462662793a0fd683839deb488ef48f05d60436e2db9f470b7",
+    "quod_rate.beam": "189fcf50f27da29f70a6e4c18a85ee10084c64a8953381889e31ae55640a6ea3"
+  },
+  "ebin": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04/ebin",
+  "command": [
+    "docker",
+    "run",
+    "--rm",
+    "--init",
+    "--user",
+    "1000:1000",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source:/work:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone:/code:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-boundaries/owner04:/checks",
+    "-w",
+    "/code",
+    "-e",
+    "ERL_FLAGS=+S 4:4 +SDio 2 +SDcpu 2",
+    "--entrypoint",
+    "/bin/sh",
+    "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+    "-c",
+    "exec erl -noshell -pa /work/_build/test/checkouts/*/ebin /work/_build/test/lib/*/ebin /work/_build/test/lib/quod/test -eval \"$1\"",
+    "sh",
+    "{ok,quod_ask}=compile:file(\"/checks/quod_ask.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_client_goal_endpoint}=compile:file(\"/checks/quod_client_goal_endpoint.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_client_goal_router}=compile:file(\"/checks/quod_client_goal_router.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_client_result}=compile:file(\"/checks/quod_client_result.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_client_view}=compile:file(\"/checks/quod_client_view.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_dtx}=compile:file(\"/checks/quod_dtx.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_physics}=compile:file(\"/checks/quod_physics.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_proof_session}=compile:file(\"/checks/quod_proof_session.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_scope_session}=compile:file(\"/checks/quod_scope_session.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_scope_wire}=compile:file(\"/checks/quod_scope_wire.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_terrain_wire}=compile:file(\"/checks/quod_terrain_wire.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_voxel}=compile:file(\"/checks/quod_voxel.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_wire_term}=compile:file(\"/checks/quod_wire_term.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_ask_tests}=compile:file(\"/checks/quod_ask_tests.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_client_goal_endpoint_tests}=compile:file(\"/checks/quod_client_goal_endpoint_tests.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_client_goal_router_tests}=compile:file(\"/checks/quod_client_goal_router_tests.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_client_result_tests}=compile:file(\"/checks/quod_client_result_tests.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_dtx_tests}=compile:file(\"/checks/quod_dtx_tests.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_material_admission_tests}=compile:file(\"/checks/quod_material_admission_tests.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_physics_tests}=compile:file(\"/checks/quod_physics_tests.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_proof_answer_tests}=compile:file(\"/checks/quod_proof_answer_tests.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_proof_session_tests}=compile:file(\"/checks/quod_proof_session_tests.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_scope_session_tests}=compile:file(\"/checks/quod_scope_session_tests.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_scope_wire_tests}=compile:file(\"/checks/quod_scope_wire_tests.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_terrain_wire_tests}=compile:file(\"/checks/quod_terrain_wire_tests.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_wire_term_tests}=compile:file(\"/checks/quod_wire_term_tests.erl\",[export_all,{d,'TEST'},{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\nhalt(0)."
+  ],
+  "elapsed_seconds": 10.555005106998578
+}

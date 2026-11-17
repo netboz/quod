@@ -1,0 +1,51 @@
+--- doc/evidence/godot-m4-vive-retest10-20261030/verify_result.py
++++ doc/evidence/godot-m4-vive-retest10-20261030/verify_result02.py
+@@ -34,14 +34,14 @@
+  p=Path(row['path']);assert p.stat().st_mode&0o7777==0o600 and raw(p)==row['sha256']
+  assert raw(wrapper.parent/('native-vive-product10-run-'+kind+'.log'))==row['sanitized_sha256']
+ api=load(ev/'api-lifecycle.json');assert api['raw_sha256']==r['api_dump']['sha256'] and api['raw_bytes']==r['api_dump']['bytes']
+-# The completed one-pass parser did not retain pre/post stat keys. Complete the
+-# missing strict binding with one separately labelled byte-only digest pass;
+-# do not replay its parsing, a campaign or any older dump.
+-dump=Path(r['api_dump']['path']);before=key(dump);assert dump.stat().st_mode&0o7777==0o600
+-assert d.h(dump)==api['raw_sha256'] and key(dump)==before
+-write(ev/'api-strict-binding.json',{'path':str(dump),'sha256':api['raw_sha256'],'bytes':api['raw_bytes'],'stat_key':before,
+- 'scope':'New completed case10 only. One parse already completed; this remaining byte-only stat binding does not parse or run anything.',
+- 'parse_count':1,'additional_byte_binding_pass':True,'raw_bytes_remain_private':True})
++# Verifier01 completed the new API's strict byte/stat binding before its later
++# resource-scope assertion failed. Reuse that exact key, never reread this dump.
++first=load(ev/'result-verification01/result.json');assert first['exit']==1
++assert (ev/'verify_result.py').read_bytes()==(TASK/'private/metadata-inputs/case10-result-verification01/verify_result.py').read_bytes()
++assert 'line 53' in (ev/'result-verification01/output.log').read_text()
++binding=load(ev/'api-strict-binding.json');dump=Path(binding['path']);current=key(dump)
++assert current==tuple(binding['stat_key']) and binding['sha256']==api['raw_sha256'] and dump.stat().st_mode&0o7777==0o600
++d.values[current]=binding['sha256'];d.used[current]=binding['sha256']
+ last=c['snapshots'][-1];metrics=last['metrics'];resources=metrics['resources']
+ assert len(c['checks'])==13 and last['phase']=='observer-retired'
+ assert metrics['Subscriptions']==metrics['sources']==metrics['appearances']==metrics['captures']==0
+@@ -49,7 +49,8 @@
+ assert resources['LiveTemplates']==resources['LiveLeases']==0 and metrics['LateCallbacks']==0
+ assert all(s.get('phase')!='ninety_frames' for s in c['snapshots'])
+ assert all(row.get('diagnostic_instruction') not in ['sample','gui-check','close-form','restart'] for row in r['commands'])
+-observed=[s for s in c['snapshots'] if s.get('metrics',{}).get('resources',{}).get('Acquisitions')==2 and s['metrics']['resources']['Releases']==0]
++observed=[s for s in c['snapshots'] if s.get('metrics',{}).get('resources',{}).get('InstancesCreated')==2 and s['metrics']['resources']['Releases']==0]
++assert len(observed)==4 and observed[0]['phase']=='status'
+ assert all([s['metrics']['resources'][n] for n in ['Acquisitions','Decodes','InstancesCreated','NodesBuilt','TexturesDecoded']]==[2,1,2,114,1] for s in observed)
+ human=load(ev/'visual-response-80.json')['answer'];assert human['respondedAt']==1793358716056
+ answers=human['answers'];assert answers['headset_view']['selectedId']=='both_lenses' and answers['panel_readability']['selectedId']=='readable_comfortable'
+@@ -65,7 +66,7 @@
+  'human':{'responded_at':human['respondedAt'],'both_lens_interface':True,'front_readable_comfortable_panel':True,'controller_exact_other':exact,'controller_visibility_pass':False,'neutral_or_sample_permission':False,'scope':'One actual look on this diagnostic payload; no general comfort claim.'},
+  'later_pose_counts':[{'hand':s['hand'],'tracked_frames':s['tracked_frames'],'internal_adjusted_pose_disagreements':s['pose_disagreements'],'raw_edges':len(s['edges'])} for s in last['sources']],
+  'pose_scope':'Recorded FramePostDraw availability/counts; Current(0) is not a separate freshness proof. Post-answer geometry cannot qualify the earlier human interval. Ninety-draw gate unrun.',
+- 'model_work_unchanged_in_recorded_repeats':{'acquisitions':2,'decodes':1,'instances':2,'nodes':114,'textures':1,'server_history_read_write_sync':'Not newly measured; unchanged accepted software evidence reused.'},
++ 'model_work_unchanged_after_first_completed_appearance':{'acquisitions':2,'decodes':1,'instances':2,'nodes':114,'textures':1,'server_history_read_write_sync':'Not newly measured; unchanged accepted software evidence reused.'},
+  'final_metrics':metrics,'api_counts':api['counts'],'api_layer_counts':api['submitted_layer_counts'],'api_projection_view_counts':api['projection_view_counts'],'api_scope':api['scope'],
+  'focus_extension81':'UNRUN: normal stop11:18:35/finish11:18:41 occurred before instruction81 at11:20:03.725. Closed PID/address/exec never reused.',
+  'prepared_event_listener':{'sha256':raw(ev/'focus_events.py'),'pure_checks':14,'pure_child_exit':0,'actual_listener_armed':False,'live_qualification':'UNRUN; future separately authorized owned case required.','snapshot_limit':'No socket2 acknowledgement or cross-socket ordering barrier/sequence; snapshot never overwrites event stream state.'},
+@@ -75,5 +76,5 @@
+  'Future event observer requires actual new case authority/readiness; no automatic11 or human question. Historical08/09/cold-head and desktop stalls remain failed. No fullM4/QUO27/QUO59/Stage2/Quest credit.']}
+ write(ev/'qualification.json',qualification)
+ cache=TASK/'cache/case10-result-verification-hashes.json';d.write(cache)
+-write(ev/'result-cache.json',{'path':str(cache),'sha256':raw(cache),'strict_hits':d.hits,'new_hashes':d.new,'new_bytes':d.bytes})
++write(ev/'result-cache.json',{'path':str(cache),'sha256':raw(cache),'new_api_digest_reused_from_completed01_prefix':True,'strict_hits':d.hits,'new_hashes':d.new,'new_bytes':d.bytes})
+ print(json.dumps({'passed':True,'scope':'New receipt/source/privacy binding only; no product replay.','helper_checks':13,'pure_offline_checks':14,'full_physical_acceptance':False}))

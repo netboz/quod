@@ -1,0 +1,15 @@
+{
+  "helper_failure_preserved": {
+    "phase": "pre-launch wrapper adaptation",
+    "exit": 1,
+    "reason": "Assertion tested substring finish_sent, also present in the retained receipt key finish_sent_monotonic. No wrapper source was written before assertion. Applied direct patch afterward.",
+    "application_or_runtime_launch": false
+  },
+  "regressions": [
+    "steamvr264-supervision-regression01",
+    "steamvr264-supervision-regression02"
+  ],
+  "selected_checks": 15,
+  "companion_rebuilt": false,
+  "failed263_untouched": true
+}

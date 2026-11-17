@@ -1,0 +1,301 @@
+{
+  "inputs": {
+    "src/quod_voxel.erl": {
+      "sha256": "af39b9b1c30bf1a44007efe706231b9811ebd4d828fd2a4d5f25e0f4d53029e2",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_voxel.erl"
+    },
+    "src/quod_physics.erl": {
+      "sha256": "39792fb4a50c149e20550ce6070d18df4e8568b5b1e5c9e379b8190e3aa8659b",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_physics.erl"
+    },
+    "test/quod_rendering_tests.erl": {
+      "sha256": "0601e08693ac5fda153132aa9e93c3f8e76f5f1e9abe538f1b2dfb699f3f68bf",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_rendering_tests.erl"
+    },
+    "test/quod_lens_tests.erl": {
+      "sha256": "2b37cd01f31c96879989416def4ba06d6011510109706c83e84302f8e5c7613f",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_lens_tests.erl"
+    },
+    "test/quod_voxel_tests.erl": {
+      "sha256": "0e2c55652d4c6f11803a68767d91f53228e556aee6052d8dbb42fd84cb4c7a37",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_voxel_tests.erl"
+    },
+    "priv/ontologies/lobby_atmosphere.pl": {
+      "sha256": "52e725869fb37f0c535fde08ed7576ab21b63b218559160e83d50a872414ebfd",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/lobby_atmosphere.pl"
+    },
+    "priv/ontologies/quod_names.pl": {
+      "sha256": "b8a5f99dbf72d9f1d8498123c7ec010e37970a86879eae6008a15900873bdeee",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_names.pl"
+    },
+    "priv/ontologies/voxel_world.pl": {
+      "sha256": "669e383e2e794184c66872e1529500ad301cfef2d35fbf92f96a1a3e72ecaf13",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/voxel_world.pl"
+    },
+    "priv/ontologies/quod_controllers.pl": {
+      "sha256": "78df5f091b5995d17a7465ebb416e9472ba1ca39914e66ea2df849ea357000b2",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_controllers.pl"
+    },
+    "priv/ontologies/cross_benchmark_target.pl": {
+      "sha256": "b0b41c0b28598b4cd0143a8d11c59374f4f3898049e8c5c6ab9d05cc504e2d2e",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/cross_benchmark_target.pl"
+    },
+    "priv/ontologies/lobby_instance.pl": {
+      "sha256": "57be0ddfc8d134da10e374bc493d8e4e6940c4f740ab3e4dc86861fe6a724a0a",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/lobby_instance.pl"
+    },
+    "priv/ontologies/common_predicates.pl": {
+      "sha256": "27a23b8d3d34e2f9e04316e9d2b101d92befbd039c623d293b4488a7da46a049",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/common_predicates.pl"
+    },
+    "priv/ontologies/quod_space.pl": {
+      "sha256": "70e1c448750c06f487f3f45378a869f09ab3a3281dfc3cdc55700a40b0f1204a",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_space.pl"
+    },
+    "priv/ontologies/gui_forms.pl": {
+      "sha256": "007032b836948bfbc13dfb3f20c467353b3b7c16cccef247cfc9f6ee5e28133b",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/gui_forms.pl"
+    },
+    "priv/ontologies/quod_environment_eidolons.pl": {
+      "sha256": "370cf34e94284de34669da8455e81634d24e723a4447b2171f9cb55f2a87a241",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_environment_eidolons.pl"
+    },
+    "priv/ontologies/hinged_example_view.pl": {
+      "sha256": "1b504de1d5f76068684b5968724944f287ef41e2cfd136d6af7c37da1e0bc935",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/hinged_example_view.pl"
+    },
+    "priv/ontologies/gui_scene.pl": {
+      "sha256": "6b29795ad6705b19ab1a0089b8628100afe3a48d4a09637c73415982781f56e6",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/gui_scene.pl"
+    },
+    "priv/ontologies/quod_hinged.pl": {
+      "sha256": "5a1b432da48b0439655994be2f6a8aa613db2cb18c4c1dc965d8b31a0c2078b2",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_hinged.pl"
+    },
+    "priv/ontologies/quod_environment.pl": {
+      "sha256": "2ecbd5e3208cb0a21890f6e5600a1813021a18df6618d02e12a00bb8a8c87f43",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_environment.pl"
+    },
+    "priv/ontologies/gui_instance.pl": {
+      "sha256": "3ba66deb9d36308a783b61583b260b82783de36b1b9fd729d9b23d8ce95107c0",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/gui_instance.pl"
+    },
+    "priv/ontologies/cross_benchmark_source.pl": {
+      "sha256": "3da47909be1b5265c560405e1909e592aec5ee6fbf3d5f0339ab24ed04b99608",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/cross_benchmark_source.pl"
+    },
+    "priv/ontologies/quod_node.pl": {
+      "sha256": "f7531de9c3081ec26f77d43f34a937d2c7cfc2941ef4d27f6858764ae0d900a2",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_node.pl"
+    },
+    "priv/ontologies/fipa_request.pl": {
+      "sha256": "d7a7de47079235a134eec507efeb789afdc78fc8af6d6294f93e725ca22032da",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/fipa_request.pl"
+    },
+    "priv/ontologies/animals.pl": {
+      "sha256": "75f1a2c0cac115091b1b54c7c410cebafae9a434c414e8df9159c9445640d018",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/animals.pl"
+    },
+    "priv/ontologies/agent_recovery_policy.pl": {
+      "sha256": "9839cd3f6f49115391e00963f97401f34374f977d2b1b5054fb9e0e63400b865",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/agent_recovery_policy.pl"
+    },
+    "priv/ontologies/pets.pl": {
+      "sha256": "7940ee0b18cced9019a56b98aeda795d97986acd29869a6e9ea84afff4c24197",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/pets.pl"
+    },
+    "priv/ontologies/node_instance.pl": {
+      "sha256": "b54de016f5f413fd6a5e3118ac25b824bf4ffd3133e419924250e87678989c40",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/node_instance.pl"
+    },
+    "priv/ontologies/quod_licence.pl": {
+      "sha256": "a93e1664cf1cf9db7de01ce5d0b6bddef357ffcb7e7b5ab5f641db272df21112",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_licence.pl"
+    },
+    "priv/ontologies/quod_material_eidolons.pl": {
+      "sha256": "f31583679b387e679378c3908dd2503ccc803dee17e31cf5de38382e3be224cf",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_material_eidolons.pl"
+    },
+    "priv/ontologies/quod_material.pl": {
+      "sha256": "8fa34ec28eb02510164f4d05f9e31ed10dd0a39784589e843761cf73adc8f96d",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_material.pl"
+    },
+    "priv/ontologies/construction.pl": {
+      "sha256": "b86de51186ca0a308485d37f11237d26c96439a62681d449d18954c19597a266",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/construction.pl"
+    },
+    "priv/ontologies/voxel_world_gui.pl": {
+      "sha256": "9e66b7089abe70078ea198da07e377bff77ed875c71e5121fe63ae8fd0f4035c",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/voxel_world_gui.pl"
+    },
+    "priv/ontologies/agent_instance.pl": {
+      "sha256": "ffec2e02cfd6bf89e1bc1d26b61cfc6b6ffc9c0feea4807c64849e8b45373613",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/agent_instance.pl"
+    },
+    "priv/ontologies/quod_gui.pl": {
+      "sha256": "012da0f37e94ab5ab5a4a26e4ea38e422cad9b650d30bc00a7e8d02c4b81f6db",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_gui.pl"
+    },
+    "priv/ontologies/voxel_world_view.pl": {
+      "sha256": "9b8a5505d68bf1399aced9b867acf88a39be2fefa3366a3a757a5e758c31cf8e",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/voxel_world_view.pl"
+    },
+    "priv/ontologies/quod_lobby.pl": {
+      "sha256": "fc22164d4683b2bac4d67d91779d06ffa9a7b27d2b25367b56c827fb94dd4c25",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_lobby.pl"
+    },
+    "priv/ontologies/instrument_configuration.pl": {
+      "sha256": "68bf3df1a39e184f44a42f22149fade89a1a0e51738e237df7c72018f699f561",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/instrument_configuration.pl"
+    },
+    "priv/ontologies/quod_root.pl": {
+      "sha256": "20193024399f1fbccb745d4e730a2dd52ae6206a5c708815e44415dd8104293a",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_root.pl"
+    },
+    "priv/ontologies/quod_agent.pl": {
+      "sha256": "58664252af00ff0137d88268a529475941641ed34a7c199e68a1c5dabc49bb5f",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_agent.pl"
+    },
+    "priv/ontologies/gui_tools.pl": {
+      "sha256": "ea0d5ee6b08cdd29e3ad517cb880e3b09ea913766aef9f24d8ccf450137329c8",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/gui_tools.pl"
+    },
+    "priv/ontologies/geometry_schema.pl": {
+      "sha256": "90975d5382ebaaaeeb006ec0796207726a42201b590023eaf13cfc97c0329b54",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/geometry_schema.pl"
+    },
+    "priv/ontologies/quod_user.pl": {
+      "sha256": "5dd72d559c73f22050372d7659dc278805c05dea2fba7dd3bb397fc40ac25258",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_user.pl"
+    },
+    "priv/ontologies/quod_physics.pl": {
+      "sha256": "b24718fe4ee6f8c7aff9644dc3580d36cb2963e08cb936a3af0b119d0af7c439",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_physics.pl"
+    },
+    "priv/ontologies/gui_measure.pl": {
+      "sha256": "95b1c373b7e4e6c227d5106357b4696bb9ca7e102f630d58a869d7854fce5b58",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/gui_measure.pl"
+    },
+    "priv/ontologies/user_instance.pl": {
+      "sha256": "2993ac2ef2e3a9ab2142780dbb21b28c271d44130db5ead43901023e9fa00b99",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/user_instance.pl"
+    },
+    "priv/ontologies/material_policy.pl": {
+      "sha256": "ad07dc60e23a47f7d55a81aecbeee528cfe3d00dc96b89b08463e33816706169",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/material_policy.pl"
+    },
+    "priv/ontologies/lobby_worlds.pl": {
+      "sha256": "bf7bba8d4aff998ab47512e0c24e0cd29339f366c9704cceaf2d1b2120bd359b",
+      "copy": "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/lobby_worlds.pl"
+    }
+  },
+  "command": [
+    "docker",
+    "run",
+    "--rm",
+    "--init",
+    "--user",
+    "1000:1000",
+    "-v",
+    "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source:/work:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone:/code:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02:/checks",
+    "-w",
+    "/code",
+    "-e",
+    "ERL_FLAGS=+S 4:4 +SDio 2 +SDcpu 2",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/lobby_atmosphere.pl:/work/priv/ontologies/lobby_atmosphere.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_names.pl:/work/priv/ontologies/quod_names.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/voxel_world.pl:/work/priv/ontologies/voxel_world.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_controllers.pl:/work/priv/ontologies/quod_controllers.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/cross_benchmark_target.pl:/work/priv/ontologies/cross_benchmark_target.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/lobby_instance.pl:/work/priv/ontologies/lobby_instance.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/common_predicates.pl:/work/priv/ontologies/common_predicates.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_space.pl:/work/priv/ontologies/quod_space.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/gui_forms.pl:/work/priv/ontologies/gui_forms.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_environment_eidolons.pl:/work/priv/ontologies/quod_environment_eidolons.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/hinged_example_view.pl:/work/priv/ontologies/hinged_example_view.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/gui_scene.pl:/work/priv/ontologies/gui_scene.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_hinged.pl:/work/priv/ontologies/quod_hinged.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_environment.pl:/work/priv/ontologies/quod_environment.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/gui_instance.pl:/work/priv/ontologies/gui_instance.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/cross_benchmark_source.pl:/work/priv/ontologies/cross_benchmark_source.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_node.pl:/work/priv/ontologies/quod_node.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/fipa_request.pl:/work/priv/ontologies/fipa_request.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/animals.pl:/work/priv/ontologies/animals.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/agent_recovery_policy.pl:/work/priv/ontologies/agent_recovery_policy.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/pets.pl:/work/priv/ontologies/pets.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/node_instance.pl:/work/priv/ontologies/node_instance.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_licence.pl:/work/priv/ontologies/quod_licence.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_material_eidolons.pl:/work/priv/ontologies/quod_material_eidolons.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_material.pl:/work/priv/ontologies/quod_material.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/construction.pl:/work/priv/ontologies/construction.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/voxel_world_gui.pl:/work/priv/ontologies/voxel_world_gui.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/agent_instance.pl:/work/priv/ontologies/agent_instance.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_gui.pl:/work/priv/ontologies/quod_gui.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/voxel_world_view.pl:/work/priv/ontologies/voxel_world_view.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_lobby.pl:/work/priv/ontologies/quod_lobby.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/instrument_configuration.pl:/work/priv/ontologies/instrument_configuration.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_root.pl:/work/priv/ontologies/quod_root.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_agent.pl:/work/priv/ontologies/quod_agent.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/gui_tools.pl:/work/priv/ontologies/gui_tools.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/geometry_schema.pl:/work/priv/ontologies/geometry_schema.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_user.pl:/work/priv/ontologies/quod_user.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/quod_physics.pl:/work/priv/ontologies/quod_physics.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/gui_measure.pl:/work/priv/ontologies/gui_measure.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/user_instance.pl:/work/priv/ontologies/user_instance.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/material_policy.pl:/work/priv/ontologies/material_policy.pl:ro",
+    "-v",
+    "/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-presentation-limits/owner02/lobby_worlds.pl:/work/priv/ontologies/lobby_worlds.pl:ro",
+    "--entrypoint",
+    "/bin/sh",
+    "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+    "-c",
+    "exec erl -noshell -pa /work/_build/test/checkouts/*/ebin /work/_build/test/lib/*/ebin /work/_build/test/lib/quod/test -eval \"$1\"",
+    "sh",
+    "{ok,quod_voxel}=compile:file(\"/checks/quod_voxel.erl\",[{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_physics}=compile:file(\"/checks/quod_physics.erl\",[{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_rendering_tests}=compile:file(\"/checks/quod_rendering_tests.erl\",[{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_lens_tests}=compile:file(\"/checks/quod_lens_tests.erl\",[{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\n{ok,quod_voxel_tests}=compile:file(\"/checks/quod_voxel_tests.erl\",[{outdir,\"/checks/ebin\"},{i,\"/code/include\"},report_errors,report_warnings]),\ntrue=code:add_patha(\"/checks/ebin\"), case eunit:test([quod_rendering_tests,quod_lens_tests,quod_voxel_tests],[verbose]) of ok->halt(0);_->halt(1) end."
+  ]
+}

@@ -13,12 +13,12 @@ eidolon_query(instance_of(_, _)).
 eidolon_query(texture_asset(_, _, _, _)).
 eidolon_query(Goal) :- public_source_query(Goal).
 
-surface_recipe(wood, solid, warm_wood, surface(<<"#93613D">>,0,700,0,[])).
+surface_recipe(wood, solid, warm_wood, surface(<<"#93613D">>,0,700,0,1000,[])).
 surface_recipe(oak_wood, solid, oak, Surface) :- textured_surface(wood_table_001, 1000, Surface).
-surface_recipe(stone, solid, stone, surface(<<"#918477">>,0,900,0,[])).
+surface_recipe(stone, solid, stone, surface(<<"#918477">>,0,900,0,1000,[])).
 surface_recipe(marble, solid, marble, Surface) :- textured_surface(floor_tiles_02, 2500, Surface).
-surface_recipe(metal, solid, metal, surface(<<"#919DA0">>,1000,350,0,[])).
-surface_recipe(bronze, solid, bronze, surface(<<"#AE8051">>,1000,400,0,[])).
+surface_recipe(metal, solid, metal, surface(<<"#919DA0">>,1000,350,0,1000,[])).
+surface_recipe(bronze, solid, bronze, surface(<<"#AE8051">>,1000,400,0,1000,[])).
 
 %% Enumerate every most-specific recipe. Incomparable alternatives or two
 %% recipes at the same specificity remain choices for the consuming world.
@@ -63,7 +63,7 @@ texture_asset(floor_tiles_02, <<"orm">>,
     asset(<<"e03673c57b47c2ce436d8cd3851ff1030e1304162d16c47e82c54721e5c17479">>, <<"image/jpeg">>),
     source(<<"https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/floor_tiles_02/floor_tiles_02_arm_1k.jpg">>, <<"CC0-1.0">>)).
 
-textured_surface(Asset, Repeat, surface(<<"#FFFFFF">>, 0, 1000, 0, Textures)) :-
+textured_surface(Asset, Repeat, surface(<<"#FFFFFF">>, 0, 1000, 0, 1000, Textures)) :-
     findall(texture(Slot, Ref, repeat(Repeat, Repeat)), texture_asset(Asset, Slot, Ref, _), Textures).
 
 %% Babylon playground samples, retained byte-for-byte with content identity.

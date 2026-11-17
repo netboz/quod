@@ -1,0 +1,118 @@
+{
+  "passed": true,
+  "reader_errors": [],
+  "host_input_or_focus_action": false,
+  "software_native_Control_inputs": true,
+  "setup_Control_signals": true,
+  "no_headset_or_runtime": true,
+  "companion_not_distributed": true,
+  "production_auth_lifetime_unchanged": true,
+  "manifest_sha256": "18e369ba036955769e6ce449019571810c76f53a87a830a704b2b2f6ceb634f4",
+  "driver_inputs": {
+    "signed.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/visibility-question08/drivers/signed.py",
+      "sha256": "bfcb85cfcaab3dada0f19494c606b38e4eba4704896ded1ff4fb588582871c8b"
+    },
+    "isolation.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/visibility-question08/drivers/isolation.py",
+      "sha256": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8"
+    },
+    "hashes.py": {
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/visibility-question08/drivers/hashes.py",
+      "sha256": "4578d513b92c34e1ed0c82d8401361e2db5fd412e0678607ef151425bb305fb5"
+    }
+  },
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-visibility-question-stdout": true,
+    "client-visibility-question-stderr": true
+  },
+  "streams": {
+    "server-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/visibility-question08/server-stdout.raw",
+      "sha256": "3b860d4d4eeebb59221d110f4660ab93852770389a3b9a1602adc65d7b338bf6",
+      "bytes": 129
+    },
+    "client-visibility-question-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/visibility-question08/client-visibility-question-stderr.raw",
+      "sha256": "9faee901efd231152076fcde9be460be08252114e7e7d68aad945d86f14ffc85",
+      "bytes": 137
+    },
+    "client-visibility-question-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/visibility-question08/client-visibility-question-stdout.raw",
+      "sha256": "0b92cc3a307e501a60794818c75b0b6894290cb93a14ea9a108b8cd15264ea6a",
+      "bytes": 88351
+    },
+    "server-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/visibility-question08/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "native_input_count": 0,
+  "children": {
+    "server": {
+      "true_exit": 0
+    },
+    "client-visibility-question": {
+      "explicit_completion": true,
+      "completion_monotonic": 12269.969160236,
+      "true_exit": 0,
+      "checks": [
+        "native term decoder refuses the earlier fixture's literal non-UTF8 binary separator",
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "explicit signed question layout fixture commits",
+        "explicit signed question layout fixture commits",
+        "shared title styling retains question title field and actions at (False, 1200, 26) @Label@76",
+        "shared title styling retains question title field and actions at (False, 1200, 26) control0",
+        "shared title styling retains question title field and actions at (False, 1200, 26) control1",
+        "shared title styling retains question title field and actions at (False, 1200, 26) hide-question",
+        "shared title styling retains question title field and actions at (False, 1200, 26) cancel-question",
+        "question root title remains outside its bounded field scroll",
+        "question native editor and adjacent keyboard remain available at (False, 1200, 26)",
+        "actual affected question raster retained",
+        "shared title styling retains question title field and actions at (False, 1200, 48) @Label@76",
+        "shared title styling retains question title field and actions at (False, 1200, 48) control0",
+        "shared title styling retains question title field and actions at (False, 1200, 48) control1",
+        "shared title styling retains question title field and actions at (False, 1200, 48) hide-question",
+        "shared title styling retains question title field and actions at (False, 1200, 48) cancel-question",
+        "question root title remains outside its bounded field scroll",
+        "question native editor and adjacent keyboard remain available at (False, 1200, 48)",
+        "actual affected question raster retained",
+        "shared title styling retains question title field and actions at (False, 560, 26) @Label@76",
+        "shared title styling retains question title field and actions at (False, 560, 26) control0",
+        "shared title styling retains question title field and actions at (False, 560, 26) control1",
+        "shared title styling retains question title field and actions at (False, 560, 26) hide-question",
+        "shared title styling retains question title field and actions at (False, 560, 26) cancel-question",
+        "question root title remains outside its bounded field scroll",
+        "question native editor and adjacent keyboard remain available at (False, 560, 26)",
+        "actual affected question raster retained",
+        "shared title styling retains question title field and actions at (True, 1200, 26) @Label@76",
+        "shared title styling retains question title field and actions at (True, 1200, 26) control0",
+        "shared title styling retains question title field and actions at (True, 1200, 26) control1",
+        "shared title styling retains question title field and actions at (True, 1200, 26) hide-question",
+        "shared title styling retains question title field and actions at (True, 1200, 26) cancel-question",
+        "question root title remains outside its bounded field scroll",
+        "question native editor and adjacent keyboard remain available at (True, 1200, 26)",
+        "actual affected question raster retained",
+        "shared title styling retains question title field and actions at (True, 1200, 48) @Label@76",
+        "shared title styling retains question title field and actions at (True, 1200, 48) control0",
+        "shared title styling retains question title field and actions at (True, 1200, 48) control1",
+        "shared title styling retains question title field and actions at (True, 1200, 48) hide-question",
+        "shared title styling retains question title field and actions at (True, 1200, 48) cancel-question",
+        "question root title remains outside its bounded field scroll",
+        "question native editor and adjacent keyboard remain available at (True, 1200, 48)",
+        "actual affected question raster retained",
+        "question title layout preserves its native draft and pending identity",
+        "layout never submits or cancels the question and never starts native XR",
+        "enabled action disconnect",
+        "signed occurrence consumers retire through the existing owner"
+      ]
+    }
+  }
+}

@@ -1,0 +1,294 @@
+{
+  "files": [
+    {
+      "path": "client/godot-tests/Program.cs",
+      "category": "test",
+      "before_lines": 200,
+      "after_lines": 212,
+      "delta": 12
+    },
+    {
+      "path": "client/godot-tests/journey.py",
+      "category": "test",
+      "before_lines": 298,
+      "after_lines": 305,
+      "delta": 7
+    },
+    {
+      "path": "client/godot-tools/run.py",
+      "category": "production",
+      "before_lines": 71,
+      "after_lines": 76,
+      "delta": 5
+    },
+    {
+      "path": "client/godot/Core/Controllers.cs",
+      "category": "production",
+      "before_lines": 0,
+      "after_lines": 273,
+      "delta": 273
+    },
+    {
+      "path": "client/godot/Core/Controllers.cs.uid",
+      "category": "generated-uid",
+      "before_lines": 0,
+      "after_lines": 1,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/Core/PhysicsInput.cs",
+      "category": "production",
+      "before_lines": 72,
+      "after_lines": 96,
+      "delta": 24
+    },
+    {
+      "path": "client/godot/Core/PhysicsInput.cs.uid",
+      "category": "generated-uid",
+      "before_lines": 0,
+      "after_lines": 1,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/Core/Scene.cs.uid",
+      "category": "generated-uid",
+      "before_lines": 0,
+      "after_lines": 1,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/Core/StaticGlb.cs",
+      "category": "production",
+      "before_lines": 0,
+      "after_lines": 166,
+      "delta": 166
+    },
+    {
+      "path": "client/godot/Core/StaticGlb.cs.uid",
+      "category": "generated-uid",
+      "before_lines": 0,
+      "after_lines": 1,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/Core/Transport.cs",
+      "category": "production",
+      "before_lines": 206,
+      "after_lines": 218,
+      "delta": 12
+    },
+    {
+      "path": "client/godot/Core/World.cs",
+      "category": "production",
+      "before_lines": 161,
+      "after_lines": 173,
+      "delta": 12
+    },
+    {
+      "path": "client/godot/Core/World.cs.uid",
+      "category": "generated-uid",
+      "before_lines": 0,
+      "after_lines": 1,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/Main.cs",
+      "category": "production",
+      "before_lines": 424,
+      "after_lines": 502,
+      "delta": 78
+    },
+    {
+      "path": "client/godot/OpenXRInput.cs",
+      "category": "production",
+      "before_lines": 0,
+      "after_lines": 315,
+      "delta": 315
+    },
+    {
+      "path": "client/godot/OpenXRInput.cs.uid",
+      "category": "generated-uid",
+      "before_lines": 0,
+      "after_lines": 1,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/OperationsPanel.cs",
+      "category": "production",
+      "before_lines": 245,
+      "after_lines": 247,
+      "delta": 2
+    },
+    {
+      "path": "client/godot/README.md",
+      "category": "docs",
+      "before_lines": 74,
+      "after_lines": 111,
+      "delta": 37
+    },
+    {
+      "path": "client/godot/RenderModels.cs",
+      "category": "production",
+      "before_lines": 0,
+      "after_lines": 97,
+      "delta": 97
+    },
+    {
+      "path": "client/godot/RenderModels.cs.uid",
+      "category": "generated-uid",
+      "before_lines": 0,
+      "after_lines": 1,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/ScenePanel.cs",
+      "category": "production",
+      "before_lines": 223,
+      "after_lines": 245,
+      "delta": 22
+    },
+    {
+      "path": "client/godot/ScenePanel.cs.uid",
+      "category": "generated-uid",
+      "before_lines": 0,
+      "after_lines": 1,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/SpatialGui.cs",
+      "category": "production",
+      "before_lines": 0,
+      "after_lines": 70,
+      "delta": 70
+    },
+    {
+      "path": "client/godot/SpatialGui.cs.uid",
+      "category": "generated-uid",
+      "before_lines": 0,
+      "after_lines": 1,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/assets/vive-LICENSE.txt",
+      "category": "production",
+      "before_lines": 0,
+      "after_lines": 26,
+      "delta": 26
+    },
+    {
+      "path": "client/godot/project.godot",
+      "category": "production",
+      "before_lines": 13,
+      "after_lines": 16,
+      "delta": 3
+    },
+    {
+      "path": "client/godot/tests/ControllerChecks.cs",
+      "category": "test",
+      "before_lines": 0,
+      "after_lines": 126,
+      "delta": 126
+    },
+    {
+      "path": "client/godot/tests/ControllerChecks.cs.uid",
+      "category": "generated-uid",
+      "before_lines": 0,
+      "after_lines": 1,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/tests/ControllerLiveChecks.cs",
+      "category": "test",
+      "before_lines": 0,
+      "after_lines": 76,
+      "delta": 76
+    },
+    {
+      "path": "client/godot/tests/ControllerLiveChecks.cs.uid",
+      "category": "generated-uid",
+      "before_lines": 0,
+      "after_lines": 1,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/tests/ExportChecks.cs",
+      "category": "test",
+      "before_lines": 254,
+      "after_lines": 258,
+      "delta": 4
+    },
+    {
+      "path": "client/godot/tests/ExportLifecycle.cs",
+      "category": "test",
+      "before_lines": 380,
+      "after_lines": 384,
+      "delta": 4
+    },
+    {
+      "path": "client/godot/tests/NavigationChecks.cs.uid",
+      "category": "generated-uid",
+      "before_lines": 0,
+      "after_lines": 1,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/tests/OpenXRChecks.cs",
+      "category": "test",
+      "before_lines": 0,
+      "after_lines": 32,
+      "delta": 32
+    },
+    {
+      "path": "client/godot/tests/OpenXRChecks.cs.uid",
+      "category": "generated-uid",
+      "before_lines": 0,
+      "after_lines": 1,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/tests/PhysicsChecks.cs",
+      "category": "test",
+      "before_lines": 151,
+      "after_lines": 189,
+      "delta": 38
+    },
+    {
+      "path": "client/godot/tests/PhysicsChecks.cs.uid",
+      "category": "generated-uid",
+      "before_lines": 0,
+      "after_lines": 1,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/tests/SceneChecks.cs",
+      "category": "test",
+      "before_lines": 56,
+      "after_lines": 58,
+      "delta": 2
+    },
+    {
+      "path": "client/godot/tests/SceneChecks.cs.uid",
+      "category": "generated-uid",
+      "before_lines": 0,
+      "after_lines": 1,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/tests/SpaceChecks.cs.uid",
+      "category": "generated-uid",
+      "before_lines": 0,
+      "after_lines": 1,
+      "delta": 1
+    },
+    {
+      "path": "client/godot/xr_actions.tres",
+      "category": "production",
+      "before_lines": 0,
+      "after_lines": 127,
+      "delta": 127
+    }
+  ],
+  "relocations": [],
+  "server_production_changes": [],
+  "prior_evidence_changes": []
+}

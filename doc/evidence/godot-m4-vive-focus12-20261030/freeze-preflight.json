@@ -1,0 +1,24 @@
+{
+  "passed": true,
+  "scope": "Metadata/cache and source syntax only; no product/runtime/old API replay.",
+  "prior_source_paths": 25793,
+  "changed_inherited_publishers": [
+    "doc/evidence/godot-m4-vive-physical-20261029/manual_run.py",
+    "doc/evidence/godot-m4-vive-retest-20261030/physical09.py"
+  ],
+  "uncached": {
+    "live": {
+      "entries": 0,
+      "bytes": 0,
+      "paths": []
+    },
+    "previous-materialization": {
+      "entries": 0,
+      "bytes": 0,
+      "paths": []
+    }
+  },
+  "free_bytes": 806462668800,
+  "no_source_or_object_links_created": true,
+  "root_quiescence": "Actual retirement/card-cancel reports state no nonignored additions or source/object links during sealing."
+}

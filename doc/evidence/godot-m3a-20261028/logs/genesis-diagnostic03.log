@@ -1,0 +1,3 @@
+#{operations => 888,invalid_heads => [],invalid_wire_heads => [],
+  payload_size => error,
+  transaction_encoding => {error,bad_term}}

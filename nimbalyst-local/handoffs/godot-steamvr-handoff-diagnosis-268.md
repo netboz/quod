@@ -1,0 +1,29 @@
+# Diagnose Quod's SteamVR session handoff — 268
+
+/planning-implement QUO-65
+
+Continue SAME sole actual Astra writer `ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f`, coordinator `ed9cd520-b2a4-4607-a8f5-ff99d08f3e46`, pearl-stone. Read AGENTS and this whole bounded continuation. Yan's current VR-test request is unfulfilled; keep progressing on the demonstrated application/runtime admission gap. No duplicate writer/model/reviewer, Claude wait or routine permission request.
+
+## Established evidence
+
+Human-confirmed after the user-owned SteamVR restart: **Dashboard and controllers visible while wearing**, desktop1793555820999, durable `vr-dashboard-after-restart-answer-266.json` under coordinator Q. Latest chat “yes, works.” Root told Yan to keep the headset on and close the dashboard before267.267 still failed its ORIGINAL30s admission: SteamVR initialized/running, Synchronized/CanRenderfalse/0 observed XR frames, headHigh, controller profiles none/untracked; world/operations accepted, auth unexpired. This does not establish why the session never became visible/focused. Do not blame hardware, assume current wearing/presence, equate desktop focus with XR focus or ask for another generic runtime restart.
+
+263 had actual positive native stereo/focus/controller admission before the now-fixed external wrapper closed on signed Updating. Preserve that positive observation, its human/pixel limits and pending1 association. Corrected264 supervision/15 regression is unchanged and reused.264/265/266/267 are literal failed opportunities, not evidence of a shutdown defect. All previous owned clients/fixtures are CLOSED, including267 PTYs70172/65324/PID3825405; never target them again. Current user-owned SteamVR is NOT ours to stop, signal, attach or refocus.
+
+Root read actual267 final full response and whole ROOT2/worker0 batch once at this material boundary, saved `vr-handoff-diagnosis-integration-268-private/full-batch.json` SHA494e6d48373c10f2abc02a283934c4651f1de6560a012572d8ecf3ad5c7955c6. Writer actualIDLE/Astra/no question/error. List-only is not consumption. There is no pending user question or reviewer. Root has told Yan he can remove the headset while this diagnosis runs.
+
+## Diagnose before another human attempt
+
+No further identical launch. First trace the existing Main -> OpenXRInput -> ScenePanel lifecycle and the pinned native Godot/OpenXR frame owner, together with bounded saved263/267 and current SteamVR records for the exact owned invocation intervals. Use current pinned source references, not historical native API dumps or bulk archives. Compare the actual positive263 and negative267 paths; don't erase either or manufacture a basic unsupported-SteamVR conclusion.
+
+Identify where progress stops: session events/begin/end, actual frame pumping/submission, primary XR viewport/visibility/update ownership, active interface/action set, and native presence/standby/admission if the real owner exposes it. These are investigation axes, NOT findings. Root's static trace only establishes ScenePanel is a SubViewportContainer, PresentXR hides its desktop container and sets its child UseXR/Always, and OpenXRInput preserves focus-dependent input guards. It does not prove a rendering defect or justify an XR flag/pose/focus patch. Do not repeat the earlier disproved assumption that the scene viewport stayed mono.
+
+Use bounded redacted observation on the existing executor if saved data cannot resolve the chain. ONE separately labelled nondistributable diagnostic invocation is allowed if it answers a concrete question, with fresh owned identities/profile and the corrected supervision/original bounds. Prefer the existing Main/OpenXR owner and minimum necessary setup; native frame pumping may be observable without creating another Library/domain instruction. No automated human task, uncertain replay, fake controller/frame, host/dashboard/focus input or hidden renewal. It is diagnosis, not a new human opportunity. Yan may have removed the headset: do not misclassify expected absence of presence/focus as a product defect, or claim human/pixel readiness. If a coordinated physical step is genuinely required, return the concrete observation/question to root.
+
+Keep exact current source/dependency/driver receipts and actual exits/EOF. No repeated broad suite, old API/archive/export/extraction/history rehash/copy, native engine/runtime rebuild, global config/display/provider/trust change, install or process takeover. Do not add polling, another domain executor or speculative fallback. Temporary signed Updating remains correctly locked and must not terminate the app or reset its deadlines.
+
+## Correction only for a demonstrated responsible owner
+
+If the source and actual observation demonstrate a small current client owner defect, retain its exact failing baseline and correct that shared owner under this existing authority. Preserve signed identity/auth/OCC, draft/control/caret lifetime, original outcomes/noReplay and all input/neutral/tracking/capture guards. Run only the affected real-owner lifecycle/render/input checks with true exits and retained failures. No architecture/framework replacement or weakened readiness/guard/deadline. If an engine/runtime/global change or a genuinely undecided policy is required, report the exact gap before doing it.
+
+Keep the accepted98-input product/private package unchanged unless a demonstrated production correction warrants its own source-only build and qualification. No package detour, new human invitation or self-launched next ticket. Report meaningful causal findings immediately; root independently integrates them and coordinates the next human test. Finish with a short exact handoff, current limitations and all owned closure receipts. No immutable seal/audit campaign while Yan is waiting for the cause.

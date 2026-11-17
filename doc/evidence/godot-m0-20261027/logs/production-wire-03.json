@@ -1,0 +1,12 @@
+{
+  "command": [
+    "node",
+    "doc/evidence/godot-m0-20261027/production-wire-check.mjs"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-27T15:42:14Z",
+  "elapsed_seconds": 0.2673025131225586,
+  "child_exit": 0,
+  "timed_out": false,
+  "error_diagnostics": 0
+}

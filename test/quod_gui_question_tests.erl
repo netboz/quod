@@ -2,6 +2,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -export([with_receiver/3,commit/2,await_commit/1,await_operation/1]).
 -export([gui_socket/3,gui_session/1,gui_open_message/7]).
+-export([user_source_with_allowance/2]).
 
 %% Focused transition fixtures seed accepted rows. The live-opening fixture
 %% exercises native acceptance and the original atomic transaction together.
@@ -18,6 +19,8 @@ native_scope_is_read_only_and_keeps_original_request_test_() ->
             Read = fun(Target,Goal) -> quod_ask:native_read(Node,Target,Goal,Auth,quod_time:mono_ms()+10000) end,
             ?assertEqual({ok,{current_request_operation,Operation}},
                          Read(Identity,{current_request_operation,Operation})),
+            ?assertEqual({ok,{current_request_operation,Operation}},
+                         Read(Identity,{current_request_operation,{0}})),
             %% The original signed execute bytes authenticate this native read;
             %% they do not cause its embedded assertz goal to execute.
             ?assertMatch({fail,_},read(Ctx,Ns,{saved,ok})),
@@ -60,7 +63,7 @@ native_scope_cancellation_closes_receiver_worker_test_() ->
                 Parent ! {native_reply,self(),quod_ask:native_read(
                     Node,Identity,test_local_wait,Auth,quod_time:mono_ms()+10000)}
             end),
-            Worker = receive {local_proof_waiting,W} -> W
+            Worker = receive {local_proof_waiting, W, _} -> W
                      after 5000 -> error(native_scope_not_entered) end,
             Monitor = monitor(process,Worker),
             exit(Caller,kill),
@@ -72,7 +75,7 @@ native_scope_cancellation_closes_receiver_worker_test_() ->
                 Parent ! {native_reply,self(),quod_ask:native_read(
                     Node,Identity,test_local_wait,Auth,quod_time:mono_ms()+2000)}
             end),
-            TimedWorker = receive {local_proof_waiting,W2} -> W2
+            TimedWorker = receive {local_proof_waiting, W2, _} -> W2
                           after 5000 -> error(timed_scope_not_entered) end,
             TimedScopeMonitor = monitor(process,TimedWorker),
             receive {native_reply,Timed,Reply} ->
@@ -93,21 +96,21 @@ native_scope_cancellation_closes_receiver_worker_test_() ->
 native_presentation_uses_original_scope_and_closed_effect_codec_test_() ->
     {timeout,60,fun() ->
         Dir = filename:join("/tmp","quod-gui-native-effect-" ++ binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(12)))),
-        Ctx = quod_lobby_tests:start(Dir), Parent = self(),
-        {HumanNs,HumanAnchor} = maps:get(agent,Ctx), Instance = {human_user,test_agent},
+        Instance = {human_user,test_agent},
+        Ctx = quod_lobby_tests:start(Dir,[],base_system_catalogue,[],
+            user_source_with_allowance(Instance,2) ++ [{instance_of,{':',quod,{':',user,human_user}},Instance}]), Parent = self(),
+        {HumanNs,HumanAnchor} = maps:get(agent,Ctx),
         Human = {agent_instance_ref,HumanNs,HumanAnchor,Instance},
         {ok,HumanBytes} = quod_wire_term:encode_canonical(Human),
         {ok,Node} = application:get_env(quod,node_pubkey),
         GuiIdentity = {<<"quod:gui">>,quod_simplex:genesis_hash(<<"quod:gui">>)},
         {Hud,Monitor} = spawn_monitor(fun() -> gui_socket(Parent,#{peer => {127,0,0,1}}) end),
         try
-            commit(Ctx,assertions(source("gui_hud.pl") ++
-                [{instance_of,human_user,Instance},{gui_pending_allowance,Instance,2}])),
             Session = gui_session(Ctx),
             Hud ! {client,gui_open_message(Ctx,Session,gui_hud,HumanNs,none,0)},
             _ = gui_reply(Hud,<<"projection">>),
             {client_view,{gui_hud,HumanBytes,Connection}} = maps:get(receiver_key,gui_socket_state(Hud)),
-            commit(Ctx,{gui_select_receiver,Instance,Node,Connection}),
+            commit(Ctx,gui({gui_select_receiver,{agent_instance_ref,HumanNs,quod_simplex:genesis_hash(HumanNs),Instance},Node,Connection})),
             _ = gui_reply(Hud,<<"refresh">>),
             Hud ! {client,gui_open_message(Ctx,Session,gui_hud,HumanNs,none,0)},
             _ = gui_reply(Hud,<<"projection">>),
@@ -170,7 +173,7 @@ native_presentation_uses_original_scope_and_closed_effect_codec_test_() ->
             ?assertEqual(ok,gui_result(Lost)),
             ?assertEqual(ok,quod_gui_presentation:release(ShortEffect,ShortPrepared)),
             ?assertMatch({fail,_},read(Ctx,HumanNs,{saved,ok})),
-            ?assertMatch({ok,[#{<<"V0">> := []}],_},read(Ctx,HumanNs,{gui_pending_questions,{0}})),
+            ?assertMatch({ok,[#{<<"V0">> := []}],_},read(Ctx,HumanNs,gui({gui_pending_questions,{0}}))),
             ?assertEqual({error,invalid_presentation_binding},quod_gui_presentation:release(setelement(8,Effect,{node,Node}),Prepared))
         after
             Hud ! stop,
@@ -183,20 +186,23 @@ live_opening_commits_question_hud_and_presentation_together_test_() ->
     {timeout,120,fun() ->
         quod_agent_hosting_tests:with_host(fun(Ctx = #{namespace := Ns,reference := Actor,
                 node := Node,key := Key,directory := Dir,identity := Identity}) ->
-            ?assertMatch({ok,_,_},quod_ct:rp(Ns,{goal,{agent_hosted,actor,Node,1,Key}})),
+            start_question_actor(Ctx),
+            UserOwner = quod_agent_hosting_tests:start_ontology(<<"quod:user">>,Dir,Identity,
+                quod_prolog:genesis_diff("priv/ontologies/quod_user.pl"),[]),
             AgentPid = receive {agent_installed,_,Pid,#{reference := Actor},_} -> Pid
             after 10000 -> error(gui_actor_not_installed) end,
+            %% Cross-ontology recovery waits on this production progress owner.
             {ok,Journal} = quod_effect_journal:start_link(#{data_dir => filename:join(Dir,"effects")}),
             ok = quod_effect_journal:configure_limits(8,unlimited),
             Admin = {can_invoke,{'_'},Node,{'_'},{'_'}},
             Start = fun(Name,Terms) -> quod_agent_hosting_tests:start_ontology(Name,Dir,Identity,[],[Admin|Terms]) end,
             {Gui,_} = quod_lobby_tests:start_namespace(<<"quod:gui">>,#{
                 node_id => maps:get(pubkey,Identity),identity => Identity,mode => create,
-                data_dir => filename:join(Dir,"gui"),genesis_diff => quod_prolog:terms_to_diff(source("quod_gui.pl")),
+                data_dir => filename:join(Dir,"gui"),genesis_diff => quod_prolog:terms_to_diff(quod_ct:gui_terms()),
                 external_predicate_modules => [quod_agent_predicates,quod_gui_predicates]}),
             {HumanKey,_} = HumanPair = quod_identity:generate(), HumanNs = <<"gui:open-human">>,
-            HumanOwner = Start(HumanNs,source("gui_hud.pl") ++ [
-                {instance_of,human_user,person},{agent_key,person,HumanKey,active},{gui_pending_allowance,person,4},
+            HumanOwner = Start(HumanNs,user_source_with_allowance(person,4) ++ [
+                {instance_of,{':',quod,{':',user,human_user}},person},{agent_key,person,HumanKey,active},
                 {can_invoke,{'_'},{agent_instance_ref,HumanNs,{'_'},person},{'_'},HumanNs}]),
             HumanAnchor = quod_simplex:genesis_hash(HumanNs), Human = {agent_instance_ref,HumanNs,HumanAnchor,person},
             HumanCtx = #{agent => {HumanNs,HumanAnchor},instance => <<"person.">>,key_pair => HumanPair,network => <<42:256>>},
@@ -211,24 +217,24 @@ live_opening_commits_question_hud_and_presentation_together_test_() ->
                     {assertz,{gui_responder_policy,actor,Source,Human}}))),
                 %% Missing selection is a pre-dispatch logical failure.
                 ?assertMatch({ok,_,{normalized,{failed,_}}},
-                    quod_lobby_tests:submit(HumanCtx,execute,scope(AppNs,{gui_open,settings,{0}}))),
+                    quod_lobby_tests:submit(HumanCtx,execute,gui({gui_open,Source,{0}}))),
                 Session = gui_session(HumanCtx),
                 Hud ! {client,gui_open_message(HumanCtx,Session,gui_hud,HumanNs,none,0)},
                 _ = gui_projection(Hud),
                 {client_view,{gui_hud,_,Connection}} = maps:get(receiver_key,gui_socket_state(Hud)),
-                commit(HumanCtx,{gui_select_receiver,person,maps:get(pubkey,Identity),Connection}),
+                commit(HumanCtx,gui({gui_select_receiver,Human,maps:get(pubkey,Identity),Connection})),
                 _ = gui_reply(Hud,<<"refresh">>),
                 Hud ! {client,gui_open_message(HumanCtx,Session,gui_hud,HumanNs,none,0)},
                 _ = gui_projection(Hud),
                 Caller = gui_async(fun() -> quod_lobby_tests:submit(HumanCtx,execute,
-                    scope(AppNs,{gui_open,settings,{0}})) end),
+                    gui({gui_open,Source,{0}})) end),
                 {Result,Frames} = gui_open_result(Caller,Hud,none,[]),
                 ?assertMatch({ok,_,{normalized,{committed,_,_}}},Result),
                 ?assert(lists:member(<<"gui_prepare">>,Frames)),
                 ?assert(lists:member(<<"gui_activate">>,Frames)),
-                {ok,[#{<<"V0">> := [Reference]}],_} = read(HumanCtx,HumanNs,{gui_pending_questions,{0}}),
+                {ok,[#{<<"V0">> := [Reference]}],_} = read(HumanCtx,HumanNs,gui({gui_pending_questions,{0}})),
                 {question_ref,Ns,_,Q} = Reference,
-                ?assertMatch({ok,[#{<<"V0">> := Source}],_},read(HumanCtx,Ns,{gui_question_view,Q,{0},{'_'},awaiting})),
+                ?assertMatch({ok,[#{<<"V0">> := Source}],_},read(HumanCtx,Ns,gui({gui_question_view,Reference,{0},{'_'},awaiting}))),
                 [#{effect_id := EffectId}] = quod_effect_journal:rows(),
                 ok = quod_effect_journal:await(EffectId,10000),
                 [#{state := applied}] = quod_effect_journal:rows(),
@@ -240,30 +246,30 @@ live_opening_commits_question_hud_and_presentation_together_test_() ->
                 receive {'DOWN',AgentMonitor,process,AgentPid,_} -> ok
                 after 5000 -> error(gui_responder_not_stopped) end,
                 {fail,HandlerReasons} = read(HumanCtx,Ns,
-                    {gui_native_handler,actor,Source,Human,{hosted,Node,1,Key},{0}}),
+                    gui({gui_native_handler,Actor,Source,Human,{hosted,Node,1,Key},{0}})),
                 ?assert(lists:member(agent_handler_unavailable,HandlerReasons)),
-                fail(HumanCtx,scope(AppNs,{gui_open,settings,{0}})),
-                ?assertMatch({ok,[#{<<"V0">> := [Reference]}],_},read(HumanCtx,HumanNs,{gui_pending_questions,{0}})),
+                fail(HumanCtx,gui({gui_open,Source,{0}})),
+                ?assertMatch({ok,[#{<<"V0">> := [Reference]}],_},read(HumanCtx,HumanNs,gui({gui_pending_questions,{0}}))),
                 ?assertMatch({ok,_,{normalized,{committed,_,_}}},node_request(Ctx,execute,
                     scope(Ns,{retract,{agent_hosting_suspended,actor}}))),
                 receive {agent_installed,_,Replacement,#{reference := Actor},_} -> ?assertNotEqual(AgentPid,Replacement)
                 after 5000 -> error(gui_responder_not_reinstalled) end,
-                commit(HumanCtx,scope(Ns,{gui_cancel,Q})),
-                ?assertMatch({ok,[#{<<"V0">> := []}],_},read(HumanCtx,HumanNs,{gui_pending_questions,{0}})),
+                commit(HumanCtx,scope(Ns,gui({gui_cancel,question_ref(Ns,Q)}))),
+                ?assertMatch({ok,[#{<<"V0">> := []}],_},read(HumanCtx,HumanNs,gui({gui_pending_questions,{0}}))),
                 Hud ! {client,gui_open_message(HumanCtx,Session,gui_hud,HumanNs,none,0)},
                 _ = gui_projection(Hud),
                 %% Even after creating both private material rows, outer proof
                 %% failure aborts every scope and never releases the effect.
                 Rollback = gui_async(fun() -> quod_lobby_tests:submit(HumanCtx,execute,
-                    {',',scope(AppNs,{gui_open,settings,{0}}),fail}) end),
+                    {',',gui({gui_open,Source,{0}}),fail}) end),
                 _ = gui_reply(Hud,<<"gui_prepare">>),
                 ?assertMatch({ok,_,{normalized,{failed,_}}},gui_result(Rollback)),
-                ?assertMatch({ok,[#{<<"V0">> := []}],_},read(HumanCtx,HumanNs,{gui_pending_questions,{0}})),
+                ?assertMatch({ok,[#{<<"V0">> := []}],_},read(HumanCtx,HumanNs,gui({gui_pending_questions,{0}}))),
                 [#{state := applied}] = quod_effect_journal:rows(),
                 ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{gui_question,{'_'},{'_'},{'_'},{'_'},{'_'},{'_'}})),
                 Hud ! {automatic,false}, _ = gui_socket_state(Hud),
                 Refusal = gui_async(fun() -> quod_lobby_tests:submit(HumanCtx,execute,
-                    scope(AppNs,{gui_open,settings,{0}})) end),
+                    gui({gui_open,Source,{0}})) end),
                 #{<<"token">> := RefusedToken} = gui_reply(Hud,<<"gui_prepare">>),
                 gui_ack(Hud,#{type => gui_prepared,token => RefusedToken,accepted => false}),
                 ?assertMatch({ok,_,{normalized,{failed,_}}},gui_result(Refusal)),
@@ -271,10 +277,10 @@ live_opening_commits_question_hud_and_presentation_together_test_() ->
                 %% Accept one, then release the other after that commit. OCC
                 %% rejects the stale write rather than leaking a second row.
                 RaceA = gui_async(fun() -> quod_lobby_tests:submit(HumanCtx,execute,
-                    scope(AppNs,{gui_open,settings,{0}})) end),
+                    gui({gui_open,Source,{0}})) end),
                 #{<<"token">> := TokenA,<<"question">> := QuestionA} = gui_reply(Hud,<<"gui_prepare">>),
                 RaceB = gui_async(fun() -> quod_lobby_tests:submit(HumanCtx,execute,
-                    scope(AppNs,{gui_open,settings,{0}})) end),
+                    gui({gui_open,Source,{0}})) end),
                 #{<<"token">> := TokenB,<<"question">> := QuestionB} = gui_reply(Hud,<<"gui_prepare">>),
                 ?assertNotEqual(QuestionA,QuestionB),
                 Hud ! {automatic,true},
@@ -287,15 +293,15 @@ live_opening_commits_question_hud_and_presentation_together_test_() ->
                         ?assertEqual({ok,[conflict_retry]},quod_wire_term:decode_failure_reasons(Conflict));
                     RaceOther -> error({unexpected_gui_race_result,RaceOther})
                 end,
-                {ok,[#{<<"V0">> := [{question_ref,Ns,_,RaceQ}]}],_} = read(HumanCtx,HumanNs,{gui_pending_questions,{0}}),
-                commit(HumanCtx,scope(Ns,{gui_cancel,RaceQ})),
+                {ok,[#{<<"V0">> := [{question_ref,Ns,_,RaceQ}]}],_} = read(HumanCtx,HumanNs,gui({gui_pending_questions,{0}})),
+                commit(HumanCtx,scope(Ns,gui({gui_cancel,question_ref(Ns,RaceQ)}))),
                 Hud ! {client,gui_open_message(HumanCtx,Session,gui_hud,HumanNs,none,0)},
                 _ = gui_projection(Hud),
                 %% A retained route is not evidence that its human is connected.
-                commit(HumanCtx,{gui_select_receiver,person,maps:get(pubkey,Identity),<<0:256>>}),
+                commit(HumanCtx,gui({gui_select_receiver,Human,maps:get(pubkey,Identity),<<0:256>>})),
                 _ = gui_reply(Hud,<<"refresh">>),
-                fail(HumanCtx,scope(AppNs,{gui_open,settings,{0}})),
-                commit(HumanCtx,{gui_select_receiver,person,maps:get(pubkey,Identity),Connection}),
+                fail(HumanCtx,gui({gui_open,Source,{0}})),
+                commit(HumanCtx,gui({gui_select_receiver,Human,maps:get(pubkey,Identity),Connection})),
                 Hud ! {client,gui_open_message(HumanCtx,Session,gui_hud,HumanNs,none,0)},
                 _ = gui_projection(Hud),
                 %% Agent-led opening uses ordinary authored application work.
@@ -310,27 +316,27 @@ live_opening_commits_question_hud_and_presentation_together_test_() ->
                     after quod_reg:unsubscribe({agent,Actor}) end
                 end) end,
                 PromptRules = [{can_invoke,open_settings,Actor,{'_'},Ns},
-                    {':-',open_settings,scope(AppNs,{gui_open,settings,{'_'}})},
+                    {':-',open_settings,gui({gui_open,Source,{'_'}})},
                     {':-',{react_on,gui_prompt,open_settings},{me,Actor}}],
                 ?assertMatch({ok,_,{normalized,{committed,_,_}}},
                     node_request(Ctx,execute,scope(Ns,assertions(PromptRules)))),
                 ?assertMatch({ok,_,{normalized,{failed,_}}},gui_result(Prompt())),
                 ?assertMatch({ok,[#{<<"V0">> := []}],_},
-                    read(HumanCtx,HumanNs,{gui_pending_questions,{0}})),
+                    read(HumanCtx,HumanNs,gui({gui_pending_questions,{0}}))),
                 commit(HumanCtx,{assertz,{gui_receiver_policy,person,Actor}}),
                 Hud ! {client,gui_open_message(HumanCtx,Session,gui_hud,HumanNs,none,0)},
                 _ = gui_projection(Hud),
                 {_,_} = gui_open_result(Prompt(),Hud,none,[]),
                 {ok,[#{<<"V0">> := [{question_ref,Ns,_,AgentQ}]}],_} =
-                    read(HumanCtx,HumanNs,{gui_pending_questions,{0}}),
-                commit(HumanCtx,scope(Ns,{gui_cancel,AgentQ})),
+                    read(HumanCtx,HumanNs,gui({gui_pending_questions,{0}})),
+                commit(HumanCtx,scope(Ns,gui({gui_cancel,question_ref(Ns,AgentQ)}))),
                 Hud ! {client,gui_open_message(HumanCtx,Session,gui_hud,HumanNs,none,0)},
                 _ = gui_projection(Hud),
                 [Handler] = [Clause || Clause = {':-', {react_on,{assert,{gui_question,_,_,_,_,_,_}},
-                    {gui_complete,_}},_} <- source("gui_question.pl")],
+                    {'::',<<"quod:gui">>,{gui_complete,_}}},_} <- source("gui_instance.pl")],
                 ?assertMatch({ok,_,{normalized,{committed,_,_}}},node_request(Ctx,execute,scope(Ns,{retract,Handler}))),
-                fail(HumanCtx,scope(AppNs,{gui_open,settings,{0}})),
-                ?assertMatch({ok,[#{<<"V0">> := []}],_},read(HumanCtx,HumanNs,{gui_pending_questions,{0}})),
+                fail(HumanCtx,gui({gui_open,Source,{0}})),
+                ?assertMatch({ok,[#{<<"V0">> := []}],_},read(HumanCtx,HumanNs,gui({gui_pending_questions,{0}}))),
                 ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{gui_question,{'_'},{'_'},{'_'},{'_'},{'_'},{'_'}})),
                 ?assertEqual(3,length([ok || #{state := applied} <- quod_effect_journal:rows()]))
             after
@@ -338,9 +344,11 @@ live_opening_commits_question_hud_and_presentation_together_test_() ->
                 receive {'DOWN',M,process,Hud,normal} -> ok after 5000 -> error(hud_not_stopped) end,
                 quod_agent_hosting_tests:stop_ontology(App),
                 quod_agent_hosting_tests:stop_ontology(HumanOwner),
-                quod_agent_hosting_tests:stop_ontology(Gui),gen_server:stop(Journal)
+                quod_agent_hosting_tests:stop_ontology(Gui),
+                quod_agent_hosting_tests:stop_ontology(UserOwner),
+                gen_server:stop(Journal)
             end
-        end,source("gui_question.pl") ++ [{gui_pending_allowance,actor,4},{gui_completion_allowance,actor,30000}])
+        end,source("gui_instance.pl") ++ [{gui_pending_allowance,actor,4},{gui_completion_allowance,actor,30000}])
     end}.
 
 gui_projection(Hud) ->
@@ -364,14 +372,14 @@ with_receiver(Ctx,HumanNs,Fun) ->
         {client_view,{gui_hud,HumanBytes,Connection}} = maps:get(receiver_key,gui_socket_state(Hud)),
         {ok,{agent_instance_ref,HumanNs,_,Instance}} = quod_agent_ref:materialize(HumanBytes),
         {ok,Node} = application:get_env(quod,node_pubkey),
-        commit(Ctx,scope(HumanNs,{gui_select_receiver,Instance,Node,Connection})),
+        commit(Ctx,scope(HumanNs,gui({gui_select_receiver,{agent_instance_ref,HumanNs,quod_simplex:genesis_hash(HumanNs),Instance},Node,Connection}))),
         Open = fun(Ns,Form) ->
             _ = Renew(),
             ?assertEqual(#{},maps:get(gui_resources,gui_socket_state(Hud),#{})),
             Caller = gui_async(fun() -> quod_lobby_tests:submit(Ctx,execute,
-                scope(Ns,{gui_open,Form,{0}})) end),
+                gui({gui_open,{form_ref,Ns,quod_simplex:genesis_hash(Ns),Form},{0}})) end),
             _ = gui_open_result(Caller,Hud,none,[]),
-            {ok,[#{<<"V0">> := [Reference]}],_} = read(Ctx,HumanNs,{gui_pending_questions,{0}}),
+            {ok,[#{<<"V0">> := [Reference]}],_} = read(Ctx,HumanNs,gui({gui_pending_questions,{0}})),
             Reference
         end,
         Fun(Open)
@@ -398,7 +406,7 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
     {timeout, 120, fun() ->
         Dir = filename:join("/tmp", "quod-gui-questions-" ++
                             binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(12)))),
-        Ctx = quod_lobby_tests:start(Dir),
+        Ctx = quod_lobby_tests:start(Dir,[],base_system_catalogue,[],quod_personal_agent_tests:user_terms()),
         {ontology_ref, Lobby, _} = maps:get(lobby, Ctx),
         {_, Base} = maps:get(Lobby, maps:get(ontologies, Ctx)),
         {HumanNs, HumanAnchor} = maps:get(agent, Ctx),
@@ -412,12 +420,12 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
         Admin = {can_invoke, {'_'}, Human, {'_'}, {'_'}},
         HudHelperGrant = {can_invoke,
             {',', {current_ontology_identity, ResponderNs, {'_'}},
-             scope(HumanNs, {gui_unlink, HumanInstance, {'Ref'}})},
+             gui({gui_unlink, Human, {'Ref'}})},
             {agent_instance_ref, ResponderNs, {'_'}, responder}, {'_'}, ResponderNs},
         {Responder, _} = quod_lobby_tests:start_namespace(ResponderNs, Base#{
             data_dir => filename:join(Dir, "responsible"),
             genesis_diff => quod_prolog:terms_to_diff(source("agent_instance.pl") ++
-                source("gui_question.pl") ++ [Admin, HudHelperGrant, {gui_completion_allowance, responder, 30000},
+                source("gui_instance.pl") ++ [Admin, HudHelperGrant, {gui_completion_allowance, responder, 30000},
                                              {agent_key, responder, PublicKey, active},
                                              {agent_key, other_responder, PublicKey, active}])}),
         ResponderAnchor = quod_simplex:genesis_hash(ResponderNs),
@@ -431,10 +439,10 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
                      {',', {'\\+', reject_save},
                       {'\\+', {',', reject_after_consume,
                        {',', {gui_application_active, {question_ref, ResponderNs, {'Anchor'}, {'Q'}}},
-                        scope(ResponderNs, {gui_consume, {'Q'}})}}}}}},
+                        gui({gui_consume, {question_ref,ResponderNs,{'Anchor'},{'Q'}}})}}}}}},
         SourceHelperGrant = {can_invoke,
             {',', {current_ontology_identity, AppNs, {'_'}},
-             scope(ResponderNs, {gui_consume, {'Q'}})}, Actor, {'_'}, AppNs},
+             gui({gui_consume, {question_ref,ResponderNs,{'Anchor'},{'Q'}}})}, Actor, {'_'}, AppNs},
         {Application, _} = quod_lobby_tests:start_namespace(AppNs, Base#{
             data_dir => filename:join(Dir, "application"),
             genesis_diff => quod_prolog:terms_to_diff(source("gui_instance.pl") ++
@@ -447,9 +455,9 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
                  {gui_question_policy, another_form, Human, OtherActor},
                  {gui_vocabulary, <<"quod:gui">>, quod_simplex:genesis_hash(<<"quod:gui">>)}])}),
         try
-            commit(Ctx, scope(HumanNs, assertions(source("gui_hud.pl") ++
-                [{instance_of, human_user, HumanInstance},
-                 {instance_of, human_user, OtherHumanInstance},
+            commit(Ctx, scope(HumanNs, assertions(
+                [{instance_of, {':',quod,{':',user,human_user}}, HumanInstance},
+                 {instance_of, {':',quod,{':',user,human_user}}, OtherHumanInstance},
                  {agent_key, OtherHumanInstance, PublicKey, active}]))),
             assert_receiver_selection(Ctx, OtherHumanCtx, ActorCtx, HumanNs, HumanInstance, Actor),
             {ok, [#{<<"V0">> := Revision}], _} = read(Ctx, AppNs, {gui_schema, settings, {0}, {'_'}}),
@@ -461,7 +469,7 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
             %% through signed multi-scope ingress and an actual committed write;
             %% no signer or live bridge may be required to retain the intent.
             {ok, Network} = quod_ontology:network_identity(),
-            {ok, CompletionText} = quod_client_goal_parser:format({gui_complete, Question}),
+            {ok, CompletionText} = quod_client_goal_parser:format(gui({gui_complete, question_ref(ResponderNs,Question)})),
             Intent = {agent_goal_v1, Network, Actor, <<"responder.">>, PublicKey,
                       <<77:256>>, 1800000000000, execute, 3, CompletionText},
             {ok, _, IntentBytes} = quod_client_goal:encode_typed(Intent),
@@ -477,25 +485,25 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
             Awaiting = {gui_question, Question, Source, Human, responder, Revision, awaiting},
             seed(Ctx, ResponderNs, HumanNs, HumanInstance, Reference, Awaiting),
             ?assertMatch({ok, [#{<<"V0">> := [Reference]}], _},
-                read(Ctx, HumanNs, {gui_pending_questions, {0}})),
-            ?assertMatch({fail, _}, read(ActorCtx, HumanNs, {gui_pending_questions, {0}})),
+                read(Ctx, HumanNs, gui({gui_pending_questions, {0}}))),
+            ?assertMatch({fail, _}, read(ActorCtx, HumanNs, gui({gui_pending_questions, {0}}))),
             ?assertMatch({ok, [#{<<"V0">> := []}], _},
-                read(OtherHumanCtx, HumanNs, {gui_pending_questions, {0}})),
+                read(OtherHumanCtx, HumanNs, gui({gui_pending_questions, {0}}))),
             no_io(2, fun() ->
                 ?assertMatch({ok, [#{<<"V0">> := [Reference]}], _},
-                    read(Ctx, HumanNs, {gui_pending_questions, {0}}))
+                    read(Ctx, HumanNs, gui({gui_pending_questions, {0}})))
             end),
             ?assertMatch({ok, [_], _}, read(Ctx, ResponderNs,
                 {instance_of, {':', quod, {':', gui, question}}, Question})),
-            Submit = {gui_submit, Question, Revision, apply, Fields},
-            View = {gui_question_view, Question, Source, Revision, awaiting},
-            ?assertMatch({ok, [_], _}, read(Ctx, ResponderNs, View)),
-            fail(OtherHumanCtx, scope(ResponderNs, View)),
+            Submit = {gui_submit, question_ref(ResponderNs,Question), Revision, apply, Fields},
+            View = {gui_question_view, question_ref(ResponderNs,Question), Source, Revision, awaiting},
+            ?assertMatch({ok, [_], _}, read(Ctx, ResponderNs, gui(View))),
+            fail(OtherHumanCtx, scope(ResponderNs, gui(View))),
             no_io(3, fun() ->
-                ?assertMatch({ok, [_], _}, read(Ctx, ResponderNs, View))
+                ?assertMatch({ok, [_], _}, read(Ctx, ResponderNs, gui(View)))
             end),
-            FormQuery = {gui_question_form, Question, {0}},
-            {ok, [#{<<"V0">> := FormView}], _} = read(Ctx, ResponderNs, FormQuery),
+            FormQuery = {gui_question_form, question_ref(ResponderNs,Question), {0}},
+            {ok, [#{<<"V0">> := FormView}], _} = read(Ctx, ResponderNs, gui(FormQuery)),
             {question_form, Source, Actor, Revision, awaiting,
              {form_view, Revision, Tree, ValuesToken, Initial, apply}} = FormView,
             ?assertMatch({component, settings, form, _, _}, Tree),
@@ -504,33 +512,33 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
             ?assertEqual(32, byte_size(ValuesToken)),
             assert_gui_view_lifecycle(Ctx, OtherHumanCtx, HumanNs, ResponderNs, AppNs,
                                       Question, Reference),
-            ?assertMatch({fail, _}, read(OtherHumanCtx, ResponderNs, FormQuery)),
-            ?assertMatch({fail, _}, read(ActorCtx, ResponderNs, FormQuery)),
+            ?assertMatch({fail, _}, read(OtherHumanCtx, ResponderNs, gui(FormQuery))),
+            ?assertMatch({fail, _}, read(ActorCtx, ResponderNs, gui(FormQuery))),
             no_io(4, fun() ->
                 ?assertMatch({ok, [#{<<"V0">> := FormView}], _},
-                    read(Ctx, ResponderNs, FormQuery))
+                    read(Ctx, ResponderNs, gui(FormQuery)))
             end),
             %% Presentation rechecks current source policy, even if a question
             %% was accepted before that permission was withdrawn.
             Policy = {gui_question_policy, settings, Human, Actor},
             commit(Ctx, scope(AppNs, {retract, Policy})),
-            ?assertMatch({fail, _}, read(Ctx, ResponderNs, FormQuery)),
+            ?assertMatch({fail, _}, read(Ctx, ResponderNs, gui(FormQuery))),
             commit(Ctx, scope(AppNs, {assertz, Policy})),
             commit(Ctx, scope(AppNs, {assertz, {attribute, name, help, <<"New help">>}})),
             {ok, [#{<<"V0">> := {question_form, Source, Actor, Revision, awaiting,
                 {form_view, ChangedRevision, _, ValuesToken, Initial, apply}}}], _} =
-                read(Ctx, ResponderNs, FormQuery),
+                read(Ctx, ResponderNs, gui(FormQuery)),
             ?assertNotEqual(Revision, ChangedRevision),
             commit(Ctx, scope(AppNs, {retract, {attribute, name, help, <<"New help">>}})),
             %% Source schema validation and the assigned human remain enforced
             %% even where the containing ontology grants its owner broad access.
-            fail(Ctx, scope(ResponderNs, setelement(3, Submit, <<0:256>>))),
-            fail(Ctx, scope(ResponderNs, setelement(5, Submit, tl(Fields)))),
-            fail(ActorCtx, Submit),
-            fail(OtherHumanCtx, scope(ResponderNs, Submit)),
+            fail(Ctx, scope(ResponderNs, gui(setelement(3, Submit, <<0:256>>)))),
+            fail(Ctx, scope(ResponderNs, gui(setelement(5, Submit, tl(Fields))))),
+            fail(ActorCtx, gui(Submit)),
+            fail(OtherHumanCtx, scope(ResponderNs, gui(Submit))),
             ?assertMatch({ok, [_], _}, read(Ctx, ResponderNs, Awaiting)),
             {ok, #{operation_ref := Submission}, {normalized, {committed, _, _}}} =
-                quod_lobby_tests:submit(Ctx, execute, scope(ResponderNs, Submit)),
+                quod_lobby_tests:submit(Ctx, execute, scope(ResponderNs, gui(Submit))),
             Bytes = completion_bytes(Ctx, ResponderNs, Question),
             Submitted = setelement(7, Awaiting, {submitted, Submission, apply, Fields, Bytes}),
             {ok, #{request := #{operation_id := CompletionId}, agent_ref_blob := ActorBytes}} =
@@ -539,39 +547,39 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
             ?assertMatch({ok, #{reference := Actor}}, quod_agent_ref:decode(ActorBytes)),
             ?assertMatch({ok, [_], _}, read(Ctx, ResponderNs, Submitted)),
             ?assertMatch({ok, [_], _}, read(Ctx, ResponderNs,
-                setelement(5, View, {submitted, Submission, apply, Fields}))),
+                gui(setelement(5, View, {submitted, Submission, apply, Fields})))),
             ?assertMatch({ok, [#{<<"V0">> := {question_form, Source, Actor, Revision,
                 {submitted, Submission, apply, Fields}, _}}], _},
-                read(Ctx, ResponderNs, FormQuery)),
+                read(Ctx, ResponderNs, gui(FormQuery))),
             ?assertMatch({fail, _}, read(Ctx, ResponderNs, {gui_submitted, Question, Submission})),
-            fail(Ctx, scope(ResponderNs, Submit)),
+            fail(Ctx, scope(ResponderNs, gui(Submit))),
             ?assertMatch({ok, _, {normalized, {error, proof_unavailable}}},
-                quod_lobby_tests:submit(Ctx, execute, scope(ResponderNs, {gui_cancel, Question}))),
-            fail(Ctx, scope(ResponderNs, {gui_complete, Question})),
-            fail(ActorCtx, {gui_consume, Question}),
-            fail(OtherActorCtx, scope(AppNs, {gui_continue, Reference})),
+                quod_lobby_tests:submit(Ctx, execute, scope(ResponderNs, gui({gui_cancel, question_ref(ResponderNs,Question)})))),
+            fail(Ctx, scope(ResponderNs, gui({gui_complete, question_ref(ResponderNs,Question)}))),
+            fail(ActorCtx, gui({gui_consume, question_ref(ResponderNs,Question)})),
+            fail(OtherActorCtx, scope(AppNs, gui({gui_continue, Reference}))),
             %% A forged event or direct helper entry supplies no authority to
             %% consume a question or remove its HUD reference.
             commit(Ctx, scope(ResponderNs, {trigger_event, {gui_submitted, Question, <<0:256>>}})),
-            fail(ActorCtx, scope(AppNs, scope(ResponderNs, {gui_consume, Question}))),
+            fail(ActorCtx, scope(AppNs, scope(ResponderNs, gui({gui_consume, question_ref(ResponderNs,Question)})))),
             fail(ActorCtx, scope(ResponderNs, scope(HumanNs,
-                {gui_unlink, HumanInstance, Reference}))),
+                gui({gui_unlink, Human, Reference})))),
             ?assertMatch({ok, [_], _}, read(Ctx, ResponderNs, Submitted)),
             ?assertMatch({ok, [_], _}, read(Ctx, HumanNs, {gui_pending, HumanInstance, Reference})),
             %% Even the assigned actor cannot replace the exact stored intent
             %% with a fresh signed operation for the same goal.
-            fail(ActorCtx, {gui_complete, Question}),
+            fail(ActorCtx, gui({gui_complete, question_ref(ResponderNs,Question)})),
             ?assertMatch({ok, _, {normalized, {committed, _, _}}}, complete(ActorCtx, Bytes)),
             ?assertMatch({ok, [_], _}, read(Ctx, AppNs, {saved, <<"Entered">>, square, 75, 180})),
             ?assertMatch({fail, _}, read(Ctx, ResponderNs, Submitted)),
-            ?assertMatch({fail, _}, read(Ctx, ResponderNs, setelement(5, View, {'_'}))),
-            ?assertMatch({fail, _}, read(Ctx, ResponderNs, FormQuery)),
+            ?assertMatch({fail, _}, read(Ctx, ResponderNs, gui(setelement(5, View, {'_'})))),
+            ?assertMatch({fail, _}, read(Ctx, ResponderNs, gui(FormQuery))),
             ?assertMatch({fail, _}, read(Ctx, HumanNs, {gui_pending, HumanInstance, Reference})),
             assert_no_guards(Ctx, AppNs, ResponderNs),
             ?assertMatch({ok, [#{<<"V0">> := []}], _},
-                read(Ctx, HumanNs, {gui_pending_questions, {0}})),
-            fail(ActorCtx, {gui_complete, Question}),
-            fail(Ctx, scope(ResponderNs, Submit)),
+                read(Ctx, HumanNs, gui({gui_pending_questions, {0}}))),
+            fail(ActorCtx, gui({gui_complete, question_ref(ResponderNs,Question)})),
+            fail(Ctx, scope(ResponderNs, gui(Submit))),
             {ok, [#{<<"V0">> := [true]}], _} = read(Ctx, AppNs,
                 {findall, true, {saved, <<"Entered">>, square, 75, 180}, {0}}),
             %% A second opening of the same form has an independent identity.
@@ -579,28 +587,28 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
             OtherRef = setelement(4, Reference, OtherQ),
             OtherRow = setelement(2, Awaiting, OtherQ),
             seed(Ctx, ResponderNs, HumanNs, HumanInstance, OtherRef, OtherRow),
-            commit(Ctx, scope(ResponderNs, {gui_cancel, OtherQ})),
+            commit(Ctx, scope(ResponderNs, gui({gui_cancel, question_ref(ResponderNs,OtherQ)}))),
             ?assertMatch({fail, _}, read(Ctx, ResponderNs, OtherRow)),
             ?assertMatch({fail, _}, read(Ctx, HumanNs, {gui_pending, HumanInstance, OtherRef})),
             assert_no_guards(Ctx, AppNs, ResponderNs),
-            fail(Ctx, scope(ResponderNs, {gui_cancel, OtherQ})),
+            fail(Ctx, scope(ResponderNs, gui({gui_cancel, question_ref(ResponderNs,OtherQ)}))),
             %% Namespace equality cannot substitute for the exact source history.
             WrongQ = {question, <<5:256>>},
             WrongRef = setelement(4, Reference, WrongQ),
             WrongRow = setelement(3, setelement(2, Awaiting, WrongQ),
                 setelement(3, Source, <<0:256>>)),
             seed(Ctx, ResponderNs, HumanNs, HumanInstance, WrongRef, WrongRow),
-            fail(Ctx, scope(ResponderNs, setelement(2, Submit, WrongQ))),
-            ?assertMatch({fail, _}, read(Ctx, ResponderNs, setelement(2, FormQuery, WrongQ))),
+            fail(Ctx, scope(ResponderNs, gui(setelement(2, Submit, question_ref(ResponderNs,WrongQ))))),
+            ?assertMatch({fail, _}, read(Ctx, ResponderNs, gui(setelement(2, FormQuery, question_ref(ResponderNs,WrongQ))))),
             ?assertMatch({ok, [_], _}, read(Ctx, ResponderNs, WrongRow)),
-            commit(Ctx, scope(ResponderNs, {gui_cancel, WrongQ})),
+            commit(Ctx, scope(ResponderNs, gui({gui_cancel, question_ref(ResponderNs,WrongQ)}))),
             %% Simultaneous submitted operations race through the production
             %% owner. Only one replaces the same awaiting row.
             RaceQ = {question, <<3:256>>},
             RaceRef = setelement(4, Reference, RaceQ),
             RaceRow = setelement(2, Awaiting, RaceQ),
             seed(Ctx, ResponderNs, HumanNs, HumanInstance, RaceRef, RaceRow),
-            RaceSubmit = scope(ResponderNs, setelement(2, Submit, RaceQ)),
+            RaceSubmit = scope(ResponderNs, gui(setelement(2, Submit, question_ref(ResponderNs,RaceQ)))),
             Results = concurrent_submissions(Ctx, [RaceSubmit, RaceSubmit]),
             [WinningOperation] = [Op || {ok, #{operation_ref := Op},
                 {normalized, {committed, _, _}}} <- Results],
@@ -609,14 +617,14 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
             ?assertMatch({ok, _, {normalized, {committed, _, _}}},
                 complete(ActorCtx, completion_bytes(Ctx, ResponderNs, RaceQ))),
             ?assertMatch({ok, [#{<<"V0">> := []}], _},
-                read(Ctx, HumanNs, {gui_pending_questions, {0}})),
+                read(Ctx, HumanNs, gui({gui_pending_questions, {0}}))),
             CancelQ = {question, <<4:256>>},
             CancelRef = setelement(4, Reference, CancelQ),
             CancelRow = setelement(2, Awaiting, CancelQ),
             seed(Ctx, ResponderNs, HumanNs, HumanInstance, CancelRef, CancelRow),
             [SubmitResult, CancelResult] = concurrent_submissions(Ctx,
-                [scope(ResponderNs, setelement(2, Submit, CancelQ)),
-                 scope(ResponderNs, {gui_cancel, CancelQ})]),
+                [scope(ResponderNs, gui(setelement(2, Submit, question_ref(ResponderNs,CancelQ)))),
+                 scope(ResponderNs, gui({gui_cancel, question_ref(ResponderNs,CancelQ)}))]),
             ?assertEqual(1, length([ok || {ok, _, {normalized, {committed, _, _}}}
                 <- [SubmitResult, CancelResult]])),
             case SubmitResult of
@@ -627,7 +635,7 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
                     {gui_question, CancelQ, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}}))
             end,
             ?assertMatch({ok, [#{<<"V0">> := []}], _},
-                read(Ctx, HumanNs, {gui_pending_questions, {0}})),
+                read(Ctx, HumanNs, gui({gui_pending_questions, {0}}))),
             %% Each rollback case owns a distinct accepted intent, executed
             %% once. No failed or uncertain completion is ever resubmitted.
             lists:foreach(fun({Id, Failure}) ->
@@ -636,7 +644,7 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
                 Row = setelement(2, Awaiting, Q),
                 seed(Ctx, ResponderNs, HumanNs, HumanInstance, Ref, Row),
                 UniqueFields = [{field, name, <<Id:32>>} | tl(Fields)],
-                commit(Ctx, scope(ResponderNs, {gui_submit, Q, Revision, apply, UniqueFields})),
+                commit(Ctx, scope(ResponderNs, gui({gui_submit, question_ref(ResponderNs,Q), Revision, apply, UniqueFields}))),
                 Original = completion_bytes(Ctx, ResponderNs, Q),
                 commit(Ctx, scope(AppNs, {assertz, Failure})),
                 ?assertMatch({ok, _, {normalized, {failed, _}}}, complete(ActorCtx, Original)),
@@ -654,7 +662,7 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
             ExpiredQ = {question, <<8:256>>},
             ExpiredRef = setelement(4, Reference, ExpiredQ),
             {ok, #{request := OriginalRequest}} = quod_client_goal:request_identity(Bytes),
-            {ok, ExpiredText} = quod_client_goal_parser:format({gui_complete, ExpiredQ}),
+            {ok, ExpiredText} = quod_client_goal_parser:format(gui({gui_complete, question_ref(ResponderNs,ExpiredQ)})),
             {ok, ExpiredBytes} = quod_client_goal:encode(OriginalRequest#{
                 operation_id => <<88:256>>, goal_text => ExpiredText,
                 not_after_ms => quod_time:now_ms() - 60000}),
@@ -663,11 +671,11 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
             seed(Ctx, ResponderNs, HumanNs, HumanInstance, ExpiredRef, ExpiredRow),
             no_io(5, fun() ->
                 ?assertMatch({ok, [_], _},
-                    read(Ctx, ResponderNs, {gui_question_status, ExpiredQ, expired}))
+                    read(Ctx, ResponderNs, gui({gui_question_status, question_ref(ResponderNs,ExpiredQ), expired})))
             end),
             ?assertMatch({fail, _}, read(OtherHumanCtx, ResponderNs,
-                {gui_question_status, ExpiredQ, expired})),
-            commit(Ctx, scope(ResponderNs, {gui_cancel, ExpiredQ})),
+                gui({gui_question_status, question_ref(ResponderNs,ExpiredQ), expired}))),
+            commit(Ctx, scope(ResponderNs, gui({gui_cancel, question_ref(ResponderNs,ExpiredQ)}))),
             ?assertMatch({fail, _}, read(Ctx, ResponderNs, ExpiredRow)),
             ?assertMatch({fail, _}, read(Ctx, HumanNs, {gui_pending, HumanInstance, ExpiredRef})),
             assert_no_guards(Ctx, AppNs, ResponderNs)
@@ -695,17 +703,38 @@ concurrent_submissions(Ctx, Goals) ->
      after 30000 -> error(submit_result_missing) end || {Pid, Monitor} <- Requests].
 
 seed(Ctx, ResponderNs, HumanNs, Instance, Ref, Row) ->
-    commit(Ctx, {transaction, {',', scope(ResponderNs, {assertz, Row}),
+    commit(Ctx, {transaction, {',', scope(ResponderNs, {',', quod_ct:source_assertion({instance_of,{':',quod,{':',gui,question}},element(4,Ref)}), {assertz, Row}}),
         scope(HumanNs, {assertz, {gui_pending, Instance, Ref}})}}).
 
-source(Name) -> quod_prolog:read_terms(filename:join(code:priv_dir(quod), "ontologies/" ++ Name)).
+%% The fixture authors its smaller HUD allowance at genesis, replacing the
+%% account template's default rather than admitting two policy answers.
+user_source_with_allowance(Instance,Limit) ->
+    [T || T<-quod_personal_agent_tests:user_terms(), not user_allowance_clause(T)] ++
+        [{gui_pending_allowance,Instance,Limit}].
+user_allowance_clause({gui_pending_allowance,_,_}) -> true;
+user_allowance_clause(_) -> false.
+
+source(Name) ->
+    case Name of
+        "gui_measure.pl" -> quod_ct:gui_terms();
+        "gui_scene.pl" -> quod_ct:gui_terms();
+        "gui_tools.pl" -> quod_ct:gui_terms();
+        "quod_gui.pl" -> quod_ct:gui_terms();
+        _ -> quod_prolog:read_terms(filename:join(code:priv_dir(quod), "ontologies/" ++ Name))
+    end.
+gui(Goal) -> {'::', <<"quod:gui">>, Goal}.
+question_ref(Ns,Q) -> {question_ref,Ns,quod_simplex:genesis_hash(Ns),Q}.
 read(Ctx, Ns, Goal) -> quod_lobby_tests:read(Ctx, scope(Ns, Goal)).
 scope(Ns, Goal) -> {'::', Ns, {',', {current_ontology_identity, Ns, quod_simplex:genesis_hash(Ns)}, Goal}}.
 commit(Ctx, Goal) ->
     await_commit(quod_lobby_tests:submit(Ctx, execute, Goal)).
 
 await_commit({ok, #{operation_ref := Operation}, {normalized, {committed, _, _}}}) ->
-    await_operation(Operation).
+    await_operation(Operation);
+await_commit({ok, _, {normalized, {failed, Encoded}}}) ->
+    {ok,Reasons} = quod_wire_term:decode_failure_reasons(Encoded),
+    error({expected_committed,lists:flatten(io_lib:format("~P",[Reasons,18]))});
+await_commit({error,Reason}) -> error({expected_committed,Reason}).
 
 await_operation(Operation) ->
     %% Complete publication can outlive the client result. Join that existing
@@ -745,16 +774,18 @@ committed_answer_automatically_completes_test_() ->
     {timeout, 60, fun() ->
         quod_agent_hosting_tests:with_host(fun(Ctx = #{namespace := Ns, reference := Actor,
                 node := Node, key := Key, directory := Dir, identity := Identity}) ->
-            ?assertMatch({ok, _, _}, quod_ct:rp(Ns, {goal, {agent_hosted, actor, Node, 1, Key}})),
+            start_question_actor(Ctx),
+            UserOwner = quod_agent_hosting_tests:start_ontology(<<"quod:user">>,Dir,Identity,
+                quod_prolog:genesis_diff("priv/ontologies/quod_user.pl"),[]),
             receive {agent_installed, _, _, #{reference := Actor}, _} -> ok
             after 10000 -> error(gui_actor_not_installed) end,
             Admin = {can_invoke, {'_'}, Node, {'_'}, {'_'}},
             Start = fun(Name, Terms) ->
                 quod_agent_hosting_tests:start_ontology(Name, Dir, Identity, [], [Admin | Terms])
             end,
-            Vocabulary = Start(<<"quod:gui">>, source("quod_gui.pl")),
+            Vocabulary = Start(<<"quod:gui">>, quod_ct:gui_terms()),
             HumanNs = <<"gui:auto-human">>,
-            HumanOwner = Start(HumanNs, source("gui_hud.pl") ++ [{instance_of, human_user, person}]),
+            HumanOwner = Start(HumanNs, quod_personal_agent_tests:user_terms() ++ [{instance_of, {':',quod,{':',user,human_user}}, person}]),
             Human = {agent_instance_ref, HumanNs, quod_simplex:genesis_hash(HumanNs), person},
             AppNs = <<"gui:auto-app">>,
             Callback = {':-', {settings_entered, {'N'}, {'M'}, {'L'}, {'A'}},
@@ -773,7 +804,7 @@ committed_answer_automatically_completes_test_() ->
                 Source = {form_ref, AppNs, quod_simplex:genesis_hash(AppNs), settings},
                 Fields = [{field, name, <<"Automatic">>}, {field, mode, square},
                           {field, level, 75}, {field, angle, 180}],
-                {ok, Text} = quod_client_goal_parser:format({gui_complete, Q}),
+                {ok, Text} = quod_client_goal_parser:format(gui({gui_complete, Reference})),
                 {ok, Bytes} = quod_client_goal:encode(#{network_identity => <<42:256>>,
                     agent_namespace => Ns, agent_genesis_anchor => element(3, Actor),
                     agent_instance_text => <<"actor.">>, signing_public_key => Key,
@@ -792,7 +823,8 @@ committed_answer_automatically_completes_test_() ->
                 %% through an exact grant; governed signing uses GUI's own ACL.
                 BroadEntry = {can_invoke,{'_'},Node,{'_'},Ns},
                 SeedEntry = {can_invoke,
-                    {',',{current_ontology_identity,Ns,element(3,Actor)},{assertz,Row}},
+                    {',',{current_ontology_identity,Ns,element(3,Actor)},
+                     {',',quod_ct:source_assertion({instance_of,{':',quod,{':',gui,question}},Q}),{assertz,Row}}},
                     Node,{'_'},Ns},
                 %% Test setup retains write administration, never a generic
                 %% read/signing entry. Actual hosted signature reads must use
@@ -811,7 +843,7 @@ committed_answer_automatically_completes_test_() ->
                 %% The reference and accepted row become visible together.
                 ?assertMatch({ok, _, {normalized, {committed, _, _}}}, node_request(Ctx, execute,
                     {transaction, {',', scope(HumanNs, {assertz, {gui_pending, person, Reference}}),
-                                        scope(Ns, {assertz, Row})}})),
+                                        scope(Ns, {',',quod_ct:source_assertion({instance_of,{':',quod,{':',gui,question}},Q}),{assertz, Row}})}})),
                 receive
                     {agent_request_finished, _, _, #{reference := Actor}, _, Result} ->
                         ?assertMatch({ok, #{request_bytes := Bytes},
@@ -848,7 +880,7 @@ committed_answer_automatically_completes_test_() ->
                     ?assertMatch({ok,_,{normalized,{committed,_,_}}},
                                  node_request(Ctx,execute,scope(Ns,{retract,BadRow})))
                 end,[{{question,<<93:256>>},{record_ping,unauthorized}},
-                      {{question,<<94:256>>},{gui_complete,{0}}}]),
+                      {{question,<<94:256>>},gui({gui_complete,{0}})}]),
                 %% A forged ordinary event cannot recreate an assertion.
                 ?assertMatch({ok,_,{normalized,{committed,_,_}}},node_request(Ctx,execute,
                     scope(Ns,{trigger_event,{gui_submitted,Q,fixture_submission}}))),
@@ -869,10 +901,19 @@ committed_answer_automatically_completes_test_() ->
             after
                 quod_agent_hosting_tests:stop_ontology(App),
                 quod_agent_hosting_tests:stop_ontology(HumanOwner),
-                quod_agent_hosting_tests:stop_ontology(Vocabulary)
+                quod_agent_hosting_tests:stop_ontology(Vocabulary),
+                quod_agent_hosting_tests:stop_ontology(UserOwner)
             end
-        end, source("gui_question.pl"))
+        end, source("gui_instance.pl"))
     end}.
+
+start_question_actor(Ctx = #{namespace := Ns, reference := Actor, node := Node,
+                             key := Key}) ->
+    ?assertMatch({ok,_,{normalized,{committed,_,_}}},node_request(Ctx,execute,
+        scope(Ns,assertions([{instance_of,{':',quod,{':',agent,agent}},actor},
+            {can_assign_agent_host,Node,actor,none,0,Node,Key}])))),
+    ?assertMatch({ok,_,{normalized,{committed,_,_}}},node_request(Ctx,execute,
+        {'::',<<"quod:agent">>,{goal,{agent_hosted,Actor,Node,1,Key}}})).
 
 node_request(#{node := {agent_instance_ref, Ns, Anchor, Instance}, identity := Identity}, Mode, Goal) ->
     {Numbered, _, _} = erlog_int:term_instance(Goal, 0),
@@ -1003,7 +1044,7 @@ assert_gui_view_lifecycle(Ctx, OtherCtx, HumanNs, ResponderNs, AppNs, Q, Referen
 %% provisional handles; it is never negative evidence about a material write.
 assert_gui_resources(Hud,Ctx,Session,HumanNs,ResponderNs,Q,Reference) ->
     {client_view,{gui_hud,Human,Connection}} = Key = maps:get(receiver_key,gui_socket_state(Hud)),
-    {ok,[#{<<"V0">> := Descriptor}],_} = read(Ctx,ResponderNs,{gui_question_form,Q,{0}}),
+    {ok,[#{<<"V0">> := Descriptor}],_} = read(Ctx,ResponderNs,gui({gui_question_form,question_ref(ResponderNs,Q),{0}})),
     Request = crypto:strong_rand_bytes(32), Expiry = quod_time:now_ms()+30000,
     Deadline = quod_time:mono_ms()+30000,
     Prepare = fun(R,Ref,Form,Capacity) ->
@@ -1103,9 +1144,10 @@ gui_ack(Hud,Message) -> Hud ! {client,iolist_to_binary(json:encode(Message))}.
 
 assert_receiver_selection(Ctx, OtherCtx, ActorCtx, HumanNs, Instance, Actor) ->
     {ok,Node} = application:get_env(quod,node_pubkey),
+    Human = {agent_instance_ref,HumanNs,quod_simplex:genesis_hash(HumanNs),Instance},
     First = <<71:256>>, Second = <<72:256>>,
-    Select = fun(Token) -> scope(HumanNs,{gui_select_receiver,Instance,Node,Token}) end,
-    Read = {gui_receiver_for,Instance,{0}},
+    Select = fun(Token) -> scope(HumanNs,gui({gui_select_receiver,Human,Node,Token})) end,
+    Read = gui({gui_receiver_for,Human,{0}}),
     commit(Ctx,Select(First)),
     ?assertMatch({ok,[#{<<"V0">> := {receiver,Node,First}}],_},read(Ctx,HumanNs,Read)),
     fail(OtherCtx,Select(Second)),
@@ -1115,7 +1157,7 @@ assert_receiver_selection(Ctx, OtherCtx, ActorCtx, HumanNs, Instance, Actor) ->
     commit(Ctx,scope(HumanNs,{assertz,Policy})),
     ?assertMatch({ok,[#{<<"V0">> := {receiver,Node,First}}],_},read(ActorCtx,HumanNs,Read)),
     commit(Ctx,Select(Second)),
-    fail(Ctx,scope(HumanNs,{gui_select_receiver,Instance,<<0>>,First})),
+    fail(Ctx,scope(HumanNs,gui({gui_select_receiver,Human,<<0>>,First}))),
     ?assertMatch({ok,[#{<<"V0">> := {receiver,Node,Second}}],_},read(Ctx,HumanNs,Read)),
     no_io(receiver_selection,fun() ->
         ?assertMatch({ok,[#{<<"V0">> := {receiver,Node,Second}}],_},read(Ctx,HumanNs,Read))
@@ -1140,9 +1182,12 @@ gui_open_message(Ctx, Session, Kind, Ns, Q, ExtraExpiry) ->
 gui_open_message(Ctx, Session, Kind, Ns, Anchor, Q, ExtraExpiry) ->
     {Source, SourceAnchor} = maps:get(agent, Ctx),
     {Pub, _} = Pair = maps:get(key_pair, Ctx),
-    Inner = case Kind of gui_hud -> <<"gui_pending_questions(View)">>;
-        gui_question -> [<<"gui_question_form(">>, quod_client_goal_parser:value_text(Q), <<",View)">>];
-        gui_operations -> [<<"gui_operations(">>, quod_client_goal_parser:value_text(Q), <<",View)">>] end,
+    Inner = case Kind of gui_hud -> <<"<<\"quod:gui\">>::gui_pending_questions(View)">>;
+        gui_question -> [<<"<<\"quod:gui\">>::gui_question_form(">>, quod_client_goal_parser:value_text({question_ref,Ns,Anchor,Q}), <<",View)">>];
+        source_access -> [<<"prolog_inspect(">>, quod_client_goal_parser:value_text(Q), <<",presentation,View)">>];
+        gui_operations -> [<<"gui_operations(">>, quod_client_goal_parser:value_text(Q), <<",View)">>];
+        menu -> [<<"client_menu(">>, quod_client_goal_parser:value_text(Q), <<",View)">>];
+        world -> [<<"client_world_view(">>, quod_client_goal_parser:value_text(Q), <<",playing,[],View)">>] end,
     Goal = iolist_to_binary([quod_client_goal_parser:value_text(Ns), " :: (current_ontology_identity(",
         quod_client_goal_parser:value_text(Ns), ",", quod_client_goal_parser:value_text(Anchor), "),", Inner, ")."]),
     {ok, Bytes} = quod_client_goal:encode(#{network_identity => maps:get(network, Ctx),

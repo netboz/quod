@@ -1,0 +1,15 @@
+{
+  "observed_outer_exit": 1,
+  "all_five_child_exits": 0,
+  "source_unchanged": false,
+  "changes": [
+    {
+      "path": "rebar.lock",
+      "expected": "09f364a859950d3cf2aeece1e56c14f8fd6cbbd4b7cda2a4de4e83888b9df01b",
+      "live": "09f364a859950d3cf2aeece1e56c14f8fd6cbbd4b7cda2a4de4e83888b9df01b",
+      "stage": "6e768714a501546673ca1b7a2cd0f30e7cb5043fca28ac0ec4009333c87ca9d9",
+      "live_size": 5401,
+      "stage_size": 4763
+    }
+  ]
+}

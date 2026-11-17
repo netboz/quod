@@ -1,0 +1,12 @@
+{error, "*** eval: {'EXIT',{{unsupported_type,{<<"quod_node.pl">>,
+                                      <<"F7531DE9C3081EC26F77D43F34A937D2C7CFC2941EF4D27F6858764AE0D900A2">>}},
+                   [{json,do_encode,2,[{file,"json.erl"},{line,203}]},
+                    {json,do_encode_list,2,[{file,"json.erl"},{line,245}]},
+                    {json,'-do_encode_map/2-lc$^0/1-0-',2,
+                          [{file,"json.erl"},{line,261}]},
+                    {json,do_encode_map,2,[{file,"json.erl"},{line,261}]},
+                    {erl_eval,do_apply,7,[{file,"erl_eval.erl"},{line,920}]},
+                    {erl_eval,expr_list,7,[{file,"erl_eval.erl"},{line,1504}]},
+                    {erl_eval,expr,6,[{file,"erl_eval.erl"},{line,641}]},
+                    {erl_eval,expr_list,7,
+                              [{file,"erl_eval.erl"},{line,1504}]}]}}"}

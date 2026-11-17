@@ -1,0 +1,398 @@
+--- candidate09/client/godot-tests/desktop_input.py
++++ final03/client/godot-tests/desktop_input.py
+@@ -13,39 +13,55 @@
+     if not desktop:
+         raise RuntimeError('Unsupported native qualification input')
+     before = json.loads(subprocess.check_output(['hyprctl', '-j', 'activewindow']))
+-    commands = []
++    def owned_window(title):
++        windows=json.loads(subprocess.check_output(['hyprctl','-j','clients']))
++        owned=[w for w in windows if w.get('pid')==pid and w.get('mapped') and w.get('title')==title]
++        if len(owned)!=1:raise RuntimeError('Native input must name one exact owned visible window')
++        return owned[0]
++    def geometry(window):
++        return {k:window[k] for k in ('address','at','size')}
++    def run(command, require_focus=True, target=None):
++        nonlocal before
++        environment=dict(os.environ,YDOTOOL_SOCKET=str(Path('/run/user')/str(os.getuid())/'.ydotool_socket'))
++        child = subprocess.run(command, capture_output=True, text=True, timeout=5,env=environment)
++        after = json.loads(subprocess.check_output(['hyprctl', '-j', 'activewindow']))
++        records.append({'command': command, 'child_exit': child.returncode,
++            'stdout': child.stdout, 'stderr': child.stderr, 'owned_pid': pid,
++            'before_pid': before.get('pid'), 'after_pid': after.get('pid'), 'target_geometry':target})
++        if child.returncode or (require_focus and after.get('pid') != pid):
++            raise RuntimeError('Native qualification input lost its owned window')
++        before = after
+     if key_event:
+         if before.get('pid') != pid:
+-            commands.append(['hyprctl', 'dispatch', 'hl.dsp.focus({window="pid:' + str(pid) + '"})'])
++            run(['hyprctl', 'dispatch', 'hl.dsp.focus({window="pid:' + str(pid) + '"})'])
+         key=line.split()[1]
+-        if key in ('hold-w','release-w'):commands.append(['ydotool','key','17:1' if key=='hold-w' else '17:0'])
+-        elif key in ('space','Return','F24'):commands.append(['wtype', '-k', key])
++        if key in ('hold-w','release-w'):run(['ydotool','key','17:1' if key=='hold-w' else '17:0'])
++        elif key in ('space','Return','F24'):run(['wtype', '-k', key])
+         else:raise RuntimeError('Unsupported native key')
+     else:
+         payload=json.loads(line.split(' ',1)[1])
+-        windows=json.loads(subprocess.check_output(['hyprctl','-j','clients']))
+-        owned=[w for w in windows if w.get('pid')==pid and w.get('mapped') and w.get('title')==payload['title']]
+-        if len(owned)!=1:raise RuntimeError('Native input must name one exact owned visible window')
+-        window=owned[0]
++        window=owned_window(payload['title'])
+         address=window['address']
+         if before.get('address')!=address:
+-            commands.append(['hyprctl','dispatch','hl.dsp.focus({window="address:'+address+'"})'])
++            run(['hyprctl','dispatch','hl.dsp.focus({window="address:'+address+'"})'],target=geometry(window))
++        current=owned_window(payload['title'])
++        if current['address']!=address or current['size']!=window['size']:
++            raise RuntimeError('Native input target changed layout before dispatch')
++        window=current
+         if close_event:
+-            commands.append(['hyprctl','dispatch','hl.dsp.window.close({window="address:'+address+'"})'])
++            # Addressed close may legitimately retire its focused window.
++            # The campaign separately requires the real process exit and EOF.
++            run(['hyprctl','dispatch','hl.dsp.window.close({window="address:'+address+'"})'],False,geometry(window))
+         else:
+             x,y,width,height=(float(payload[k]) for k in ['x','y','width','height'])
+             if not (0<=x<width and 0<=y<height):raise RuntimeError('Native pointer lies outside its exact window')
+             screen_x=round(window['at'][0]+x*window['size'][0]/width)
+             screen_y=round(window['at'][1]+y*window['size'][1]/height)
+-            commands.append(['hyprctl','dispatch',f'hl.dsp.cursor.move({{x={screen_x},y={screen_y}}})'])
+-            commands.append(['ydotool','click','0xC0'])
+-    for command in commands:
+-        environment=dict(os.environ,YDOTOOL_SOCKET=str(Path('/run/user')/str(os.getuid())/'.ydotool_socket'))
+-        child = subprocess.run(command, capture_output=True, text=True, timeout=5,env=environment)
+-        after = json.loads(subprocess.check_output(['hyprctl', '-j', 'activewindow']))
+-        records.append({'command': command, 'child_exit': child.returncode,
+-            'stdout': child.stdout, 'stderr': child.stderr, 'owned_pid': pid,
+-            'before_pid': before.get('pid'), 'after_pid': after.get('pid')})
+-        if child.returncode or after.get('pid') != pid:
+-            raise RuntimeError('Native qualification input lost its owned window')
+-        before = after
++            run(['hyprctl','dispatch',f'hl.dsp.cursor.move({{x={screen_x},y={screen_y}}})'],target=geometry(window))
++            current=owned_window(payload['title'])
++            cursor=json.loads(subprocess.check_output(['hyprctl','-j','cursorpos']))
++            left,top=current['at'];width,height=current['size']
++            if geometry(current)!=geometry(window) or not (left<=cursor['x']<left+width and top<=cursor['y']<top+height) or abs(cursor['x']-screen_x)>1 or abs(cursor['y']-screen_y)>1:
++                records.append({'refused_before_click':True,'owned_pid':pid,'requested':[screen_x,screen_y],'actual_cursor':cursor,'target_geometry':geometry(current)})
++                raise RuntimeError('Native pointer did not remain inside its exact owned window')
++            run(['ydotool','click','0xC0'],target=geometry(current))
+--- candidate09/client/godot/Main.cs
++++ final03/client/godot/Main.cs
+@@ -447,13 +447,13 @@
+     }
+     void ReleaseIdentity()
+     { if (released) return; released = true; key?.Dispose(); store?.Dispose(); }
+-    internal async Task CloseApplication()
++    internal async Task CloseApplication(int exitCode=0)
+     {
+         if (closing) return; closing = true; action?.Cancel(); backupCancellation?.Cancel(); backupDialog?.QueueFree(); CloseSession();
+         await Task.WhenAll(ViewsDisposed, activeAction, backupWork,xr.Completion);
+         models.Dispose();await models.Completion;
+         bool xrStopped=await xr.Shutdown(SignedSession.Now+5000);
+-        disposed = true; ReleaseIdentity(); GetTree().Quit(xrStopped ? 0 : 1);
++        disposed = true; ReleaseIdentity(); GetTree().Quit(xrStopped ? exitCode : 1);
+     }
+     public override void _ExitTree()
+     {
+--- candidate09/client/godot/OpenXRInput.cs
++++ final03/client/godot/OpenXRInput.cs
+@@ -28,11 +28,12 @@
+             var line=new ImmediateMesh();line.SurfaceBegin(Mesh.PrimitiveType.Lines);line.SurfaceAddVertex(Vector3.Zero);line.SurfaceAddVertex(new(0,0,-2));line.SurfaceEnd();
+             Pointer.Mesh=line;Pointer.MaterialOverride=new StandardMaterial3D { ShadingMode=BaseMaterial3D.ShadingModeEnum.Unshaded,AlbedoColor=Colors.Gold };Aim.AddChild(Pointer);
+         }
+-        public bool Current(ulong frame)=>Alive && XRServer.GetTracker(Tracker.Name)?.GetInstanceId()==Tracker.GetInstanceId() && Tracker.HasPose("aim") && Tracker.HasPose("grip_pose") &&
+-            Tracker.GetPose("aim").HasTrackingData && Tracker.GetPose("grip_pose").HasTrackingData &&
+-            Tracker.GetPose("aim").TrackingConfidence!=XRPose.TrackingConfidenceEnum.None && Tracker.GetPose("grip_pose").TrackingConfidence!=XRPose.TrackingConfidenceEnum.None;
++        // Godot translates the authored OpenXR grip_pose action to tracker pose grip.
++        public bool Current(ulong frame)=>Alive && XRServer.GetTracker(Tracker.Name)?.GetInstanceId()==Tracker.GetInstanceId() && Tracker.HasPose("aim") && Tracker.HasPose("grip") &&
++            Tracker.GetPose("aim").HasTrackingData && Tracker.GetPose("grip").HasTrackingData &&
++            Tracker.GetPose("aim").TrackingConfidence!=XRPose.TrackingConfidenceEnum.None && Tracker.GetPose("grip").TrackingConfidence!=XRPose.TrackingConfidenceEnum.None;
+         public void UpdatePose()
+-        { if(!Alive)return;if(Tracker.HasPose("aim"))Aim.Transform=Tracker.GetPose("aim").GetAdjustedTransform();if(Tracker.HasPose("grip_pose"))Grip.Transform=Tracker.GetPose("grip_pose").GetAdjustedTransform(); }
++        { if(!Alive)return;if(Tracker.HasPose("aim"))Aim.Transform=Tracker.GetPose("aim").GetAdjustedTransform();if(Tracker.HasPose("grip"))Grip.Transform=Tracker.GetPose("grip").GetAdjustedTransform(); }
+         public ComponentSample? Read(string id)
+         {
+             if(!Alive || Profiles.Length==0)return null;
+@@ -112,7 +113,7 @@
+         xr.SessionLossPending+=Stopping;xr.InstanceExiting+=Stopping;xr.PoseRecentered+=Recentered;Subscriptions+=7;
+         lifecycleSubscribed=true;xr.SetActionSetActive("quod_inputs",true);
+         AttachSources();active=true;calibration=null;
+-        scene.ReleaseInput();scene.Visible=false;scene.Viewport.UseXR=true;scene.Viewport.RenderTargetUpdateMode=SubViewport.UpdateMode.Always;
++        scene.ReleaseInput();scene.PresentXR(true);
+         gui.Surface.GuiEmbedSubwindows=true;
+         camera.Current=true;panel.Visible=true;PositionPanel();
+         Status="OpenXR active; input requires current focused tracking and signed settings.";Changed?.Invoke();return true;
+@@ -164,7 +165,8 @@
+         if(!active || xr==null)return;
+         bool focused=applicationFocused && xr.GetSessionState()==OpenXRInterface.SessionState.Focused && api.IsRunning();
+         var head=XRServer.GetTracker("head") as XRPositionalTracker;
+-        bool tracked=head?.HasPose("default")==true && head.GetPose("default").HasTrackingData;
++        bool tracked=head?.HasPose("default")==true && head.GetPose("default").HasTrackingData &&
++            head.GetPose("default").TrackingConfidence!=XRPose.TrackingConfidenceEnum.None;
+         ControlChanged();
+         if(tracked && calibration==null) {
+             var pose=head!.GetPose("default").Transform;var forward=-pose.Basis.Z;
+@@ -287,13 +289,14 @@
+             xr.SessionFocussed-=Focused;xr.SessionVisible-=Unfocused;xr.SessionSynchronized-=Unfocused;xr.SessionStopping-=Stopping;
+             xr.SessionLossPending-=Stopping;xr.InstanceExiting-=Stopping;xr.PoseRecentered-=Recentered;Subscriptions-=7;
+             lifecycleSubscribed=false;
+-            if(xr.IsInitialized())xr.SetActionSetActive("quod_inputs",false);
+         }
+         // Godot owns one native session for the application. Uninitialize does
+         // not destroy that session, so it cannot be used as a restart boundary.
+         // Pause/reentry releases this consumer, retaining the engine's session.
+-        scene.Viewport.UseXR=false;xr=null;
+-        scene.Visible=true;panel.Visible=false;gui.Surface.GuiEmbedSubwindows=false;calibration=null;Status="OpenXR stopped; local sources and captures released.";Changed?.Invoke();
++        // Its action set remains owned by that session; no samples dispatch
++        // once this consumer has released its sources and gesture owner.
++        scene.PresentXR(false);xr=null;
++        panel.Visible=false;gui.Surface.GuiEmbedSubwindows=false;calibration=null;Status="OpenXR stopped; local sources and captures released.";Changed?.Invoke();
+     }
+     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+     delegate int RequestExitSession(ulong session);
+--- candidate09/client/godot/README.md
++++ final03/client/godot/README.md
+@@ -94,13 +94,18 @@
+ them. The complete export includes the model's MIT notice. **Stop OpenXR**
+ releases this consumer's sources, captures and render leases. Godot retains its
+ native session for the application lifetime; application close requests session
+-exit before uninitializing the engine interface.
++exit before uninitializing the engine interface. The scene owner releases the
++stretched mono layout for XR, keeps the hidden stereo viewport rendering, and
++restores the same mono viewport and desktop camera on pause. Failed exported
++qualification also closes through this owner and retains its failing exit code.
+ 
+ Runtime discovery, injected engine tests and physical hardware observations are
+-separate qualification levels. The installed Monado service currently cannot
+-load its absent OpenCV4.13 dependencies. Native session teardown and physical
+-Vive/two-wand display, tracking, gestures, comfort and exit therefore require
+-further observations. Quest and Android headset qualification are outside M4.
++separate qualification levels. A compatible runtime ABI and access to the
++headset display are prerequisites independent of controller mapping. The pinned
++engine's retained teardown diagnostics and native/physical acceptance limits
++are recorded in the [M4-R2 evidence](../../doc/evidence/godot-m4-r2-20261029/README.md).
++Process exit alone does not prove native resource retirement. Quest and Android
++headset qualification are outside M4.
+ The legacy native viewer
+ retains its uncovered asset/XR obligations until their replacement qualifies;
+ it is not a dependency of this client. The shared [QUO-62](nimbalyst://QUO-62)
+--- candidate09/client/godot/ScenePanel.cs
++++ final03/client/godot/ScenePanel.cs
+@@ -20,6 +20,19 @@
+     public bool Controlled { get; set; }
+     public bool NavigationBlocked { get=>navigationBlocked;set { if(value&&!navigationBlocked)ReleaseInput();navigationBlocked=value; } }
+     internal SubViewport Viewport=>viewport;
++    internal void PresentXR(bool active)
++    {
++        if(viewport.UseXR==active)return;
++        // The XR runtime owns stereo dimensions; desktop layout owns the
++        // stretched mono target. Release layout before changing that contract.
++        Stretch=false;
++        // Container visibility changes its child's update mode. Establish
++        // presentation first, then give the active XR renderer final ownership.
++        Visible=!active;
++        viewport.UseXR=active;
++        if(!active) { viewport.ViewCount=1;camera.Current=true;Stretch=true; }
++        viewport.RenderTargetUpdateMode=active ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.WhenVisible;
++    }
+     internal Node3D SceneRoot=>root;
+     internal Transform3D CameraPose=>camera.GlobalTransform;
+     internal Basis DomainBasis {
+--- candidate09/client/godot/tests/ControllerChecks.cs
++++ final03/client/godot/tests/ControllerChecks.cs
+@@ -9,7 +9,7 @@
+     {
+         // Frames are injected through real XRServer trackers. GUI events,
+         // scene nodes and GLB decode are the production engine consumers.
+-        if(DisplayServer.GetName()=="headless")GetTree().Root.Size=new(1200,800);await Frame();
++        await Frame();
+         byte[] model=await File.ReadAllBytesAsync(Env("M4_MODEL"));
+         var mapping=ControllerMapping.Decode(Term.Parse(await File.ReadAllTextAsync(Env("M4_MAPPING"))))!;
+         var gui=(SpatialGui)app.FindChild("shared-gui",true,false);
+@@ -25,7 +25,7 @@
+             var t=new XRControllerTracker { Name=name,Type=XRServer.TrackerType.Controller,Profile="/interaction_profiles/htc/vive_controller",Hand=hand };
+             t.SetInput("trigger_press",false);t.SetInput("trigger_value",0.0);t.SetInput("squeeze_press",false);t.SetInput("pad_press",false);t.SetInput("pad_touch",false);t.SetInput("pad_axes",Vector2.Zero);
+             t.SetPose("aim",new(Basis.Identity,new(0,0,1)),Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);
+-            t.SetPose("grip_pose",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);XRServer.AddTracker(t);return t;
++            t.SetPose("grip",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);XRServer.AddTracker(t);return t;
+         }
+         adapter.Install(mapping);adapter.AttachSources();
+         var left=Tracker("m4_left",XRPositionalTracker.TrackerHand.Left);var right=Tracker("m4_right",XRPositionalTracker.TrackerHand.Right);
+@@ -54,9 +54,9 @@
+         adapter.Focus(true);Advance();Held(left,"trigger_press",false);Check(clicked==1,"held focus return requires release before rearming");
+         Advance();Held(left,"trigger_press",true);left.InvalidatePose("aim");Advance();Held(left,"trigger_press",false);
+         Check(clicked==1 && gui.Captures==0,"lost current ray cancels while an old engine transform remains");
+-        Pose(left,button.GetGlobalRect().GetCenter());Advance();Held(left,"trigger_press",true);left.InvalidatePose("grip_pose");Advance();Held(left,"trigger_press",false);
++        Pose(left,button.GetGlobalRect().GetCenter());Advance();Held(left,"trigger_press",true);left.InvalidatePose("grip");Advance();Held(left,"trigger_press",false);
+         Check(clicked==1,"lost grip pose cannot select through a retained ray");
+-        left.SetPose("grip_pose",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);Advance();
++        left.SetPose("grip",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);Advance();
+         Held(left,"trigger_press",true);adapter.Advance(frame,true);Held(left,"trigger_press",false);
+         Check(clicked==1,"duplicate stale frame cancels pending selection");
+         Advance();Held(left,"trigger_press",true);adapter.Visibility(false);adapter.Visibility(true);Held(left,"trigger_press",false);
+--- candidate09/client/godot/tests/ControllerLiveChecks.cs
++++ final03/client/godot/tests/ControllerLiveChecks.cs
+@@ -20,7 +20,7 @@
+         adapter.AttachSources();
+         var tracker=new XRControllerTracker { Name="m4_live_source",Type=XRServer.TrackerType.Controller,Profile="/interaction_profiles/htc/vive_controller",Hand=XRPositionalTracker.TrackerHand.Left };
+         tracker.SetInput("trigger_press",false);tracker.SetInput("trigger_value",0.0);tracker.SetInput("squeeze_press",false);tracker.SetInput("pad_press",false);tracker.SetInput("pad_touch",false);tracker.SetInput("pad_axes",Vector2.Zero);
+-        tracker.SetPose("aim",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);tracker.SetPose("grip_pose",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);
++        tracker.SetPose("aim",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);tracker.SetPose("grip",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);
+         XRServer.AddTracker(tracker);await Frame();await adapter.Completion;adapter.Advance(1,true);
+         var resources=JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(adapter.Metrics))!["resources"]!;
+         Check(resources["Decodes"]!.GetValue<int>()==1 && resources["LiveLeases"]!.GetValue<int>()==1,"real HTTPS asset bytes pass digest/profile/cost admission and instantiate in the production scene owner");
+--- candidate09/client/godot/tests/ExportChecks.cs
++++ final03/client/godot/tests/ExportChecks.cs
+@@ -44,6 +44,7 @@
+         try {
+             var args = OS.GetCmdlineUserArgs(); profile = args[Array.IndexOf(args, "--profile") + 1];
+             app = application;
++            if(DisplayServer.GetName()=="headless")GetTree().Root.Size=new(1200,800);
+             app.Changed += () => {
+                 var state = State.AsObject(); state.Remove("setup"); state.Remove("human"); state.Remove("public_key"); state.Remove("network");
+                 Console.WriteLine("M1B_STATE " + state.ToJsonString()); Console.Out.Flush();
+@@ -54,7 +55,8 @@
+             if (phase == "menu") { await NativeMenu(); return; }
+             if (phase == "scene") { await SceneAdapter(); return; }
+             if (phase == "controller-input") { await ControllerAdapter(); return; }
+-            if (phase == "openxr") { await OpenXRRuntime(); return; }
++            if (phase is "openxr" or "openxr-input") { await OpenXRRuntime(); return; }
++            if (phase == "shutdown-connect") { await CloseDuringConnect(); return; }
+             if (phase == "physics") { await PhysicsJourney(); return; }
+             bool fresh = phase is "fresh" or "questions" or "m2-fresh" or "m3-fresh";
+             if (phase == "tls") { await Tls(); return; }
+@@ -166,7 +168,7 @@
+                 await File.WriteAllTextAsync(Env("M1B_RESULT"), report.ToJsonString());
+                 Console.WriteLine("M1B_EXPORT_PASS"); Console.Out.Flush(); await app.CloseApplication();
+             }
+-        } catch (Exception error) { Console.Error.WriteLine(error.ToString()); Console.Error.WriteLine(app.Inspect()); Console.Error.Flush(); GetTree().Quit(1); }
++        } catch (Exception error) { Console.Error.WriteLine(error.ToString()); Console.Error.WriteLine(app.Inspect()); Console.Error.Flush(); await app.CloseApplication(1); }
+     }
+ 
+     readonly HashSet<SignedView> tracedOperationViews = [];
+--- candidate09/client/godot/tests/ExportLifecycle.cs
++++ final03/client/godot/tests/ExportLifecycle.cs
+@@ -10,6 +10,18 @@
+ 
+ public partial class ExportChecks
+ {
++    async Task CloseDuringConnect()
++    {
++        await Press("create-key");
++        ((Button)app.FindChild("connect",true,false)).EmitSignal(BaseButton.SignalName.Pressed);
++        await Until(()=>Busy);
++        Check(app.ActiveStore.Snapshot!.Pending.Count==0,"closing a pending sign-in has no durable domain submission");
++        await File.WriteAllTextAsync(Env("M1B_RESULT"),JsonSerializer.Serialize(new { armed=true,checks }));
++        // The driver delivers this real window close only after its TLS peer
++        // observes the actual challenge request. It never supplies a reply.
++        Console.WriteLine("M4_PENDING_CONNECT");
++        Console.WriteLine("M2_NATIVE_CLOSE "+JsonSerializer.Serialize(new { title=GetWindow().Title }));Console.Out.Flush();
++    }
+     async Task Tls()
+     {
+         bool expected = Env("M1B_TLS_EXPECT") == "accept";
+--- candidate09/client/godot/tests/OpenXRChecks.cs
++++ final03/client/godot/tests/OpenXRChecks.cs
+@@ -7,26 +7,86 @@
+     async Task OpenXRRuntime()
+     {
+         var adapter=(OpenXRInput)app.FindChild("openxr-input",true,false);
++        var scene=(ScenePanel)app.FindChild("space-scene",true,false);
+         using var api=new OpenXRApiExtension();
+         var cycles=new List<object>();
++        var calibration=typeof(OpenXRInput).GetField("calibration",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!;
+         for(int cycle=1;cycle<=3;cycle++) {
+             Check(adapter.Start(),"installed OpenXR interface starts cycle "+cycle);
+-            long previous=0;int fresh=0,tracked=0;var samples=new List<long>();
++            if(cycle==1 && Env("M1B_PHASE")=="openxr-input")await ObserveOpenXRControls(adapter);
++            long previous=0;int fresh=0,tracked=0,high=0;var samples=new List<long>();
++            int invalidStartupFrames=0;bool invalidHeadCalibration=false;
++            var sourceSamples=new Dictionary<OpenXRInput.Source,int>();bool sourcePosesAgree=true;
+             for(int i=0;i<90;i++) {
+                 await ToSignal(RenderingServer.Singleton,RenderingServer.SignalName.FramePostDraw);
+                 long time=api.GetPredictedDisplayTime();if(time>previous){fresh++;previous=time;samples.Add(time);}
+-                if(XRServer.GetTracker("head") is XRPositionalTracker head && head.HasPose("default") && head.GetPose("default").HasTrackingData)tracked++;
++                if(XRServer.GetTracker("head") is XRPositionalTracker head && head.HasPose("default") && head.GetPose("default").HasTrackingData && head.GetPose("default").TrackingConfidence!=XRPose.TrackingConfidenceEnum.None) {
++                    tracked++;if(head.GetPose("default").TrackingConfidence==XRPose.TrackingConfidenceEnum.High)high++;
++                } else if(tracked==0) { invalidStartupFrames++;invalidHeadCalibration|=calibration.GetValue(adapter)!=null; }
++                foreach(var source in adapter.Sources.Where(s=>s.Current(0))) {
++                    sourceSamples[source]=sourceSamples.GetValueOrDefault(source)+1;
++                    sourcePosesAgree&=source.Aim.Transform.IsEqualApprox(source.Tracker.GetPose("aim").GetAdjustedTransform()) &&
++                        source.Grip.Transform.IsEqualApprox(source.Tracker.GetPose("grip").GetAdjustedTransform());
++                }
+             }
+             var xr=XRServer.FindInterface("OpenXR") as OpenXRInterface??throw new Exception("OpenXR interface disappeared");
++            long draws=scene.Viewport.GetRenderInfo(Viewport.RenderInfoType.Visible,Viewport.RenderInfo.DrawCallsInFrame);
++            var sourceTracking=adapter.Sources.Select(s=>new { name=s.Tracker.Name.ToString(),valid_frames=sourceSamples.GetValueOrDefault(s),
++                aim=s.Tracker.HasPose("aim") ? s.Tracker.GetPose("aim").TrackingConfidence.ToString() : "missing",
++                grip=s.Tracker.HasPose("grip") ? s.Tracker.GetPose("grip").TrackingConfidence.ToString() : "missing" }).ToArray();
++            await File.WriteAllTextAsync(Env("M1B_RESULT")+".cycle"+cycle+".json",System.Text.Json.JsonSerializer.Serialize(new {
++                cycle,fresh,tracked,high,invalidStartupFrames,invalidHeadCalibration,sourceTracking,sourcePosesAgree,draws,
++                update_mode=scene.Viewport.RenderTargetUpdateMode.ToString(),view_count=scene.Viewport.ViewCount,session_state=xr.GetSessionState().ToString(),can_render=api.CanRender() }));
++            if(invalidStartupFrames>0)Check(!invalidHeadCalibration,"startup without a valid native head pose cannot establish world calibration");
+             Check(fresh>0 && tracked>0 && api.GetViewCount()==2,"real runtime supplies fresh stereo head frames cycle "+cycle);
++            Check(scene.Viewport.ViewCount==2,"XR scene retains the runtime's stereo render layout cycle "+cycle);
++            Check(scene.Viewport.RenderTargetUpdateMode==SubViewport.UpdateMode.Always && draws>0,"hidden desktop container keeps the actual XR scene rendering cycle "+cycle);
++            if(sourceSamples.Count>0)Check(sourcePosesAgree,"adapter uses the native tracker aim and grip poses cycle "+cycle);
+             var profiles=adapter.Sources.Select(s=>new { name=s.Tracker.Name.ToString(),profile=s.Tracker.Profile,hand=s.Hand,components=s.Layout }).ToArray();
+             var system=xr.GetSystemInfo().ToDictionary(p=>p.Key.AsString(),p=>p.Value.ToString());
+             adapter.StopSession();await adapter.Completion;
+             Check(adapter.Subscriptions==0 && adapter.Router.Count==0,"OpenXR adapter stop releases every subscribed source cycle "+cycle);
+-            cycles.Add(new { cycle,fresh,tracked,profiles,system,frame_times=samples,metrics=adapter.Metrics });
++            Check(scene.Viewport.ViewCount==1 && scene.Viewport.GetCamera3D()==scene.FindChild("scene-camera",true,false),"XR stop restores the same desktop mono scene and camera cycle "+cycle);
++            cycles.Add(new { cycle,fresh,tracked,high,draws,profiles,sourceTracking,source_pose_agreement_qualified=sourceSamples.Count>0 && sourcePosesAgree,system,frame_times=samples,metrics=adapter.Metrics });
+             Console.WriteLine("M4_XR_CYCLE "+cycle);Console.Out.Flush();
+         }
+         await File.WriteAllTextAsync(Env("M1B_RESULT"),System.Text.Json.JsonSerializer.Serialize(new { passed=true,simulated=System.Environment.GetEnvironmentVariable("SIMULATED_ENABLE")=="1",checks,cycles }));
+         Console.WriteLine("M4_XR_PASS");Console.Out.Flush();await app.CloseApplication();
+     }
++    async Task ObserveOpenXRControls(OpenXRInput adapter)
++    {
++        Check(System.Environment.GetEnvironmentVariable("SIMULATED_ENABLE")!="1","wand observation requires a real runtime hardware source");
++        string[] components=["xr-standard-trigger","xr-standard-squeeze","xr-standard-touchpad"];
++        var previous=new Dictionary<(OpenXRInput.Source Source,string Component),bool>();
++        var neutral=new HashSet<(OpenXRInput.Source,string)>();var down=new HashSet<(OpenXRInput.Source,string)>();var completed=new HashSet<(OpenXRInput.Source,string)>();
++        var tracked=new HashSet<OpenXRInput.Source>();
++        var states=new Dictionary<string,int>();var edges=new List<object>();
++        var instruction=new Label { Text="XR INPUT OBSERVATION READY\nPress/release trigger, grip and touchpad on each wand.",Position=new(30,30),MouseFilter=Control.MouseFilterEnum.Ignore };
++        ((SpatialGui)app.FindChild("shared-gui",true,false)).Surface.AddChild(instruction);
++        long until=System.Diagnostics.Stopwatch.GetTimestamp()+60*System.Diagnostics.Stopwatch.Frequency;
++        Console.WriteLine("M4_XR_INPUT_READY");Console.Out.Flush();
++        while(System.Diagnostics.Stopwatch.GetTimestamp()<until) {
++            await ToSignal(RenderingServer.Singleton,RenderingServer.SignalName.FramePostDraw);
++            string state=((OpenXRInterface)XRServer.FindInterface("OpenXR")).GetSessionState().ToString();states[state]=states.GetValueOrDefault(state)+1;
++            foreach(var source in adapter.Sources.Where(s=>s.Profiles.Contains("htc-vive"))) {
++                if(source.Current(0))tracked.Add(source);
++                foreach(string component in components) {
++                    var sample=source.Read(component);if(sample==null)continue;
++                    var key=(source,component);bool pressed=sample.Pressed;
++                    if(pressed!=previous.GetValueOrDefault(key))edges.Add(new { source=source.Tracker.Name.ToString(),component,pressed });
++                    if(!pressed)neutral.Add(key);
++                    if(pressed && neutral.Contains(key) && !previous.GetValueOrDefault(key))down.Add(key);
++                    if(!pressed && previous.GetValueOrDefault(key) && down.Contains(key))completed.Add(key);
++                    previous[key]=pressed;
++                }
++            }
++            if(completed.Select(k=>k.Item1).Distinct().Count(s=>components.All(c=>completed.Contains((s,c))))>=2)break;
++        }
++        instruction.QueueFree();
++        var observations=adapter.Sources.Select(s=>new { name=s.Tracker.Name.ToString(),profile=s.Tracker.Profile,hand=s.Hand,layout=s.Layout,tracked=tracked.Contains(s),aim=s.Tracker.HasPose("aim") ? s.Tracker.GetPose("aim").TrackingConfidence.ToString() : "missing",grip=s.Tracker.HasPose("grip") ? s.Tracker.GetPose("grip").TrackingConfidence.ToString() : "missing",released=components.Where(c=>completed.Contains((s,c))).ToArray() }).ToArray();
++        await File.WriteAllTextAsync(Env("M1B_RESULT")+".input.json",System.Text.Json.JsonSerializer.Serialize(new { observations,states,edges,coverage="actual runtime button/pose delivery; no signed mapping installed; no mapped gesture or headset-pixel claim" }));
++        Check(observations.Count(s=>s.tracked && s.released.Length==components.Length)>=2,"both actual Vive wands deliver tracked trigger grip and touchpad press/release");
++        Check(adapter.DriveRequests==0 && adapter.SnapRequests==0 && adapter.TeleportRequests==0,"hardware observations without signed settings cannot dispatch travel");
++        Console.WriteLine("M4_XR_INPUT_RECEIVED");Console.Out.Flush();
++    }
+ }
+--- candidate09/client/godot/tests/PhysicsChecks.cs
++++ final03/client/godot/tests/PhysicsChecks.cs
+@@ -128,7 +128,7 @@
+         mapped.Configure(scene,gui,models,()=>input,()=>false,()=>[]);mapped.Install(mapping);mapped.AttachSources();
+         var tracker=new XRControllerTracker { Name="m4_native_motion",Type=XRServer.TrackerType.Controller,Profile="/interaction_profiles/htc/vive_controller",Hand=XRPositionalTracker.TrackerHand.Left };
+         tracker.SetInput("trigger_press",false);tracker.SetInput("trigger_value",0.0);tracker.SetInput("squeeze_press",false);tracker.SetInput("pad_press",false);tracker.SetInput("pad_touch",false);tracker.SetInput("pad_axes",Vector2.Zero);
+-        tracker.SetPose("aim",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);tracker.SetPose("grip_pose",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);
++        tracker.SetPose("aim",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);tracker.SetPose("grip",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);
+         XRServer.AddTracker(tracker);await Frame();await mapped.Completion;ulong mappedFrame=0;
+         void MappedFrame()=>mapped.Advance(++mappedFrame,true);
+         MappedFrame();

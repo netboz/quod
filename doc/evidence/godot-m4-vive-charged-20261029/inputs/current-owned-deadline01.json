@@ -1,0 +1,10 @@
+{
+  "recorded_at_utc": "2026-10-29T22:20:29Z",
+  "owned_client_pid": 1865986,
+  "owned_driver_pid": 1865734,
+  "driver_age_seconds": 942.4700000000012,
+  "conservative_manual_time_remaining_lower_bound_seconds": 857.5299999999988,
+  "manual_deadline_not_reset": true,
+  "scope": "Driver starts before the actual manual window; remaining value is only a conservative lower bound, not a new deadline",
+  "owned_window_currently_active": false
+}

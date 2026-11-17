@@ -1,0 +1,10 @@
+PASS enabled action create-key
+PASS enabled action connect
+PASS enabled action register
+PASS enabled action prepare
+PASS enabled action setup
+PASS native unsent form draft changed locally
+PASS enabled action disconnect
+PASS enabled action connect
+PASS explicit same-profile reconnect retains the original unsent native form draft
+{"passed": true, "failure": null, "children": {"server": 0, "client-onboarding-draft": 0}, "native_inputs": 0}

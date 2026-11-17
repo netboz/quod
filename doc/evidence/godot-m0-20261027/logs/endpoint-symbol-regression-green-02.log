@@ -1,0 +1,33 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.06s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+module 'quod_dtx_endpoint_tests'
+  quod_dtx_endpoint_tests: owner_errors_use_the_wire_refusal_vocabulary_test...[0.015 s] ok
+  quod_dtx_endpoint_tests: channel_and_wire_bounds_are_fixed_test...ok
+  quod_dtx_endpoint_tests: trace_carrier_is_transport_only_and_never_changes_correlation_test...ok
+  quod_dtx_endpoint_tests: all_request_shapes_roundtrip_deterministically_test...[0.105 s] ok
+  quod_dtx_endpoint_tests: all_response_shapes_roundtrip_and_correlate_test...[0.021 s] ok
+  quod_dtx_endpoint_tests: certified_remote_application_response_correlates_test...[0.186 s] ok
+  quod_dtx_endpoint_tests: direction_namespace_and_exact_correlation_are_enforced_test...ok
+  quod_dtx_endpoint_tests: read_attest_correlation_binds_the_exact_plan_test...ok
+  quod_dtx_endpoint_tests: applied_response_carries_signer_and_signature_test...ok
+  quod_dtx_endpoint_tests: cancel_operation_effect_rejects_the_old_tuple_test...ok
+  quod_dtx_endpoint_tests: entry_hint_roundtrips_as_untrusted_sidecar_test...[0.134 s] ok
+  quod_dtx_endpoint_tests: application_result_sidecar_roundtrips_entry_and_member_vote_test...[0.070 s] ok
+  quod_dtx_endpoint_tests: malformed_received_hint_is_ignored_without_losing_the_request_test...[0.008 s] ok
+  quod_dtx_endpoint_tests: entry_sidecar_keeps_foreign_symbols_wrapped_test...ok
+  quod_dtx_endpoint_tests: published_group_pending_status_uses_current_wire_vocabulary_test...ok
+  quod_dtx_endpoint_tests: outcome_view_and_floor_correlation_are_exact_test...ok
+  quod_dtx_endpoint_tests: old_phase_refusal_and_absence_barrier_vocabulary_is_rejected_test...ok
+  quod_dtx_endpoint_tests: submit_digest_correlation_is_exact_test...ok
+  quod_dtx_endpoint_tests: selected_negative_vote_correlates_without_becoming_an_uncommitted_refusal_test...[0.024 s] ok
+  quod_dtx_endpoint_tests: malformed_and_noncanonical_frames_fail_closed_test...[0.001 s] ok
+  quod_dtx_endpoint_tests: committed_outcome_preserves_unknown_binding_symbols_test...ok
+  quod_dtx_endpoint_tests: unknown_atoms_are_not_created_test...ok
+  quod_dtx_endpoint_tests: invalid_fixed_shapes_are_rejected_test...ok
+  [done in 0.633 s]
+=======================================================
+  All 23 tests passed.

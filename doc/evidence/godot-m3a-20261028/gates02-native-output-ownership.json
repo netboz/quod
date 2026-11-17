@@ -1,0 +1,20 @@
+[
+  {
+    "path": "/home/yan/src/quod_worktrees/pearl-stone/_build/m3a-retained/gates02-native-target.tar.gz",
+    "sha256": "4f4e3f25e2aabc5d8c7a007a002280e4bec922ce9e1fe70b7fb27771f9b18035",
+    "bytes": 323975746,
+    "original_uid": 65534,
+    "current_uid": 1000,
+    "logical_path_preserved": true,
+    "content_bytes_unchanged": true
+  },
+  {
+    "path": "/home/yan/src/quod_worktrees/pearl-stone/_build/m3a-retained/gates02-native-target-manifest.json",
+    "sha256": "b8c7c4d8e7d542aa688e4e24ee7cf483b12c12ee35e8d36385bab13fed1679bc",
+    "bytes": 414705,
+    "original_uid": 65534,
+    "current_uid": 1000,
+    "logical_path_preserved": true,
+    "content_bytes_unchanged": true
+  }
+]

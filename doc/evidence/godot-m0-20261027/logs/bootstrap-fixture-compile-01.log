@@ -1,0 +1,68 @@
+/review/quod_foreign_log_tests.erl:4:14: can't find include lib "opentelemetry/include/otel_span.hrl"
+%    4| -include_lib("opentelemetry/include/otel_span.hrl").
+%     |              ^
+
+/review/quod_foreign_log_tests.erl:865:78: record span undefined
+%  865|                                                otel_attributes:map(Collection#span.attributes))),
+%     |                                                                              ^
+
+/review/quod_foreign_log_tests.erl:867:73: record span undefined
+%  867|                                                otel_attributes:map(Probe#span.attributes))),
+%     |                                                                         ^
+
+/review/quod_foreign_log_tests.erl:872:49: record span undefined
+%  872|                             ?assertEqual(Current#span.trace_id, Span#span.trace_id)
+%     |                                                 ^
+
+/review/quod_foreign_log_tests.erl:872:69: record span undefined
+%  872|                             ?assertEqual(Current#span.trace_id, Span#span.trace_id)
+%     |                                                                     ^
+
+/review/quod_foreign_log_tests.erl:877:43: record span undefined
+%  877|                       ?assertEqual(Current#span.trace_id, Page#span.trace_id),
+%     |                                           ^
+
+/review/quod_foreign_log_tests.erl:877:63: record span undefined
+%  877|                       ?assertEqual(Current#span.trace_id, Page#span.trace_id),
+%     |                                                               ^
+
+/review/quod_foreign_log_tests.erl:1175:28: record span undefined
+% 1175| take_page_child_span(Name, #span{span_id = ParentId, trace_id = TraceId}) ->
+%     |                            ^
+
+/review/quod_foreign_log_tests.erl:1177:33: record span undefined
+% 1177|         {quod_test_span, Span = #span{name = Name, parent_span_id = ParentId,
+%     |                                 ^
+
+/review/quod_foreign_log_tests.erl:2621:33: record span undefined
+% 2621|             ?assertEqual(Current#span.trace_id,
+%     |                                 ^
+
+/review/quod_foreign_log_tests.erl:2622:38: record span undefined
+% 2622|                          OwnerRequest#span.trace_id),
+%     |                                      ^
+
+/review/quod_foreign_log_tests.erl:2623:33: record span undefined
+% 2623|             ?assertEqual(Current#span.span_id,
+%     |                                 ^
+
+/review/quod_foreign_log_tests.erl:2624:38: record span undefined
+% 2624|                          OwnerRequest#span.parent_span_id),
+%     |                                      ^
+
+/review/quod_foreign_log_tests.erl:2625:38: record span undefined
+% 2625|             ?assertEqual(OwnerRequest#span.trace_id,
+%     |                                      ^
+
+/review/quod_foreign_log_tests.erl:2626:38: record span undefined
+% 2626|                          Verification#span.trace_id),
+%     |                                      ^
+
+/review/quod_foreign_log_tests.erl:2627:38: record span undefined
+% 2627|             ?assertEqual(OwnerRequest#span.span_id,
+%     |                                      ^
+
+/review/quod_foreign_log_tests.erl:2628:38: record span undefined
+% 2628|                          Verification#span.parent_span_id)
+%     |                                      ^
+

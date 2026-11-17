@@ -1,0 +1,53 @@
+{
+  "notice": "Public fixture keys only. Symbolic revision/fields are wire examples, not executable permission grants.",
+  "human_key": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ",
+  "agent_key": "5_FioQvsVZr-oZXk3OhLaVaNXSywlj60RsBoXisX8vA",
+  "requests": [
+    {
+      "name": "human-offers",
+      "actor": {
+        "namespace": "human:public-m0",
+        "anchor": "CAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg",
+        "instanceText": "me."
+      },
+      "mode": "read",
+      "goal": "gui_operations(entity_ref(<<\"human:public-m0\">>,<<\"\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\">>,me),Views).",
+      "deadline": "1900000000000",
+      "public_key": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ",
+      "bytes": "cXVvZC5hZ2VudC5nb2FsLnYxAAcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwAPaHVtYW46cHVibGljLW0wCAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgAAAADbWUuAAMAAAG6YNM4AAAAAOJndWlfb3BlcmF0aW9ucyhlbnRpdHlfcmVmKDw8Imh1bWFuOnB1YmxpYy1tMCI-Piw8PCJceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcIj4-LG1lKSxWaWV3cyku",
+      "signature": "KLfA-fDMCPiy5JCLHRDStM1ab98zC6r0Umh8mKyAyQ95BX3zTe0Sf_l3fC-ONnZse8S9El0MRZbH0hKffM1ODA"
+    },
+    {
+      "name": "agent-controller-save",
+      "actor": {
+        "namespace": "human:public-m0",
+        "anchor": "CAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg",
+        "instanceText": "personal."
+      },
+      "mode": "execute",
+      "goal": "gui_operation(entity_ref(<<\"human:public-m0\">>,<<\"\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\">>,me),controller_settings,Revision,controller_save,Fields,Results).",
+      "deadline": "1900000000000",
+      "public_key": "5_FioQvsVZr-oZXk3OhLaVaNXSywlj60RsBoXisX8vA",
+      "bytes": "cXVvZC5hZ2VudC5nb2FsLnYxAAcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH5_FioQvsVZr-oZXk3OhLaVaNXSywlj60RsBoXisX8vAMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAAPaHVtYW46cHVibGljLW0wCAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgAAAAJcGVyc29uYWwuAQMAAAG6YNM4AAAAARdndWlfb3BlcmF0aW9uKGVudGl0eV9yZWYoPDwiaHVtYW46cHVibGljLW0wIj4-LDw8Ilx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFwiPj4sbWUpLGNvbnRyb2xsZXJfc2V0dGluZ3MsUmV2aXNpb24sY29udHJvbGxlcl9zYXZlLEZpZWxkcyxSZXN1bHRzKS4",
+      "signature": "SOnYsgQlNhlNMKtHBGKGYxoGxdaIl3yzT7D0toEnQ9moM2VoWvphVB8VSBEVBib0gI1MuQSXde8pH26m7__NAA"
+    },
+    {
+      "name": "agent-space-create",
+      "actor": {
+        "namespace": "human:public-m0",
+        "anchor": "CAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg",
+        "instanceText": "personal."
+      },
+      "mode": "execute",
+      "goal": "gui_operation(class_ref(<<\"storage:public-m0\">>,<<\"\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\">>,space),create,Revision,space_create_submit,Fields,Results).",
+      "deadline": "1900000000000",
+      "public_key": "5_FioQvsVZr-oZXk3OhLaVaNXSywlj60RsBoXisX8vA",
+      "bytes": "cXVvZC5hZ2VudC5nb2FsLnYxAAcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH5_FioQvsVZr-oZXk3OhLaVaNXSywlj60RsBoXisX8vANDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQAPaHVtYW46cHVibGljLW0wCAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgAAAAJcGVyc29uYWwuAQMAAAG6YNM4AAAAARJndWlfb3BlcmF0aW9uKGNsYXNzX3JlZig8PCJzdG9yYWdlOnB1YmxpYy1tMCI-Piw8PCJceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcXHgwOFxceDA4XFx4MDhcIj4-LHNwYWNlKSxjcmVhdGUsUmV2aXNpb24sc3BhY2VfY3JlYXRlX3N1Ym1pdCxGaWVsZHMsUmVzdWx0cyku",
+      "signature": "n7jFA4kk3wkHcVs9-uSyR9AJMR7h_VSaw-K3RucHAFB_KFezrhhDHkO-149FVJRp28RAVk9sXVJS47aqeFZFAg"
+    }
+  ],
+  "result_examples": [
+    "[result(revision,1)]",
+    "[result(space,entity_ref(<<\"storage:public-m0\">>,<<\"\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\">>,<<\"01ARZ3NDEKTSV4RRFFQ69G5FAV\">>)),result(location,placed(entity_ref(<<\"human:public-m0\">>,<<\"\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\\x08\\\">>,<<\"01ARZ3NDEKTSV4RRFFQ69G5FAT\">>),transform(1000,0,0,0,0,0)))]"
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-client-policy-20261031/gates.py",
+    "answer-policy-clean-focused05",
+    "--module",
+    "quod_proof_answer_tests,quod_material_admission_tests,quod_proof_session_tests,quod_scope_session_tests,quod_scope_wire_tests"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 1,
+  "timed_out": false,
+  "driver_inputs": {
+    "build_shutdown.py": "256a7b33f79650aba93c482344ba68b961ddf8933b25ddacfb4a083cf45e37f2",
+    "gates.py": "7b269fa2d55a0d597255fa7e9082e9b57687decb0b9418cfdf2266d8809f2dc9",
+    "hashes.py": "746cae42cbc6ac13b217990b32cf7c271cef36aef2990d8289840d407be0928f",
+    "instrument_close.py": "7bb13ee7f6d780c25e03e523d31f9fcd7114c38d40a00dc0abb63021ecea2ac5",
+    "isolation.py": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8",
+    "owner_checks.py": "cc25c22841e8c15495e1c450d7a91e67af6601e7857d99a340b3f570a93dee10",
+    "run.py": "20ace533ea6238853b692dde4a651472517e4bf91a4cacdd966f348fc37b1afd",
+    "serve.py": "b74299ffd289ed13adb032cbc31f7a0849f4d54f2b4f1d1e01333abed69ac007",
+    "shutdown_capture.py": "5603bdeac2f668f60e7f65aa0ae27b2c61760c16118c87f670edfda0f0ba7387",
+    "package.py": "e43ddf3de584c3313da081d4bbe3dcf05744af84b97d070e892a1b8d8744f16f"
+  },
+  "start_utc": "2026-10-31T21:53:02Z",
+  "elapsed_seconds": 3.672980785369873,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/answer-policy-clean-focused05/stdout.raw",
+      "sha256": "a816180e19eaa85667fa5886bac9b20819f686368c308e8f347592f7d762e7fc",
+      "bytes": 3371
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/answer-policy-clean-focused05/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-client-policy-20261031/logs/answer-policy-clean-focused05-stdout.log",
+      "sha256": "a816180e19eaa85667fa5886bac9b20819f686368c308e8f347592f7d762e7fc",
+      "bytes": 3371
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-client-policy-20261031/logs/answer-policy-clean-focused05-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

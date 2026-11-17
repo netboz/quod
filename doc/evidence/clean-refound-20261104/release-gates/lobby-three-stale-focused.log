@@ -1,0 +1,52 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_lobby_tests: -ontology_instances_share_selection_and_authorized_inspection_test_/0-fun-28-...*failed*
+in function quod_lobby_tests:assert_ontology_choices/2 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_lobby_tests.erl, line 1197)
+in call from quod_lobby_tests:'-ontology_instances_share_selection_and_authorized_inspection_test_/0-fun-28-'/0 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_lobby_tests.erl, line 784)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{assertEqual,
+    [{module,quod_lobby_tests},
+     {line,1197},
+     {expression,"lists : sort ( Choices )"},
+     {expected,
+         [{eidolon,edition,contents,
+              {recipe,<<"lobby-test-perso"...>>,
+                  <<217,144,38,...>>,
+                  ontology_contents}},
+          {eidolon,inspection,interfaces,
+              {recipe,<<"quod:gui">>,<<"JqÄ"...>>,interfaces}},
+          {eidolon,inspection,policy,
+              {recipe,<<"quod:gui">>,<<"JqÄ"...>>,policy}},
+          {eidolon,inspection,routes,{recipe,<<"quod"...>>,<<...>>,...}},
+          {eidolon,playing,contents,{recipe,<<...>>,...}},
+          {eidolon,prolog,source,{recipe,...}},
+          {eidolon,workspace,workbench,{...}}]},
+     {value,
+         [{eidolon,edition,contents,
+              {recipe,<<"lobby-test-c"...>>,<<21,240,...>>,ontology_contents}},
+          {eidolon,edition,contents,
+              {recipe,<<"lobby-te"...>>,<<217,...>>,ontology_contents}},
+          {eidolon,edition,solid,{recipe,<<"lobb"...>>,<<...>>,...}},
+          {eidolon,edition,wireframe,{recipe,<<...>>,...}},
+          {eidolon,inspection,interfaces,{recipe,...}},
+          {eidolon,inspection,policy,{...}},
+          {eidolon,inspection,routes,...},
+          {eidolon,playing,...},
+          {eidolon,...},
+          {...}|...]}]}
+  output:<<"">>
+
+quod_lobby_tests: -non_system_read_only_source_uses_the_same_recipe_test_/0-fun-5-...[0.839 s] ok
+quod_lobby_tests: -large_signed_source_edit_does_not_return_inspection_scratch_test_/0-fun-5-...[0.814 s] ok
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 2.
+===> Error running tests

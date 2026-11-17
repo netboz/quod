@@ -91,9 +91,9 @@ settings_entered(Name, Level, Angle) :-
     goal(object_settings(Name, Level, Angle)).
 ```
 
-`gui_open(settings, Question)` is the convenient local entry supplied by shared
-GUI behavior. It captures the exact owning ontology, form and authorized
-responsible agent. The default human comes from authenticated context;
+`quod:gui::gui_open(form_ref(Ns, Anchor, settings), Question)` opens the exact
+form at its owner through the shared GUI behavior. The class owner selects the
+authorized responsible agent. The default human comes from authenticated context;
 agent-originated questions obtain their human from authorized application state.
 No caller-supplied human string confers authority.
 
@@ -130,8 +130,12 @@ semantics, with coverage for both spellings through class and Eidolon lookup.
 The shared argument-following and class paths now resolve both structured
 spellings; GUI components use that same resolution.
 
-The first executable layer is composed from `gui_instance.pl`, using the same
-founding/source-edit mechanism as existing reusable ontology behavior:
+The form compiler and offered-operation binder are shared framework mechanics
+in [`gui_forms.pl`](../priv/ontologies/gui_forms.pl), loaded by the existing
+committed projection base. Applications compose `gui_instance.pl` for their
+question lifecycle and advertised API, using the existing founding/source-edit
+mechanism. Applications retain all form declarations, entry permissions,
+question state, signing, hosting, HUD consequences and continuations:
 
 - `gui_schema(Form, Revision, Tree)` compiles the component tree and binding
   declaration. It neither opens a question nor authorizes a submission.
@@ -143,7 +147,12 @@ founding/source-edit mechanism as existing reusable ontology behavior:
   reaction/agent path. It is not a direct submission endpoint.
 
 `gui_vocabulary(Namespace, Anchor)` pins the vocabulary used by these predicates.
-The containing ontology still supplies its own entry ACL. A variant digest uses
+The containing ontology still supplies its own entry ACL. The shared compiler
+remains interpreted source in that owner's versioned base. Complete source
+inspection includes it; local edits use the existing exact-baseline and commit
+checks. Recovery requires the exact qualified base package and history. Fresh
+founding composes only the lifecycle file, avoiding duplicate compiler clauses
+from its former inline source. A variant digest uses
 the existing canonical term codec's variable tags, so renaming declaration
 variables preserves the revision while changing variable sharing does not.
 
@@ -154,8 +163,8 @@ scope explicitly. Qualified class names keep ordinary ontology semantics.
 Selection values may be arbitrary ground terms; a colon in a submitted value
 is data and never asks another ontology to validate it.
 
-Text fields use a UTF-8 **byte** allowance, `max_bytes` (default 4096), rather
-than a misleading character count. Numeric values use integer units and the
+Text fields may declare a UTF-8 **byte** allowance, `max_bytes`; an absent
+allowance imposes no generic text quota. Supplied allowances remain authoritative. Numeric values use integer units and the
 inclusive `range(Min, Max, Step)` lattice. Every input appears exactly once in
 `gui_form/3`; shared declaration variables impose equality between fields.
 Readonly or disabled fields must echo their current frozen values, and a
@@ -173,10 +182,10 @@ validated unique component identities.
 
 ### Offered class and instance operations
 
-Compose `gui_operation.pl` alongside `gui_instance.pl` in the target ontology.
-The former adds description and binding only; existing signed goals, domain
-guards, transactions and result recovery remain the execution path. Composing
-these rules grants no entry ACL and publishes no `action/3` automatically.
+`gui_instance.pl` advertises offered operations; `gui_forms.pl` provides their
+single shared discovery and binding implementation. Existing signed goals,
+domain guards, transactions and result recovery remain the execution path.
+These mechanics grant no entry ACL and publish no `action/3` automatically.
 
 An author explicitly offers a recipe with
 `class_eidolon(Class, operation(class), Name, recipe(Ns, Anchor, Recipe))`
@@ -238,8 +247,9 @@ validation-sensitive domain revisions in the goal or `gui_validation_context/2`,
 as for question forms; this is not a hash of every helper predicate's source.
 Broad authorized source rewriting retains its existing authority.
 
-`gui_operation_classes(Classes)` enumerates classes with explicit class offers
-in the selected storage ontology. The World screen's **Create / operations**
+`gui_operation_classes(Classes)` returns exact `class_ref` values for classes
+with explicit offers in the selected storing ontology. Each reference names
+the class owner; selecting its form retains the storing ontology. The World screen's **Create / operations**
 entry selects storage explicitly, then the class and authored form. Exact-instance
 operation recipes open from the same Eidolon choices as workspaces and inspection.
 Returned entity references can open their own operations with the original anchor.
@@ -472,15 +482,15 @@ do not rename them, raise constants or split transactions to evade them.
 
 ## 6. Questions and bounded current state
 
-The implemented transition layer is composed from
-[`gui_question.pl`](../priv/ontologies/gui_question.pl) in the responsible
-ontology and [`gui_hud.pl`](../priv/ontologies/gui_hud.pl) in the human ontology.
-The application composes [`gui_instance.pl`](../priv/ontologies/gui_instance.pl)
-and declares `gui_question_policy(Form, HumanRef, ResponsibleRef)`.
+The transition layer lives at [`quod:gui`](../priv/ontologies/quod_gui.pl).
+The responsible actor's and human's storing ontologies hold question rows,
+ACL clauses and the completion reaction. The application declares
+`gui_question_policy(Form, HumanRef, ResponsibleRef)` and admits the class
+owner's exact scoped calls through its ACL.
 `gui_submit/4`, `gui_complete/1` and `gui_cancel/1` use the
 ordinary signed request and transaction owners. `gui_pending_questions/1`
 returns the authenticated human's exact references. In the referenced scope,
-`gui_question_view(Id, FormRef, Revision, State)` reads the authoritative row
+`quod:gui::gui_question_view(QuestionRef, FormRef, Revision, State)` reads the authoritative row
 for that human; it exposes either `awaiting` or
 `submitted(OriginalSubmitOperation, Control, Fields)`. These read interfaces
 do not grant another human or responder access to the accepted fields.
@@ -524,8 +534,9 @@ That evidence participates in the retirement transaction's read set. Awaiting
 questions remain cancellable without an outcome. Reads and reconnects never
 redispatch retained requests.
 
-The shared `/api/views` subscription owner serves world, human HUD and selected
-question projections through signed anchored reads. HUD and question adapters
+The shared `/api/views` subscription owner serves world, human HUD, selected
+questions, offered operations, controller preferences and source-access projections
+through signed anchored reads. HUD and question adapters
 reuse the same connection, dependency, renewal and expiry machinery; they attach
 no physics subscription. The browser's question controller owns only local drafts
 and interaction locks. Submission and cancellation use the existing signed
@@ -535,6 +546,17 @@ changed schemas lock and preserve drafts with their original fields. Choosing
 current defaults is an explicit local action. Desktop and spatial forms share this controller
 and the existing workspace model. Pending questions are accessible through the
 world client's existing action menu as well as its desktop controls.
+
+Source inspection uses view kind `source_access` with the exact anchored read
+`prolog_inspect(ontology_ref(Target, Anchor), presentation, View)` at the pinned
+GUI tools owner. The existing Prolog inspection path decides `read_only` or
+`editable` and retains its Root/target permission dependencies. This is a
+closed read shape on the same subscription owner, not arbitrary socket queries
+or an additional permission engine. The adapter obtains authorization before
+starting its existing source cursor. Invalidation, expiry, denial, cancellation
+or disposal withdraws displayed source and cancels its reader; a retired cursor
+cannot publish into a replacement view. Reopening follows the ordinary signed
+view lifecycle and never substitutes valid empty source after a denied read.
 
 Public opening now commits through the native preparation and atomic transaction
 owners, including an authenticated receiver on a separate observer node. Live
@@ -596,7 +618,7 @@ question row alone is insufficient: the admission contract must retain the
 same exact material operation identity through existing outcome machinery,
 rather than allowing another operation to recreate a consumed Question.
 
-`gui_submit(Question, Revision, Control, Fields)` replaces awaiting with submitted
+`quod:gui::gui_submit(Question, Revision, Control, Fields)` replaces awaiting with submitted
 state and exact completion intent atomically. The committed assertion is the
 correlated event; the shared reaction dispatches its exact request once. Recovery
 observes retained outcome evidence through the existing question controller
@@ -628,7 +650,7 @@ controllers and cursor behavior. Generic forms have local drafts and explicit
 submission only. No duplicate source editor or ontology editing application.
 The same migration replaces the ground `gui_view/2` forms in
 [the GUI vocabulary](../priv/ontologies/quod_gui.pl), the workspace descriptors
-in [Prolog Eidolons](../priv/ontologies/quod_prolog_eidolons.pl),
+in [Prolog Eidolons](../priv/ontologies/gui_tools.pl),
 class-selected workspace recipes and their consumers/tests. Keep one view process type with
 explicit admitted world/GUI read goals, not a parallel GUI subscription owner.
 
@@ -790,7 +812,8 @@ projection. The form can stay beside the sky or move to the personal workspace.
 
 ```prolog
 open_atmosphere(Sky, Question) :-
-    gui_open(atmosphere(Sky), Question).
+    current_ontology_identity(Ns, Anchor),
+    quod:gui::gui_open(form_ref(Ns, Anchor, atmosphere(Sky)), Question).
 
 gui_form(atmosphere(Sky),
     [field(preset(Sky), Preset),
@@ -839,7 +862,8 @@ attribute(phase(Instrument), unit, degrees) :-
     instance_of(instrument, Instrument).
 
 open_instrument(Instrument, Question) :-
-    gui_open(instrument_settings(Instrument), Question).
+    current_ontology_identity(Ns, Anchor),
+    quod:gui::gui_open(form_ref(Ns, Anchor, instrument_settings(Instrument)), Question).
 
 gui_form(instrument_settings(Instrument),
     [field(run_name(Instrument), Name), field(mode(Instrument), Mode),
@@ -877,7 +901,8 @@ after reconnecting, while the original opening proof has already ended.
 
 ```prolog
 ask_review(Work, Question) :-
-    gui_open(review(Work), Question).
+    current_ontology_identity(Ns, Anchor),
+    quod:gui::gui_open(form_ref(Ns, Anchor, review(Work)), Question).
 
 gui_recipient(review(Work), Human) :- work_reviewer(Work, Human).
 gui_responder(review(Work), Agent) :- work_responder(Work, Agent).
@@ -978,3 +1003,30 @@ remove obsolete dispatch and duplicate lifecycle machinery. Mark the tracker
 complete only when its required acceptance is met under the repository's
 review/commit workflow; partial implementation or unrun headset checks are not
 completion.
+
+### Current authored appearance contract
+
+The shared container vocabulary admits `appearance` separately from semantic
+values and permissions. `inherit` uses its enclosing appearance or offline
+adapter defaults. `appearance(1, Tokens)` supplies unique `token(Name, Value)`
+entries: `panel`, `field`, `text`, `accent`, `edge`, `error` and `success` accept
+integer `rgb(R,G,B)` channels in 0–255; `panel_opacity` accepts integer permille
+0–1000; `spacing`, `padding` and `corner_radius` accept nonnegative logical units.
+An adapter refuses an extent it cannot represent. Unknown versions, names,
+duplicates and invalid values fail through the existing schema owner.
+
+`gui_compile/6` excludes only appearance from its semantic tree digest. Exact
+subject, declarations, bindings, continuation and preconditions remain covered.
+Native consumers retain the same controls and drafts while updating their
+existing theme resources. A signed refresh still withdraws interaction; retained
+presentation remains hidden until replacement authorization is accepted. Changes
+to hit geometry cancel an active capture. Denial and consumer replacement retire
+the retained presentation through the existing owners.
+
+Godot translates these tokens to native themes and style boxes. Foreground,
+controls, status, popups and the adjacent keyboard remain opaque; only authored
+panel backgrounds use alpha. Desktop opacity and the user's Opaque/Larger text
+preferences take precedence. The existing browser parser accepts `inherit` and
+explicitly rejects authored tokens until its renderer supports them; it does not
+silently substitute defaults. This adapter boundary does not certify physical
+headset readability or comfort.

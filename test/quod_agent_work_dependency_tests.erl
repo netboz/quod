@@ -1,5 +1,6 @@
 -module(quod_agent_work_dependency_tests).
 -include_lib("eunit/include/eunit.hrl").
+-import(quod_agent_hosting_tests, [agent/1, agent_ref/2]).
 
 finite_pass_retains_earlier_reads_and_retires_them_on_new_pass_test_() ->
     {timeout, 60, fun() ->
@@ -20,12 +21,12 @@ finite_pass_retains_earlier_reads_and_retires_them_on_new_pass_test_() ->
                          (State, _, _) -> State end,
             ok = sys:install(Runtime, {Observe, none}),
             Trace = trace:session_create(?MODULE, self(), []),
-            trace:function(Trace, {quod_runtime, select_resource_description, 5},
-                           [{[Ns, '_', '_', agent_work, '_'], [], []}], [local]),
+            trace:function(Trace, {quod_runtime, select_resource_description, 6},
+                           [{[Ns, '_', '_', agent_work, '_', '_'], [], []}], [local]),
             trace:process(Trace, Runtime, true, [call, set_on_spawn]),
             try
                 commit(Ns, assertions(work_policy(F))),
-                commit(Ns, {goal, {agent_hosted, actor, Node, 1, Key}}),
+                commit(Ns, agent({goal, {agent_hosted, agent_ref(Ns, actor), Node, 1, Key}})),
                 settled(Ns, Tag),
                 completed(Ref),
                 ?assert(selections(Trace, Ns) >= 2),
@@ -96,7 +97,7 @@ selections(Trace, Ns) ->
 count_selections(Ns, Count) ->
     receive
         {trace, _, call, {quod_runtime, select_resource_description,
-                         [Ns, _, _, agent_work, _]}} -> count_selections(Ns, Count + 1)
+                         [Ns, _, _, agent_work, _, _]}} -> count_selections(Ns, Count + 1)
     after 0 -> Count end.
 
 replace(Predicate, Before, After) ->

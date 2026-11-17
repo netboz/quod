@@ -1,0 +1,668 @@
+CONFIGURED_ERLOG_OPTIONS [debug_info,
+                          {d,'ERLANG_VERSION',"28.5.0.2"},
+                          {d,'HAS_MAPS',true},
+                          {d,'HAS_FULL_KEYS',true},
+                          {d,'NEW_REC_CORE',true},
+                          {d,'NEW_RAND',true},
+                          {d,'NEW_BOOL_GUARD',true},
+                          {d,'HAS_FLOOR',true},
+                          {d,'HAS_CEIL',true},
+                          {d,'NEW_STACKTRACE',true},
+                          {d,'EEP48',true}]
+======================== EUnit ========================
+module 'selection_cost_tests'
+  selection_cost_tests: ordinary_choicepoints_require_no_checkpoint_scan_test...[0.033 s] ok
+  selection_cost_tests: nested_checkpoint_mode_keeps_real_pending_tokens_test...[0.018 s] ok
+  selection_cost_tests: finished_and_failed_savepoints_retire_their_checkpoint_choicepoints_test...[0.009 s] ok
+  [done in 0.069 s]
+module 'reason_admission_tests'
+  reason_admission_tests: native_admission_validates_each_reason_once_test...[0.002 s] ok
+  reason_admission_tests: projection_admission_encodes_only_at_delivery_test...[0.012 s] ok
+  reason_admission_tests: native_and_wire_reason_shape_equivalence_test...ok
+  [done in 0.023 s]
+module 'erlog_failure_reasons_tests'
+  erlog_failure_reasons_tests: direct_failure_reason_test...ok
+  erlog_failure_reasons_tests: standard_predicate_gets_default_reason_test...ok
+  erlog_failure_reasons_tests: nested_predicates_form_failure_trace_test...ok
+  erlog_failure_reasons_tests: explicit_reason_is_root_cause_of_trace_test...ok
+  erlog_failure_reasons_tests: internal_predicates_do_not_pollute_failure_trace_test...ok
+  erlog_failure_reasons_tests: ecall_is_not_available_test...ok
+  erlog_failure_reasons_tests: unbound_default_arguments_are_frozen_test...ok
+  erlog_failure_reasons_tests: non_prolog_default_arguments_are_sanitized_test...ok
+  erlog_failure_reasons_tests: backtracking_fallback_reads_reason_test...ok
+  erlog_failure_reasons_tests: reasons_are_newest_first_test...ok
+  erlog_failure_reasons_tests: cut_retains_reason_history_test...ok
+  erlog_failure_reasons_tests: fresh_proof_resets_reasons_test...ok
+  erlog_failure_reasons_tests: negation_retains_explicit_reason_test...ok
+  erlog_failure_reasons_tests: findall_retains_explicit_reason_test...ok
+  erlog_failure_reasons_tests: successful_negation_retains_automatic_trace_test...ok
+  erlog_failure_reasons_tests: successful_findall_retains_automatic_trace_test...ok
+  erlog_failure_reasons_tests: get_fail_reasons_does_not_frame_itself_test...ok
+  erlog_failure_reasons_tests: successful_call_boundaries_are_retained_test...ok
+  erlog_failure_reasons_tests: non_ground_reason_is_error_test...ok
+  erlog_failure_reasons_tests: non_portable_reason_is_error_test...ok
+  erlog_failure_reasons_tests: large_reason_is_preserved_test...ok
+  erlog_failure_reasons_tests: outer_frames_preserve_a_large_inner_reason_test...ok
+  erlog_failure_reasons_tests: total_reason_stack_is_preserved_test...ok
+  erlog_failure_reasons_tests: custom_stack_policy_truncates_at_creation_test...ok
+  erlog_failure_reasons_tests: remote_merge_preserves_order_and_bounds_test...ok
+  [done in 0.075 s]
+module 'erlog_findall_cut_tests'
+  erlog_findall_cut_tests: generator_cut_prunes_its_alternatives_test...ok
+  erlog_findall_cut_tests: generator_without_cut_keeps_all_alternatives_test...ok
+  erlog_findall_cut_tests: bare_cut_still_reaches_collector_test...ok
+  erlog_findall_cut_tests: alternatives_after_cut_are_not_pruned_test...ok
+  erlog_findall_cut_tests: cut_then_failure_returns_empty_collection_test...ok
+  erlog_findall_cut_tests: generator_cut_does_not_prune_callers_alternative_test...ok
+  erlog_findall_cut_tests: nested_collectors_keep_distinct_cut_boundaries_test...ok
+  erlog_findall_cut_tests: call_cut_is_local_to_call_inside_generator_test...ok
+  erlog_findall_cut_tests: once_cut_is_local_to_once_inside_generator_test...ok
+  erlog_findall_cut_tests: negation_cut_is_local_to_negation_inside_generator_test...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (inline:negation_failed_cut)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (inline:negation_successful_cut)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (inline:if_failed_cut_else)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (inline:if_successful_cut_then)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (inline:once_failed_cut_keeps_caller)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (inline:once_successful_cut)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (inline:call_failed_cut_keeps_caller)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (inline:call_successful_cut)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (inline:nested_condition_failed_inner_cut)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (inline:failed_condition_without_cut)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (clause:negation_failed_cut)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (clause:negation_successful_cut)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (clause:if_failed_cut_else)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (clause:if_successful_cut_then)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (clause:once_failed_cut_keeps_caller)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (clause:once_successful_cut)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (clause:call_failed_cut_keeps_caller)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (clause:call_successful_cut)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (clause:nested_condition_failed_inner_cut)...ok
+  erlog_findall_cut_tests: -meta_goal_boundaries_test_/0-fun-2- (clause:failed_condition_without_cut)...ok
+  erlog_findall_cut_tests: -cut_before_failure_still_prunes_later_clauses_test_/0-fun-2- (plain)...ok
+  erlog_findall_cut_tests: -cut_before_failure_still_prunes_later_clauses_test_/0-fun-2- (unreachable_cut)...ok
+  erlog_findall_cut_tests: generator_bindings_do_not_escape_test...ok
+  erlog_findall_cut_tests: ordinary_generator_keeps_staged_writes_test...ok
+  erlog_findall_cut_tests: checkpointed_generator_restores_writes_after_cut_test...ok
+  erlog_findall_cut_tests: checkpointed_cut_failure_restores_generator_writes_test...ok
+  erlog_findall_cut_tests: generator_error_after_cut_cleans_collector_test...ok
+  [done in 0.111 s]
+module 'erlog_choicepoint_checkpoint_tests'
+  erlog_choicepoint_checkpoint_tests: default_mode_keeps_standard_non_backtrackable_writes_test...ok
+  erlog_choicepoint_checkpoint_tests: inherited_checkpoint_mode_survives_fresh_proof_entry_test...ok
+  erlog_choicepoint_checkpoint_tests: checkpoint_mode_restores_failed_disjunction_branch_test...ok
+  erlog_choicepoint_checkpoint_tests: write_before_choicepoint_is_retained_test...ok
+  erlog_choicepoint_checkpoint_tests: retract_and_abolish_are_restored_test...ok
+  erlog_choicepoint_checkpoint_tests: interpreted_clause_retry_restores_failed_clause_test...ok
+  erlog_choicepoint_checkpoint_tests: compiled_list_retry_restores_failed_alternative_test...ok
+  erlog_choicepoint_checkpoint_tests: cut_discards_checkpoint_without_rolling_back_test...ok
+  erlog_choicepoint_checkpoint_tests: failure_reasons_survive_database_restore_test...ok
+  erlog_choicepoint_checkpoint_tests: findall_accumulator_survives_generator_backtracking_test...ok
+  erlog_choicepoint_checkpoint_tests: findall_generator_writes_are_restored_test...ok
+  erlog_choicepoint_checkpoint_tests: nested_checkpoint_depth_is_balanced_test...ok
+  erlog_choicepoint_checkpoint_tests: unsupported_mutable_database_fails_cleanly_test...ok
+  [done in 0.039 s]
+module 'erlog_choicepoint_owned_tests'
+  erlog_choicepoint_owned_tests: owned_data_survives_relation_clause_retry_test...[0.001 s] ok
+  erlog_choicepoint_owned_tests: owned_data_is_gone_after_relation_exhaustion_test...ok
+  erlog_choicepoint_owned_tests: owned_data_is_gone_after_cut_test...ok
+  erlog_choicepoint_owned_tests: owned_data_is_per_activation_test...ok
+  [done in 0.013 s]
+module 'erlog_observation_tests'
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (plain:false)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (direct:false)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (failed_alternative:false)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (negation:false)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (meta_call:false)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (cut:false)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (collector:false)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (enumeration:false)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (failed_value:false)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (absent_flag:false)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (exception:false)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (writes:false)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (plain:true)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (direct:true)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (failed_alternative:true)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (negation:true)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (meta_call:true)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (cut:true)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (collector:true)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (enumeration:true)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (failed_value:true)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (absent_flag:true)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (exception:true)...ok
+  erlog_observation_tests: -proof_transparency_test_/0-fun-7- (writes:true)...ok
+  erlog_observation_tests: constant_lookup_does_not_read_other_flags_test...ok
+  erlog_observation_tests: redo_observations_survive_failure_test...ok
+  erlog_observation_tests: cut_pruned_branch_observation_survives_leaving_checkpoints_test...ok
+  erlog_observation_tests: native_entry_is_explicitly_unclassified_test...ok
+  erlog_observation_tests: internal_unknown_flag_is_observed_test...ok
+  erlog_observation_tests: sink_failure_is_not_silent_incomplete_success_test...ok
+  [done in 0.090 s]
+module 'erlog_opaque_functor_tests'
+  erlog_opaque_functor_tests: opaque_functor_is_valid_data_inside_a_goal_test...ok
+  erlog_opaque_functor_tests: opaque_functor_is_not_executable_test...ok
+  erlog_opaque_functor_tests: byte_literals_remain_a_single_term_test...ok
+  [done in 0.009 s]
+module 'erlog_io_tests'
+  erlog_io_tests: read_string_terms_preserves_order_and_variables_test...ok
+  erlog_io_tests: read_string_terms_accepts_empty_source_test...ok
+  erlog_io_tests: read_string_terms_accepts_final_dot_without_space_test...ok
+  erlog_io_tests: read_string_terms_reports_scanner_line_test...ok
+  erlog_io_tests: read_string_terms_reports_parser_line_test...ok
+  erlog_io_tests: read_string_terms_reports_actual_ending_line_test...ok
+  erlog_io_tests: mid_source_expected_error_keeps_token_line_test...ok
+  erlog_io_tests: read_file_uses_actual_ending_line_test...ok
+  erlog_io_tests: read_file_accepts_final_dot_without_space_test...ok
+  [done in 0.027 s]
+module 'quod_wire_term_tests'
+  quod_wire_term_tests: self_scoped_symbols_use_the_same_admission_walk_test...ok
+  quod_wire_term_tests: foreign_scope_defers_inner_symbols_even_when_nested_test...ok
+  quod_wire_term_tests: opaque_rule_clause_heads_remain_executable_test...ok
+  quod_wire_term_tests: roundtrip_existing_terms_test...ok
+  quod_wire_term_tests: unknown_symbol_does_not_allocate_atom_test...ok
+  quod_wire_term_tests: answer_bytes_bind_identically_before_and_after_atom_creation_test...ok
+  quod_wire_term_tests: variable_name_is_not_treated_as_goal_vocabulary_test...ok
+  quod_wire_term_tests: opaque_spelling_wins_when_retained_goal_contains_both_test...ok
+  quod_wire_term_tests: malformed_reserved_marker_is_not_walked_as_vocabulary_test...ok
+  quod_wire_term_tests: unknown_predicate_stays_opaque_until_target_materializes_test...ok
+  quod_wire_term_tests: malformed_reserved_symbol_markers_are_rejected_test...ok
+  quod_wire_term_tests: goal_symbol_names_is_atom_safe_and_uses_callable_positions_test...ok
+  quod_wire_term_tests: remote_selector_is_materialized_but_inner_goal_stays_opaque_test...ok
+  quod_wire_term_tests: database_update_clause_heads_are_callable_positions_test...ok
+  quod_wire_term_tests: independent_walks_owned_goals_but_not_foreign_goals_or_data_test...ok
+  quod_wire_term_tests: independent_with_other_arity_does_not_materialize_data_test...ok
+  quod_wire_term_tests: -transaction_owned_goal_positions_test_/0-fun-8- (atom)...ok
+  quod_wire_term_tests: -transaction_owned_goal_positions_test_/0-fun-8- (opaque)...ok
+  quod_wire_term_tests: transaction_other_arity_keeps_data_opaque_test...ok
+  quod_wire_term_tests: deep_value_roundtrip_test...ok
+  quod_wire_term_tests: flat_list_spine_does_not_consume_depth_test...ok
+  quod_wire_term_tests: flat_content_uses_enclosing_byte_bound_test...[0.004 s] ok
+  quod_wire_term_tests: improper_tuple_item_list_is_rejected_test...ok
+  quod_wire_term_tests: real_erlog_failure_stack_roundtrips_canonically_test...ok
+  quod_wire_term_tests: quod_policy_preserves_the_real_erlog_stack_before_encoding_test...[0.004 s] ok
+  quod_wire_term_tests: failure_reason_count_and_shape_bounds_are_exact_test...ok
+  quod_wire_term_tests: failure_reason_canonical_byte_bounds_are_exact_test...ok
+  quod_wire_term_tests: empty_failure_stack_is_a_canonical_scope_completion_test...ok
+  quod_wire_term_tests: failure_stack_decode_rejects_noncanonical_etf_test...ok
+  [done in 0.095 s]
+module 'quod_predicate_failure_tests'
+  quod_predicate_failure_tests: physics_private_contracts_test...[0.019 s] ok
+  quod_predicate_failure_tests: transient_context_and_descriptor_test...[0.009 s] ok
+  quod_predicate_failure_tests: audited_argument_errors_test...[0.011 s] ok
+  quod_predicate_failure_tests: committee_refusal_reasons_test...[0.008 s] ok
+  quod_predicate_failure_tests: missing_ontology_anchor_reason_test...[0.038 s] ok
+  [done in 0.100 s]
+module 'quod_ask_tests'
+  quod_ask_tests: remote_route_errors_retry_only_before_execution_test...[0.002 s] ok
+  quod_ask_tests: remote_policy_refusals_are_fatal_and_keep_their_reason_test...ok
+  quod_ask_tests: pending_router_death_is_reported_at_each_opening_wait_test...[0.008 s] ok
+  quod_ask_tests: plain_reads_never_select_advertised_observers_test...ok
+  quod_ask_tests: cohosted_write_selection_uses_eligibility_not_location_test...ok
+  quod_ask_tests: advertised_validator_must_belong_to_certified_committee_test...ok
+  quod_ask_tests: nested_source_binding_test...ok
+  quod_ask_tests: authorization_transcript_reproves_allowed_and_denied_test...ok
+  quod_ask_tests: authorization_transcript_binds_full_chain_test...ok
+  quod_ask_tests: remote_nested_first_use_answer_binds_test...ok
+  quod_ask_tests: existing_and_fresh_answer_symbols_bind_identically_test...ok
+  quod_ask_tests: normalized_remote_answer_preserves_variable_binding_test...ok
+  quod_ask_tests: remote_answer_mismatch_is_typed_protocol_error_test...ok
+  quod_ask_tests: remote_answer_normalization_does_not_allocate_foreign_symbols_test...ok
+  quod_ask_tests: concurrent_first_use_answers_bind_on_same_node_test...ok
+  quod_ask_tests:305: -ask_test_/0-fun-43-...[0.003 s] ok
+  quod_ask_tests:306: -ask_test_/0-fun-42-...[0.019 s] ok
+  quod_ask_tests:307: -ask_test_/0-fun-41-...ok
+  quod_ask_tests:308: -ask_test_/0-fun-40-...ok
+  quod_ask_tests:309: -ask_test_/0-fun-39-...ok
+  quod_ask_tests:310: -ask_test_/0-fun-38-...[0.001 s] ok
+  quod_ask_tests:311: -ask_test_/0-fun-37-...[0.131 s] ok
+  quod_ask_tests:312: -ask_test_/0-fun-36-...[0.004 s] ok
+  quod_ask_tests:313: -ask_test_/0-fun-35-...[0.001 s] ok
+  quod_ask_tests:314: -ask_test_/0-fun-34-...[0.011 s] ok
+  quod_ask_tests:315: -ask_test_/0-fun-33-...[0.001 s] ok
+  quod_ask_tests:316: -ask_test_/0-fun-32-...[0.001 s] ok
+  quod_ask_tests:317: -ask_test_/0-fun-31-...ok
+  quod_ask_tests:318: -ask_test_/0-fun-30-...[0.005 s] ok
+  quod_ask_tests:319: -ask_test_/0-fun-29-...ok
+  quod_ask_tests:320: -ask_test_/0-fun-28-...ok
+  quod_ask_tests:322: -ask_test_/0-fun-27-...[0.063 s] ok
+  quod_ask_tests:324: -ask_test_/0-fun-26-...[0.072 s] ok
+  quod_ask_tests:325: -ask_test_/0-fun-25-...ok
+  quod_ask_tests:327: -ask_test_/0-fun-24-...[0.058 s] ok
+  quod_ask_tests:328: -ask_test_/0-fun-23-...[0.001 s] ok
+  quod_ask_tests:329: -ask_test_/0-fun-22-...[0.110 s] ok
+  quod_ask_tests:330: -ask_test_/0-fun-21-...[0.059 s] ok
+  quod_ask_tests:331: -ask_test_/0-fun-20-...[0.001 s] ok
+  quod_ask_tests:332: -ask_test_/0-fun-19-...[0.011 s] ok
+  quod_ask_tests:333: -ask_test_/0-fun-18-...[0.057 s] ok
+  quod_ask_tests:334: -ask_test_/0-fun-17-...[0.074 s] ok
+  quod_ask_tests:335: -ask_test_/0-fun-16-...ok
+  quod_ask_tests:336: -ask_test_/0-fun-15-...[0.001 s] ok
+  quod_ask_tests:337: -ask_test_/0-fun-14-...[0.001 s] ok
+  quod_ask_tests:338: -ask_test_/0-fun-13-...[0.126 s] ok
+  quod_ask_tests:339: -ask_test_/0-fun-12-...[0.011 s] ok
+  quod_ask_tests:340: -ask_test_/0-fun-11-...ok
+  quod_ask_tests:341: -ask_test_/0-fun-10-...ok
+  quod_ask_tests:342: -ask_test_/0-fun-9-...[0.002 s] ok
+  quod_ask_tests:343: -ask_test_/0-fun-8-...[0.061 s] ok
+  quod_ask_tests:344: -ask_test_/0-fun-7-...ok
+  quod_ask_tests:345: -ask_test_/0-fun-6-...[0.063 s] ok
+  quod_ask_tests:347: -ask_test_/0-fun-5-...[0.063 s] ok
+  quod_ask_tests:348: -ask_test_/0-fun-4-...[0.021 s] ok
+=WARNING REPORT==== 3-Nov-2026::18:34:16.304158 ===
+quod_proof_scope[<0.994.0>]: proof crashed: error:badarg [{ets,prev_lookup,
+                                                           [#Ref<0.1294570023.279576577.74874>,
+                                                            {version,
+                                                             {material_limit,
+                                                              3},
+                                                             2}],
+                                                           [{error_info,
+                                                             #{cause => id,
+                                                               module =>
+                                                                erl_stdlib_errors}}]},
+                                                          {quod_erlog_db_mvcc,
+                                                           previous_version,3,
+                                                           [{file,
+                                                             "/checks/source/src/quod_erlog_db_mvcc.erl"},
+                                                            {line,268}]},
+                                                          {quod_erlog_db_mvcc,
+                                                           committed_procedure,
+                                                           2,
+                                                           [{file,
+                                                             "/checks/source/src/quod_erlog_db_mvcc.erl"},
+                                                            {line,258}]},
+                                                          {quod_erlog_db_mvcc,
+                                                           get_procedure,2,
+                                                           [{file,
+                                                             "/checks/source/src/quod_erlog_db_mvcc.erl"},
+                                                            {line,86}]},
+                                                          {quod_erlog_db_local_prove,
+                                                           raw_get_procedure,
+                                                           2,
+                                                           [{file,
+                                                             "/build/source/src/quod_erlog_db_local_prove.erl"},
+                                                            {line,844}]},
+                                                          {quod_erlog_db_local_prove,
+                                                           get_procedure,2,
+                                                           [{file,
+                                                             "/build/source/src/quod_erlog_db_local_prove.erl"},
+                                                            {line,831}]},
+                                                          {erlog_int,
+                                                           prove_goal,3,
+                                                           [{file,
+                                                             "/build/source/_build/default/lib/erlog/src/erlog_int.erl"},
+                                                            {line,551}]},
+                                                          {erlog_int,
+                                                           prove_findall,5,
+                                                           [{file,
+                                                             "/build/source/_build/default/lib/erlog/src/erlog_int.erl"},
+                                                            {line,958}]}]
+  =SUPERVISOR REPORT==== 3-Nov-2026::18:34:16.304266 ===
+    supervisor: {via,gproc,{n,l,{quod_ns,<<"slow">>}}}
+    errorContext: child_terminated
+    reason: killed
+    offender: [{pid,<0.480.0>},
+               {id,quod_prolog},
+               {mfargs,{quod_prolog,start_link,
+                                    [<<"slow">>,
+                                     #{mode => create,
+                                       node_id =>
+                                           <<27,158,36,241,214,188,145,6,209,
+                                             116,173,127,48,169,147,3,199,168,
+                                             178,129,22,55,246,30,153,123,9,
+                                             137,71,109,224,250>>,
+                                       role => member,
+                                       external_predicate_modules => [],
+                                       genesis_file =>
+                                           "/tmp/quod_ask_F89BB49BB92B5FD0/slow.pl",
+                                       seed_peers => [],
+                                       data_dir =>
+                                           "/tmp/quod_ask_F89BB49BB92B5FD0",
+                                       batch_window_ms => 25,
+                                       detailed_consensus_metrics => false,
+                                       transaction_ttl_ms => 30000,
+                                       max_proof_workers => unlimited,
+                                       max_scope_workers => unlimited,
+                                       proof_timeout_ms => 300000,
+                                       scope_timeout_ms => 300000,
+                                       scope_step_timeout_ms => 30000}]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,5000},
+               {child_type,worker}]
+
+quod_ask_tests:349: -ask_test_/0-fun-3-...[0.027 s] ok
+  quod_ask_tests:350: -ask_test_/0-fun-2-...*failed*
+in function quod_ask_tests:t_scope_worker_limit/1 (/checks/source/test/quod_ask_tests.erl, line 1463)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+in call from eunit_proc:run_group/2 (eunit_proc.erl, line 593)
+**error:{assertEqual,
+    [{module,quod_ask_tests},
+     {line,1463},
+     {expression,
+         "gen_server : call ( quod_reg : where ( { quod_prolog , A } ) , scope_open_request ( A , scope_id ( 164 ) , crypto : strong_rand_bytes ( 32 ) , Anchor , false ) )"},
+     {expected,{error,{ontology_busy,<<"animals">>}}},
+     {value,
+         {ok,{quod_scope_session,<0.1145.0>,
+                 <<0,0,0,0,0,...>>,
+                 <<249,106,30,67,...>>,
+                 #Ref<0.1294570023.279445505.82629>,<<"animals">>,<<"`"...>>},
+             3}}]}
+  output:<<"">>
+
+  quod_ask_tests:351: -ask_test_/0-fun-1-...*failed*
+in function quod_ask_tests:t_frozen_scope_view/1 (/checks/source/test/quod_ask_tests.erl, line 1471)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+in call from eunit_proc:run_group/2 (eunit_proc.erl, line 593)
+**error:{badmatch,{error,timeout}}
+  output:<<"">>
+
+  quod_ask_tests:352: -ask_test_/0-fun-0-...*failed*
+in function quod_ask_tests:'-t_workers_are_reaped/1-fun-3-'/1 (/checks/source/test/quod_ask_tests.erl, line 1501)
+in call from lists:foreach_1/2 (lists.erl, line 2641)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{assertEqual,[{module,quod_ask_tests},
+              {line,1501},
+              {expression,"wait_workers ( Ns , 0 , ? WAIT_RETRIES )"},
+              {expected,ok},
+              {value,{error,timeout}}]}
+  output:<<"">>
+
+  quod_ask_tests: -fresh_ledgers_single_target_uses_vector_receipt_test_/0-fun-12-...[0.286 s] ok
+  quod_ask_tests: -signed_read_dependencies_test_/0-fun-4-...[0.244 s] ok
+  quod_ask_tests:641: -independent_integration_test_/0-fun-3-...[0.839 s] ok
+  quod_ask_tests:642: -independent_integration_test_/0-fun-2-...[0.872 s] ok
+  quod_ask_tests:643: -independent_integration_test_/0-fun-1-...[0.487 s] ok
+  quod_ask_tests:644: -independent_integration_test_/0-fun-0-...[0.582 s] ok
+  quod_ask_tests: checked_completion_accepts_wire_bounded_symbol_stacks_test...*failed*
+in function quod_ask_tests:checked_completion_accepts_wire_bounded_symbol_stacks_test/0 (/checks/source/test/quod_ask_tests.erl, line 1579)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{assertEqual,[{module,quod_ask_tests},
+              {line,1579},
+              {expression,"erlog_int : merge_failure_reasons ( Stack , # est { } )"},
+              {expected,error},
+              {value,{ok,{est,undefined,undefined,undefined,undefined,
+                              undefined,
+                              [{...}|...],
+                              false,...}}}]}
+  output:<<"">>
+
+  [done in 10.633 s]
+module 'quod_proof_session_tests'
+  quod_proof_session_tests: resumable_invocation_preserves_solution_order_test...[0.008 s] ok
+  quod_proof_session_tests: computed_answers_do_not_echo_ground_inputs_test...[0.008 s] ok
+  quod_proof_session_tests: computed_answer_preserves_unbound_aliases_and_real_output_limit_test...[0.009 s] ok
+  quod_proof_session_tests: independent_intent_belongs_to_an_invocation_not_the_shared_revision_test...[0.008 s] ok
+  quod_proof_session_tests: sealed_scope_records_independent_eligibility_not_selected_lane_test...[0.034 s] ok
+  quod_proof_session_tests: repeated_invocations_share_staged_writes_test...[0.007 s] ok
+  quod_proof_session_tests: failed_invocation_keeps_ordinary_prolog_writes_test...[0.007 s] ok
+  quod_proof_session_tests: failed_branch_write_is_visible_to_its_next_alternative_test...[0.008 s] ok
+  quod_proof_session_tests: stateless_erlog_error_keeps_the_current_revision_test...[0.007 s] ok
+  quod_proof_session_tests: stateful_erlog_error_preserves_its_revision_test...[0.008 s] ok
+  quod_proof_session_tests: transaction_error_adopts_rolled_back_revision_test...[0.007 s] ok
+  quod_proof_session_tests: older_continuation_rebases_to_newer_overlay_test...[0.007 s] ok
+  quod_proof_session_tests: publish_then_refresh_preserves_nested_revision_test...[0.008 s] ok
+  quod_proof_session_tests: run_first_keeps_existing_result_contract_test...[0.007 s] ok
+  quod_proof_session_tests: invocations_retain_distinct_lifetime_ids_test...[0.007 s] ok
+  quod_proof_session_tests: seal_latches_state_and_first_manifest_attestation_test...[0.009 s] ok
+  quod_proof_session_tests: not_material_seal_is_also_terminal_test...[0.008 s] ok
+  quod_proof_session_tests: pending_generation_rejects_open_and_discards_old_invocation_test...[0.007 s] ok
+  quod_proof_session_tests: gate_change_during_step_cannot_expose_solution_test...[0.008 s] ok
+  quod_proof_session_tests: authorization_subproof_retains_the_parent_guard_test...[0.007 s] ok
+  quod_proof_session_tests: committed_authorization_preserves_infrastructure_fences_test...[0.007 s] ok
+  [done in 0.249 s]
+module 'quod_scope_session_tests'
+  quod_scope_session_tests: scope_worker_retains_authenticated_request_expiry_test...[0.010 s] ok
+  quod_scope_session_tests: scope_auth_bytes_must_match_the_admitted_binding_test...[0.008 s] ok
+  quod_scope_session_tests: unsigned_scope_cannot_supply_authenticated_expiry_test...[0.007 s] ok
+  quod_scope_session_tests: scope_operation_metadata_requires_matching_signed_principal_test...[0.008 s] ok
+  quod_scope_session_tests: invocation_worker_retains_received_trace_context_test...[0.008 s] ok
+  quod_scope_session_tests: committed_submit_reply_is_bound_to_expected_transaction_test...ok
+  quod_scope_session_tests: divergent_submit_reply_terminates_with_expected_reference_test...ok
+  quod_scope_session_tests: startup_failure_is_asynchronous_and_monitored_test...=WARNING REPORT==== 3-Nov-2026::18:34:25.626197 ===
+quod_scope_session[quod:broken-scope]: start failed: error:function_clause [{quod_proof_session,
+                                                                             start,
+                                                                             [{not_an_erlog_state},
+                                                                              #{scope_id =>
+                                                                                 <<154,146,
+                                                                                   230,228,
+                                                                                   212,112,
+                                                                                   102,14,
+                                                                                   189,114,
+                                                                                   11,54,
+                                                                                   57,38,
+                                                                                   243,122>>,
+                                                                                proof_context =>
+                                                                                 {scope,
+                                                                                  <<113,136,
+                                                                                    171,94,
+                                                                                    224,89,
+                                                                                    172,157,
+                                                                                    188,176,
+                                                                                    178,29,
+                                                                                    94,188,
+                                                                                    77,164,
+                                                                                    20,120,
+                                                                                    255,164,
+                                                                                    120,70,
+                                                                                    89,50,
+                                                                                    178,12,
+                                                                                    127,130,
+                                                                                    132,236,
+                                                                                    69,222>>,
+                                                                                  <0.125.0>,
+                                                                                  #Ref<0.1294570023.279445505.117186>,
+                                                                                  <<154,146,
+                                                                                    230,228,
+                                                                                    212,112,
+                                                                                    102,14,
+                                                                                    189,114,
+                                                                                    11,54,
+                                                                                    57,38,
+                                                                                    243,122>>},
+                                                                                read_set =>
+                                                                                 true,
+                                                                                request_binding =>
+                                                                                 none,
+                                                                                deadline_ms =>
+                                                                                 -576460734624,
+                                                                                principal =>
+                                                                                 {node,
+                                                                                  <<0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,0,
+                                                                                    0,0,0,1>>}}],
+                                                                             [{file,
+                                                                               "/checks/source/src/quod_proof_session.erl"},
+                                                                              {line,
+                                                                               100}]},
+                                                                            {quod_scope_session,
+                                                                             start_session,
+                                                                             2,
+                                                                             [{file,
+                                                                               "/checks/source/src/quod_scope_session.erl"},
+                                                                              {line,
+                                                                               1294}]},
+                                                                            {quod_scope_session,
+                                                                             init,
+                                                                             10,
+                                                                             [{file,
+                                                                               "/checks/source/src/quod_scope_session.erl"},
+                                                                              {line,
+                                                                               1265}]},
+                                                                            {quod_trace,
+                                                                             with_context,
+                                                                             2,
+                                                                             [{file,
+                                                                               "/checks/source/src/quod_trace.erl"},
+                                                                              {line,
+                                                                               59}]}]
+ok
+  quod_scope_session_tests: worker_refuses_invalid_or_zero_heap_policy_before_execution_test...[0.023 s] ok
+  quod_scope_session_tests: authored_heap_budget_still_kills_unbounded_allocation_test...=ERROR REPORT==== 3-Nov-2026::18:34:25.676488 ===
+     Process:            <0.2757.0> 
+     Context:            maximum heap size reached
+     Max Heap Size:      1048576
+     Total Heap Size:    1200544
+     Kill:               true
+     Error Logger:       true
+     Message Queue Len:  0
+     GC Info:            [{old_heap_block_size,987},
+                          {heap_block_size,2199188},
+                          {mbuf_size,0},
+                          {recent_size,0},
+                          {stack_size,999630},
+                          {old_heap_size,589},
+                          {heap_size,0},
+                          {bin_vheap_size,0},
+                          {bin_vheap_block_size,46422},
+                          {bin_old_vheap_size,8},
+                          {bin_old_vheap_block_size,46422}]
+     Stacktrace:         [{erlog_int,make_var_list,2,
+                              [{file,
+                                   "/build/source/_build/default/lib/erlog/src/erlog_int.erl"},
+                               {line,1096}]},
+                          {erlog_int,make_var_list,2,
+                              [{file,
+                                   "/build/source/_build/default/lib/erlog/src/erlog_int.erl"},
+                               {line,1098}]},
+                          {erlog_lib_lists,make_list,4,
+                              [{file,
+                                   "/build/source/_build/default/lib/erlog/src/erlog_lib_lists.erl"},
+                               {line,127}]},
+                          {quod_proof_scope,guarded,1,
+                              [{file,
+                                   "/checks/source/src/quod_proof_scope.erl"},
+                               {line,102}]},
+                          {quod_trace,'-with_span/6-fun-0-',3,
+                              [{file,"/checks/source/src/quod_trace.erl"},
+                               {line,81}]},
+                          {quod_trace,with_context,2,
+                              [{file,"/checks/source/src/quod_trace.erl"},
+                               {line,59}]},
+                          {quod_proof_scope,next,1,
+                              [{file,
+                                   "/checks/source/src/quod_proof_scope.erl"},
+                               {line,55}]},
+                          {quod_transaction_scope,with_invocation,4,
+                              [{file,
+                                   "/checks/source/src/quod_transaction_scope.erl"},
+                               {line,88}]}]
+
+[0.021 s] ok
+  quod_scope_session_tests: worker_authored_heap_budget_and_public_local_errors_test...[0.008 s] ok
+  quod_scope_session_tests: worker_preserves_pending_guard_error_without_dirty_recheck_test...[0.007 s] ok
+  quod_scope_session_tests: local_invocation_facade_preserves_worker_protocol_test...ok
+  quod_scope_session_tests: local_materialize_restore_and_release_test...[0.007 s] ok
+  quod_scope_session_tests: local_scope_uses_shared_seal_and_attestation_lifecycle_test...[0.009 s] ok
+  quod_scope_session_tests:469: -read_certificate_facades_test_/0-fun-2-...[0.019 s] ok
+  quod_scope_session_tests:470: -read_certificate_facades_test_/0-fun-1-...[0.017 s] ok
+  quod_scope_session_tests:471: -read_certificate_facades_test_/0-fun-0-...[0.069 s] ok
+  quod_scope_session_tests: read_certificate_result_normalization_is_closed_test...ok
+  quod_scope_session_tests: observer_scope_refuses_read_certification_before_any_signature_test...[0.008 s] ok
+  quod_scope_session_tests: cohosted_materialize_uses_exact_worker_reply_test...ok
+  quod_scope_session_tests: cohosted_group_effect_batch_preserves_owner_and_starts_together_test...ok
+  quod_scope_session_tests: remote_invocation_facade_encodes_goal_and_uses_budget_test...ok
+  quod_scope_session_tests: remote_materialize_restore_release_are_exact_test...ok
+  quod_scope_session_tests: remote_controls_validate_their_explicit_batch_ids_before_send_test...[0.021 s] ok
+  quod_scope_session_tests: failure_reason_is_transport_specific_test...ok
+  quod_scope_session_tests: remote_control_surfaces_exact_error_and_down_test...ok
+  quod_scope_session_tests: remote_control_fails_when_its_exact_router_generation_dies_test...ok
+  quod_scope_session_tests: remote_control_obeys_expired_budget_without_retry_test...[0.021 s] ok
+  quod_scope_session_tests: remote_seal_and_control_stop_at_the_running_budget_test...[0.082 s] ok
+  quod_scope_session_tests: remote_scope_seal_and_attestation_are_verified_end_to_end_test...[0.009 s] ok
+  quod_scope_session_tests: remote_scope_read_certificate_is_bound_to_the_exact_sealed_plan_test...[0.016 s] ok
+  quod_scope_session_tests: read_certificate_many_cleans_up_on_cohosted_worker_down_test...ok
+  quod_scope_session_tests: read_certificate_many_surfaces_remote_scope_error_test...ok
+  quod_scope_session_tests: worker_seals_its_session_on_request_test...[0.011 s] ok
+  quod_scope_session_tests: read_certificate_failed_setup_releases_its_root_and_environment_test...[0.076 s] ok
+  quod_scope_session_tests: binary_heavy_nested_scope_preserves_authorization_and_cancellation_test...[0.018 s] ok
+  [done in 0.733 s]
+module 'quod_proof_session_savepoint_tests'
+  quod_proof_session_savepoint_tests: restore_rolls_back_writes_but_keeps_reads_test...[0.009 s] ok
+  quod_proof_session_savepoint_tests: checkpoint_is_first_writer_wins_test...[0.008 s] ok
+  quod_proof_session_savepoint_tests: savepoint_population_preserves_generation_test...[0.008 s] ok
+  quod_proof_session_savepoint_tests: exact_selection_materializes_only_live_batches_test...[0.023 s] ok
+  quod_proof_session_savepoint_tests: local_checkpoints_reuse_controller_authority_until_foreign_work_test...[0.023 s] ok
+  quod_proof_session_savepoint_tests: unmaterialized_batches_reuse_only_exact_actor_and_lineage_test...[0.016 s] ok
+  quod_proof_session_savepoint_tests: invalid_selection_is_atomic_test...[0.015 s] ok
+  quod_proof_session_savepoint_tests: controller_activates_many_owned_transaction_frames_test...[0.011 s] ok
+  quod_proof_session_savepoint_tests: controller_materializes_many_owned_batches_test...[0.017 s] ok
+  quod_proof_session_savepoint_tests: malformed_controller_lists_fail_before_mutation_test...[0.007 s] ok
+  [done in 0.167 s]
+module 'quod_proof_context_tests'
+  quod_proof_context_tests:6: -context_test_/0-fun-12-...ok
+  quod_proof_context_tests:7: -context_test_/0-fun-11-...ok
+  quod_proof_context_tests:8: -context_test_/0-fun-10-...ok
+  quod_proof_context_tests:9: -context_test_/0-fun-9-...ok
+  quod_proof_context_tests:10: -context_test_/0-fun-8-...ok
+  quod_proof_context_tests:11: -context_test_/0-fun-7-...ok
+  quod_proof_context_tests:12: -context_test_/0-fun-6-...ok
+  quod_proof_context_tests:13: -context_test_/0-fun-5-...ok
+  quod_proof_context_tests:14: -context_test_/0-fun-4-...ok
+  quod_proof_context_tests:15: -context_test_/0-fun-3-...[0.021 s] ok
+  quod_proof_context_tests:16: -context_test_/0-fun-2-...[0.021 s] ok
+  quod_proof_context_tests:17: -context_test_/0-fun-1-...ok
+  quod_proof_context_tests:18: -context_test_/0-fun-0-...ok
+  [done in 0.081 s]
+module 'quod_transaction_predicates_tests'
+  quod_transaction_predicates_tests: failed_alternative_restores_its_writes_test...ok
+  quod_transaction_predicates_tests: write_prefix_is_visible_to_later_alternative_test...ok
+  quod_transaction_predicates_tests: total_failure_restores_assert_retract_and_abolish_test...ok
+  quod_transaction_predicates_tests: error_restores_entry_and_preserves_descriptor_test...ok
+  quod_transaction_predicates_tests: transaction_commits_first_complete_solution_test...ok
+  quod_transaction_predicates_tests: nested_transaction_composes_test...ok
+  quod_transaction_predicates_tests: cut_inside_transaction_prunes_only_inner_alternatives_test...ok
+  quod_transaction_predicates_tests: caller_cut_keeps_ordinary_scope_test...ok
+  quod_transaction_predicates_tests: failure_reasons_survive_rollback_test...ok
+  quod_transaction_predicates_tests: ordinary_backtracking_remains_non_transactional_test...ok
+  quod_transaction_predicates_tests: explicit_events_follow_net_fact_diff_in_call_order_test...ok
+  quod_transaction_predicates_tests: failed_alternative_and_transaction_rollback_remove_events_test...ok
+  quod_transaction_predicates_tests: trigger_event_rejects_invalid_payloads_test...ok
+  quod_transaction_predicates_tests: trigger_event_is_refused_in_reaction_context_test...ok
+  [done in 0.042 s]
+module 'quod_action_savepoint_tests'
+  quod_action_savepoint_tests: independent_action_preserves_candidate_rollback_test...[0.008 s] ok
+  quod_action_savepoint_tests: action_transition_may_choose_independent_test...[0.007 s] ok
+  quod_action_savepoint_tests: failed_independent_candidate_discards_intent_and_material_test...[0.007 s] ok
+  quod_action_savepoint_tests: independent_action_failed_postcondition_rolls_back_test...[0.007 s] ok
+  quod_action_savepoint_tests: independent_action_error_preserves_descriptor_and_cleans_mode_test...[0.007 s] ok
+  quod_action_savepoint_tests: caller_backtracking_discards_intent_but_not_successful_action_writes_test...[0.008 s] ok
+  quod_action_savepoint_tests: public_atomic_intent_remains_distinct_from_private_rollback_test...[0.008 s] ok
+  quod_action_savepoint_tests: already_satisfied_action_runs_no_transition_test...[0.008 s] ok
+  quod_action_savepoint_tests: private_savepoint_is_not_a_new_public_prolog_control_test...[0.007 s] ok
+  quod_action_savepoint_tests: failed_candidate_restores_prepared_effect_and_provenance_test...[0.008 s] ok
+  quod_action_savepoint_tests: stateful_candidate_error_restores_the_actual_error_revision_test...[0.008 s] ok
+  quod_action_savepoint_tests: released_action_does_not_rollback_a_callers_stateful_error_test...[0.008 s] ok
+  quod_action_savepoint_tests: released_readonly_statecheck_preserves_the_callers_error_state_test...[0.007 s] ok
+  quod_action_savepoint_tests: failed_candidate_reads_are_monotonic_dependencies_test...[0.009 s] ok
+  quod_action_savepoint_tests: public_atomic_mode_restores_before_the_caller_test...[0.007 s] ok
+  quod_action_savepoint_tests: nested_public_transaction_restores_its_atomic_parent_test...[0.008 s] ok
+  [done in 0.171 s]
+=======================================================
+  Failed: 4.  Skipped: 0.  Passed: 334.

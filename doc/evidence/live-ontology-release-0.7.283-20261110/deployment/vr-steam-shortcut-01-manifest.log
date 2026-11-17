@@ -1,0 +1,22 @@
+{
+	"source": "steam",
+	"applications": [
+		{
+			"app_key": "steam.app.3208097213",
+			"strings": {
+				"en_us": {
+					"name": "quod.x86_64"
+				}
+
+			}
+,
+			"image_path": "/home/yan/Games/quod/steam/icon.png",
+			"launch_type": "binary",
+			"binary_path_linux": "/home/yan/src/quod_worktrees/pearl-stone/client/_build/quod-steam-20261104-wwLDjq/quod.x86_64",
+			"working_directory": "/home/yan/src/quod_worktrees/pearl-stone/client/_build/quod-steam-20261104-wwLDjq/",
+			"arguments": "--profile /tmp/quod-steam-vr-probe-20261110-01"
+		}
+
+	]
+
+}

@@ -1,0 +1,24 @@
+======================== EUnit ========================
+quod_evidence_resolver_tests: persisted_cache_replays_at_startup_not_on_later_requests_test...OBSERVED_CALL pid=<0.108.0> mfa={quod_foreign_log,spawn_verification_worker,3} caller={quod_foreign_log,
+                                                                                       launch_request_owned,
+                                                                                       4}
+OBSERVED_CALL pid=<0.108.0> mfa={quod_foreign_log,spawn_verification_worker,3} caller={quod_foreign_log,
+                                                                                       launch_request_owned,
+                                                                                       4}
+OBSERVED_CALL pid=<0.128.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_projection,
+                                                                               materialize_turn,
+                                                                               1}
+OBSERVED_CALL pid=<0.138.0> mfa={quod_foreign_log,spawn_verification_worker,3} caller={quod_foreign_log,
+                                                                                       launch_request_owned,
+                                                                                       4}
+OBSERVED_CALL pid=<0.139.0> mfa={quod_foreign_log,replay_cache,7} caller={quod_foreign_log,
+                                                                          measure_foreign_stage,
+                                                                          2}
+OBSERVED_CALL pid=<0.146.0> mfa={quod_ledger_store,open_ro_snapshot,1} caller={quod_foreign_log,
+                                                                               with_snapshot_store,
+                                                                               3}
+ASSERTED_SNAPSHOT_CALLS test=<0.88.0> pids=[<0.146.0>]
+[0.225 s] ok
+=======================================================
+  Test passed.
+RESOLVER_PROBE_RESULT ok

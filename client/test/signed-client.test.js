@@ -131,40 +131,27 @@ test('signed goal bytes match the Erlang browser fixture', () => {
   )
 })
 
-test('request encoding and journaling share the full protocol bounds', async () => {
+test('request encoding and journaling preserve large exact signed bytes', async () => {
   const bytes = encodeGoalRequest({
     networkIdentity: u256(0x10),
     signingPublicKey: u256(0x11),
     operationId: u256(0x12),
     agentNamespace: 'n'.repeat(SIGNED_GOAL_LIMITS.namespaceBytes),
     agentAnchor: u256(0x13),
-    agentInstanceText: 'i'.repeat(SIGNED_GOAL_LIMITS.agentInstanceTextBytes),
+    agentInstanceText: 'i'.repeat((140 * 1024)),
     mode: 'execute',
     notAfterMs: 1_800_000_000_000,
-    goal: 'g'.repeat(SIGNED_GOAL_LIMITS.goalTextBytes),
+    goal: 'g'.repeat((140 * 1024)),
   })
-  assert.ok(bytes.length <= SIGNED_GOAL_LIMITS.requestBytes)
+  assert.ok(bytes.length > 256 * 1024)
 
   const request = Buffer.from(bytes).toString('base64url')
-  assert.ok(request.length <= SIGNED_GOAL_LIMITS.requestBase64urlChars)
+  assert.equal(Buffer.from(request, 'base64url').length, bytes.length)
   const journal = memoryOperationJournal()
   const row = operationJournalRow(request)
   await journal.put(row)
   assert.equal((await journal.list())[0].request, request)
 
-  await journal.put({
-    ...row,
-    id: 'b'.repeat(43),
-    request: 'r'.repeat(SIGNED_GOAL_LIMITS.requestBase64urlChars),
-  })
-  await assert.rejects(
-    journal.put({
-      ...row,
-      id: 'c'.repeat(43),
-      request: 'r'.repeat(SIGNED_GOAL_LIMITS.requestBase64urlChars + 1),
-    }),
-    /invalid operation journal row/,
-  )
 
   assert.throws(
     () => encodeGoalRequest({
@@ -182,13 +169,13 @@ test('request encoding and journaling share the full protocol bounds', async () 
   )
 })
 
-test('oversized goal reports the actual byte encoding resource', () => {
-  assert.throws(() => encodeGoalRequest({
+test('goal encoding accepts text beyond the retired quota', () => {
+  assert.doesNotThrow(() => encodeGoalRequest({
     networkIdentity: u256(0x10), signingPublicKey: u256(0x11), operationId: u256(0x12),
     agentNamespace: 'human:owner', agentAnchor: u256(0x13), agentInstanceText: 'owner.',
     mode: 'execute', notAfterMs: 1_800_000_000_000,
-    goal: 'x'.repeat(SIGNED_GOAL_LIMITS.goalTextBytes + 1),
-  }), /signed goal text exceeds byte encoding limit/)
+    goal: 'x'.repeat((140 * 1024) + 1),
+  }))
 })
 
 test('a lost signed-goal response is marked outcome-unknown', async () => {
@@ -632,3 +619,29 @@ function jsonResponse(status, payload) {
     json: async () => payload,
   }
 }
+
+
+test('result delivery failure retains exact signed work and resolves without execution replay', async () => {
+  const previousFetch = globalThis.fetch, journal = memoryOperationJournal(), identity = signedIdentity()
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url, body: JSON.parse(init.body) })
+    return url === '/api/goals/execute'
+      ? jsonResponse(503, { error: 'result_too_large' })
+      : jsonResponse(200, { result: 'operation_outcome', status: 'committed', terminal: true })
+  }
+  try {
+    await assert.rejects(signedGoal(identity, signedWrite(), { journal }),
+      error => error.status === 503 && error.outcomeUnknown === true)
+    const [original] = await journal.list()
+    assert.ok(original)
+    const [resolved] = await resolveSignedOperations(identity, { journal })
+    assert.equal(resolved.reply.status, 'committed')
+    assert.deepEqual(calls.map(x => x.url), ['/api/goals/execute', '/api/goals/outcomes'])
+    for (const field of ['request', 'signature']) {
+      assert.equal(calls[0].body[field], original[field])
+      assert.equal(calls[1].body[field], original[field])
+    }
+    assert.equal((await journal.list()).length, 0)
+  } finally { globalThis.fetch = previousFetch }
+})

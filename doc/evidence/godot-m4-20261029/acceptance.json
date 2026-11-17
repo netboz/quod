@@ -1,0 +1,59 @@
+[
+  {
+    "id": 1,
+    "scope": "Signed mapping, strict profiles/components, explicit roles/choices and one adapter contract",
+    "result": "Software qualified",
+    "evidence": [
+      "input-final07/client-result.json",
+      "gui-final06/export-result.json.m4.json"
+    ]
+  },
+  {
+    "id": 2,
+    "scope": "Desktop/pointing/generic GUI and fenced private preferences including invalid-row repair",
+    "result": "Software qualified; unchanged policy/privacy obligations also reuse committed server evidence",
+    "evidence": [
+      "gui-final06",
+      "gui-final06-backup-import",
+      "spaces-final06",
+      "navigation-final06"
+    ]
+  },
+  {
+    "id": 3,
+    "scope": "Lifecycle, neutral rearm, source identity, cancellation and pointer/travel/menu arbitration",
+    "result": "Injected real engine and actual desktop qualified; physical behavior unrun",
+    "evidence": [
+      "input-final07/client-result.json"
+    ]
+  },
+  {
+    "id": 4,
+    "scope": "Current signed movement association, native snap/teleport, sequences/truncation/fences/uncertainty",
+    "result": "Real signed native owner qualified with injected controller frames; no physical claim",
+    "evidence": [
+      "physics-final08",
+      "navigation-final06"
+    ]
+  },
+  {
+    "id": 5,
+    "scope": "Licensed class-selected representation and retained resources",
+    "result": "Real asset transfer/admission/decode and unchanged work qualified",
+    "evidence": [
+      "input-final07",
+      "gui-final06/export-result.json.m4.json"
+    ]
+  },
+  {
+    "id": 6,
+    "scope": "OpenXR native start/stop, teardown and hardware",
+    "result": "Partial: injected lifecycles and normal desktop closes qualified; installed runtime blocked; retained native process-exit stalls unresolved; hardware unrun",
+    "evidence": [
+      "native-xr-development01",
+      "inputs/native-discovery.json",
+      "engine-ownership.md",
+      "failure-dispositions.md"
+    ]
+  }
+]

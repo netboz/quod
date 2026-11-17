@@ -1,0 +1,16 @@
++ Job: "quod-cloud-ledger-cleanup-20261110"
++ Task Group: "cleanup" (1 create)
+  + Task: "remove-old-ledgers" (forces create)
+
+Scheduler dry-run:
+- All tasks successfully allocated.
+
+Job Modify Index: 0
+To submit the job with version verification run:
+
+nomad job run -check-index 0 doc/evidence/live-ontology-release-0.7.283-20261110/deployment/cloud-cleanup.nomad
+
+When running the job with the check-index flag, the job will only be run if the
+job modify index given matches the server-side version. If the index has
+changed, another user has modified the job and the plan's results are
+potentially invalid.

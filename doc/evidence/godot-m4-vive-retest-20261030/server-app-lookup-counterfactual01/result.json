@@ -1,0 +1,9 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-m4-vive-retest-20261030/probe_dependencies.py"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 1.7336387679997642
+}

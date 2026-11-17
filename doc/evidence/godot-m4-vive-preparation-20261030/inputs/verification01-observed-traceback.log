@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-preparation-20261030/verify_build.py", line 67, in <module>
+    'dll':m['export_outputs']['data_quod_linuxbsd_x86_64/Quod.dll'],
+          ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'data_quod_linuxbsd_x86_64/Quod.dll'

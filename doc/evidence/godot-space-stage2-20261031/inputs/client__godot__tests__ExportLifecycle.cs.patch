@@ -1,0 +1,84 @@
+--- client/godot/tests/ExportLifecycle.cs before
+
++++ client/godot/tests/ExportLifecycle.cs
+
+@@ -125,47 +125,44 @@
+
+         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+         await session.Authenticate(timeout.Token);
+         var accounts = new Accounts(session, store); await accounts.Discover(timeout.Token);
+-        var source = new SourcePanel(); app.AddChild(source); source.Open(session, accounts);
+-        source.Changed += () => app.EmitSignal(Main.SignalName.Changed);
+-        var target = accounts.Catalogue.Single(x => x.Namespace == "quod:gui");
+-        source.Inspect(target, true);
+-        await Until(() => source.Content.Length > 0 || source.Status.StartsWith("Source unavailable"));
+-        Check(source.Content.Contains("gui_"), "real exported source tools assemble complete authorized cursor");
+-        string content = source.Content;
+-        var traffic = await session.Transport.Send("/qualification/traffic", null, timeout.Token);
+-        await Renew(source);
+-        var renewedTraffic = await session.Transport.Send("/qualification/traffic", null, timeout.Token);
+-        Check(source.Content == content && traffic["cursor_opens"]!.ToString() == renewedTraffic["cursor_opens"]!.ToString(), "unchanged real authorization renewal retains complete snapshot with zero new source cursors");
+-        await Transition(new() { ["source_access"] = "deny" });
+-        await Until(() => source.Content.Length == 0 && source.Status.StartsWith("Source withdrawn"));
+-        Check(source.Content.Length == 0, "revoked source grant withdraws exported content");
+-        await Transition(new() { ["source_access"] = "restore" });
+-        source.Inspect(target, true); await Until(() => source.Content.Length > 0);
+-        Check(source.Content == content, "explicit reopen restores exact authorized source");
+-        source.Inspect(human, true); await Until(() => source.Content.Length > 0 && source.Content != content);
+-        var beforeUpdate = await session.Transport.Send("/qualification/traffic", null, timeout.Token);
+-        Check(Json.Committed(await ExecuteComplete(session, store, human, "assertz(m1b_source_changed(1)).", timeout.Token)), "source update commits through its actual owner");
+-        await Until(() => source.Content.Contains("m1b_source_changed(1)"));
+-        var afterUpdate = await session.Transport.Send("/qualification/traffic", null, timeout.Token);
+-        Check(Json.U(afterUpdate, "cursor_opens") == Json.U(beforeUpdate, "cursor_opens") + 1, "real source update invalidates and reads exactly one replacement cursor");
+-        source.Inspect(target with { Anchor = Identity.Encode(new byte[32]) }, true);
+-        await Until(() => source.Status.StartsWith("Source withdrawn"));
+-        Check(source.Content.Length == 0, "denied source never becomes a valid empty snapshot");
+-        source.Inspect(target, true); source.DisposeView();
+-        await source.Completion;
+-        Check(source.Content.Length == 0, "cancelled opening reader cannot publish after disposal");
+-        source.QueueFree();
+-    }
+-    static async Task Renew(Node consumer)
++        var panel=new EidolonPanel();app.AddChild(panel);panel.Changed+=()=>app.EmitSignal(Main.SignalName.Changed);
++        var target=accounts.Catalogue.Single(x=>x.Namespace=="quod:gui");
++        async Task Inspect(Actor chosen){panel.Open(session,accounts,store,chosen.Ontology);await Until(()=>panel.Available);panel.Choose(panel.Offered.Single(e=>e.Purpose.Name=="prolog"));}
++        await Inspect(target);var source=(SourcePanel)panel.FindChild("source-tools",true,false);
++        await Until(()=>source.Content.Length>0);
++        Check(source.Content.Contains("gui_"),"real exported source tools assemble complete authorized cursor");
++        string content=source.Content;
++        var traffic=await session.Transport.Send("/qualification/traffic",null,timeout.Token);
++        await Renew(panel,"representation");
++        var renewedTraffic=await session.Transport.Send("/qualification/traffic",null,timeout.Token);
++        Check(source.Content==content && traffic["cursor_opens"]!.ToString()==renewedTraffic["cursor_opens"]!.ToString(),"unchanged real authorization renewal retains complete snapshot with zero new source cursors");
++        await Transition(new(){["source_access"]="deny"});await Until(()=>source.Content.Length==0);
++        Check(!source.CanEdit,"revoked source grant withdraws exported content and edit authority");
++        await Transition(new(){["source_access"]="restore"});await Inspect(target);await Until(()=>source.Content.Length>0);
++        Check(source.Content==content,"explicit reopen restores exact authorized source");
++        await Inspect(human);await Until(()=>source.Content.Length>0 && source.Content!=content);
++        var beforeUpdate=await session.Transport.Send("/qualification/traffic",null,timeout.Token);
++        Check(Json.Committed(await ExecuteComplete(session,store,human,"assertz(m1b_source_changed(1)).",timeout.Token)),"source update commits through its actual owner");
++        await Until(()=>source.Content.Contains("m1b_source_changed(1)"));
++        var afterUpdate=await session.Transport.Send("/qualification/traffic",null,timeout.Token);
++        Check(Json.U(afterUpdate,"cursor_opens")==Json.U(beforeUpdate,"cursor_opens")+1,"real source update invalidates and reads exactly one replacement cursor");
++        panel.Open(session,accounts,store,(target with {Anchor=Identity.Encode(new byte[32])}).Ontology);
++        await Until(()=>panel.StatusText.StartsWith("Unavailable"));
++        Check(source.Content.Length==0,"denied source never becomes a valid empty snapshot");
++        panel.Open(session,accounts,store,target.Ontology);panel.DisposeView();await panel.Completion;
++        Check(source.Content.Length==0,"cancelled opening reader cannot publish after disposal");panel.QueueFree();
++    }
++
++    static async Task Renew(Node consumer,string fieldName="view")
+     {
+         // Exercise the existing signed renewal path without waiting for its
+         // protocol timer. No projection or authority is fabricated here.
+-        var field = consumer.GetType().GetField("view", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
++        var field = consumer.GetType().GetField(fieldName, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+         var view = (SignedView)field.GetValue(consumer)!;
+         var projected = new TaskCompletionSource(); void Project(JsonNode _) => projected.TrySetResult();
+         view.Projection += Project;
+         try {
+-            await (Task)typeof(SignedView).GetMethod("Open", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(view, null)!;
++            await view.Renew();
+             await projected.Task.WaitAsync(TimeSpan.FromSeconds(10));
+         } finally { view.Projection -= Project; }
+     }

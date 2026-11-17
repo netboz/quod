@@ -1,0 +1,43 @@
+fresh: Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+fresh: 
+fresh: PASS enabled action create-key
+fresh: M1B_STATE {"state":"offline","busy":true,"public_key":null,"network":null,"human":null,"setup":null,"pending":null,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"Create or import a key offline, then connect. Active keys use private files; encrypted backups have a separate passphrase."}
+fresh: M1B_STATE {"state":"offline","busy":false,"public_key":"3eb8fT5cxgf5eBV-pc33T66zLrzrUMk9JgdzjuALPDQ","network":null,"human":null,"setup":null,"pending":0,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"Identity saved durably. The active key is protected by private filesystem permissions. Export an encrypted backup separately."}
+fresh: PASS offline durable identity created
+fresh: PASS enabled action connect
+fresh: M1B_STATE {"state":"offline","busy":true,"public_key":"3eb8fT5cxgf5eBV-pc33T66zLrzrUMk9JgdzjuALPDQ","network":null,"human":null,"setup":null,"pending":0,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"Identity saved durably. The active key is protected by private filesystem permissions. Export an encrypted backup separately."}
+fresh: M1B_STATE {"state":"offline","busy":true,"public_key":"3eb8fT5cxgf5eBV-pc33T66zLrzrUMk9JgdzjuALPDQ","network":"","human":null,"setup":null,"pending":0,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"Authenticating the exact saved key\u2026"}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"public_key":"3eb8fT5cxgf5eBV-pc33T66zLrzrUMk9JgdzjuALPDQ","network":"oZFjVPMWCqdOhmi4n3txdVKsYHiR0ptRQWWetNnyMD4","human":null,"setup":null,"pending":0,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"Authenticated. Network: oZFjVPMWCqdOhmi4n3txdVKsYHiR0ptRQWWetNnyMD4"}
+fresh: PASS real challenge and authenticated network
+fresh: PASS enabled action register
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":true,"public_key":"3eb8fT5cxgf5eBV-pc33T66zLrzrUMk9JgdzjuALPDQ","network":"oZFjVPMWCqdOhmi4n3txdVKsYHiR0ptRQWWetNnyMD4","human":null,"setup":null,"pending":0,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"Authenticated. Network: oZFjVPMWCqdOhmi4n3txdVKsYHiR0ptRQWWetNnyMD4"}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"public_key":"3eb8fT5cxgf5eBV-pc33T66zLrzrUMk9JgdzjuALPDQ","network":"oZFjVPMWCqdOhmi4n3txdVKsYHiR0ptRQWWetNnyMD4","human":null,"setup":null,"pending":1,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"An error occurred while sending the request. Original work retained; resolve its outcome."}
+fresh: PASS lost signup response retains original signed work
+fresh: PASS enabled action resolve
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":true,"public_key":"3eb8fT5cxgf5eBV-pc33T66zLrzrUMk9JgdzjuALPDQ","network":"oZFjVPMWCqdOhmi4n3txdVKsYHiR0ptRQWWetNnyMD4","human":null,"setup":null,"pending":1,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"An error occurred while sending the request. Original work retained; resolve its outcome."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"public_key":"3eb8fT5cxgf5eBV-pc33T66zLrzrUMk9JgdzjuALPDQ","network":"oZFjVPMWCqdOhmi4n3txdVKsYHiR0ptRQWWetNnyMD4","human":{"Namespace":"human:Phoy1cbaHqEKvhm0aiS_6GkSqgn5AspjKKGhRLJY2tQ","Anchor":"3fFM1Et-ryZsbEMXSB5N_7aor3igEVt7a4DAVtSAqDs","InstanceText":"me."},"setup":null,"pending":0,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"Original outcomes resolved without submission."}
+fresh: PASS original fresh human recovered
+fresh: PASS enabled action prepare
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":true,"public_key":"3eb8fT5cxgf5eBV-pc33T66zLrzrUMk9JgdzjuALPDQ","network":"oZFjVPMWCqdOhmi4n3txdVKsYHiR0ptRQWWetNnyMD4","human":{"Namespace":"human:Phoy1cbaHqEKvhm0aiS_6GkSqgn5AspjKKGhRLJY2tQ","Anchor":"3fFM1Et-ryZsbEMXSB5N_7aor3igEVt7a4DAVtSAqDs","InstanceText":"me."},"setup":null,"pending":0,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"Original outcomes resolved without submission."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"public_key":"3eb8fT5cxgf5eBV-pc33T66zLrzrUMk9JgdzjuALPDQ","network":"oZFjVPMWCqdOhmi4n3txdVKsYHiR0ptRQWWetNnyMD4","human":{"Namespace":"human:Phoy1cbaHqEKvhm0aiS_6GkSqgn5AspjKKGhRLJY2tQ","Anchor":"3fFM1Et-ryZsbEMXSB5N_7aor3igEVt7a4DAVtSAqDs","InstanceText":"me."},"setup":null,"pending":0,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"Account policy selected the existing account ontology human:Phoy1cbaHqEKvhm0aiS_6GkSqgn5AspjKKGhRLJY2tQ, genesis 3fFM1Et-ryZsbEMXSB5N_7aor3igEVt7a4DAVtSAqDs, for S0. This selection applies to initial setup."}
+fresh: PASS policy-selected existing S0 storage explained
+fresh: PASS enabled action setup
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":true,"public_key":"3eb8fT5cxgf5eBV-pc33T66zLrzrUMk9JgdzjuALPDQ","network":"oZFjVPMWCqdOhmi4n3txdVKsYHiR0ptRQWWetNnyMD4","human":{"Namespace":"human:Phoy1cbaHqEKvhm0aiS_6GkSqgn5AspjKKGhRLJY2tQ","Anchor":"3fFM1Et-ryZsbEMXSB5N_7aor3igEVt7a4DAVtSAqDs","InstanceText":"me."},"setup":null,"pending":0,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"Account policy selected the existing account ontology human:Phoy1cbaHqEKvhm0aiS_6GkSqgn5AspjKKGhRLJY2tQ, genesis 3fFM1Et-ryZsbEMXSB5N_7aor3igEVt7a4DAVtSAqDs, for S0. This selection applies to initial setup."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"public_key":"3eb8fT5cxgf5eBV-pc33T66zLrzrUMk9JgdzjuALPDQ","network":"oZFjVPMWCqdOhmi4n3txdVKsYHiR0ptRQWWetNnyMD4","human":{"Namespace":"human:Phoy1cbaHqEKvhm0aiS_6GkSqgn5AspjKKGhRLJY2tQ","Anchor":"3fFM1Et-ryZsbEMXSB5N_7aor3igEVt7a4DAVtSAqDs","InstanceText":"me."},"setup":null,"pending":1,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"An error occurred while sending the request. Original work retained; resolve its outcome."}
+fresh: PASS lost setup response retains original signed work
+fresh: PASS enabled action resolve
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":true,"public_key":"3eb8fT5cxgf5eBV-pc33T66zLrzrUMk9JgdzjuALPDQ","network":"oZFjVPMWCqdOhmi4n3txdVKsYHiR0ptRQWWetNnyMD4","human":{"Namespace":"human:Phoy1cbaHqEKvhm0aiS_6GkSqgn5AspjKKGhRLJY2tQ","Anchor":"3fFM1Et-ryZsbEMXSB5N_7aor3igEVt7a4DAVtSAqDs","InstanceText":"me."},"setup":null,"pending":1,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"An error occurred while sending the request. Original work retained; resolve its outcome."}
+fresh: M1B_STATE {"state":"signed-in-no-account","busy":false,"public_key":"3eb8fT5cxgf5eBV-pc33T66zLrzrUMk9JgdzjuALPDQ","network":"oZFjVPMWCqdOhmi4n3txdVKsYHiR0ptRQWWetNnyMD4","human":{"Namespace":"human:Phoy1cbaHqEKvhm0aiS_6GkSqgn5AspjKKGhRLJY2tQ","Anchor":"3fFM1Et-ryZsbEMXSB5N_7aor3igEVt7a4DAVtSAqDs","InstanceText":"me."},"setup":null,"pending":1,"world_accepted":false,"live_sockets":0,"operation_available":null,"operation_status":null,"status":"The original outcome is still unknown. No operation was resubmitted."}
+Traceback (most recent call last):
+  File "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/journey.py", line 146, in <module>
+    line = output.get(timeout=60)
+  File "/usr/lib/python3.14/queue.py", line 209, in get
+    raise Empty
+_queue.Empty
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/journey.py", line 152, in <module>
+    raise RuntimeError('No qualification progress within the test watchdog')
+RuntimeError: No qualification progress within the test watchdog

@@ -165,8 +165,6 @@ frame_shape_rejection_test() ->
                     {submit, <<3:248>>, Signature, <<5, 6, 7>>}),
          setelement(6, Submit,
                     {submit, Author, <<4:504>>, <<5, 6, 7>>}),
-         setelement(6, Submit,
-                    {submit, Author, Signature, <<0:(?QUOD_MAX_CANONICAL_TRANSACTION_BYTES + 1)/unit:8>>}),
          setelement(7, Submit, [{<<"baggage">>, <<"not-accepted">>}])],
     [?assertEqual(
        error,

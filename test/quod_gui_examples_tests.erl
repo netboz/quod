@@ -11,10 +11,12 @@ world_library_creation_names_ownership_and_entry_test_() ->
 
 world_library() ->
     Dir = filename:join("/tmp","quod-world-library-" ++ binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(12)))),
-    Ctx = quod_lobby_tests:start(Dir,[],extended_system_catalogue,[]),
+    Instance = {human_user,test_agent},
+    Ctx = quod_lobby_tests:start(Dir,[],extended_system_catalogue,[],
+        quod_gui_question_tests:user_source_with_allowance(Instance,8) ++ [{instance_of,{':',quod,{':',user,human_user}},Instance}]),
     {ontology_ref,Lobby,_} = maps:get(lobby,Ctx),
     {_,Base} = maps:get(Lobby,maps:get(ontologies,Ctx)),
-    {HumanNs,HumanAnchor} = maps:get(agent,Ctx),Instance = {human_user,test_agent},
+    {HumanNs,HumanAnchor} = maps:get(agent,Ctx),
     Human = {agent_instance_ref,HumanNs,HumanAnchor,Instance},
     try with_responder(Ctx,Base,Human,fun({agent_instance_ref,ResponderNs,_,_}) ->
         {ok,[#{<<"V0">> := Node}],_} = read(Ctx,ResponderNs,{agent_hosted,responder,{0},{'_'},{'_'}}),
@@ -27,9 +29,7 @@ world_library() ->
             {lobby_vocabulary,<<"lobby-test-classes">>,quod_simplex:genesis_hash(<<"lobby-test-classes">>)},
             {rendering_vocabulary,<<"lobby-test-rendering">>,quod_simplex:genesis_hash(<<"lobby-test-rendering">>)},
             {modelling_vocabulary,<<"lobby-test-modelling">>,quod_simplex:genesis_hash(<<"lobby-test-modelling">>)}],
-        Files = ["space.pl","agent_instance.pl","quod_physics.pl","space_view.pl","lobby_instance.pl",
-                 "voxel_world.pl","voxel_world_view.pl","gui_instance.pl","gui_operation.pl","space_gui.pl","gui_question.pl",
-                 "voxel_world_gui.pl","lobby_worlds.pl"],
+        Files = ["agent_instance.pl", "quod_physics.pl", "lobby_instance.pl", "voxel_world.pl", "voxel_world_view.pl", "gui_instance.pl", "voxel_world_gui.pl", "lobby_worlds.pl"],
         {Application,WorldConfig} = quod_lobby_tests:start_namespace(Ns,Base#{
             data_dir => filename:join(Dir,"worlds"),
             genesis_diff => quod_prolog:terms_to_diff(lists:append([source(F) || F <- Files]) ++ Facts)}),
@@ -37,8 +37,6 @@ world_library() ->
         true = quod_reg:subscribe({agent,Actor}),true = quod_reg:subscribe({agent_hosting,Ns}),
         true = quod_reg:subscribe({physics,Ns}),
         try
-            commit(Ctx,scope(HumanNs,assertions(source("gui_hud.pl") ++
-                [{instance_of,human_user,Instance},{gui_pending_allowance,Instance,8}]))),
             ?assertMatch({ok,[#{<<"V0">> := []}],_},read(Ctx,Ns,{world_library,{0}})),
             ?assertMatch({ok,[#{<<"V0">> := setup_required}],_},read(Ctx,Ns,{world_library_status,{0}})),
             ?assertMatch({fail,_},read(Ctx#{instance => <<"human_user(other_agent).">>},Ns,{world_library,{0}})),
@@ -60,21 +58,21 @@ world_library() ->
                         {field,{voxel_setting,world_creation,preset},Preset}),
                     {question_ref,Ns,Anchor,Q} = Open(Ns,Form),
                     Before = quod_prolog:applied(Ns),
-                    commit(Ctx,scope(Ns,{gui_submit,Q,Revision,create_world,Fields})),
+                    commit(Ctx,scope(Ns,gui({gui_submit,question_ref(Ns,Q),Revision,create_world,Fields}))),
                     receive {agent_request_finished,_,_,#{reference := Actor},_,Result} ->
                         quod_gui_question_tests:await_commit(Result)
                     after 30000 -> error(world_creation_completion_missing) end,
                     ?assert(quod_prolog:applied(Ns) >= Before+2),
-                    ?assertMatch({ok,[#{<<"V0">> := []}],_},read(Ctx,HumanNs,{gui_pending_questions,{0}})),
+                    ?assertMatch({ok,[#{<<"V0">> := []}],_},read(Ctx,HumanNs,gui({gui_pending_questions,{0}}))),
                     ?assertMatch({ok,_,{normalized,{failed,_}}},quod_lobby_tests:submit(Ctx,execute,
-                        scope(Ns,{gui_submit,Q,Revision,create_world,Fields}))),
+                        scope(Ns,gui({gui_submit,question_ref(Ns,Q),Revision,create_world,Fields})))),
                     {ok,[#{<<"V0">> := Rows}],_} = read(Ctx,Ns,{world_library,{0}}),Rows
                 end,
                 [{world,{entity_ref,Ns,Anchor,W1},Generated}] = Create(<<>>,meadow),
                 ?assert(is_binary(Generated)),
                 ?assertMatch({ok,[_],_},read(Ctx,Ns,{gui_schema,{voxel_excavation,W1},{0},{1}})),
                 {question_ref,Ns,Anchor,Tools} = Open(Ns,{voxel_excavation,W1}),
-                commit(Ctx,scope(Ns,{gui_cancel,Tools})),
+                commit(Ctx,scope(Ns,gui({gui_cancel,question_ref(Ns,Tools)}))),
                 ?assertMatch({ok,[_],_},read(Ctx,<<"quod:names">>,
                     {name,Generated,<<"landscape">>,<<"world">>,<<"neutral">>})),
                 ?assertEqual(NamesBefore,quod_lobby_tests:complete_source(Ctx,NamesTarget)),
@@ -92,22 +90,26 @@ world_library() ->
                 end),
                 Owners = [begin
                     {ok,[#{<<"V0">> := {prepared,Node,PhysicsKey}}],_} = read(Ctx,Ns,{physics_preparation,W,{0}}),
-                    commit(Ctx,scope(Ns,{physics_initialize,W,Node,PhysicsKey})),
-                    Owner = world_entry_ready({world_ref,Ns,Anchor,W},quod_time:mono_ms()+15000),
+                    PhysicsActor = {agent_instance_ref,Ns,Anchor,{world_authority,W}},
+                    true = quod_reg:subscribe({agent,PhysicsActor}),
+                    Owner = try
+                        commit(Ctx,scope(Ns,{physics_initialize,W,Node,PhysicsKey})),
+                        world_entry_ready({world_ref,Ns,Anchor,W},quod_time:mono_ms()+15000)
+                    after quod_reg:unsubscribe({agent,PhysicsActor}) end,
                     ?assertMatch(#{phase := active,navigation_ready := true},gen_server:call(Owner,status)),
                     %% Body IDs deliberately overlap; the exact world and pilot
                     %% remain distinct in control and presentation selection.
                     ?assertMatch({ok,[_],_},read(Ctx,Ns,{physics_control,W,Human,1,{controlled,{world_pilot,W},eye}})),
-                    {ok,[#{<<"V0">> := {world_view,_,Visible,_}}],_} =
+                    {ok,[#{<<"V0">> := {world_view,_,_,Visible,_}}],_} =
                         read(Ctx,Ns,{client_world_view,W,playing,[],{0}}),
                     ?assert(lists:any(fun({mark,_,<<"terrain">>,_,_,_,_,_}) -> true;
                                         (_) -> false end,Visible)),
                     ?assert(lists:any(fun({mark,_,<<"sky_sphere">>,_,_,
-                        {surface,_,_,_,1000,[{texture,<<"base_colour">>,_,_}]},_,_}) -> true;
+                        {surface,_,_,_,1000,1000,[{texture,<<"base_colour">>,_,_}]},_,_}) -> true;
                         (_) -> false end,Visible)),
                     {ok,[#{<<"V0">> := Palette}],_} = read(Ctx,Ns,
                         {voxel_presentation,W,<<"terrain">>,{0},{1},{2}}),
-                    ?assertMatch({material,1,{surface,_,_,_,_,[{texture,<<"base_colour">>,_,_}]}},
+                    ?assertMatch({material,1,{surface,_,_,_,_,1000,[{texture,<<"base_colour">>,_,_}]}},
                         lists:keyfind(1,2,Palette)),
                     ?assertMatch({ok,[_],_},read(Ctx,Ns,{instance_of,sky_sphere,{world_sky,W}})),
                     {W,Owner}
@@ -165,7 +167,8 @@ world_library() ->
     after quod_lobby_tests:stop(Ctx) end,
     ok = file:del_dir_r(Dir).
 
-world_entry_ready(World,Deadline) ->
+world_entry_ready(World = {world_ref,Ns,Anchor,W},Deadline) ->
+    Actor = {agent_instance_ref,Ns,Anchor,{world_authority,W}},
     receive {physics_status,_,Pid,World,_,_} ->
         case is_process_alive(Pid) of
             false -> world_entry_ready(World,Deadline);
@@ -174,8 +177,18 @@ world_entry_ready(World,Deadline) ->
                 #{phase := {failed,Reason}} -> error({world_entry_failed,Reason});
                 _ -> world_entry_ready(World,Deadline)
             end
-        end
-    after max(0,Deadline-quod_time:mono_ms()) -> error(world_entry_not_ready) end.
+        end;
+        {agent_request_finished,_,_,#{reference := Actor},_,Result} ->
+            case Result of
+                {error,Reason} -> error({world_entry_request_failed,Reason});
+                {ok,_,{normalized,{failed,_}}} -> quod_gui_question_tests:await_commit(Result);
+                _ -> world_entry_ready(World,Deadline)
+            end
+    after max(0,Deadline-quod_time:mono_ms()) ->
+        Worlds = gen_server:call(quod_reg:via({quod_runtime,Ns}),physics_worlds),
+        error({world_entry_not_ready,quod_runtime:stats(Ns),
+            maps:map(fun(_,Entry) -> maps:with([status,stopping,needs_reconciliation],Entry) end,Worlds)})
+    end.
 
 world_terrain_delivery(Ns,World,Pid,Distance) ->
     Runtime = quod_reg:via({quod_runtime,Ns}),
@@ -222,10 +235,12 @@ consume_world_terrain(Runtime,World,Pid,Ref,Current,Deadline) ->
 voxel_form_creates_user_owned_terrain_and_rejects_a_dig_stale_submission_test_() ->
     {timeout,120,fun() ->
         Dir = filename:join("/tmp","quod-voxel-gui-" ++ binary_to_list(binary:encode_hex(crypto:strong_rand_bytes(12)))),
-        Ctx = quod_lobby_tests:start(Dir,[],base_system_catalogue,[]),
+        Instance = {human_user,test_agent},
+        Ctx = quod_lobby_tests:start(Dir,[],base_system_catalogue,[],
+            quod_gui_question_tests:user_source_with_allowance(Instance,4) ++ [{instance_of,{':',quod,{':',user,human_user}},Instance}]),
         {ontology_ref,Lobby,_} = maps:get(lobby,Ctx),
         {_,Base} = maps:get(Lobby,maps:get(ontologies,Ctx)),
-        {HumanNs,HumanAnchor} = maps:get(agent,Ctx), Instance = {human_user,test_agent},
+        {HumanNs,HumanAnchor} = maps:get(agent,Ctx),
         Human = {agent_instance_ref,HumanNs,HumanAnchor,Instance},
         try with_responder(Ctx,Base,Human,fun(Actor = {agent_instance_ref,ResponderNs,_,_}) ->
             Ns = <<"gui:voxel-world">>, Form = {voxel_generation,land},
@@ -240,7 +255,7 @@ voxel_form_creates_user_owned_terrain_and_rejects_a_dig_stale_submission_test_()
                 {rendering_vocabulary,<<"lobby-test-rendering">>,quod_simplex:genesis_hash(<<"lobby-test-rendering">>)},
                 {modelling_vocabulary,<<"lobby-test-modelling">>,quod_simplex:genesis_hash(<<"lobby-test-modelling">>)},
                 {voxel_presentation,land,<<"land">>,
-                    [{material,I,{surface,<<"#887755">>,0,900,0,[]}} || I <- lists:seq(1,6)],
+                    [{material,I,{surface,<<"#887755">>,0,900,0,1000,[]}} || I <- lists:seq(1,6)],
                     {view_distance,8000,4000,4000},{resources,1000000,2000000,20000,10000,64}},
                 {voxel_view_range,land,{range,4,32,4}},
                 {voxel_brush_controls,land,{range,-64000,64000,100},{range,600,2000,100}},
@@ -249,13 +264,10 @@ voxel_form_creates_user_owned_terrain_and_rejects_a_dig_stale_submission_test_()
                     {surface_limits,512,10000,10000},64,69120,1048576}},
                 {physics_structure,land,1},{physics_next_body,land,0},
                 {physics_allowances,land,{limits,8,8,128,1000000,{geometry,128,100000,100000}},16667,-9810,10000}],
-            Terms = lists:append([source(F) || F <- ["space.pl","quod_physics.pl","voxel_world.pl",
-                "space_view.pl","voxel_world_view.pl","gui_instance.pl","voxel_world_gui.pl"]]) ++ Facts,
+            Terms = lists:append([source(F) || F <- ["quod_physics.pl", "voxel_world.pl", "voxel_world_view.pl", "gui_instance.pl", "voxel_world_gui.pl"]]) ++ Facts,
             {Application,_} = quod_lobby_tests:start_namespace(Ns,Base#{data_dir => filename:join(Dir,"terrain"),
                 genesis_diff => quod_prolog:terms_to_diff(Terms)}),
             try
-                commit(Ctx,scope(HumanNs,assertions(source("gui_hud.pl") ++
-                    [{instance_of,human_user,Instance},{gui_pending_allowance,Instance,4}]))),
                 lists:foreach(fun(F) -> commit(Ctx,scope(ResponderNs,{assertz,{gui_responder_policy,responder,
                     {form_ref,Ns,quod_simplex:genesis_hash(Ns),F},Human}})) end,
                     [Form,{voxel_excavation,land},{voxel_view_settings,land}]),
@@ -267,7 +279,7 @@ voxel_form_creates_user_owned_terrain_and_rejects_a_dig_stale_submission_test_()
                 ?assertEqual({voxel_generation_entered,land,0,[],meadow,1947,1000,bounded,32,128,100,15},Bound),
                 quod_gui_question_tests:with_receiver(Ctx,HumanNs,fun(Open) ->
                     {question_ref,ResponderNs,_,Q} = Open(Ns,Form),
-                    commit(Ctx,scope(ResponderNs,{gui_submit,Q,Revision,{generate_voxel,land},Fields})),
+                    commit(Ctx,scope(ResponderNs,gui({gui_submit,question_ref(ResponderNs,Q),Revision,{generate_voxel,land},Fields}))),
                     receive {agent_request_finished,_,_,#{reference := Actor},_,Completion} ->
                         ?assertMatch({ok,_,{normalized,{committed,_,_}}},Completion)
                     after 10000 -> error(voxel_completion_missing) end,
@@ -276,15 +288,17 @@ voxel_form_creates_user_owned_terrain_and_rejects_a_dig_stale_submission_test_()
                         {terrain_v1,{bounded,{chunk_v1,-4,-4,-4},{chunk_v1,4,4,4}},smooth,
                          {field_v1,1947,1000,{'_'},1}}})),
                     ?assertMatch({ok,[_],_},read(Ctx,Ns,{voxel_terrain_binding,land,0,2})),
-                    ?assertMatch({ok,[#{<<"V0">> := []}],_},read(Ctx,HumanNs,{gui_pending_questions,{0}})),
-                    {ok,[#{<<"V0">> := Scene}],_} = read(Ctx,Ns,{world_view,land,playing,{0}}),
-                    ?assertMatch([{mark,<<"land">>,<<"group">>,_,_,_,_,_},
-                        {mark,<<"land/ground">>,<<"terrain">>,_,{relative,<<"land">>,{body_pose,0,2}},
+                    ?assertMatch({ok,[#{<<"V0">> := []}],_},read(Ctx,HumanNs,gui({gui_pending_questions,{0}}))),
+                    {ok,[#{<<"V0">> := Scene}],_} = read(Ctx,Ns,{'::',<<"quod:space">>,{world_view,{entity_ref,Ns,quod_simplex:genesis_hash(Ns),land},playing,{0}}}),
+                    Land = quod_ct:scene_mark_id(Scene,{entity_ref,Ns,quod_simplex:genesis_hash(Ns),{terrain,land}}),
+                    Ground = <<Land/binary,"/ground">>,
+                    ?assertMatch([{mark,Land,<<"group">>,_,_,_,_,_},
+                        {mark,Ground,<<"terrain">>,_,{relative,Land,{body_pose,0,2}},
                          terrain_surfaces,unlabelled,{depicts,Ns,_,{terrain,land}}}],Scene),
                     SubmitForm = fun(F,Control,Values) ->
                         {ok,[#{<<"V0">> := R}],_} = read(Ctx,Ns,{gui_schema,F,{0},{1}}),
                         {question_ref,ResponderNs,_,Question} = Open(Ns,F),
-                        commit(Ctx,scope(ResponderNs,{gui_submit,Question,R,Control,Values})),
+                        commit(Ctx,scope(ResponderNs,gui({gui_submit,question_ref(ResponderNs,Question),R,Control,Values}))),
                         receive {agent_request_finished,_,_,#{reference := Actor},_,Result} ->
                             ?assertMatch({ok,_,{normalized,{committed,_,_}}},Result)
                         after 10000 -> error(voxel_control_completion_missing) end
@@ -305,8 +319,8 @@ voxel_form_creates_user_owned_terrain_and_rejects_a_dig_stale_submission_test_()
                     {ok,[#{<<"V0">> := AfterDig}],_} = read(Ctx,Ns,{gui_schema,Form,{0},{1}}),
                     ?assertNotEqual(BeforeDig,AfterDig),
                     ?assertMatch({ok,_,{normalized,{failed,_}}},quod_lobby_tests:submit(Ctx,execute,
-                        scope(ResponderNs,{gui_submit,StaleQ,BeforeDig,{generate_voxel,land},Fields}))),
-                    commit(Ctx,scope(ResponderNs,{gui_cancel,StaleQ}))
+                        scope(ResponderNs,gui({gui_submit,question_ref(ResponderNs,StaleQ),BeforeDig,{generate_voxel,land},Fields})))),
+                    commit(Ctx,scope(ResponderNs,gui({gui_cancel,question_ref(ResponderNs,StaleQ)})))
                 end),
                 quod_lobby_tests:assert_read_has_no_io(fun() ->
                     First = read(Ctx,Ns,{gui_schema,Form,{0},{1}}),
@@ -328,11 +342,13 @@ examples() ->
         [{attribute, personal_sky, preset_name, <<"Original">>},
          {atmosphere_panorama, belfast_sunset_puresky, <<"Belfast sunset">>},
          {atmosphere_panorama, dusk, <<"Dusk">>}],
-    Ctx = quod_lobby_tests:start(Dir, [], base_system_catalogue, LobbyTerms),
+    HumanInstance = {human_user, test_agent},
+    Ctx = quod_lobby_tests:start(Dir, [], base_system_catalogue, LobbyTerms,
+        quod_gui_question_tests:user_source_with_allowance(HumanInstance,4) ++
+            [{instance_of,{':',quod,{':',user,human_user}},HumanInstance}]),
     {ontology_ref, Lobby, _} = maps:get(lobby, Ctx),
     {_, Base} = maps:get(Lobby, maps:get(ontologies, Ctx)),
     {HumanNs, HumanAnchor} = maps:get(agent, Ctx),
-    HumanInstance = {human_user, test_agent},
     Human = {agent_instance_ref, HumanNs, HumanAnchor, HumanInstance},
     Admin = {can_invoke, {'_'}, Human, {'_'}, {'_'}},
     try with_responder(Ctx,Base,Human,fun(Actor) ->
@@ -370,8 +386,6 @@ examples() ->
                 ?assertEqual(First, read(Ctx, Ns, {gui_schema, Form, {0}, {1}}))
             end, Cases)
         end),
-        commit(Ctx, scope(HumanNs, assertions(source("gui_hud.pl") ++
-            [{instance_of, human_user, HumanInstance},{gui_pending_allowance,HumanInstance,4}]))),
         commit(Ctx, scope(Lobby, {assertz, {gui_question_policy, {atmosphere, personal_sky}, Human, Actor}})),
         commit(Ctx,scope(ResponderNs,{assertz,
             {gui_question_policy,{instrument_settings,Instrument},Human,Actor}})),
@@ -395,7 +409,7 @@ examples() ->
                 {question_ref,ResponderNs,_,Q} = Open(Ns,Form),
                 Row = {gui_question, Q, {form_ref, Ns, quod_simplex:genesis_hash(Ns), Form},
                        Human, responder, Revision, awaiting},
-                Submit = scope(ResponderNs, {gui_submit, Q, Revision, Control, Fields}),
+                Submit = scope(ResponderNs, gui({gui_submit,question_ref(ResponderNs,Q),Revision,Control,Fields})),
                 case {Ns, Round} of
                     {Lobby, 1} ->
                         Choice = {atmosphere_panorama, dusk, <<"Dusk">>},
@@ -411,14 +425,14 @@ examples() ->
                     {agent_request_finished,_,_,#{reference := Actor},_,Completion} ->
                         {ok,#{request_bytes := CompletionBytes},{normalized,{committed,_,_}}} = Completion,
                         {ok,#{goal_text := CompletionText}} = quod_client_goal:decode(CompletionBytes),
-                        {ok,ExpectedText} = quod_client_goal_parser:format({gui_complete,Q}),
+                        {ok,ExpectedText} = quod_client_goal_parser:format(gui({gui_complete,question_ref(ResponderNs,Q)})),
                         ?assertEqual(quod_client_goal_parser:parse(ExpectedText,3),
                                      quod_client_goal_parser:parse(CompletionText,3))
                 after 10000 -> error(example_completion_missing) end,
                 ?assertMatch({fail, _}, read(Ctx, ResponderNs,
                     {gui_question, Q, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}})),
                 ?assertMatch({ok, [#{<<"V0">> := []}], _},
-                    read(Ctx, HumanNs, {gui_pending_questions, {0}})),
+                    read(Ctx, HumanNs, gui({gui_pending_questions, {0}}))),
                 ?assertMatch({ok, [#{<<"V1">> := Fields}], _},
                     read(Ctx, Ns, {gui_values, Form, {0}, {1}}))
             end, [1, 2])
@@ -450,7 +464,7 @@ with_responder(Ctx,Base,Human,Fun) ->
     NodeNs = <<"gui:examples-node">>,
     {NodeOwner,_} = quod_lobby_tests:start_namespace(NodeNs,Base#{
         data_dir => filename:join(Dir,"node"),
-        genesis_diff => quod_prolog:terms_to_diff(source("node_execution.pl") ++
+        genesis_diff => quod_prolog:terms_to_diff(source("node_instance.pl") ++
             [{node_ontology,NodeNs},{instance_of,node,physical_node},{agent_key,physical_node,Pub,active}])}),
     Node = {agent_instance_ref,NodeNs,quod_simplex:genesis_hash(NodeNs),physical_node},
     {ok,NodeBlob} = quod_wire_term:encode_canonical(Node),
@@ -460,9 +474,10 @@ with_responder(Ctx,Base,Human,Fun) ->
     {Responder,_} = quod_lobby_tests:start_namespace(Ns,Base#{
         data_dir => filename:join(Dir,"responder"),
         external_predicate_modules => [quod_agent_predicates],
-        genesis_diff => quod_prolog:terms_to_diff(source("agent_instance.pl") ++ source("gui_question.pl") ++
-            source("gui_instance.pl") ++ source("instrument_configuration.pl") ++
+        genesis_diff => quod_prolog:terms_to_diff(source("agent_instance.pl") ++ source("gui_instance.pl") ++ source("instrument_configuration.pl") ++
             [{can_invoke,{'_'},Human,{'_'},Ns},
+             {can_invoke,{'_'},{node,Pub},{'_'},Ns},
+             {instance_of,{':',quod,{':',agent,agent}},responder},
              {instance_of,instrument,analyzer_a},
              {instrument_configuration,analyzer_a,<<"Baseline">>,hold,20,0,false,[left],<<>>},
              {gui_vocabulary,<<"quod:gui">>,quod_simplex:genesis_hash(<<"quod:gui">>)},
@@ -473,7 +488,7 @@ with_responder(Ctx,Base,Human,Fun) ->
     try
         {ok,ActorBlob} = quod_wire_term:encode_canonical(Actor),
         {ok,Key} = quod_agent_vault:prepare(ActorBlob,0),
-        commit(Ctx,scope(Ns,{goal,{agent_hosted,responder,Node,1,Key}})),
+        commit(Ctx,scope(Ns,{'::',<<"quod:agent">>,{goal,{agent_hosted,Actor,Node,1,Key}}})),
         receive {agent_installed,_,_,#{reference := Actor},_} -> ok
         after 10000 -> error(example_responder_not_installed) end,
         Fun(Actor)
@@ -485,14 +500,19 @@ with_responder(Ctx,Base,Human,Fun) ->
             {ok,Value} -> application:set_env(quod,node_actor_principal,Value) end
     end.
 
-source(Name) -> quod_prolog:read_terms(filename:join(code:priv_dir(quod), "ontologies/" ++ Name)).
+source(Name) ->
+    case Name of
+        "gui_measure.pl" -> quod_ct:gui_terms();
+        "gui_scene.pl" -> quod_ct:gui_terms();
+        "gui_tools.pl" -> quod_ct:gui_terms();
+        "quod_gui.pl" -> quod_ct:gui_terms();
+        _ -> quod_prolog:read_terms(filename:join(code:priv_dir(quod), "ontologies/" ++ Name))
+    end.
+gui(Goal) -> {'::',<<"quod:gui">>,Goal}.
+question_ref(Ns,Q) -> {question_ref,Ns,quod_simplex:genesis_hash(Ns),Q}.
+
 scope(Ns, Goal) -> {'::', Ns, {',', {current_ontology_identity, Ns, quod_simplex:genesis_hash(Ns)}, Goal}}.
 read(Ctx, Ns, Goal) -> quod_lobby_tests:read(Ctx, scope(Ns, Goal)).
 commit(Ctx, Goal) ->
     quod_gui_question_tests:commit(Ctx,Goal).
-assertions(Terms) -> conjunction(quod_ct:source_assertions(Terms)).
-conjunction([Goal]) -> Goal;
-conjunction(Goals) ->
-    {Left, Right} = lists:split(length(Goals) div 2, Goals),
-    {',', conjunction(Left), conjunction(Right)}.
 kinds({component, _, Kind, _, Children}) -> [Kind | lists:append([kinds(C) || C <- Children])].

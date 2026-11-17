@@ -1,0 +1,60 @@
++/- Job: "quod"
++/- Task Group: "quod-cloud" (1 create/destroy update, 1 ignore)
+  +/- Task: "prepare-agent-vault" (forces create/destroy update)
+    +/- Config {
+          args[0]:       "set -eu\numask 077\nmkdir -p \"$QUOD_DATA_DIR\"\nvault_key=\"$QUOD_DATA_DIR/agent-vault.unlock\"\nif [ ! -e \"$vault_key\" ] && [ ! -L \"$vault_key\" ]; then\n  vault_tmp=$(mktemp \"$vault_key.XXXXXX\")\n  trap 'rm -f \"$vault_tmp\"' EXIT\n  openssl rand -out \"$vault_tmp\" 32\n  sync \"$vault_tmp\"\n  ln \"$vault_tmp\" \"$vault_key\"\n  rm \"$vault_tmp\"\n  trap - EXIT\nfi\ntest ! -L \"$vault_key\"\ntest -f \"$vault_key\"\ntest \"$(stat -c '%a:%s' \"$vault_key\")\" = '600:32'\nsync \"$vault_key\" \"$QUOD_DATA_DIR\"\n"
+          entrypoint[0]: "/bin/sh"
+          entrypoint[1]: "-c"
+          force_pull:    "true"
+      +/- image:         "192.168.1.11:5000/quod:0.7.283" => "192.168.1.11:5000/quod:0.7.285"
+        }
+  +/- Task: "quod" (forces create/destroy update)
+    +/- Config {
+          force_pull: "true"
+      +/- image:      "192.168.1.11:5000/quod:0.7.283" => "192.168.1.11:5000/quod:0.7.285"
+          ports[0]:   "p2p"
+          ports[1]:   "metrics"
+          ports[2]:   "explorer"
+          ports[3]:   "client"
+        }
+      Task: "wait-for-peer"
+
++/- Task Group: "quod-node" (1 create/destroy update, 7 ignore)
+  +/- Task: "prepare-agent-vault" (forces create/destroy update)
+    +/- Config {
+          args[0]:       "set -eu\numask 077\nmkdir -p \"$QUOD_DATA_DIR\"\nvault_key=\"$QUOD_DATA_DIR/agent-vault.unlock\"\nif [ ! -e \"$vault_key\" ] && [ ! -L \"$vault_key\" ]; then\n  vault_tmp=$(mktemp \"$vault_key.XXXXXX\")\n  trap 'rm -f \"$vault_tmp\"' EXIT\n  openssl rand -out \"$vault_tmp\" 32\n  sync \"$vault_tmp\"\n  ln \"$vault_tmp\" \"$vault_key\"\n  rm \"$vault_tmp\"\n  trap - EXIT\nfi\ntest ! -L \"$vault_key\"\ntest -f \"$vault_key\"\ntest \"$(stat -c '%a:%s' \"$vault_key\")\" = '600:32'\nsync \"$vault_key\" \"$QUOD_DATA_DIR\"\n"
+          entrypoint[0]: "/bin/sh"
+          entrypoint[1]: "-c"
+          force_pull:    "true"
+      +/- image:         "192.168.1.11:5000/quod:0.7.283" => "192.168.1.11:5000/quod:0.7.285"
+        }
+  +/- Task: "quod" (forces create/destroy update)
+    +/- Config {
+          force_pull: "true"
+      +/- image:      "192.168.1.11:5000/quod:0.7.283" => "192.168.1.11:5000/quod:0.7.285"
+          ports[0]:   "p2p"
+          ports[1]:   "metrics"
+          ports[2]:   "explorer"
+          ports[3]:   "client"
+        }
+  +/- Task: "wait-for-peer" (forces create/destroy update)
+    +/- Config {
+          args[0]:       "if [ -z 'C21E011BC94C7B69AD56A4227BED085EF2FA7C536458A5457C410256C1FD3F5E' ] || [ \"$NOMAD_ALLOC_INDEX\" = 0 ]; then echo 'anchor allocation, no peer required'; exit 0; fi; while :; do while IFS=: read -r H P; do if [ -n \"$H\" ] && [ -n \"$P\" ] && curl -s -o /dev/null --max-time 2 \"http://$H:$P/metrics\"; then echo \"peer reachable at $H:$P\"; exit 0; fi; done < \"$NOMAD_TASK_DIR/peers\"; echo 'no peer reachable yet, sleeping 2s'; sleep 2; done"
+          entrypoint[0]: "/bin/sh"
+          entrypoint[1]: "-c"
+          force_pull:    "true"
+      +/- image:         "192.168.1.11:5000/quod:0.7.283" => "192.168.1.11:5000/quod:0.7.285"
+        }
+
+Scheduler dry-run:
+- All tasks successfully allocated.
+
+Job Modify Index: 936707
+To submit the job with version verification run:
+
+nomad job run -check-index 936707 -var="image_tag=0.7.285" -var="node_count=8" -var="cloud_node_count=2" -var="genesis_hash=C21E011BC94C7B69AD56A4227BED085EF2FA7C536458A5457C410256C1FD3F5E" deploy/quod.nomad
+
+When running the job with the check-index flag, the job will only be run if the
+job modify index given matches the server-side version. If the index has
+changed, another user has modified the job and the plan's results are
+potentially invalid.

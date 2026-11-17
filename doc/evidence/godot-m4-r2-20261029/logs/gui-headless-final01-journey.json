@@ -1,0 +1,33 @@
+{
+  "command": [
+    "python3",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/inputs/gui-headless-final01-drivers/journey.py",
+    "--journey",
+    "gui",
+    "--export",
+    "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final02/source/client/godot/dist/quod.x86_64",
+    "--backend-port",
+    "39509",
+    "--backend-ca",
+    "/home/yan/.cache/quod-m4-r2-artifacts/private/quod-m4-live-gui-headless-final01-server/backend-ca.pem",
+    "--control-port",
+    "46827",
+    "--network",
+    "NEYRoSzbdhy-9qaQ4KpRlGdulJRmRMTNCu1sRwmfnIo",
+    "--evidence",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-r2-20261029/gui-headless-final01",
+    "--private",
+    "/home/yan/.cache/quod-m4-r2-artifacts/private/gui-headless-final01",
+    "--controllers"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T11:27:16Z",
+  "elapsed_seconds": 25.722425937652588,
+  "child_exit": 1,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m4-r2-artifacts/private/logs/gui-headless-final01-journey.log",
+  "raw_sha256": "d6705cf3ee51a55b1240eed16dae81b192910b7c0bef1a59f1a86913ed58437b",
+  "sanitized_sha256": "d6705cf3ee51a55b1240eed16dae81b192910b7c0bef1a59f1a86913ed58437b",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

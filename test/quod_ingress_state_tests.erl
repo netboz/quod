@@ -1,6 +1,7 @@
 -module(quod_ingress_state_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("retired_remaining_sizes.hrl").
 -include("quod_ledger.hrl").
 -include("quod_ingress_limits.hrl").
 
@@ -229,10 +230,10 @@ barrier_future_slot_and_capacity_truth_table_test() ->
          entry, local, Membership, NonEmptyBatch)),
     OversizedChange =
         (tx(<<"oversized">>, B, 0, none))#transaction{
-          goal = binary:copy(<<0>>, ?MAX_BLOCK_BYTES)},
+          goal = binary:copy(<<0>>, ?LEGACY_MAX_BLOCK_BYTES)},
     Oversized = quod_ingress_state:request(OversizedChange),
     ?assertEqual(
-       {reject, too_large},
+       {collect, 4},
        route(
          entry, local, Oversized,
          with_view(B, [A, B], #{}))).
@@ -293,22 +294,20 @@ queue_order_restore_expiry_and_reset_test() ->
     ?assertEqual(0, quod_ingress_state:count(Reset)),
     ?assertEqual(Source, quod_ingress_state:view_source(Reset)).
 
-queue_per_author_bound_test() ->
+queue_preserves_all_authors_test() ->
     [A, B] = validators(),
     Request = request(<<"bounded">>, A, 0, none, false),
     S0 = with_view(B, [A, B], #{}),
     Prepared = prepared(Request, S0),
     S64 = enqueue_n(64, Prepared, S0),
-    ?assertEqual(
-       full,
-       quod_ingress_state:enqueue(
-         local, overflow, Prepared, 65, S64)),
+    {ok, 65, Expanded} = quod_ingress_state:enqueue(
+         local, next, Prepared, 65, S64),
     Other = request(<<"other">>, B, 0, none, false),
-    OtherPrepared = prepared(Other, S64),
-    {ok, 65, S65} =
+    OtherPrepared = prepared(Other, Expanded),
+    {ok, 66, S65} =
         quod_ingress_state:enqueue(
-          local, other, OtherPrepared, 66, S64),
-    ?assertEqual(#{A => 64, B => 1},
+          local, other, OtherPrepared, 66, Expanded),
+    ?assertEqual(#{A => 65, B => 1},
                  maps:get(authors,
                           quod_ingress_state:summary(S65))).
 

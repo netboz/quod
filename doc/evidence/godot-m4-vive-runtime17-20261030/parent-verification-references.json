@@ -1,0 +1,19 @@
+{
+  "scope": "New parent122 verification relayed in the actual complete prefreeze batch; no product/test replay by this worker.",
+  "report_id": "meta-1793390925860-bfzd1tn",
+  "proof_path": "_build/godot-m4-r2-coordinator-20261029/runtime17-closure-check-122.json",
+  "proof_sha256": "2abf9b5dc8eab245a6da65e6b957c671e42a602135b40ce124f2da0a9a66caa3",
+  "parent_reported_errors": [],
+  "parent_cache_path": "_build/godot-m4-r2-coordinator-20261029/runtime17-closure-hashes-122.json",
+  "parent_cache_sha256": "def584a59e8d77b5b7666983528ac4df6ad43f5fca7de341303d6cfc85e44fc3",
+  "parent_cache_records": 115,
+  "cache_not_reused_by_this_small_seal": true,
+  "parent_bounded_status_disposition": {
+    "operation_status": "Sign-in expired; reconnect explicitly.",
+    "world_status": "Space unavailable: Updating authorized view…",
+    "owner_trace": "SignedSession.Sign emits the exact expired-sign-in string when Expires<=Now; preferences withdrawal installs null profiles; the existing Appearance(null) hides models.",
+    "limits": "Snapshot and source facts do not establish complete event order or why every view transition occurred. No automatic reconnect, desktop-focus/hardware/stall cause or policy fix inferred."
+  },
+  "notification_chronology_correction": "After the original GO before19:49:43UTC, parent later invoked its pause notifier once before its final live reply. The earlier no-notifier statement described the original GO, not the full run. Worker sent no live notifier or extra focus. No notifier causation is inferred.",
+  "physical_human_result": "None; parent full-batch comparison confirms no actual human visual answer."
+}

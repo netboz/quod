@@ -1,0 +1,7 @@
+{
+  "client/src/signed-client.js": "99ae6a09009e00afa2440171814c3cb5d3cee92a98cbcb4f08350581286ea3dd",
+  "client/test/signed-client.test.js": "aeae6bbd2de09a2a847cc2510c1023aa2b232a35dce9f096a0bf91dd389e81ff",
+  "client/godot-tests/Program.cs": "454d8e7bdd52ce4b7cd20d6c2ae7ad985eefe31690b06b78053f036409cc13bf",
+  "client/godot-tests/ResourceErrorChecks.cs": "b66ec13195c8555ae22e59654a8f4a445b2d9c6ec7901dd1d46f0b0768e98983",
+  "client/godot/Core/Transport.cs": "43d056bc0e973b40238d08d820146b9db089dc161900b9c6c96f8051c6f64375"
+}

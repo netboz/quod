@@ -1,0 +1,1244 @@
+{
+  "passed": true,
+  "full_M4_or_M5": false,
+  "full_QUO24_or_human_acceptance": false,
+  "worker": "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
+  "actual_model": "openai-codex:gpt-6-astra",
+  "effective_backend_effort": "unexposed",
+  "product": {
+    "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/client-gui-product01-manifest.json",
+    "sha256": "4baa9e2e3e91ef8193b1b02906f2bf841a9f604a9185adc99ffb6f87ffdd36c7",
+    "passed": true,
+    "supplied": 97,
+    "live": 97,
+    "phase_exits": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "diagnostic": {
+    "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/client-gui-usability-final19-manifest.json",
+    "sha256": "81323f63512027a8e9206446e37ffaff766af58befbda856fb4a4bacc7af869a",
+    "passed": true,
+    "supplied": 99,
+    "live": 97,
+    "phase_exits": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "builds": {
+    "gui-layout-baseline05": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/client-gui-layout-baseline05-manifest.json",
+      "sha256": "f432e1628027fe3cc38c6eed05cfef5a460076ef641666ccb8dfbc81e51bc0e7",
+      "passed": true,
+      "supplied": 99,
+      "live": 97,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "gui-product01": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/client-gui-product01-manifest.json",
+      "sha256": "4baa9e2e3e91ef8193b1b02906f2bf841a9f604a9185adc99ffb6f87ffdd36c7",
+      "passed": true,
+      "supplied": 97,
+      "live": 97,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "gui-reveal-diagnostic13": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/client-gui-reveal-diagnostic13-manifest.json",
+      "sha256": "f33f4c6a0c086f48f9c64a7ee370da4abb512a665caf07eb6d756c5f5811481a",
+      "passed": true,
+      "supplied": 99,
+      "live": 97,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "gui-usability-baseline01": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/client-gui-usability-baseline01-manifest.json",
+      "sha256": "e528bf9e5cfc58b9924cc2368c19c0a48f15cd4b884922891ee9b054ce8add8a",
+      "passed": true,
+      "supplied": 98,
+      "live": 97,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "gui-usability-candidate01": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/client-gui-usability-candidate01-manifest.json",
+      "sha256": "823b25d8273fe7ac67c5d0c27a511d78528e0bb87029b4936edd7575ce34d82e",
+      "passed": true,
+      "supplied": 98,
+      "live": 97,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "gui-usability-candidate02": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/client-gui-usability-candidate02-manifest.json",
+      "sha256": "dbf44533a695e011f600be84ed0f898c5fc631205077d220aacc9dec530079c0",
+      "passed": true,
+      "supplied": 98,
+      "live": 97,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "gui-usability-candidate03": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/client-gui-usability-candidate03-manifest.json",
+      "sha256": "7493f1d74282e80132af5bf55f70fff3427f78f71db63d921637c63abcbf14d0",
+      "passed": true,
+      "supplied": 98,
+      "live": 97,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "gui-usability-candidate04": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/client-gui-usability-candidate04-manifest.json",
+      "sha256": "dbf0d0599a6db250e9cf19c1db05151c7f3d300bd74b82fff8459e70aaa78e62",
+      "passed": true,
+      "supplied": 98,
+      "live": 97,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "gui-usability-candidate06": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/client-gui-usability-candidate06-manifest.json",
+      "sha256": "a2c561af0f4b774285d45461cc14c0e4e759bb26f45896fd4291feb673e4a8b3",
+      "passed": true,
+      "supplied": 99,
+      "live": 97,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "gui-usability-candidate07": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/client-gui-usability-candidate07-manifest.json",
+      "sha256": "26b57ffae9dc108d87571060823486602dd51d4d161398913cd3474bb48133ad",
+      "passed": true,
+      "supplied": 99,
+      "live": 97,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "gui-usability-candidate08": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/client-gui-usability-candidate08-manifest.json",
+      "sha256": "1e6cf13f16c2ddaae6a104ffdbfddf532581c1ccfa0540baaeab1f577d407508",
+      "passed": true,
+      "supplied": 99,
+      "live": 97,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "gui-usability-candidate09": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/client-gui-usability-candidate09-manifest.json",
+      "sha256": "d96d51d5844234ed55aae915be6414f8179fe685ae953a5a28fb801ea8b642c2",
+      "passed": true,
+      "supplied": 99,
+      "live": 97,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "gui-usability-candidate10": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/client-gui-usability-candidate10-manifest.json",
+      "sha256": "213033b76199e008b94b8a971fec03cb4c364c159770918ce85ec6713ac26df1",
+      "passed": true,
+      "supplied": 99,
+      "live": 97,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "gui-usability-candidate11": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/client-gui-usability-candidate11-manifest.json",
+      "sha256": "c06f9f1f01c02b902bf00c34909c94e21fcb830f6fd1c613dfc177692b05661d",
+      "passed": true,
+      "supplied": 99,
+      "live": 97,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "gui-usability-candidate12": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/client-gui-usability-candidate12-manifest.json",
+      "sha256": "9bfe5ab34b924a7c476c1df67885c2c661703e4264a29dea261969aa283e987d",
+      "passed": true,
+      "supplied": 99,
+      "live": 97,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "gui-usability-candidate14": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/client-gui-usability-candidate14-manifest.json",
+      "sha256": "c98160c08a5e4c421992c19c24a6d45eaf6296b9c14e532c64bf077b058a10fc",
+      "passed": true,
+      "supplied": 99,
+      "live": 97,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "gui-usability-final15": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/client-gui-usability-final15-manifest.json",
+      "sha256": "497e9df775cb90c51018b6a30ac6d224b6fc3f85175c1cc1d34ff32da548f36b",
+      "passed": true,
+      "supplied": 99,
+      "live": 97,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "gui-usability-final16": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/client-gui-usability-final16-manifest.json",
+      "sha256": "fb3ad28f0b657be6c3595b49fea1e6d6d59b4fd899fbafb9d59858bc19f2de20",
+      "passed": true,
+      "supplied": 99,
+      "live": 97,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "gui-usability-final17": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/client-gui-usability-final17-manifest.json",
+      "sha256": "bfe4c41a35bd54d8d709a62a7de7c7bfc1c1dea9603ac698be9bcfa9b0aed508",
+      "passed": true,
+      "supplied": 99,
+      "live": 97,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "gui-usability-final18": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/client-gui-usability-final18-manifest.json",
+      "sha256": "5867b1a62baaf9e536f434e772a593be0962ae15f6fb5b983a5092018c0b30d6",
+      "passed": true,
+      "supplied": 99,
+      "live": 97,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "gui-usability-final19": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-gui-usability-20261101/inputs/client-gui-usability-final19-manifest.json",
+      "sha256": "81323f63512027a8e9206446e37ffaff766af58befbda856fb4a4bacc7af869a",
+      "passed": true,
+      "supplied": 99,
+      "live": 97,
+      "phase_exits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "selected": {
+    "controls": {
+      "label": "gui-controls15-render",
+      "checks": 59,
+      "client_exit": 0,
+      "EOF": {
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "receipt_sha256": "c7771c914f4955829f755e002d38b09f6d3dec8e8fc364b5af8ba71763cff9e7",
+      "executed_manifest": "gui-usability-final15",
+      "reused_production_differences": [
+        "client/godot/OperationsPanel.cs",
+        "client/godot/README.md"
+      ]
+    },
+    "layout": {
+      "label": "gui-layout15-render",
+      "checks": 13,
+      "client_exit": 0,
+      "EOF": {
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "receipt_sha256": "3336e35fe6b162e63750674c1a6a128bd6817aebaee458d21260710147e60ee0",
+      "executed_manifest": "gui-usability-final15",
+      "reused_production_differences": [
+        "client/godot/OperationsPanel.cs",
+        "client/godot/README.md"
+      ]
+    },
+    "workspace": {
+      "label": "gui-workspace15-render",
+      "checks": 47,
+      "client_exit": 0,
+      "EOF": {
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "receipt_sha256": "a2bff855838c32d27cc3d8968184f20bc370fc54234ddd90dc281509824690a9",
+      "executed_manifest": "gui-usability-final15",
+      "reused_production_differences": [
+        "client/godot/OperationsPanel.cs",
+        "client/godot/README.md"
+      ]
+    },
+    "outcomes": {
+      "label": "gui-outcomes19-render",
+      "checks": 24,
+      "client_exit": 0,
+      "EOF": {
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "receipt_sha256": "4b4e2e71127f644a58c952a128ac4c268da2c2b2beddb922a81d0d0fef3a7a29",
+      "executed_manifest": "gui-usability-final19",
+      "reused_production_differences": []
+    },
+    "signed": {
+      "label": "gui-signed18",
+      "checks": 63,
+      "true_exits": {
+        "server": 0,
+        "client-gui-signed": 0
+      },
+      "EOF": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-gui-signed-stdout": true,
+        "client-gui-signed-stderr": true
+      },
+      "report_sha256": "063a37e197269980b6e3d8e021252ebbcbf7b8de9a00ee4b2ee74041595cd9d0",
+      "host_input_count": 0,
+      "executed_manifest": "gui-usability-final18",
+      "later_product_delta": "received-outcome wording only; native display cases separately qualified",
+      "reused_production_differences": [
+        "client/godot/OperationsPanel.cs"
+      ]
+    }
+  },
+  "true_wrapper_outcomes": {
+    "gui-baseline01-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "a92b9773655acb4f6002543804b3ded6f12b630f7c87571ea8f5e6e615c3b01c",
+      "diagnostic_failure": false
+    },
+    "gui-candidate01-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "0c0f63a362b3caac14a2a503f9949e4437b80bd0f5264190681869c929bde4fb",
+      "diagnostic_failure": false
+    },
+    "gui-candidate01-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "703cfc2d47d4a94b186bfb5c5616b589a8f8d9023ac367ff0e38ad506531f6f4",
+      "diagnostic_failure": false
+    },
+    "gui-candidate02-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "7975a5f8866171301b2f115ebf33aefbe8c5b5e0886b38721710e76ea6a576d8",
+      "diagnostic_failure": false
+    },
+    "gui-candidate02-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "02bc19d51303a2fb2b9fad598583f0cde782ff457b0625d6ef01e199c67e803e",
+      "diagnostic_failure": false
+    },
+    "gui-candidate03-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "7032d886983db7b55cb6000a15c5decf0209aca8f5ca7c96b28e5088516eef2d",
+      "diagnostic_failure": false
+    },
+    "gui-candidate03-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "d1facc35361728bdebb6ab45cefe04f1b62b33f3f24fa34986bc6689dc87de93",
+      "diagnostic_failure": false
+    },
+    "gui-candidate04-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "8b39281b70409795b805cc33b82d2f083ca013fe8a91be2331b675bfca8f0d3f",
+      "diagnostic_failure": false
+    },
+    "gui-candidate04-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "cf096ac74860db0040a9854f9d964df0be9a0b4b499c5db04c35cc5be457141b",
+      "diagnostic_failure": false
+    },
+    "gui-candidate06-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "a95bc5fd0324bd44a73715158e755ccd2adf443b0711ead935c9465bc816a145",
+      "diagnostic_failure": false
+    },
+    "gui-candidate07-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "50240909782266968fcab41bce46f42251fc1f91f90364017bfe81a0b184fa44",
+      "diagnostic_failure": false
+    },
+    "gui-candidate07-render-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "b5c9890862e19180ced166a552b51822f53165ad3522b70b5b2e1b572cfa26ea",
+      "diagnostic_failure": false
+    },
+    "gui-candidate08-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "04a79c6860ebfb21e193e69f81593ab8341031ce1663824441b2d06ef1cdc316",
+      "diagnostic_failure": false
+    },
+    "gui-candidate09-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "c93623e60119908a356a94eb88fca7794e52ad81e9902849c0d2d391d15bc8a4",
+      "diagnostic_failure": false
+    },
+    "gui-candidate10-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "5f51e6bc5c19e5df2863c0a51fe6434611d5ff418a49ad496c10a37775dc78ee",
+      "diagnostic_failure": false
+    },
+    "gui-candidate11-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "5fa89c84d9979ce1a45987baf7d1d84967ecdb9bc93b92b173748b1284ca4dc3",
+      "diagnostic_failure": false
+    },
+    "gui-candidate12-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "c36234405de00b9b68a9962cf8003cd59f63fbf461ed9b08d972c3bf8547a50b",
+      "diagnostic_failure": false
+    },
+    "gui-controls15-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "ff64abc6d110f04cad252c5882dca9d947183dafbb6a4cbe8debcc66db56d4b1",
+      "diagnostic_failure": false
+    },
+    "gui-layout-baseline05-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "b2db8a9c465653e2a95caa87d029d189060846e443b90ded05ea2b0b9dbf6e45",
+      "diagnostic_failure": false
+    },
+    "gui-layout-baseline05-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "cc1da2d172933fe35a215ad1add52b61ec1d63fcec3d19bb86cbcac26b965530",
+      "diagnostic_failure": false
+    },
+    "gui-layout-baseline05-export": {
+      "true_exit": 0,
+      "receipt_sha256": "a372b2e83197926d0e196bf71ad05a9fddceb644f641302bdc1e43b76dd3cc65",
+      "diagnostic_failure": false
+    },
+    "gui-layout-baseline05-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "77b85d417f0f2f9dceeea5e4683877a3ee6eaa3d92c05057424602ecf85e059c",
+      "diagnostic_failure": false
+    },
+    "gui-layout-baseline05-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "a92dc27a3c0b9491192a253864a8fc0b636da255c57b8eb352b189583b8fddf2",
+      "diagnostic_failure": false
+    },
+    "gui-layout-baseline05-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "c0b49051403436f2a8c4115219340d20612abaefd4be7cdbb20b0c7e79e83c24",
+      "diagnostic_failure": false
+    },
+    "gui-layout-baseline05-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "1a588192806fc6d7601f9b338650b258bd5529265bfd92bd57e32d4ba8c6e47b",
+      "diagnostic_failure": false
+    },
+    "gui-layout-final06-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "4c1561f46a017234afab92481bd94506876086904917a19c6f30325eb4b87c38",
+      "diagnostic_failure": false
+    },
+    "gui-layout15-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "74b3e492eba0ab69f4761f61ffe1d7088070eea8a3e6f2ed84333a7e4ab0c503",
+      "diagnostic_failure": false
+    },
+    "gui-outcomes19-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "ba476d15bf90f30184d60fdbff92917cd50982eb442f5e0add1acb0df54016d7",
+      "diagnostic_failure": false
+    },
+    "gui-product01-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "0c386bea7a68200994f19661815004d46bcf7d6491507a049007209edc3bb0f6",
+      "diagnostic_failure": false
+    },
+    "gui-product01-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "52caa8feebc7e8955ed4ce8dfdc6ca33a62f0fbb37e57ae90908a0d573ace7cf",
+      "diagnostic_failure": false
+    },
+    "gui-product01-export": {
+      "true_exit": 0,
+      "receipt_sha256": "a4dc817d503c8f0bbc1361d406cd88f242e44df5531f38b98016870899c923f1",
+      "diagnostic_failure": false
+    },
+    "gui-product01-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "2c96be912ba2aa1d5fe92582fcdf7d523399d08bcaf63e86c5de6836dd59e12c",
+      "diagnostic_failure": false
+    },
+    "gui-product01-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "7990e00e7c987aae23aa9a9dce07f49f8709ed5c42ef3fe65dd6d580753b70ee",
+      "diagnostic_failure": false
+    },
+    "gui-product01-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "281723e92619f2eb585f26104a93d3fb87eb277bd075973a8080c5bd75b1d8cd",
+      "diagnostic_failure": false
+    },
+    "gui-reveal-diagnostic13-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "35ad64fbba4e352939f774c7dee5920faacabebb0eb0f590890c339bc8a61628",
+      "diagnostic_failure": false
+    },
+    "gui-reveal-diagnostic13-export": {
+      "true_exit": 0,
+      "receipt_sha256": "6f9b3b0c1652fcf74afa48e54acf0454a6f4f78edabe86dcb51841fcb79d0cd5",
+      "diagnostic_failure": false
+    },
+    "gui-reveal-diagnostic13-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "ed91e21b12d7289ba163ef7efc47ffcb408f174e1364bd06de1cbc81e4a5e826",
+      "diagnostic_failure": false
+    },
+    "gui-reveal-diagnostic13-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "a60b95f76912a8f0142e15ec56f644f0001588d1b4d0de09a9025c82756be1d9",
+      "diagnostic_failure": false
+    },
+    "gui-reveal-diagnostic13-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "ee11e4dae299538b0a2d8ab10b887911a765b841849ad14ae95cb782e297c3ec",
+      "diagnostic_failure": false
+    },
+    "gui-reveal13-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "e39f8d38e2c5d24256ea6bc4643132b1a17978e2a205fa9a4371fa63e5749c80",
+      "diagnostic_failure": false
+    },
+    "gui-signed06-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "242b9b60e2a158e674744dba22635404e9ae47972f27c069b34d49f5111b61d9",
+      "diagnostic_failure": false
+    },
+    "gui-signed07-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "35660aa0598e4c102d976e4effe13cdead52388ecaf6c1d2fa7db7ea30d285cb",
+      "diagnostic_failure": false
+    },
+    "gui-signed08-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "c310d5ee858628d14b170f7c0f70fe2f9192959ce1422e6a73e486922ff1e538",
+      "diagnostic_failure": false
+    },
+    "gui-signed09-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "ec58a346a807841205d664f9e0df04bc0c3a5c2a7c38695da4222d011ba46ed5",
+      "diagnostic_failure": false
+    },
+    "gui-signed10-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "2bed22369478947da0039a15de545ad1d9da541ea4f9cf5fea37fa2964a624fc",
+      "diagnostic_failure": false
+    },
+    "gui-signed11-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "11eff4adfb5b07a0e5040e63da75abb66e22e92c7403bf12cae0f64e90e92213",
+      "diagnostic_failure": false
+    },
+    "gui-signed12-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "a88c4bba27f9cde8c571e9b9a50ca3a0a7a7ac0ef797aaf5fabb06d24d992aa7",
+      "diagnostic_failure": false
+    },
+    "gui-signed13-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "369d903ef9ca7468968ea3565f132330b837fd151bbcc43426bb33ad51cea4b2",
+      "diagnostic_failure": false
+    },
+    "gui-signed14-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "0272dd58317125c782c3d91838085d048d8f768eead517135372444fc907432c",
+      "diagnostic_failure": false
+    },
+    "gui-signed15-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "0c0d3a60ebce27ae16d55f25afcac5aa5d057e7588e1088c0ae08fbfff5bc463",
+      "diagnostic_failure": false
+    },
+    "gui-signed17-wrapper": {
+      "true_exit": 1,
+      "receipt_sha256": "4aba23fe037f82f985119b370564f631e83ee38e95ceeb97a1b9d441d8bd7930",
+      "diagnostic_failure": false
+    },
+    "gui-signed18-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "a71961d21e43be6b045ab7e52a100c37fada7015a30ee50817b6f94d14f4ddd3",
+      "diagnostic_failure": false
+    },
+    "gui-usability-baseline01-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "84321ff4422a95bf18a017c679d4aa8c04f30058f5170fd656ea44e39d3278e7",
+      "diagnostic_failure": false
+    },
+    "gui-usability-baseline01-export": {
+      "true_exit": 0,
+      "receipt_sha256": "bc3a9b1117db9d5e9c59f3f3c9a5ef69621e388216ab7ccff4c05fab2b4e0366",
+      "diagnostic_failure": false
+    },
+    "gui-usability-baseline01-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "abcd4a9267780d39d6af2f526c418fdc64b96d5f7e028cb248a14ecde2e3e489",
+      "diagnostic_failure": false
+    },
+    "gui-usability-baseline01-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "fb5b0c8eb1bd967b8444c928c11712c04a52e1a39b7d651b166314cb3e02a4db",
+      "diagnostic_failure": false
+    },
+    "gui-usability-baseline01-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "555c3c2966f8cdf910237f647fbf33cfe2c4f963e3bf4233d67e80a86c548097",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate01-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "4422f1cf3e7991e17dcaa89f410d02cc1f046c331db2fd23ff12c3776a527a72",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate01-export": {
+      "true_exit": 0,
+      "receipt_sha256": "be72b66d52934ced1af74c40b995f4c4236edf8aadd131e7f84bf34afd03b38c",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate01-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "3795420d6fef061ac6dc60a7778f2d5c147edf3b310f0d9d6da70617dc5af588",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate01-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "4af9bd4bcca0495f494a55f57462bd35e5802314f2622c7098b92341f4cedd62",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate01-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "1d3e5140771ead26feaf48911232afac9d62ef83084b977d31f3c489ece4f45b",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate02-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "cbd947ac80946423911d87bc7f563343d0a65a7f109da38b749cd65387783381",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate02-export": {
+      "true_exit": 0,
+      "receipt_sha256": "6148c86398f110edcf43b7ccdea2b61e2df2bc52c4dddb358d4e154b77b73491",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate02-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "7cb333ef2e6d018e8981ee351264d892425fd4424bfda5b8051d3b382bdcbefd",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate02-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "95912e2ac67b77aaf729bcf92997a433e6fa057ff5335417743495a36a26de25",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate02-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "e62524145313b470b0f230b8c2ce43567b7f13de7a7e70b8c02395e5959389a0",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate03-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "7319069ce4f4ec6e6b3aeee210510c5c826506849df0a20d9402b39b9547abe9",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate03-export": {
+      "true_exit": 0,
+      "receipt_sha256": "991077d458c7a4b12b103b8e4931b7eb0dae1d62f8a0a8f085c4ee28c64e5fd1",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate03-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "7bc27f9952e0820888d8f089a0c0447111a6921aefdd2e129d75836c8521d743",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate03-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "0b12bd26225391c2457c349a39328dde2e66255d97b81b365b229bffe3283f11",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate03-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "59445876ce5cf3fb74db769a00a83397b37bc9a0aeea9327380588d2c38308fe",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate04-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "7c65e248ffe783e7a6defb9b655380df1b7d430daafea1f20a3a40e557cc3487",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate04-export": {
+      "true_exit": 0,
+      "receipt_sha256": "f7ea14cbf916fe58f02a939d3d591e74be20a8b0c4be6f9958a8718add830b5f",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate04-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "d953d61abb5f903de0d7887e5c745761f407cd6eb336bcf6788917973d030c1f",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate04-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "3156d6b973d86c1accd880ee11724f34bf55db4d511dafa44c7149bd558b3b70",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate04-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "826ecdaf1bae8e0f88919372cb6a84143de3df7f73039427425d829a099b7e7a",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate06-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "62595665b2b7bb01e38e04b92c22bea6d898e2511ff1c25f88cd8de0f35cf97b",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate06-export": {
+      "true_exit": 0,
+      "receipt_sha256": "a32d31ad66fc3f110cbd4d4ccb24484eee86213936431666e61c28300998dddf",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate06-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "2d4e6fbd26224236e1254610a1ac3714ff33350221f3fc9267723c735878d741",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate06-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "9cb5b1fb5fe217cf67793f34ec5b89d447e1484ed5904fe2e43cc27e8c076b9b",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate06-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "ac771ebcf84e673ff6a65a46d77317a39bcdbbff04f0ae5aaf182b3c7e52bdf7",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate07-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "bcad4e2d335165082dd931a774e2aa01750bfc122e8c2babd25e8ca953642a12",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate07-export": {
+      "true_exit": 0,
+      "receipt_sha256": "e04d002fa7a5ea16dabf186093f610f09f030a2aab4ac66e25cba9d578d71de6",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate07-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "e2ef60f5e40603039bede11ec151367eb47040593088bb8b0858d85041f09297",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate07-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "45edbeb4348197de8a01f4790a7d3e22cba0a9dde013bd4bcebd5f518d5ee4c0",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate07-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "b709b2af33c2d0c851b3cbb830e5eab12f27f961335a584fdb13ecc86a7e50bb",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate08-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "349065548e80a35108121ed8a7312b338793d19eb4127187747714c919027fff",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate08-export": {
+      "true_exit": 0,
+      "receipt_sha256": "477cf57fbca2bbd22e371f01ed190b2ddfb2b4445580a2883fa661f714fa063a",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate08-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "e5890d6a688a4ab40f8eacf8d843b8aba44ea9b1a6f25731322c128356eb9097",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate08-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "61894b8a40dfcafeb1423b7547b9ee2df05575875b797362babdf1c3f18ed875",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate08-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "c5341862fe54e4e3d3c45646155c99ee0e0d8e188059bf3fe03ee155d327de90",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate09-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "ce07eff3c5eadd46464c801a2984c6087f2b4f210abd9174a62a0318f1b402e7",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate09-export": {
+      "true_exit": 0,
+      "receipt_sha256": "f5031a494a7839d45f6092585037d6bdd92c8a60be083e4a5dc335fbadf1272a",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate09-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "40a49ae857db40c2dda8ffafc5f6746a1f1364c15d5843f7429cfca5ecd41266",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate09-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "6418e56f265f6a16da64ca852bcc07462230f0dacb224d37aeaa17d611685dab",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate09-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "fe74ad985fa10532c2deeb042c5477d79261bc118521873e40f831e4fac57df5",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate10-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "0d1406dfa8b9a7124f14353462cde8ee3c6bcbcb81b5f3d7faa0bb785b2d782e",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate10-export": {
+      "true_exit": 0,
+      "receipt_sha256": "5b48b3345dead91fcb2903cd7c0049f9efde7a5ea8c7c17af99affc5820548f9",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate10-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "600ed229c9ada61b30c04617fc4f649784792328e2052aeb82d2fbe5a53cac35",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate10-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "9ca0ae9b69a042ca916a216d187ae6f469cd43cd54e4a2e709825fab45eb4d26",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate10-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "5991ae406b3c75016c77869cfe762ce86cdd1789b80bdaac8b41a26e2a825eab",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate11-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "c27d540a6bf7458ce247239421d8540021ae74f3e321479a5cd52d5b58cc460f",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate11-export": {
+      "true_exit": 0,
+      "receipt_sha256": "b3df0bd0d3aade3433b7c51dadcbdc2e7e1a69415f0a0276dfe7bb2d061cb0c6",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate11-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "5191250e1ad46e1063bfd23ce3633bad49391212c6cb3b08c59731518a7f237d",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate11-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "f4dcb4935515b2feda204e27c818031120702fb2df70dcdc66af4d9a369b0e89",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate11-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "2e9cc15bde976cf9598965a39c955fd7190d822d829586f683863ce860c264f8",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate12-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "b28dcfe08a914213cb936d47cb7feb579b1867b4540f990bc24078ec40091cb5",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate12-export": {
+      "true_exit": 0,
+      "receipt_sha256": "049ceb3b5a3c6656a38f542fbc7ef5cc098c2b382cb9ed087ff1d99414318cf7",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate12-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "cf5ca7b79e52d6ee9aaa300a88b5e1ba30a8eec517ddb9d2eaaa793adac8178a",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate12-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "887df060e07dfae5e491383e8e0f6b414a971cbc542bf70b2e9597561ba7caa1",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate12-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "9c421b0bc5581339cc2a20d6a42011528adc9625c7c7bb4e3a7e1a603531d424",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate14-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "0c7b13e464882dcd56ceea97522afc7e93795e733e79e35a6b7cbdf1f401a16a",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate14-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "c9a89bc0771de10106cd3812e1b85196473a11d6aaad81e96391777538b95764",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate14-export": {
+      "true_exit": 0,
+      "receipt_sha256": "196ab23ec36d5688e7ecce03eaa1248195f562349b93b3cea5a13a7e6c5df777",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate14-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "d2b56b089973932cfc6308ceb9b1625f859be30536d6218e487677d4ed37b9d4",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate14-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "1488adac068b83b9432e1fa0f4b4d74c5e67fc206974eb2afbd51648fa2dcbc3",
+      "diagnostic_failure": false
+    },
+    "gui-usability-candidate14-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "f371cb1f3076635dfa83bacf2a2e8ef4728771ba271f30f3ac8f429cca40ed06",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final15-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "534fdc31994f641db6350faed8f0e041146a9bb3bd44baf5d3a61b99b8068b0a",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final15-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "dc40fa5f3e474d7441f0cca9327a4dcbe280879447e887a86b707523d2ed26ac",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final15-export": {
+      "true_exit": 0,
+      "receipt_sha256": "ee64d828c58e84f9b02cffce52761baa03dc7e932ee45163612c544164e196fb",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final15-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "3b364a453643065b21752ba132e99c0ad43021d6e4b40cc9283ab2273394badc",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final15-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "4ded8d0583e59715a05a71c5599308d8b228823db49009ab163a6860f7bf16b0",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final15-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "8016d5934b91221c6e1b7ea80c6c30a89558f99d1707c1257e87a3d3a77a9172",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final16-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "baf1d9166a0a9264c71f62bed4349eeb8cf989b5510b4a87631f5e56b3593f51",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final16-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "2d4fae12d7cecd90a0d9fe31bef9a0877c3bb28f529dfaff1ae389f79efefc31",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final16-export": {
+      "true_exit": 0,
+      "receipt_sha256": "39d56ec729b83ec523818aa898bb6da706097594828362855478d2706683e0d5",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final16-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "81b3cf263f24a6d46de2772d3352f6c555e3accc05254ecb817f5930e5feb19e",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final16-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "c62965c73e42df32aaf4d3d82e456f6892b84393b19912921b555d674b40cf1b",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final16-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "884e160c5c29a5c53ca0c945c031e89f2b4636d5ce9794ae4d42eaa90d72bee9",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final17-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "80a59c3f97f611dd0308255aeeab508df7f83451ec4a0e909f8fe1b662cb1665",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final17-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "3398aaf5da0bb779c3992bbaedc084ef5f36dabff6523da4ded14689455183bd",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final17-export": {
+      "true_exit": 0,
+      "receipt_sha256": "ca5938fe34ff22a26a2151021d6cc0de8743087d0d0a2df6c13cbcc76e25f64f",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final17-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "e9e41dfdba4dea822cc7e8f5e5435aa375247d04f5eac608cf019cca4613cef3",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final17-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "83da23cdc076a4866ef8f7047cc2c0a2795096560aa4edf3a1b7a7b2e76f4128",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final17-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "aeacd59433b56ab156995a18ff97dc90071fbd824ad9c2fb5158666a2564e8ed",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final18-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "34980002c503b302de366f9f5835284300334a2efecac7737ace7f2ccfa5ec6e",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final18-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "5b247118b48900eecd2763e170c6bed54243a0475aacf5b14a7c0272ee8837a5",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final18-export": {
+      "true_exit": 0,
+      "receipt_sha256": "3369d6cdefaf7e5bb4cc6e6036b2e993c2f8580de9fe087b7c740b82ef9bd07b",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final18-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "1497f29b0b7b5cbee927c9e9ac0046420b1afa9fc02e6256ca404a400d823f78",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final18-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "51cc9b55191b23efbc2522130b67cbdb39cdad4f56b93ac7b4dcbfef26c69e21",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final18-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "738737d8389d1bccaba8a8e9ed986c3e21cbd0d98138100e7e6c9477c293da31",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final19-bootstrap": {
+      "true_exit": 0,
+      "receipt_sha256": "042beea50da669b63e4bc81fbc8838cacb30671fdcfbdf061a32ff5521c5c564",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final19-build-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "e2717342e4e75e606e14051ae33d5b4393bc8323ec1e8ee23d8b8c6a0a63102f",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final19-export": {
+      "true_exit": 0,
+      "receipt_sha256": "1fa373187be7abe61082e043702a26388015c5d94c3dca4685936699c7c1a20c",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final19-restore-debug": {
+      "true_exit": 0,
+      "receipt_sha256": "9c4d2a4f8bd64bd8972418d5b8377503c6f6f4ee03d936bc7e95d85c170a8205",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final19-restore-exportrelease": {
+      "true_exit": 0,
+      "receipt_sha256": "534d5260621a12aab0c955c3221f3ca2d1dd113a67b6d69d096c56165e2cd999",
+      "diagnostic_failure": false
+    },
+    "gui-usability-final19-toolchain": {
+      "true_exit": 0,
+      "receipt_sha256": "f2f3d3ae99d380c6899fc07eb56f1ef8841f4bef9a344201c3cf035ad6ecc192",
+      "diagnostic_failure": false
+    },
+    "gui-workspace15-wrapper": {
+      "true_exit": 0,
+      "receipt_sha256": "1e0c1c21daf4b3ecc795f802f562e4f962b30898b1b247e3015bf171fed439aa",
+      "diagnostic_failure": false
+    }
+  },
+  "source_delta": {
+    "client/godot/Main.cs": {
+      "before_path": "doc/evidence/godot-gui-usability-20261101/inputs/before/client/godot/Main.cs",
+      "before_sha256": "83b05d1fe87febb569da3305dd1817fcfcf068849f023672dd55089c5feba110",
+      "after_sha256": "75b0e0f659d59e30482a23ffbe90792bb4ee9ad72355d41c3057470e8899f18a",
+      "full_mode": 33188
+    },
+    "client/godot/SpatialGui.cs": {
+      "before_path": "doc/evidence/godot-gui-usability-20261101/inputs/before/client/godot/SpatialGui.cs",
+      "before_sha256": "094838a2f23dd7efe014c66877d438a97a7308eba5ba26aa7248fb5773fd4320",
+      "after_sha256": "4f88460313b9a498bae6f2ba728cbf8a7d0dd39d51f05055378cf9eb469dad29",
+      "full_mode": 33188
+    },
+    "client/godot/FormPanel.cs": {
+      "before_path": "doc/evidence/godot-gui-usability-20261101/inputs/before/client/godot/FormPanel.cs",
+      "before_sha256": "2b9de7f8f880c4c723869503f4477c30a95d5ee9d74f4c227971c03204262874",
+      "after_sha256": "1d50d0f762bfcbdc125f9191303e6c4c2741376da9f5567954591bbfc99115c5",
+      "full_mode": 33188
+    },
+    "client/godot/OperationsPanel.cs": {
+      "before_path": "doc/evidence/godot-gui-usability-20261101/inputs/before/client/godot/OperationsPanel.cs",
+      "before_sha256": "ec4725f9a80fa373f82fea86a719c69def8e0e763771b560602456b83ee0a79a",
+      "after_sha256": "53358fa41212d1f2ecb789db833eea3c4c58fb9b5ef2d8d641ceed11fa1ecd4f",
+      "full_mode": 33188
+    },
+    "client/godot/EidolonPanel.cs": {
+      "before_path": "doc/evidence/godot-gui-usability-20261101/inputs/before/client/godot/EidolonPanel.cs",
+      "before_sha256": "cb1b43008114f0116f1a36529c7289809f99c913da0de719b7ce2b0d8438f7ff",
+      "after_sha256": "2fb92744dc3c77f3abc3efcb9f6477873c8568b148dbdfa84311204c600f2e80",
+      "full_mode": 33188
+    },
+    "client/godot/SourcePanel.cs": {
+      "before_path": "doc/evidence/godot-gui-usability-20261101/inputs/before/client/godot/SourcePanel.cs",
+      "before_sha256": "5adc26e32fa97e05bd42461d7b1b6a6d6c1eb61afc652165a1b6a4ca603f4072",
+      "after_sha256": "dd72023f26b0007d7e1880201e4098bc6707b625269096c419acb486e9bcaf19",
+      "full_mode": 33188
+    },
+    "client/godot/README.md": {
+      "before_path": "doc/evidence/godot-gui-usability-20261101/inputs/before/client/godot/README.md",
+      "before_sha256": "d3eb072854d3d08a6db5c66a6310d87b0466818b55009bd9e8e1bbb4198b3f9a",
+      "after_sha256": "8c576bb9bf8090c48e1848270867044251b7a589678f1e45859462b45c4995a0",
+      "full_mode": 33188
+    }
+  },
+  "line_delta": {
+    "client/godot/Main.cs": {
+      "added": 37,
+      "removed": 24
+    },
+    "client/godot/SpatialGui.cs": {
+      "added": 79,
+      "removed": 12
+    },
+    "client/godot/FormPanel.cs": {
+      "added": 14,
+      "removed": 11
+    },
+    "client/godot/OperationsPanel.cs": {
+      "added": 38,
+      "removed": 26
+    },
+    "client/godot/EidolonPanel.cs": {
+      "added": 7,
+      "removed": 7
+    },
+    "client/godot/SourcePanel.cs": {
+      "added": 1,
+      "removed": 1
+    },
+    "client/godot/README.md": {
+      "added": 18,
+      "removed": 4
+    }
+  },
+  "old_package_rebuilt": false,
+  "old_API_bytes_read": 0,
+  "commit_or_push": false,
+  "review_started": false,
+  "source_sharing_consent": "coordinator-owned; pending at last instruction",
+  "server": "unchanged accepted policy/wire/space owners; fresh disposable signed fixture",
+  "input_scope": "setup uses Control signals; measured native pointer/keyboard events stay inside the app; zero host input or native XR",
+  "digest_cache": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/gui-qualification01/computed-hashes.json",
+    "sha256": "728574f7f12ed648912eb94fd81c5cbbce61a9d6ea1863ad3894154b6994f798"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "observations": [
+    "CONTENTS_RENEWAL_RECEIPT 0",
+    "RENEWAL_MS 13483",
+    "RENEWAL_WORK {\"work\":{\"calls\":[],\"watched\":[[\"quod_foreign_projection\",\"start_monitor\",4],[\"quod_committed_projection\",\"apply_entry\",3],[\"quod_physics_native\",\"install\",3],[\"quod_physics_native\",\"install_hinges\",2],[\"quod_physics_native\",\"new_world\",3],[\"quod_ledger_store\",\"fold\",5],[\"quod_ledger_store\",\"open\",3],[\"file\",\"write\",2],[\"file\",\"pwrite\",3],[\"file\",\"sync\",1],[\"file\",\"datasync\",1]]},\"catalogue_calls\":857}",
+    "CONTENTS_RENEWAL_RECEIPT 1",
+    "RENEWAL_MS 13404",
+    "RENEWAL_WORK {\"work\":{\"calls\":[],\"watched\":[[\"quod_foreign_projection\",\"start_monitor\",4],[\"quod_committed_projection\",\"apply_entry\",3],[\"quod_physics_native\",\"install\",3],[\"quod_physics_native\",\"install_hinges\",2],[\"quod_physics_native\",\"new_world\",3],[\"quod_ledger_store\",\"fold\",5],[\"quod_ledger_store\",\"open\",3],[\"file\",\"write\",2],[\"file\",\"pwrite\",3],[\"file\",\"sync\",1],[\"file\",\"datasync\",1]]},\"catalogue_calls\":857}",
+    "CONTENTS_RENEWAL_RECEIPT 2",
+    "RENEWAL_MS 13509",
+    "RENEWAL_WORK {\"work\":{\"calls\":[],\"watched\":[[\"quod_foreign_projection\",\"start_monitor\",4],[\"quod_committed_projection\",\"apply_entry\",3],[\"quod_physics_native\",\"install\",3],[\"quod_physics_native\",\"install_hinges\",2],[\"quod_physics_native\",\"new_world\",3],[\"quod_ledger_store\",\"fold\",5],[\"quod_ledger_store\",\"open\",3],[\"file\",\"write\",2],[\"file\",\"pwrite\",3],[\"file\",\"sync\",1],[\"file\",\"datasync\",1]]},\"catalogue_calls\":857}"
+  ],
+  "aggregate30_second_campaign": "signed05 remains failed",
+  "observer_scope": "each of three operations has its own unchanged30s observer; same retained consumer; overall driver180s and signed deadlines unchanged"
+}

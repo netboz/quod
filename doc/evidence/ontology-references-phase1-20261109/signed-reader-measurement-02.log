@@ -1,0 +1,2 @@
+Exit 0. Reconstructed the pre-Phase-1 production tree from HEAD and before.patch, with test exclusions first.
+{"phase1": {"added": 483, "removed": 251, "net": 232}, "cumulative": {"added": 641, "removed": 441, "net": 200}, "measured": "2026-11-09T15:59:34.771042+00:00"}

@@ -1,0 +1,154 @@
+{
+  "_build/default/lib/erlog/src/erlog_int.erl": {
+    "sha256": "3d24510c60da34323a9bc02ed2fea8fbee4bf9e2c1426fd35b8c233069b8ed0c",
+    "bytes": 62011
+  },
+  "_build/default/lib/erlog/src/erlog_int.hrl": {
+    "sha256": "833233fb56b7d28f19251484354e870b1aca9458c4ee7a9ac45ed53ba4fee707",
+    "bytes": 2774
+  },
+  "_build/default/lib/erlog/test/erlog_failure_reasons_tests.erl": {
+    "sha256": "b7070200ca0ba93f3ab50d56c7cb4417bae203dd17ca267d69001e20f177cb19",
+    "bytes": 8115
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/STATUS.md": {
+    "sha256": "1898a98888cc58041200298b4d9d898d678046d57d73aa87f646e616c7fd23e5",
+    "bytes": 1842
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/attached-repository-before-status.txt": {
+    "sha256": "817b85ed76d3fb4b556c758068717c09fb834abc468c727803a29cfcd5a2e9e0",
+    "bytes": 40
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/checkout-result.json": {
+    "sha256": "6af9025a2f36623d217af3273fa6a99d7e3531ca88ad23b607d7ad4f7df9c30c",
+    "bytes": 175
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/checkout-stderr.log": {
+    "sha256": "7bbbd39e0e0a1b4f90ed3163c1bc4405a5aa7567c56f1147acad2071b7693a93",
+    "bytes": 237
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/checkout-stdout.log": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/checkout02-result.json": {
+    "sha256": "08232ba3b616a91a2d7266d62fa75fe15540b408ad42c370a1e71311292e84f5",
+    "bytes": 718
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/checkout02-stderr.log": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/checkout02-stdout.log": {
+    "sha256": "ebd4ab40ded326f608de39927371bbb6a9a0f4f4efd1c81c12e8a02dad0ce0a9",
+    "bytes": 47
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/commit-result.json": {
+    "sha256": "e771156cea3967b99411a3d837709b631e91b39caf3ad5f97e04b1a33427883e",
+    "bytes": 354
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/copy-result.json": {
+    "sha256": "39e067e74cd90e4e36818cf105777ecd1dd66ce41775384c4e3ed71f6f283873",
+    "bytes": 744
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/dependency-pin.patch": {
+    "sha256": "555b8f4a9dd44c3633d838df067e7cd9fc22790d0915f3e8e8e5690e4e54b178",
+    "bytes": 1447
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/fetch-result.json": {
+    "sha256": "1601f32d3f02ec4717535f237eb80a360aa14020e95acc6ccfd785669045cdb5",
+    "bytes": 472
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/fetch-stderr.log": {
+    "sha256": "9cec655baff3d0c5dde7a0f443023f604ce13d4d1ad37e692a2f1ffdb29b14a3",
+    "bytes": 199
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/fetch-stdout.log": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/final-verification.json": {
+    "sha256": "5f3ed39da738a5796d00cd35404f25f99ede4c1f99b1a057df9e3278b94d69b3",
+    "bytes": 571
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/pin-application.json": {
+    "sha256": "b2811e46e0bea633d24a73ec28ff46ad6aab40fcf37d9ba676b24289f1731046",
+    "bytes": 1385
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/pin-syntax-result.json": {
+    "sha256": "01b6d50fbe8e6de23eb35e9545d5af40f2ecc7799d92db11d90540c97e862693",
+    "bytes": 283
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/pin-syntax-stderr.log": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/pin-syntax-stdout.log": {
+    "sha256": "ca906b97df06a72169b8d3af74eee7673e40ff4ed4fcad71a67b4330caebaef2",
+    "bytes": 44
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/preflight.json": {
+    "sha256": "6cc59fd7b90f8e5d73513c2cf72f132d69016924cffe67c2244a5208c7133a5d",
+    "bytes": 1074
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/publication-authorization02.json": {
+    "sha256": "b2254ded6fa3be5fd1cc948dd1c9da88db867d7a5984b3068d1ce374108ec0e1",
+    "bytes": 587
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/push-rejection01.json": {
+    "sha256": "ab5665c05c77c9c852d2c32b02c2ebe26df4d6206b896af23e8027969a6f9481",
+    "bytes": 491
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/push-result.json": {
+    "sha256": "e73247400112a0c47f2bc8f47e3b97c3b84f54303c003050dd2239030be4fd29",
+    "bytes": 267
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/push-stderr.log": {
+    "sha256": "5b47fb8b1586bb1048ec1303b8fa669fa3b1ac8979309d308ba3e8c955460577",
+    "bytes": 347
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/push-stdout.log": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/rebar.config.after": {
+    "sha256": "836055f6c4cb2f6c6104c2cc3bdea6af690b1f35f1f8adb4b4abe06b1040e83f",
+    "bytes": 3620
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/rebar.config.before": {
+    "sha256": "91e7bdd0c9fd62c423cb04cea5c089db3df615666b899c093864c43ef0d4ce5a",
+    "bytes": 3612
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/rebar.lock.after": {
+    "sha256": "fdd34e230c409c23c1a5de1bcd1ad2c8a1a40ef18f9925816c3e97f4b983ff58",
+    "bytes": 5401
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/rebar.lock.before": {
+    "sha256": "09f364a859950d3cf2aeece1e56c14f8fd6cbbd4b7cda2a4de4e83888b9df01b",
+    "bytes": 5401
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/remote-verification-stderr.log": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "doc/evidence/stage2-remaining-admission-20261103/publication01/remote-verification-stdout.log": {
+    "sha256": "683fe4fa015f2e34a581bf7c46aae6709c44acce850718381469f53792971bd1",
+    "bytes": 84
+  },
+  "nimbalyst-local/handoffs/stage2-d5-reconciliation-20261103.md": {
+    "sha256": "a169451660d94417450e18a04a9ffa4c0d4fe028111308df17b68c50b313c05b",
+    "bytes": 85143
+  },
+  "nimbalyst-local/plans/space-conceptual-architecture-review.md": {
+    "sha256": "f4027c42b0fda9c89beb0db60a1503c62931d0a5fe0c7f0b13295f2099b75155",
+    "bytes": 140286
+  },
+  "rebar.config": {
+    "sha256": "836055f6c4cb2f6c6104c2cc3bdea6af690b1f35f1f8adb4b4abe06b1040e83f",
+    "bytes": 3620
+  },
+  "rebar.lock": {
+    "sha256": "fdd34e230c409c23c1a5de1bcd1ad2c8a1a40ef18f9925816c3e97f4b983ff58",
+    "bytes": 5401
+  }
+}

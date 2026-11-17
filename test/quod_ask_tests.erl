@@ -23,10 +23,6 @@ remote_route_errors_retry_only_before_execution_test() ->
        quod_ask:test_remote_open_error(
          Target, {not_allowed, Target})),
     ?assertEqual(
-       {retry, {scope_limit_exceeded, 16}},
-       quod_ask:test_remote_open_error(
-         Target, {scope_limit_exceeded, 16})),
-    ?assertEqual(
        {fatal, {protocol_error, event_sequence}},
        quod_ask:test_remote_open_error(
          Target, {protocol_error, event_sequence})),
@@ -53,6 +49,19 @@ remote_route_errors_retry_only_before_execution_test() ->
        First,
        quod_ask:test_remember_route_error(
          First, {ontology_rebuilding, Target})).
+
+remote_policy_refusals_are_fatal_and_keep_their_reason_test() ->
+    Target = <<"quod:policy-refusal">>,
+    lists:foreach(fun(Reason) ->
+        ?assertEqual({fatal, Reason}, quod_ask:test_remote_open_error(Target, Reason))
+    end, [{material_limit, proof, heap_bytes, 4096, 0},
+          {invalid_material_policy, proof}]),
+    lists:foreach(fun(Reason) ->
+        ?assertEqual({fatal, {protocol_error, proof_engine}},
+                     quod_ask:test_remote_open_error(Target, Reason))
+    end, [{material_limit, proof, private_resource, 4096, 0},
+          {material_limit, proof, heap_bytes, 0, 4096},
+          {invalid_material_policy, private_kind}, {material_limit}]).
 
 pending_router_death_is_reported_at_each_opening_wait_test() ->
     Target = <<"quod:router-death">>,
@@ -609,7 +618,10 @@ signed_read_dependencies_test_() ->
         {timeout,30,fun() ->
             {ok,Network} = quod_ontology:network_identity(),
             BA = quod_simplex:genesis_hash(B), CA = quod_simplex:genesis_hash(C),
-            lists:foreach(fun(Text) ->
+            Trace = trace:session_create(signed_read_dependencies,self(),[]),
+            trace:function(Trace,{quod_scope_session,read_set,1},true,[local]),
+            trace:process(Trace,all,true,[call]),
+            try lists:foreach(fun(Text) ->
                 F = quod_ct:signed_goal_fixture(#{mode => read,network => Network,
                     target => {B,BA},goal_text => Text}),
                 [KeyFact] = quod_ct:signed_agent_facts(F),
@@ -617,13 +629,22 @@ signed_read_dependencies_test_() ->
                 BH = quod_prolog:applied(B), CH = quod_prolog:applied(C),
                 #{goal := Frozen} = maps:get(evidence,F),
                 {ok,Goal} = quod_wire_term:materialize_symbols(Frozen),
-                {read,Deps,_} = quod_prolog:execute_signed(
-                    maps:get(evidence,F),Goal,maps:get(principal,F)),
-                ?assertEqual([{B,BA,BH},{C,CA,CH}],Deps)
+                lists:foreach(fun(_) ->
+                    {read,Deps,_} = quod_prolog:execute_signed(
+                        maps:get(evidence,F),Goal,maps:get(principal,F)),
+                    ?assertEqual([{B,BA,BH,[]},{C,CA,CH,[]}],Deps)
+                end,[first,unchanged])
             end,[<<"chain_c::true.">>,<<"(chain_c::true, fail).">>,
                   <<"((chain_c::true, fail); true).">>,
                   <<"chain_c::assertz(read_must_not_write).">>]),
-            ?assertMatch({fail,_},prove(C,read_must_not_write))
+            ?assertMatch({fail,_},prove(C,read_must_not_write)),
+            Delivered = trace:delivered(Trace,all),
+            receive {trace_delivered,all,Delivered} -> ok
+            after 5000 -> error(read_trace_not_delivered) end,
+            receive {trace,_,call,{quod_scope_session,read_set,_}} ->
+                error(ordinary_read_fetched_predicate_versions)
+            after 0 -> ok end
+            after trace:session_destroy(Trace) end
         end}
     end}.
 
@@ -827,9 +848,7 @@ t_cut_follow_dedup_does_not_cross_invocations(
                             empty_selection()),
         assert_scope_reply(Handle, FirstOpen, {opened, First}),
         {ok, FirstNext} = quod_scope_session:invoke_next(Handle, First, 1),
-        ?assertEqual(
-           {solution, 1, Follow, false, false},
-           receive_scope_reply(Handle, FirstNext)),
+        assert_scope_solution(Handle, FirstNext, 1, Follow, #{}),
 
         {ok, SecondOpen} = quod_scope_session:invoke_open(
                              Handle, Second, Follow, Chain,
@@ -837,9 +856,7 @@ t_cut_follow_dedup_does_not_cross_invocations(
         assert_scope_reply(Handle, SecondOpen, {opened, Second}),
         {ok, SecondNext} = quod_scope_session:invoke_next(
                              Handle, Second, 1),
-        ?assertEqual(
-           {solution, 1, Follow, false, false},
-           receive_scope_reply(Handle, SecondNext))
+        assert_scope_solution(Handle, SecondNext, 1, Follow, #{})
     after
         ok = quod_scope_session:invoke_cancel(Handle, First),
         ok = quod_scope_session:invoke_cancel(Handle, Second),
@@ -1143,8 +1160,7 @@ t_scope_session_binding(#{animals := A}) ->
                      receive_scope_reply(Handle, WrongSeqRef)),
         {ok, NextRef} = quod_scope_session:invoke_next(
                           Handle, InvocationId, 1),
-        ?assertMatch({solution, 1, {diet, cat, fish}, false, false},
-                     receive_scope_reply(Handle, NextRef)),
+        assert_scope_solution(Handle, NextRef, 1, Goal, #{'D' => fish}),
         ok = quod_scope_session:invoke_cancel(Handle, InvocationId),
         ?assertEqual(Height,quod_prolog:applied(A)),
         ?assertMatch({ok,[_],_},prove(A,{assertz,{scope_height_advanced,true}})),
@@ -1277,6 +1293,13 @@ assert_scope_reply(
   Handle,
   RequestRef, Expected) ->
     ?assertEqual(Expected, receive_scope_reply(Handle, RequestRef)).
+
+assert_scope_solution(Handle, Ref, Sequence, Goal, Expected) ->
+    {solution, Sequence, Answer, false, false} = receive_scope_reply(Handle, Ref),
+    {ok, Bindings} = quod_ask:test_bind_answer(Goal, Answer),
+    maps:foreach(fun(Name, Value) ->
+        ?assertEqual(Value, erlog_int:dderef({Name}, Bindings))
+    end, Expected).
 
 assert_no_scope_reply(Pid, ProofId, SessionRef) ->
     receive
@@ -1466,16 +1489,14 @@ t_frozen_scope_view(#{animals := A, pets := P}) ->
         assert_scope_reply(Handle, OpenRef, {opened, InvocationId}),
         {ok, FirstRef} = quod_scope_session:invoke_next(
                            Handle, InvocationId, 1),
-        ?assertMatch(
-           {solution, 1, {diet, dog, kibble}, false, false},
-           receive_scope_reply(Handle, FirstRef)),
+        assert_scope_solution(Handle, FirstRef, 1,
+                              {diet, dog, {'D'}}, #{'D' => kibble}),
         ?assertMatch({ok, [_], _},
                      prove(A, {assertz, {diet, dog, tofu}})),
         {ok, SecondRef} = quod_scope_session:invoke_next(
                             Handle, InvocationId, 2),
-        ?assertMatch(
-           {solution, 2, {diet, dog, meat}, false, false},
-           receive_scope_reply(Handle, SecondRef)),
+        assert_scope_solution(Handle, SecondRef, 2,
+                              {diet, dog, {'D'}}, #{'D' => meat}),
         {ok, CompleteRef} = quod_scope_session:invoke_next(
                               Handle, InvocationId, 3),
         ?assertMatch(
@@ -1520,7 +1541,8 @@ write_ontology(Dir, Name, Contents) ->
 
 start_ns(Ns, File, Dir) ->
     {Ns, Cfg} = quod_app:build_ns_config(#{namespace => Ns, mode => create,
-                    genesis_file => File, data_dir => list_to_binary(Dir), seeds => []}),
+                    genesis_file => File, data_dir => list_to_binary(Dir), seeds => [],
+                    max_scope_workers => 64}),
     {ok, Pid} = quod_ns:start_link(Ns, Cfg),
     unlink(Pid),
     Ns.
@@ -1558,28 +1580,24 @@ invocation_id(N) -> <<N:128>>.
 
 scope_id(N) -> <<N:128>>.
 
-%% A remote completion carries the target's failure stack, bounded by the
-%% target under the wire contract and decoded here with every foreign atom
-%% wrapped as an opaque symbol. Such a stack can exceed Erlog's native
-%% external-size cap while staying inside the canonical cap it was built
-%% against; the completion check must judge it by the wire contract.
-checked_completion_accepts_wire_bounded_symbol_stacks_test() ->
-    Stack = wire_bounded_symbol_stack(),
+%% Foreign symbol wrappers retain exact reasons at both native admission and
+%% wire delivery. The historical external-size threshold is fixture data only.
+checked_completion_accepts_large_symbol_stacks_test() ->
+    Stack = large_symbol_stack(),
     ?assert(quod_wire_term:valid_failure_reason_stack(Stack)),
     ?assert(erlang:external_size(Stack) > 32768),
-    ?assertEqual(error, erlog_int:merge_failure_reasons(Stack, #est{})),
+    ?assertMatch({ok, #est{fail_reasons = Stack}},
+                 erlog_int:merge_failure_reasons(Stack, #est{})),
     ?assertEqual({complete, Stack}, quod_ask:checked_completion(Stack)),
-    %% Anything the wire contract refuses is still refused.
+    Large = [{{'$quod_symbol', <<"large">>},
+              binary:copy(<<"x">>, 5000)} | Stack],
+    ?assertEqual({complete, Large}, quod_ask:checked_completion(Large)),
     ?assertEqual(error, quod_ask:checked_completion([{f, {'X'}}])),
-    ?assertEqual(error, quod_ask:checked_completion(
-                          [{{'$quod_symbol', <<"oversized">>},
-                            binary:copy(<<"x">>, 5000)} | Stack])),
+    ?assertEqual(error, quod_ask:checked_completion([self()])),
+    ?assertEqual(error, quod_ask:checked_completion([valid | improper])),
     ?assertEqual(error, quod_ask:checked_completion(not_a_stack)).
 
-%% The largest stack of wrapped-symbol goals the wire contract accepts: each
-%% reason is one frozen predicate call whose functor and arguments are
-%% symbols the asking node never allocated as atoms.
-wire_bounded_symbol_stack() ->
+large_symbol_stack() ->
     Reason = fun(I) ->
                      Name = iolist_to_binary(io_lib:format("pool_frame_~4..0B", [I])),
                      {{'$quod_symbol', Name},
@@ -1587,11 +1605,4 @@ wire_bounded_symbol_stack() ->
                       {'$quod_symbol', <<"personal">>}, I,
                       [{'$quod_symbol', <<"element">>} || _ <- lists:seq(1, 6)]}
              end,
-    grow_stack([Reason(I) || I <- lists:seq(1, 255)], []).
-
-grow_stack([], Acc) -> lists:reverse(Acc);
-grow_stack([R | Rest], Acc) ->
-    case quod_wire_term:valid_failure_reason_stack(lists:reverse([R | Acc])) of
-        true -> grow_stack(Rest, [R | Acc]);
-        false -> lists:reverse(Acc)
-    end.
+    [Reason(I) || I <- lists:seq(1, 255)].

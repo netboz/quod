@@ -14,6 +14,10 @@ runtime APIs; callers do not need a console-specific representation.
 -export([flatten/1]).
 
 -spec flatten(term()) -> binary() | error.
+flatten({'$quod_symbol', B}) when is_binary(B) ->
+    B;
+flatten({{'$quod_symbol', <<":">>}, L, R}) ->
+    flatten({':', L, R});
 flatten(A) when is_atom(A) ->
     atom_to_binary(A, utf8);
 flatten(B) when is_binary(B) ->

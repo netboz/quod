@@ -1,0 +1,34 @@
+{
+  "first_done": {
+    "respondedAt": 1793269772195,
+    "answer": "Done: all six press/release"
+  },
+  "second_done": {
+    "respondedAt": 1793270465809,
+    "answer": "Done: repeated all six"
+  },
+  "interactive_done": {
+    "respondedAt": 1793271106886,
+    "answer": "Doe, but at second controller I swapped grip and touchpad order"
+  },
+  "component_order_required": false,
+  "placement": "table",
+  "headset_pixels_observed": false,
+  "interactive04_done": {
+    "respondedAt": 1793271614716,
+    "answer": "Done: both side grips"
+  },
+  "interactive04_tool_cell": 138,
+  "head_step_first_question": {
+    "cancelled": true,
+    "respondedAt": 1793273297623
+  },
+  "head_step_resumed": {
+    "respondedAt": 1793273379976,
+    "answer": "Done but for some reason headset led is red"
+  },
+  "canonical_grip_step": {
+    "respondedAt": 1793274357784,
+    "answer": "Done: both wands"
+  }
+}

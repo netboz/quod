@@ -1,0 +1,10 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_catchup_tests: terminal_frame_lookahead_preserves_every_part_test...[0.011 s] ok
+quod_catchup_tests: -era_paged_transfer_verifies_once_then_appends_the_complete_staged_group_test_/0-fun-24-...[0.516 s] ok
+=======================================================
+  2 tests passed.

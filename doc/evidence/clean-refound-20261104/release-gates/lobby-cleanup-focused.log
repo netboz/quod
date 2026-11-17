@@ -1,0 +1,75 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_lobby_tests: -authored_space_composition_preserves_world_test_/0-fun-8-...*failed*
+in function quod_lobby_tests:'-authored_space_composition_preserves_world_test_/0-fun-8-'/0 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_lobby_tests.erl, line 48)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+in call from eunit_proc:run_group/2 (eunit_proc.erl, line 593)
+**error:{badmatch,
+    {fail,
+        [{'::',<<"lobby-test-personal">>,
+             {',',
+                 {current_ontology_identity,<<"lobby-test-personal">>,
+                     <<"¿;åW§Èú3as©N²1"...>>},
+                 {world_view,personal_lobby,playing,unbound}}},
+         {current_ontology_identity,<<"lobby-test-personal">>,
+             <<"¿;åW§Èú3as©N²1"...>>},
+         {world_view,personal_lobby,playing,unbound},
+         {nonvar,unbound},
+         {space_projection,personal_lobby,playing,unbound,unbound},
+         {nonvar,unbound},
+         {nonvar,unbound},
+         {space_instance,personal_lobby,space},
+         {sort,[{instance,personal_lobby,space}],unbound},
+         {member,{instance,personal_lobby,space},[{instance,...}]},
+         {member,{instance,personal_lobby,...},[]},
+         {current_ontology_identity,unbound,unbound},
+         {entity_eidolons,personal_lobby,...},
+         {nonvar,...},
+         {...}|...]}}
+  output:<<"">>
+
+quod_lobby_tests: -inactive_physics_source_authoring_preserves_world_test_/0-fun-20-...*failed*
+in function quod_lobby_tests:'-inactive_physics_source_authoring_preserves_world_test_/0-fun-20-'/0 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_lobby_tests.erl, line 121)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+in call from eunit_proc:run_group/2 (eunit_proc.erl, line 593)
+**error:{badmatch,
+    {fail,
+        [{'::',<<"lobby-test-personal">>,
+             {',',
+                 {current_ontology_identity,<<"lobby-test-personal">>,
+                     <<206,126,153,218,80,172,...>>},
+                 {world_view,personal_lobby,playing,unbound}}},
+         {current_ontology_identity,<<"lobby-test-personal">>,
+             <<206,126,153,218,80,172,229,183,41,31,...>>},
+         {world_view,personal_lobby,playing,unbound},
+         {nonvar,unbound},
+         {space_projection,personal_lobby,playing,unbound,unbound},
+         {nonvar,unbound},
+         {nonvar,unbound},
+         {space_instance,personal_lobby,space},
+         {sort,[{instance,personal_lobby,space}],unbound},
+         {member,{instance,personal_lobby,space},[{instance,...}]},
+         {member,{instance,personal_lobby,...},[]},
+         {current_ontology_identity,unbound,unbound},
+         {entity_eidolons,personal_lobby,...},
+         {nonvar,...},
+         {...}|...]}}
+  output:<<"">>
+
+=======================================================
+  Failed: 2.  Skipped: 0.  Passed: 0.
+===> Error running tests

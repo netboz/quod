@@ -1,0 +1,63 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<title>Test quod_agent_failover_SUITE:uncertain_claim_recovers_after_target_restart result</title>
+<meta http-equiv="cache-control" content="no-cache"></meta>
+<meta http-equiv="content-type" content="text/html; charset=utf-8"></meta>
+<link rel="stylesheet" href="../../ct_default.css" type="text/css"></link>
+<script type="text/javascript" src="../../jquery-latest.js"></script>
+<script type="text/javascript" src="../../jquery-migrate.js"></script>
+<script type="text/javascript" src="../../jquery.tablesorter.min.js"></script>
+</head>
+<body>
+
+<a name="top"></a><pre>
+=== Test case: <a href="quod_agent_failover_suite.src.html#uncertain_claim_recovers_after_target_restart-1">quod_agent_failover_SUITE:uncertain_claim_recovers_after_target_restart/1</a> (click for source code)
+
+=== Config value:
+
+    [{watchdog,&lt;0.8514.0&gt;},
+     {tc_logfile,"/work/_build/test/logs/ct_run.nonode@nohost.2026-10-28_20.17.16/lib.quod.logs/run.2026-10-28_20.17.16/quod_agent_failover_suite.uncertain_claim_recovers_after_target_restart.html"},
+     {tc_group_properties,[{suite,quod_agent_failover_SUITE}]},
+     {tc_group_path,[]},
+     {data_dir,"/work/_build/test/lib/quod/test/quod_agent_failover_SUITE_data/"},
+     {priv_dir,"/work/_build/test/logs/ct_run.nonode@nohost.2026-10-28_20.17.16/lib.quod.logs/run.2026-10-28_20.17.16/log_private/"}]
+
+=== Current directory is "/work/_build/test/logs/ct_run.nonode@nohost.2026-10-28_20.17.16"
+
+=== Started at 2026-10-28 20:21:36
+
+<br />
+=WARNING REPORT==== 28-Oct-2026::20:21:45.632393 ===
+quod[agent:failover]: no download contact — Brahms sample empty and no non-self seed (isolated node? seeds=[] node_addr={"127.0.0.1",
+                                                                                                                         43498})
+
+=WARNING REPORT==== 28-Oct-2026::20:22:21.814299 ===
+quod: client-visible outcome_unknown producer=target_execute cause=engine_result kind=operation namespace=&lt;&lt;"failover-node-2"&gt;&gt; id=aaf3e8812da197b359fe74c694e57a4e6ae0d04cf88082ecd25f4c8c9aee3364
+
+
+</pre>
+<div class="default"><pre><b>*** User 2026-10-28 20:22:27.856 ***</b><a id=e-12 class="link-to-entry" href="#e-12">&#x1f517;</a>
+Original operation completed after custody expiry; restart=true, target height=3
+</pre></div>
+<pre>
+<a name="end"></a>
+
+
+=== Ended at 2026-10-28 20:22:27
+=== successfully completed test case
+=== === Returned value: ok
+</pre>
+<center>
+<br /><hr /><p>
+<a href="../../../all_runs.html">Test run history
+</a>  |  <a href="../../../index.html">Top level test index
+</a>  |  <a href="../../../suite.log.latest.html">Latest test result</a>
+</p>
+<div class="copyright">Copyright &copy; 2026 <a href="http://www.erlang.org">Open Telecom Platform</a><br />
+Updated: <!--date-->Wed Oct 28 2026 20:21:36<!--/date--><br />
+</div>
+</center>
+</body>
+</html>

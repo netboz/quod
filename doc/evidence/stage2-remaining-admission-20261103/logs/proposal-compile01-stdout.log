@@ -1,0 +1,66 @@
+/checks/source/src/quod_foreign_log.erl:5661:87: Warning: variable 'Height' is unused
+% 5661|                       Root, FetchFun, PageTimeout, Cursor = #verified_cursor{height = Height}) ->
+%     |                                                                                       ^
+
+/checks/source/src/quod_wire_term.erl:416:51: Warning: variable 'Owner' is unused
+%  416| collect_goal_symbols({'$quod_symbol', Name}, Acc, Owner) when is_binary(Name) ->
+%     |                                                   ^
+
+/checks/source/src/quod_wire_term.erl:418:35: Warning: variable 'Owner' is unused
+%  418| collect_goal_symbols(Tuple, _Acc, Owner)
+%     |                                   ^
+
+/checks/source/src/quod_wire_term.erl:447:34: Warning: variable 'Owner' is unused
+%  447| collect_goal_symbols(_Goal, Acc, Owner) ->
+%     |                                  ^
+
+/checks/source/src/quod_wire_term.erl:480:51: Warning: variable 'Owner' is unused
+%  480| collect_opaque_goal_positions(_Name, _Tuple, Acc, Owner) ->
+%     |                                                   ^
+
+/checks/source/src/quod_wire_term.erl:489:48: Warning: variable 'Owner' is unused
+%  489| collect_clause_symbol(_Tuple, _Position, _Acc, Owner) ->
+%     |                                                ^
+
+/checks/source/src/quod_wire_term.erl:516:41: Warning: variable 'Owner' is unused
+%  516| collect_goal_positions(_Tuple, [], Acc, Owner) ->
+%     |                                         ^
+
+/checks/source/src/quod_wire_term.erl:529:46: Warning: variable 'Owner' is unused
+%  529| replace_goal_symbols({'$quod_symbol', Name}, Owner) ->
+%     |                                              ^
+
+/checks/source/src/quod_wire_term.erl:558:28: Warning: variable 'Owner' is unused
+%  558| replace_goal_symbols(Goal, Owner) ->
+%     |                            ^
+
+/checks/source/src/quod_wire_term.erl:564:41: Warning: variable 'Owner' is unused
+%  564| replace_clause_symbol(Tuple, _Position, Owner) ->
+%     |                                         ^
+
+[{"_build/default/lib/erlog/src/erlog_int.erl",{ok,erlog_int}},
+ {"src/predicates/quod_committee_predicates.erl",
+  {ok,quod_committee_predicates}},
+ {"src/quod_agent_identity.erl",{ok,quod_agent_identity}},
+ {"src/quod_agent_ref.erl",{ok,quod_agent_ref}},
+ {"src/quod_atomic_admission.erl",{ok,quod_atomic_admission}},
+ {"src/quod_catchup.erl",{ok,quod_catchup}},
+ {"src/quod_client_auth.erl",{ok,quod_client_auth}},
+ {"src/quod_dtx.erl",{ok,quod_dtx}},
+ {"src/quod_dtx_coordinator.erl",{ok,quod_dtx_coordinator}},
+ {"src/quod_dtx_current_view.erl",{ok,quod_dtx_current_view}},
+ {"src/quod_dtx_endpoint.erl",{ok,quod_dtx_endpoint}},
+ {"src/quod_feed.erl",{ok,quod_feed}},
+ {"src/quod_foreign_log.erl",{ok,quod_foreign_log}},
+ {"src/quod_foreign_projection.erl",{ok,quod_foreign_projection}},
+ {"src/quod_ingress_state.erl",{ok,quod_ingress_state}},
+ {"src/quod_ledger_store.erl",{ok,quod_ledger_store}},
+ {"src/quod_link.erl",{ok,quod_link}},
+ {"src/quod_metrics.erl",{ok,quod_metrics}},
+ {"src/quod_ontology.erl",{ok,quod_ontology}},
+ {"src/quod_quorum.erl",{ok,quod_quorum}},
+ {"src/quod_scope_wire.erl",{ok,quod_scope_wire}},
+ {"src/quod_signing_journal.erl",{ok,quod_signing_journal}},
+ {"src/quod_simplex.erl",{ok,quod_simplex}},
+ {"src/quod_transaction.erl",{ok,quod_transaction}},
+ {"src/quod_wire_term.erl",{ok,quod_wire_term}}]

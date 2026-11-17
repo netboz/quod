@@ -1,0 +1,7 @@
+{
+  "qualified_manifest_sha256": "c10b589143cb23d54ff4605a07c3602f842650efb8d92c140d688d0e6869b649",
+  "compiled_outputs_checked": 2053,
+  "mismatches": [],
+  "runtime_source_changed": false,
+  "reuse": "M1a frozen qualification, no unchanged server gate campaign rerun"
+}

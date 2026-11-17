@@ -1,0 +1,12 @@
+369996 getrandom("<redacted entropy>", 16, GRND_NONBLOCK) = 16
+369996 getrandom("<redacted entropy>", 8, GRND_NONBLOCK) = 8
+369996 getrandom("<redacted entropy>", 32, 0) = 32
+369997 getrandom("<redacted entropy>", 16, GRND_NONBLOCK) = 16
+369997 getrandom("<redacted entropy>", 8, GRND_NONBLOCK) = 8
+369999 getrandom("<redacted entropy>", 16, GRND_NONBLOCK) = 16
+369999 getrandom("<redacted entropy>", 8, GRND_NONBLOCK) = 8
+369997 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=369999, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+369996 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=369997, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+369996 getrandom("<redacted entropy>"..., 128, 0) = 128
+369996 getrandom("<redacted entropy>"..., 128, 0) = 128
+369996 getrandom("<redacted entropy>"..., 48, 0) = 48

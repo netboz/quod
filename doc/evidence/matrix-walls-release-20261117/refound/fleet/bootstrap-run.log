@@ -1,0 +1,44 @@
+
+
+==> View this job in the Web UI: http://192.168.1.10:4646/ui/jobs/quod@default
+
+==> 2026-11-17T00:58:45+01:00: Monitoring evaluation "3d16aa53"
+    2026-11-17T00:58:45+01:00: Evaluation triggered by job "quod"
+    2026-11-17T00:58:46+01:00: Evaluation within deployment: "7d7a6e0f"
+    2026-11-17T00:58:46+01:00: Allocation "a01a409b" created: node "3e390ebd", group "quod-node"
+    2026-11-17T00:58:46+01:00: Evaluation status changed: "pending" -> "complete"
+==> 2026-11-17T00:58:46+01:00: Evaluation "3d16aa53" finished with status "complete"
+==> 2026-11-17T00:58:46+01:00: Monitoring deployment "7d7a6e0f"
+    
+2026-11-17T00:58:46+01:00
+ID          = 7d7a6e0f
+Job ID      = quod
+Job Version = 275
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-node   1        1       0        0          2026-11-17T01:18:45+01:00
+    
+2026-11-17T00:58:59+01:00
+ID          = 7d7a6e0f
+Job ID      = quod
+Job Version = 275
+Status      = running
+Description = Deployment is running
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-node   1        1       1        0          2026-11-17T01:18:58+01:00
+    
+2026-11-17T00:59:01+01:00
+ID          = 7d7a6e0f
+Job ID      = quod
+Job Version = 275
+Status      = successful
+Description = Deployment completed successfully
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-node   1        1       1        0          2026-11-17T01:18:58+01:00

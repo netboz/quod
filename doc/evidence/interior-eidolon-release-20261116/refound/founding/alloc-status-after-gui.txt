@@ -1,0 +1,92 @@
+ID                  = 94fe14bc-900a-d77b-7bed-7ca2b1d8a617
+Eval ID             = d61d5e32
+Name                = quod.quod-node[0]
+Node ID             = 3e390ebd
+Node Name           = conrad
+Job ID              = quod
+Job Version         = 272
+Client Status       = pending
+Client Description  = No tasks have started
+Desired Status      = run
+Desired Description = <none>
+Created             = 46s ago
+Modified            = 13s ago
+Deployment ID       = 42790302
+Deployment Health   = healthy
+
+Allocation Addresses (mode = "bridge"):
+Label      Dynamic  Address
+*p2p       yes      192.168.1.10:23820 -> 14567
+*metrics   yes      192.168.1.10:20057 -> 14568
+*explorer  yes      192.168.1.10:22934 -> 14569
+*client    yes      192.168.1.10:25406 -> 14570
+
+Task "prepare-agent-vault" (prestart) is "dead"
+Task Resources:
+CPU      Memory  Disk     Addresses
+100 MHz  32 MiB  300 MiB  
+
+Host Volumes:
+ID         Read Only
+quod-data  false
+
+Task Events:
+Started At     = 2026-11-16T19:35:35Z
+Finished At    = 2026-11-16T19:35:35Z
+Total Restarts = 0
+Last Restart   = N/A
+
+Recent Events:
+Time                       Type        Description
+2026-11-16T20:35:35+01:00  Terminated  Exit Code: 0
+2026-11-16T20:35:35+01:00  Started     Task started by client
+2026-11-16T20:35:31+01:00  Driver      Downloading image
+2026-11-16T20:35:31+01:00  Task Setup  Building Task Directory
+2026-11-16T20:35:31+01:00  Received    Task received by client
+
+Task "wait-for-peer" (prestart) is "dead"
+Task Resources:
+CPU      Memory  Disk     Addresses
+100 MHz  32 MiB  300 MiB  
+
+Task Events:
+Started At     = 2026-11-16T19:35:35Z
+Finished At    = 2026-11-16T19:35:35Z
+Total Restarts = 0
+Last Restart   = N/A
+
+Recent Events:
+Time                       Type        Description
+2026-11-16T20:35:35+01:00  Terminated  Exit Code: 0
+2026-11-16T20:35:35+01:00  Started     Task started by client
+2026-11-16T20:35:32+01:00  Driver      Downloading image
+2026-11-16T20:35:31+01:00  Task Setup  Building Task Directory
+2026-11-16T20:35:31+01:00  Received    Task received by client
+
+Task "quod" is "pending"
+Task Resources:
+CPU           Memory           Disk     Addresses
+3342/500 MHz  511 MiB/512 MiB  300 MiB  
+              Max: 1.0 GiB              
+
+Host Volumes:
+ID         Read Only
+quod-data  false
+
+Task Events:
+Started At     = 2026-11-16T19:35:35Z
+Finished At    = N/A
+Total Restarts = 1
+Last Restart   = 2026-11-16T20:36:04+01:00
+
+Recent Events:
+Time                       Type        Description
+2026-11-16T20:36:04+01:00  Restarting  Task restarting in 17.348882079s
+2026-11-16T20:36:04+01:00  Terminated  Exit Code: 137, Exit Message: "OOM Killed"
+2026-11-16T20:35:35+01:00  Started     Task started by client
+2026-11-16T20:35:35+01:00  Driver      Downloading image
+2026-11-16T20:35:35+01:00  Task Setup  Building Task Directory
+2026-11-16T20:35:31+01:00  Received    Task received by client
+
+
+==> View allocation details in the Web UI: http://192.168.1.10:4646/ui/allocations/94fe14bc-900a-d77b-7bed-7ca2b1d8a617

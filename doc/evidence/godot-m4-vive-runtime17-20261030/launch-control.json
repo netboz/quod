@@ -1,0 +1,57 @@
+{
+  "scope": "Actual case17 tool launch/control requests; no human look inferred.",
+  "launch_request": {
+    "cmd": "python3 -B /data/quod-m4-vr-ca84d4f8-20261029/private/case17-preparation01/unchanged-owners/godot-m4-vive-physical-20261029/manual_run.py native-vive-product17-run -- python3 -B /data/quod-m4-vr-ca84d4f8-20261029/private/case17-preparation01/unchanged-owners/godot-m4-vive-retest-20261030/physical17.py native-vive-product17 --client-manifest doc/evidence/godot-m4-vive-runtime-cue-20261030/inputs/client-runtime-cue01-manifest.json --require-wands",
+    "workdir": "/home/yan/src/quod_worktrees/pearl-stone",
+    "tty": true,
+    "sandbox_permissions": "require_escalated",
+    "justification": "Launch the authorized single case17 with its private data, fresh owned fixture/runtime and existing HDMI-only exception.",
+    "yield_time_ms": 1000,
+    "max_output_tokens": 1800
+  },
+  "launch_result": {
+    "chunk_id": "afb409",
+    "wall_time_seconds": 1.000907932,
+    "session_id": 99220,
+    "original_token_count": 0,
+    "output": ""
+  },
+  "status_request": {
+    "session_id": 99220,
+    "chars": "status\n",
+    "yield_time_ms": 1000,
+    "max_output_tokens": 1500
+  },
+  "tty": true,
+  "focus_listener": false,
+  "extra_focus_commands": 0,
+  "ready_report_result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"sessionId\": \"ed9cd520-b2a4-4607-a8f5-ff99d08f3e46\",\n  \"queuedPromptId\": \"meta-1793389798226-9j0i45t\",\n  \"prompt\": \"CASE17 IS LIVE \u2014 ready to put on now, no card/focus round trip. Actual startup inventory admitted BOTH wands; ordinary signed Main/Start, PRODUCT_READY and FIRST_DRAW completed. New accepted runtime-cue01 DLL8b439984\u2026/PCK1267200f\u2026/engine02310d; physical PTY99220. At status19:49:42UTC native Focused/running, presentation visible, head High, BOTH current canonical aim+grip High, each model root+6meshes visible; latest actual M4_VIVE_LOOK_CUE READY frame2. Window.HasFocusFALSE remains literal and is no veto. Single internal ordinary launch focus already happened; no listener, no extra focus. Current private owner binding /data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product17-invocation.json SHA6e7e2a1ef2418881d6a585cfa2224da6673d7d01a851fbab8ed2972d05ef41d2; capture doc/evidence/godot-m4-vive-runtime17-20261030/ready01.json. Conservative original client-age-derived deadline36576.988373759 monotonic;1754s remaining at19:49:48UTC. Headset cue is available: user only wears headset and holds both powered wands with every control released, looks once, reports cue/models here to you. These are sampled/marker facts, no pixels or persistent tracking guarantee. NO90/GUI/button/gesture/movement authorization. Preparation provider0, HDMI restored then authorized run exception; no rebuild/output recount. I will preserve the live opportunity, no sealing/notifier/refocus while he looks.\",\n  \"statusBeforeQueue\": \"running\",\n  \"processingTriggered\": false,\n  \"interrupted\": false\n}"
+      }
+    ],
+    "isError": false
+  },
+  "inbox_scope": "Full-text list-only inspection; consume unavailable; queued rows not marked consumed.",
+  "stop_finish_request": {
+    "session_id": 99220,
+    "chars": "stop\nfinish\n",
+    "yield_time_ms": 1000,
+    "max_output_tokens": 2200
+  },
+  "stop_finish_result": {
+    "chunk_id": "0ee825",
+    "wall_time_seconds": 1.001334557,
+    "session_id": 99220,
+    "original_token_count": 62,
+    "output": "stop\r\nfinish\r\nPASS enabled action stop-xr\r\nM4_VIVE_GUI stop-xr\r\nPASS real adapter stop retires every source subscription and capture\r\nM4_VIVE_RECORDED stopped\r\nM4_VIVE_RECORDED finished\r\nM4_VIVE_PRODUCT_FINISHED\r\nM4_VIVE_RECORDED observer-retired\r\n"
+  },
+  "completion": {
+    "exit_code": 0,
+    "chunk_id": "c76670",
+    "wall_time_seconds": 0.780431686,
+    "full_original_driver_output": "Retained privately in the unchanged manual wrapper stdout.raw; not copied into public metadata."
+  }
+}

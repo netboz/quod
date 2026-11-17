@@ -1,0 +1,126 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.05s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+quod_predicate_withdrawal_tests: -signed_contents_and_selected_editor_withdraw_test_/0-fun-24-...*failed*
+in function quod_predicate_withdrawal_tests:'-signed_contents_and_selected_editor_withdraw_test_/0-fun-24-'/0 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_predicate_withdrawal_tests.erl, line 45)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+in call from eunit_proc:run_group/2 (eunit_proc.erl, line 593)
+**error:{assert,[{module,quod_predicate_withdrawal_tests},
+         {line,45},
+         {expression,"contains ( Before , likes )"},
+         {expected,true},
+         {value,false}]}
+  output:<<"WITHDRAW_BEFORE #{<<"expires_ms">> => <<"1793811359197">>,
+                  <<"height">> => <<"4">>,<<"marks">> => <<"[]">>,
+                  <<"name">> => null,<<"selection">> => <<"unavailable">>,
+                  <<"type">> => <<"projection">>,
+                  <<"view">> =>
+                      <<"RKvNzMOjlk4WYcQK9xCWLfBS3g_8tM48eX03IezqMjo">>}
+WITHDRAW_EIDOLONS {ok,[#{<<"V0">> => []}],4}
+WITHDRAW_WORLD {fail,
+                   [{'::',<<"predicate-withdrawal">>,
+                        {',',
+                            {current_ontology_identity,
+                                <<"predicate-withdrawal">>,
+                                <<139,75,101,233,182,255,96,114,113,33,98,6,
+                                  42,239,141,83,206,90,148,118,50,143,124,115,
+                                  176,163,41,14,207,117,70,8>>},
+                            {world_view,gallery,playing,unbound}}},
+                    {current_ontology_identity,<<"predicate-withdrawal">>,
+                        <<139,75,101,233,182,255,96,114,113,33,98,6,42,239,
+                          141,83,206,90,148,118,50,143,124,115,176,163,41,14,
+                          207,117,70,8>>},
+                    {world_view,gallery,playing,unbound},
+                    {nonvar,unbound},
+                    {space_projection,gallery,playing,unbound,unbound},
+                    {nonvar,unbound},
+                    {nonvar,unbound},
+                    {space_instance,gallery,space},
+                    {sort,[{instance,gallery,space}],unbound},
+                    {member,
+                        {instance,gallery,space},
+                        [{instance,gallery,space}]},
+                    {member,{instance,gallery,space},[]},
+                    {current_ontology_identity,unbound,unbound},
+                    {entity_eidolons,gallery,playing,contents,unbound},
+                    {nonvar,unbound},
+                    {sort,[space],unbound},
+                    {class_eidolons,[space],playing,contents,unbound},
+                    {nonvar,unbound},
+                    {sort,[],unbound},
+                    {space_entity_model,[],gallery,{contents,unbound}},
+                    {space_eidolon_status,<<"No matching eidolon">>,
+                        {contents,unbound}},
+                    {member,{eidolon,playing,contents,unbound},[]},
+                    {member,{eidolon,unbound,unbound,unbound},[]},
+                    {member,{candidate,unbound,playing,contents,unbound},[]},
+                    {member,unbound,[space]},
+                    {member,unbound,[]},
+                    {isa,space,unbound},
+                    {nonvar,unbound},
+                    {var,unbound},
+                    {nonvar,thing},
+                    {nonvar,unbound},
+                    {member_eq,thing,[space]},
+                    {member_eq,thing,[]},
+                    {'==',thing,space},
+                    {var,space},
+                    {class_eidolon,space,playing,contents,unbound},
+                    {nonvar,unbound},
+                    {class_eidolon,thing,playing,contents,unbound},
+                    {nonvar,unbound},
+                    {'=',unbound,space},
+                    {class_eidolon,space,playing,contents,unbound},
+                    {nonvar,unbound},
+                    {'=',unbound,gallery},
+                    {isa,gallery,gallery},
+                    {var,gallery},
+                    {var,gallery},
+                    {instance_of,unbound,gallery},
+                    {nonvar,unbound},
+                    {instance_of,unbound,gallery},
+                    {nonvar,unbound},
+                    {isa,space,space},
+                    {nonvar,thing},
+                    {nonvar,space},
+                    {'\\==',thing,space},
+                    {nonvar,space},
+                    {'=',space,{':',unbound,unbound}},
+                    {nonvar,thing},
+                    {'=',thing,{':',unbound,unbound}},
+                    {member_eq,thing,[space]},
+                    {member_eq,thing,[]},
+                    {'==',thing,space},
+                    {var,space},
+                    {var,space}]}
+WITHDRAW_MEMBERS {ok,[#{<<"V0">> => {4},
+                        <<"V1">> =>
+                            [{entity_ref,<<"predicate-withdrawal">>,
+                                 <<139,75,101,233,182,255,96,114,113,33,98,6,
+                                   42,239,141,83,206,90,148,118,50,143,124,115,
+                                   176,163,41,14,207,117,70,8>>,
+                                 {predicate,{'/',likes,2}}},
+                             {entity_ref,<<"predicate-withdrawal">>,
+                                 <<139,75,101,233,182,255,96,114,113,33,98,6,
+                                   42,239,141,83,206,90,148,118,50,143,124,115,
+                                   176,163,41,14,207,117,70,8>>,
+                                 {predicate,{'/',unaffected,1}}},
+                             {entity_ref,<<"predicate-withdrawal">>,
+                                 <<139,75,101,233,182,255,96,114,113,33,98,6,
+                                   42,239,141,83,206,90,148,118,50,143,124,115,
+                                   176,163,41,14,207,117,70,8>>,
+                                 {predicate,{'/',empty_defined,1}}}]}],
+                     4}
+">>
+
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 0.
+===> Error running tests

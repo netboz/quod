@@ -1,0 +1,19 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-m4-r2-20261029/shutdown-connect.py",
+    "shutdown-connect-final03",
+    "--export",
+    "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final03/source/client/godot/dist/quod.x86_64"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T12:24:43Z",
+  "elapsed_seconds": 2.574341058731079,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m4-r2-artifacts/private/logs/shutdown-connect-final03.log",
+  "raw_sha256": "c6035ac0621cb64f693e0f89174f03f148b3e126c665ddd8fdf667cc6c2d8a39",
+  "sanitized_sha256": "c6035ac0621cb64f693e0f89174f03f148b3e126c665ddd8fdf667cc6c2d8a39",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

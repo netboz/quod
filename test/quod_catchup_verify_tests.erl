@@ -1,5 +1,6 @@
 -module(quod_catchup_verify_tests).
 -include_lib("eunit/include/eunit.hrl").
+-include("retired_remaining_sizes.hrl").
 -include("quod_ledger.hrl").
 -include("quod_ingress_limits.hrl").
 
@@ -48,18 +49,6 @@ genesis(Pubs) ->
     {ok, Block} = quod_ledger:new_block(
                     {genesis, 0}, none, 1, {batch, [Transaction]}, 0),
     quod_ledger:entry(1, Block, none).
-
-%% Build an over-cap record without teaching the canonical founding helper how
-%% to create invalid state.  The verifier must reject this wire/history input.
-oversized_genesis(Pubs) ->
-    Founding = lists:sublist(Pubs, ?MAX_VALIDATORS),
-    Extra = lists:nth(?MAX_VALIDATORS + 1, Pubs),
-    Entry0 = genesis(Founding),
-    #entry{data = {batch, [Tx0]}} = quod_ledger:entry_view(Entry0),
-    ExtraAdmission =
-        {assert, {{peer_admitted, Extra, undefined, undefined, Extra}, true}},
-    Tx1 = Tx0#transaction{diff = Tx0#transaction.diff ++ [ExtraAdmission]},
-    entry_with_data(Entry0, {batch, [Tx1]}).
 
 entry_with_data(Entry, Data) ->
     {ok, Changed} = quod_ledger:decode_entry(entry_bytes_with_data(Entry, Data)),
@@ -166,16 +155,15 @@ canonical_page_artifacts_survive_verify_and_forward_test() ->
         ?assertEqual({ok, Entry}, quod_ledger:decode_entry(Bytes))
     end, [G, B]).
 
-validator_cap_history_boundary_test() ->
-    N = ?MAX_VALIDATORS, C = committee(N), G = genesis(pubs(C)),
+full_committee_history_boundary_test() ->
+    N = ?LEGACY_MAX_VALIDATORS, C = committee(N), G = genesis(pubs(C)),
     {ok, P} = verify_chain(C, [G]),
     ?assertEqual(pubs(C), quod_simplex:history_committee(P)),
-    Oversized = oversized_genesis(pubs(committee(N + 1))),
-    ?assertEqual({error, {invalid_transaction, 1}},
-        verify_entries({?NS, gen_hash(Oversized)}, [Oversized])),
+    Expanded = committee(N + 1),
+    ?assertMatch({ok, _}, verify_chain(Expanded, [genesis(pubs(Expanded))])),
     {Extra, _} = quod_identity:generate(),
     Admission = committed(2, admit_tx(Extra, C), P, C, quod_simplex:quorum(N)),
-    ?assertEqual({error, {invalid_transaction, 2}}, verify_chain(C, [G, Admission])).
+    ?assertMatch({ok, _}, verify_chain(C, [G, Admission])).
 
 batch_hash_is_verified_test() ->
     C = committee(4), G = genesis(pubs(C)),

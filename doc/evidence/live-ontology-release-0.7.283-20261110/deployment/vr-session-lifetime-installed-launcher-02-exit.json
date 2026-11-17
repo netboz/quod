@@ -1,0 +1,11 @@
+{
+  "exit_code": 0,
+  "elapsed_s": 9.734568247004063,
+  "command": [
+    "/home/yan/Games/quod/quod.x86_64",
+    "--",
+    "--profile",
+    "/tmp/quod-vr-saved-startup-20261110-01",
+    "--qualification"
+  ]
+}

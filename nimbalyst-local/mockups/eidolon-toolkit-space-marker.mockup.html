@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Quod — space seen from outside: today and proposed</title>
+<style>
+  :root { --teal:#0B3954; --gray:#848FA5; --gold:#F9C80E; --ink:#F5F1EB; --muted:#C9D2DB; }
+  body { margin:0; font-family: Inter, "Segoe UI", system-ui, sans-serif; background:#041a28; color:var(--ink); padding:24px; }
+  h1 { font-weight:600; font-size:18px; color:var(--gray); margin:0 0 14px; }
+  .frame { width:1140px; height:420px; border-radius:10px; position:relative; overflow:hidden;
+           background: radial-gradient(120% 90% at 55% 20%, #06202f 0%, #020a10 70%, #000 100%); box-shadow:0 10px 30px rgba(0,0,0,.45); }
+  svg { position:absolute; inset:0; }
+  .cap { position:absolute; bottom:18px; width:240px; text-align:center; font-size:13px; color:var(--muted); line-height:1.45; }
+  .cap b { color:var(--ink); display:block; font-size:14px; margin-bottom:2px; }
+  .note { color:var(--gray); font-size:13px; margin:12px 2px 0; max-width:1140px; line-height:1.5; }
+</style>
+</head>
+<body>
+<h1>A space seen from outside — today, and the proposed fixed-size marker</h1>
+<div class="frame">
+  <svg id="scene" viewBox="0 0 1140 420" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div class="cap" style="left:40px"><b>Today</b>solid blue half-metre box</div>
+  <div class="cap" style="left:320px"><b>Proposed</b>see-through sides, corner lines that fade</div>
+  <div class="cap" style="left:600px"><b>Pointed at</b>same shape, gold lines</div>
+  <div class="cap" style="left:870px"><b>Editing (grips come later)</b>corner grips and the real size</div>
+</div>
+<p class="note">Flat sketch of the idea, not an engine render. The marker keeps one size whatever the space measures inside; the label and, when editing, the size line say what it is.</p>
+<script>
+const svg = document.getElementById('scene'), NS = 'http://www.w3.org/2000/svg';
+let ids = 0;
+function el(name, attrs, parent = svg) { const e = document.createElementNS(NS, name); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; }
+function cube(x, y, s, o) {
+  const dx = s * .45, dy = s * .35;
+  const F = [[x, y], [x + s, y], [x + s, y + s], [x, y + s]], B = F.map(([a, b]) => [a + dx, b - dy]);
+  const face = pts => el('polygon', { points: pts.map(p => p.join(',')).join(' '), fill: o.fill, 'fill-opacity': o.face, stroke: 'none' });
+  face(B); face([F[0], F[1], B[1], B[0]]); face([F[1], F[2], B[2], B[1]]); face(F);
+  const edges = [];
+  for (let i = 0; i < 4; i++) { edges.push([F[i], F[(i + 1) % 4]], [B[i], B[(i + 1) % 4]], [F[i], B[i]]); }
+  for (const [a, b] of edges) {
+    if (o.solid) { el('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: o.line, 'stroke-width': 1.5 }); continue; }
+    for (const [p, q] of [[a, b], [b, a]]) {
+      const end = [p[0] + (q[0] - p[0]) * o.reach, p[1] + (q[1] - p[1]) * o.reach], id = 'g' + ids++;
+      const g = el('linearGradient', { id, gradientUnits: 'userSpaceOnUse', x1: p[0], y1: p[1], x2: end[0], y2: end[1] }, defs);
+      el('stop', { offset: 0, 'stop-color': o.line, 'stop-opacity': 1 }, g); el('stop', { offset: 1, 'stop-color': o.line, 'stop-opacity': 0 }, g);
+      el('line', { x1: p[0], y1: p[1], x2: end[0], y2: end[1], stroke: `url(#${id})`, 'stroke-width': 2.5, 'stroke-linecap': 'round' });
+    }
+  }
+  if (o.grips) for (const p of [...F, ...B]) el('rect', { x: p[0] - 6, y: p[1] - 6, width: 12, height: 12, rx: 2, fill: o.line });
+  const t = el('text', { x: x + (s + dx) / 2, y: y - dy - 16, fill: '#F5F1EB', 'font-size': 15, 'text-anchor': 'middle', 'font-family': 'Inter, Segoe UI, sans-serif' }); t.textContent = o.label;
+  if (o.size) { const u = el('text', { x: x + (s + dx) / 2, y: y + s + 26, fill: '#F9C80E', 'font-size': 14, 'text-anchor': 'middle', 'font-family': 'Inter, Segoe UI, sans-serif' }); u.textContent = o.size; }
+}
+const defs = el('defs', {});
+cube(95, 150, 120, { fill: '#6A90D9', face: 1, line: '#9ab6ea', solid: true, label: 'Space' });
+cube(375, 150, 120, { fill: '#848FA5', face: .10, line: '#C9D2DB', reach: .32, label: 'Space' });
+cube(655, 150, 120, { fill: '#F9C80E', face: .08, line: '#F9C80E', reach: .32, label: 'Space' });
+cube(925, 150, 120, { fill: '#848FA5', face: .10, line: '#C9D2DB', reach: .32, grips: true, label: 'Space', size: '10 m × 10 m × 10 m' });
+</script>
+</body>
+</html>

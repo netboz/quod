@@ -1,0 +1,15 @@
+{
+  "api-dump.raw": {
+    "mtime_ns": 1793302560049222923,
+    "mtime_utc": "2026-10-29T19:36:00.049223+00:00"
+  },
+  "stacks": {
+    "mtime_ns": 1793302555444105541,
+    "mtime_utc": "2026-10-29T19:35:55.444105+00:00"
+  },
+  "stacks/native.raw": {
+    "mtime_ns": 1793302557127148439,
+    "mtime_utc": "2026-10-29T19:35:57.127149+00:00"
+  },
+  "scope": "Filesystem write timestamps only; stack directory entry creation bounds capture startup because capture created its sole native.raw entry before gdb. API dump last write is a call-entry logging boundary, not a returned-result or source-owner proof."
+}

@@ -1,0 +1,14 @@
+--- src/predicates/quod_ask.erl before
+
++++ src/predicates/quod_ask.erl
+
+@@ -1564,7 +1564,7 @@
+
+     %% network invocations enter here before policy and execution, so relays
+     %% never materialize another ontology's goal and the two transports cannot
+     %% drift into different admission paths.
+-    case quod_wire_term:materialize_goal_symbols(RequestedGoal) of
++    case quod_wire_term:materialize_goal_symbols(RequestedGoal, Ns) of
+         {ok, Goal} ->
+             Verdict =
+                 case authorize_scope(

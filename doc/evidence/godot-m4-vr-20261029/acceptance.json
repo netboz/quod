@@ -1,0 +1,98 @@
+{
+  "ticket": "QUO-65",
+  "status": "in-review",
+  "full_M4_accepted": false,
+  "new_qualified_scopes": [
+    {
+      "scope": "Private pinned engine ownership correction",
+      "evidence": [
+        "godot-4.7.2-openxr-lifetimes.patch",
+        "native-sim-baseline01",
+        "native-sim-patched01"
+      ],
+      "result": "Same freshly compiled C# payload; only native executable differs. Baseline retains both targeted teardown errors; patch passes18 assertions/3adapter cycles in one native session, normal client/runtime/wrapper0 and EOF without those diagnostics."
+    },
+    {
+      "scope": "Real Vive display availability and physical lens observation",
+      "evidence": [
+        "inputs/display-exception-authorization.json",
+        "inputs/hdmi-reconnect-response.json",
+        "vive-display-observation03",
+        "inputs/vive-lens-observation03-response.json"
+      ],
+      "result": {
+        "diagnostic_export": "client-display-observer02",
+        "human_lens_output": "Quod interface/text observed in both lenses; LED green",
+        "answer_receipt": "inputs/vive-lens-observation03-response.json",
+        "head_valid_frames": 15204,
+        "head_high_confidence_frames": 14744,
+        "frames": 30299,
+        "tracked_controller_frames": {
+          "left_hand": 0,
+          "right_hand": 0
+        },
+        "client_exit": 0,
+        "runtime_exit": 0,
+        "wrapper_exit": 0,
+        "eof": {
+          "runtime-stdout": true,
+          "runtime-stderr": true,
+          "client-stdout": true,
+          "client-stderr": true
+        },
+        "api_entry_counts": {
+          "xrAcquireSwapchainImage": 15203,
+          "xrBeginFrame": 30297,
+          "xrBeginSession": 1,
+          "xrCreateAction": 8,
+          "xrCreateActionSet": 1,
+          "xrCreateActionSpace": 4,
+          "xrCreateInstance": 1,
+          "xrCreateReferenceSpace": 2,
+          "xrCreateSession": 1,
+          "xrCreateSwapchain": 1,
+          "xrDestroyAction": 8,
+          "xrDestroyActionSet": 1,
+          "xrDestroyInstance": 1,
+          "xrDestroySession": 1,
+          "xrDestroySpace": 2,
+          "xrDestroySwapchain": 1,
+          "xrEndFrame": 30297,
+          "xrEndSession": 1,
+          "xrReleaseSwapchainImage": 15203,
+          "xrRequestExitSession": 1,
+          "xrWaitFrame": 30297,
+          "xrWaitSwapchainImage": 15203
+        },
+        "submitted_layer_counts": {
+          "0": 15094,
+          "1": 15203
+        },
+        "projection_view_counts": {
+          "2": 15203
+        },
+        "targeted_cleanup_diagnostics": [],
+        "scope": "Actual human pixels in a separately embedded observer export with unchanged C# application sources, real head-confidence counts and balanced native call entries. No returned-code, valid-controller, mapped-gesture, comfort, production-export physical or complete-resource proof."
+      }
+    },
+    {
+      "scope": "Faulted native application release and subsequent new session",
+      "evidence": [
+        "native-fault-reentry01"
+      ],
+      "result": "Intentional DirectoryNotFoundException -> existing Main.CloseApplication(1), client1/disconnect/absent; next exact app on same owned simulator runtime ->18 checks/client0/disconnect/absent; runtime/wrapper0 and all EOF. No historical-stall attribution."
+    }
+  ],
+  "unchanged_software_evidence_reused": {
+    "client": "Final03 core189, desktop72+live21+backup8, controller43, scene15, physics39 and cancellation seams; exact91 supplied inputs unchanged. New private engine is a distinct dependency with the new native evidence above.",
+    "server": "1432 unchanged inputs; accepted M3b native56/EUnit4266/CT149/xref/Dialyzer/release, no rerun."
+  },
+  "unqualified": [
+    "Cold production native-vive-direct02 fresh-valid-stereo-head assertion remains failed before rendering check; zero application swapchains/91empty submissions.",
+    "Current diagnostic observation has zero valid wand pose samples and no button edges. Native production-export canonical transforms, signed mapping/GUI/subject gestures, model appearance and movement are unqualified.",
+    "Native focus/disconnect/reentry with both actual tracked wands and active signed consumers/captures/models; comfort and extended platform hardware exit require further physical observations.",
+    "Independent returned-success-code telemetry for the API dump entries is absent.",
+    "Both original desktop shutdown stalls remain failed and causally unattributed; no new desktop observation1 or review.",
+    "Full QUO-27, QUO-59, broader Stage2 and M4 remain open. No Quest qualification."
+  ]
+}

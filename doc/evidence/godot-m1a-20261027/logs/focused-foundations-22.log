@@ -1,0 +1,94 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+      \x{250C}\x{2500} src/quod_physics.erl:
+      \x{2502}
+ 1192 \x{2502}      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      \x{2502}                                                               \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} src/quod_physics.erl:
+      \x{2502}
+ 1192 \x{2502}      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      \x{2502}                                                                   \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} src/quod_physics.erl:
+      \x{2502}
+ 1192 \x{2502}      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      \x{2502}                                                                       \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+    \x{250C}\x{2500} test/quod_physics_coordinates_tests.erl:
+    \x{2502}
+ 28 \x{2502}      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    \x{2502}                               \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    \x{250C}\x{2500} test/quod_physics_coordinates_tests.erl:
+    \x{2502}
+ 28 \x{2502}      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    \x{2502}                                   \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    \x{250C}\x{2500} test/quod_physics_coordinates_tests.erl:
+    \x{2502}
+ 28 \x{2502}      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    \x{2502}                                       \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+      \x{250C}\x{2500} test/quod_physics_tests.erl:
+      \x{2502}
+ 1042 \x{2502}              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+      \x{2502}                                                \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} test/quod_physics_tests.erl:
+      \x{2502}
+ 1667 \x{2502}          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      \x{2502}                                   \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} test/quod_physics_tests.erl:
+      \x{2502}
+ 1667 \x{2502}          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      \x{2502}                                         \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+=WARNING REPORT==== 27-Oct-2026::22:38:05.772219 ===
+quod_prolog[quod:user]: can_invoke refused a top-level goal at pinned height 1
+M1a setup_refusals
+M1a privacy
+M1a controller_views
+M1a renew_operations
+M1a stale_revision
+M1a reset
+M1a https
+M1a receipts
+[0;31mF[0m
+Failures:
+
+  1) quod_lifecycle_single_path_tests:-m1a_seven_foundations_test_/0-fun-13-/0
+[0;31m     Failure/Error: ?assertEqual([{<<113,117,111,100,58,103,117,105>>,1},{<<113,117,111,100,58,99,111,110,116,114,111,108,108,101,114,115>>,1},{<<113,117,111,100,58,115,112,97,99,101>>,1}], [ { N , quod_prolog : applied ( N ) } || { N , _ } <- SharedHeights ])
+       expected: [{<<"quod:gui">>,1},
+                  {<<"quod:controllers">>,1},
+                  {<<"quod:space">>,1}]
+            got: [{<<"quod:gui">>,5},
+                  {<<"quod:controllers">>,1},
+                  {<<"quod:space">>,9}][0m
+[0;36m     %% /work/test/quod_lifecycle_single_path_tests.erl:537:in `quod_lifecycle_single_path_tests:-m1a_seven_foundations_test_/0-fun-13-/0`[0m
+[0;36m     Output: (node:54) ExperimentalWarning: The Ed25519 Web Crypto API algorithm is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+[0m
+[0;36m     Output: (node:54) ExperimentalWarning: The Ed25519 Web Crypto API algorithm is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+[0m
+
+Finished in 140.914 seconds
+[0;31m1 tests, 1 failures
+[0m===> Error running tests

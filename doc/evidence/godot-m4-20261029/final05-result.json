@@ -1,0 +1,74 @@
+{
+  "client": "candidate07",
+  "source": "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-candidate07/source",
+  "commands": [
+    {
+      "label": "input-final06",
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/run.py",
+        "--timeout",
+        "900",
+        "input-final06",
+        "--",
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/input-campaign.py",
+        "input-final06",
+        "--engine",
+        "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-candidate07/source/client/godot/dist/quod.x86_64",
+        "--desktop"
+      ],
+      "child_exit": 0
+    },
+    {
+      "label": "scene-final06",
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/run.py",
+        "--timeout",
+        "900",
+        "scene-final06",
+        "--",
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/input-campaign.py",
+        "scene-final06",
+        "--engine",
+        "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-candidate07/source/client/godot/dist/quod.x86_64",
+        "--desktop",
+        "--phase",
+        "scene"
+      ],
+      "child_exit": 0
+    },
+    {
+      "label": "gui-final05",
+      "command": [
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/run.py",
+        "--timeout",
+        "900",
+        "gui-final05",
+        "--",
+        "python3",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/campaign.py",
+        "gui-final05",
+        "--client",
+        "candidate07",
+        "--stage",
+        "/tmp/quod-m3b-8b352c53/m3b-gates01/source",
+        "--profile",
+        "prod",
+        "--journey",
+        "gui",
+        "--desktop",
+        "--controllers"
+      ],
+      "child_exit": 1
+    }
+  ],
+  "passed": false,
+  "unchanged_server_gates_reused": true,
+  "retained_driver": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-20261029/inputs/final05-driver.py",
+  "driver_sha256": "b58a7a4bb1315f9b5d5460d3f2a360467ea16229694e2917c186687aba443dd9",
+  "failure": "Failed gui-final05"
+}

@@ -1,0 +1,34 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;31mF[0m
+Failures:
+
+  1) quod_gui_question_tests:-accepted_question_transitions_use_signed_atomic_owners_test_/0-fun-60-/0
+[0;31m     Failure/Error: ?assertMatch({ ok , [ # { << "V0" >> := { receiver , Node , First } } ] , _ }, read ( ActorCtx , HumanNs , Read ))
+       expected: = { ok , [ # { << "V0" >> := { receiver , Node , First } } ] , _ }
+            got: {fail,
+                  [{'::',<<"lobby-test-user">>,
+                    {',',
+                     {current_ontology_identity,<<"lobby-test-user">>,
+                      <<124,243,234,240,141,236,27,189,159,167,51,78,173,148,
+                        227,29,183,207,63,249,31,151,236,59,232,221,108,126,
+                        182,158,152,83>>},
+                     {'::',<<"quod:gui">>,
+                      {gui_receiver_for,
+                       {agent_instance_ref,<<"lobby-test-user">>,
+                        <<124,243,234,240,141,236,27,189,159,167,51,78,173,148,
+                          227,29,183,207,63,249,31,151,236,59,232,221,108,126,
+                          182,158,152,83>>,
+                        {human_user,test_agent}},
+                       unbound}}}},
+                   {not_allowed,<<"lobby-test-user">>}]}[0m
+[0;36m     %% eunit_proc.erl:369:in `eunit_proc:with_timeout/3`[0m
+[0;36m     Output: [0m
+[0;36m     Output: [0m
+
+Finished in 1.352 seconds
+[0;31m1 tests, 1 failures
+[0m===> Error running tests

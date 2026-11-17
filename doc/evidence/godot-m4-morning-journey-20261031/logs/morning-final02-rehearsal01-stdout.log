@@ -1,0 +1,16 @@
+PASS enabled action create-key
+PASS enabled action connect
+PASS fresh private journey authenticates the expected network
+PASS enabled action register
+PASS enabled action prepare
+PASS enabled action setup
+PASS guidance starts from actual installed S0, not a recorded success
+PASS pending original work stops guidance without advancing or replay
+PASS authoritative uncertainty without a device journal also stops guidance
+PASS in-flight operation cannot be mistaken for a committed step
+PASS rehearsal owns unused software tracker identities
+PASS the corrected shared owner places the first tilted head upright during a real signed session
+PASS current real control is inside the reflowed surface: location-operations
+PASS the SAME headset instruction stays accessible while the real form scrolls
+PASS one injected LEFT press/release leaves no native capture
+{"passed": false, "children": {"server": 0, "client": -15}, "eof": {"server-stdout": true, "server-stderr": true, "client-stdout": true, "client-stderr": true}, "failure": "Empty: ", "checks": 0}

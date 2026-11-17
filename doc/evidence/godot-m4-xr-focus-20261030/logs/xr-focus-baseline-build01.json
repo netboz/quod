@@ -1,0 +1,44 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-m4-xr-focus-20261030/build.py",
+    "xr-focus-baseline01",
+    "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/engine/clean02/godot.linuxbsd.template_release.x86_64.mono"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 1,
+  "timed_out": false,
+  "driver_inputs": {
+    "application.py": "e561f089ff68a2fc69ac9286bdf37a934b2d2839983cdad6c94fc8843c159777",
+    "build.py": "00d0d162321ec16519313bc75eb28e7fb38aa96e68b592e69f9631ba0a8b29d7",
+    "hashes.py": "d95c13f670104342b650b3d939354f86d479e57550e77e218814a732d98b4a99",
+    "run.py": "bb083951b41f9578d6ec35bd5fc6e51eb645475936642f1b9e2b725e138a4479"
+  },
+  "start_utc": "2026-10-30T18:57:18Z",
+  "elapsed_seconds": 0.06453275680541992,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/xr-focus-baseline-build01/stdout.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/xr-focus-baseline-build01/stderr.raw",
+      "sha256": "acca6a93649c453fe10cc252a2ef09d6f7365d010b2b8e7d7f353f28ece002cc",
+      "bytes": 2551
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-xr-focus-20261030/logs/xr-focus-baseline-build01-stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-xr-focus-20261030/logs/xr-focus-baseline-build01-stderr.log",
+      "sha256": "acca6a93649c453fe10cc252a2ef09d6f7365d010b2b8e7d7f353f28ece002cc",
+      "bytes": 2551
+    }
+  }
+}

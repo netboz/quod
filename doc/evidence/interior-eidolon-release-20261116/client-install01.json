@@ -1,0 +1,14 @@
+{
+  "switch_exit": 0,
+  "installed": "/home/yan/Games/quod",
+  "backup": "/home/yan/Games/quod-before-eidolon-20261116",
+  "verified_export_files": 226,
+  "engine_sha256": "d776f83ae09d82cfa1295fb3d70ad7ab8a77fe66a4cc4f9d42244fae3665d8cc",
+  "managed_assembly_sha256": "d0fd2d263974275f47dfee51ca1dbd5c4aa88cdf7cfde9b11f489d7beddbbe7e",
+  "pack_sha256": "f8d45dbdca96d0b1261ff3e4f8c524e02e099e5865e53c16dc0cf754bd018aef",
+  "preserved": [
+    "steam",
+    "last-run.log"
+  ],
+  "saved_identity_opened": false
+}

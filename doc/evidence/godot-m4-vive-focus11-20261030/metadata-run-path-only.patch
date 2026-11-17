@@ -1,0 +1,10 @@
+--- qualified-physical/run.py
++++ focus11/run.py
+@@ -2,6 +2,7 @@
+ """All raw streams are private on /data; small sanitized receipts stay in worktree."""
+ import argparse,hashlib,json,os,re,shutil,signal,subprocess,sys,time
+ from pathlib import Path
++sys.path.insert(0,str(Path(__file__).resolve().parent.parent/'godot-m4-vive-physical-20261029'))
+ from environment import TASK,environment
+ p=argparse.ArgumentParser();p.add_argument('--timeout',type=int,default=300);p.add_argument('--cwd',default=str(Path.cwd()));p.add_argument('label');p.add_argument('command',nargs=argparse.REMAINDER);a=p.parse_args()
+ os.umask(0o077);ev=Path(__file__).resolve().parent

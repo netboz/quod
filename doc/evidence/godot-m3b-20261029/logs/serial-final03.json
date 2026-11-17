@@ -1,0 +1,17 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-m3b-20261029/final-campaigns.py",
+    "final03"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T02:30:36Z",
+  "elapsed_seconds": 405.49811601638794,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/tmp/quod-m3b-8b352c53/private/logs/serial-final03.log",
+  "raw_sha256": "3b7d0a7390eb2e290b9447a6638d663d95a05c29097b7b5477c18131563ab351",
+  "sanitized_sha256": "3b7d0a7390eb2e290b9447a6638d663d95a05c29097b7b5477c18131563ab351",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

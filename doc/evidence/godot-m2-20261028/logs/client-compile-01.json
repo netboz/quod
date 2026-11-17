@@ -1,0 +1,19 @@
+{
+  "command": [
+    "env",
+    "-u",
+    "LD_LIBRARY_PATH",
+    "-u",
+    "LD_PRELOAD",
+    "dotnet",
+    "build",
+    "client/godot/Quod.csproj",
+    "--no-restore"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-28T05:40:36Z",
+  "elapsed_seconds": 4.533296585083008,
+  "child_exit": 1,
+  "timed_out": false,
+  "error_diagnostics": 0
+}

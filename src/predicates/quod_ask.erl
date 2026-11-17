@@ -27,7 +27,8 @@ Transport or protocol failure never masquerades as ordinary Prolog failure.
 -export([load/1, ask_2/3, follow_unique_2/3,
          authorize_scope/6, open_authorized_scope/8, authenticate_agent/5,
          validate_authorization_transcript/6, validate_agent_key/5,
-         close_stream/1, authorization_result/2, committed_authorization_result/2, native_read/5]).
+         close_stream/1, authorization_result/2, committed_authorization_result/2,
+         local_authorization_result/2, native_read/5]).
 -ifdef(TEST).
 -export([checked_completion/1]).
 -export([test_serve_nested/1, test_await_scope_reply/2,
@@ -116,9 +117,6 @@ do_ask(NsTerm, Inner, Next, St) ->
 guarded_ask(Self, Target, Inner, Next, St) ->
     quod_predicates:local_only(St) andalso ask_error(ask_in_membership_verdict),
     Chain = quod_predicates:ctx_chain(quod_predicates:context(St)),
-    length(Chain) >= ?QUOD_MAX_ACTIVE_PROOF_DEPTH andalso
-        ask_error(
-          {proof_depth_exceeded, ?QUOD_MAX_ACTIVE_PROOF_DEPTH}),
     InnerTerm = erlog_int:dderef(Inner, St#est.bs),
     case open(Self, Target, InnerTerm, Chain, St) of
         {ok, Stream, St1} ->
@@ -174,12 +172,17 @@ bind_answer(GoalTerm, Sol, Bs, Vn) ->
           end
       end).
 
--ifdef(TEST).
-test_bind_answer(Goal, Answer) ->
-    case bind_answer(Goal, Answer, erlog_int:new_bindings(), 0) of
+bind_answer(Goal, Answer) ->
+    Vn = lists:foldl(fun({Name, _}, Next) when is_integer(Name) -> max(Next, Name + 1);
+                       (_, Next) -> Next
+                    end, 0, erlog:vars_in(Goal)),
+    case bind_answer(Goal, Answer, erlog_int:new_bindings(), Vn) of
         {ok, Bs, _Vn} -> {ok, Bs};
         {error, _} = Error -> Error
     end.
+
+-ifdef(TEST).
+test_bind_answer(Goal, Answer) -> bind_answer(Goal, Answer).
 -endif.
 
 %% Rename every variable (a 1-tuple in erlog) in a target solution term to a fresh local
@@ -287,7 +290,11 @@ native_scope_once(Scope,Goal,Chain) ->
         {ok,Invocation} ->
             try
                 case advance_scope_invocation(Invocation) of
-                    {ok,{solution,1,Answer,false,false}} -> {ok,Answer};
+                    {ok,{solution,1,Answer,false,false}} ->
+                        case bind_answer(Goal,Answer) of
+                            {ok,Bindings} -> {ok,erlog_int:dderef(Goal,Bindings)};
+                            {error,_} = Error -> Error
+                        end;
                     {ok,{complete,1,Reasons,false}} -> {fail,Reasons};
                     {ok,{error,Reason,_}} -> {error,Reason};
                     {ok,{error,Reason}} -> {error,Reason};
@@ -298,13 +305,24 @@ native_scope_once(Scope,Goal,Chain) ->
         {error,_} = Error -> Error
     end.
 
+%% Tracing only: the called goal as predicate indicators, its first three
+%% conjuncts at most (`name/arity`, joined by commas). Arguments never leave.
+goal_names(Goal) ->
+    iolist_to_binary(lists:join(<<",">>, [goal_indicator(G) || G <- goal_conjuncts(Goal, 3)])).
+goal_conjuncts({',', Left, Right}, N) when N > 1 -> [Left | goal_conjuncts(Right, N - 1)];
+goal_conjuncts(Goal, _) -> [Goal].
+goal_indicator(Goal) when is_atom(Goal) -> [atom_to_binary(Goal), <<"/0">>];
+goal_indicator(Goal) when is_tuple(Goal), tuple_size(Goal) > 1, is_atom(element(1, Goal)) ->
+    [atom_to_binary(element(1, Goal)), $/, integer_to_binary(tuple_size(Goal) - 1)];
+goal_indicator(_) -> <<"_">>.
+
 %% A shared proof session routes every selection through its one origin-owned
 %% scope map. Raw snapshot adapters have no origin authority and are rejected
 %% here before directory resolution, dialing, or target-worker allocation.
 open(_Self, Target, GoalTerm, Chain, St) ->
     quod_trace:with_span(
       quod_trace:context(), <<"quod.ask.open">>, internal,
-      #{'quod.namespace' => Target},
+      #{'quod.namespace' => Target, 'quod.ask.goal' => goal_names(GoalTerm)},
       fun(_Span) ->
           St1 = publish_session(St),
           case session_metadata(St1) of
@@ -701,18 +719,14 @@ router_admission_error(_Target, Reason)
     unavailable;
 router_admission_error(_Target, {request_link_down, _Reason}) -> unavailable;
 router_admission_error(_Target, {return_link_down, _Reason}) -> unavailable;
-router_admission_error(_Target, {scope_limit_exceeded, _Max} = Reason) ->
-    %% This is a per-peer target admission bound. Another eligible host can
-    %% still admit the same immutable scope request before any execution.
-    {retry, Reason};
-router_admission_error(_Target, owner_scope_limit) ->
-    {fatal,
-     {scope_limit_exceeded, ?QUOD_MAX_ROUTER_SCOPES_PER_OWNER}};
 router_admission_error(_Target, signed_scope_unavailable) ->
     {retry, signed_scope_unavailable};
 router_admission_error(Target, {proof_poisoned, Reason}) ->
     {fatal, normalize_router_failure(Target, Reason)};
-router_admission_error(_Target, {protocol_error, _} = Reason) ->
+router_admission_error(_Target, Reason)
+  when element(1, Reason) =:= protocol_error;
+       element(1, Reason) =:= material_limit;
+       element(1, Reason) =:= invalid_material_policy ->
     case quod_scope_wire:valid_public_error(Reason) of
         true -> {fatal, Reason};
         false -> {fatal, {protocol_error, proof_engine}}
@@ -896,7 +910,12 @@ stream_next(Stream, St) ->
           St2 = refresh_session(St1),
           case Result of
               {solution, Solution, NextStream, Independent} ->
-                  {solution, Solution, NextStream, St2, Independent};
+                  case quod_proof_session:admit_answer(St2, Solution) of
+                      ok -> {solution, Solution, NextStream, St2, Independent};
+                      {error, Reason} ->
+                          close_stream(NextStream),
+                          {error, Reason, St2}
+                  end;
               {complete, Reasons} ->
                   {complete, Reasons, St2};
               {error, Reason} ->
@@ -1061,6 +1080,8 @@ await_nested_reply(Origin, ProofId, RequestRef) ->
             dispatch_reentrant(Message, Origin, ProofId, RequestRef);
         Message = {scope_savepoint, _, _, _, _, _, _} ->
             dispatch_reentrant(Message, Origin, ProofId, RequestRef);
+        Message = {scope_read_set, _, _, _, _} ->
+            dispatch_reentrant(Message, Origin, ProofId, RequestRef);
         Message = {scope_seal, _, _, _, _, _} ->
             dispatch_reentrant(Message, Origin, ProofId, RequestRef);
         Message = {scope_close, _, _, _} ->
@@ -1099,6 +1120,8 @@ await_scope_reply_loop(
     receive
         {scope_reply, Pid, ProofId, SessionRef, RequestRef, Reply} ->
             Reply;
+        {scope_start_failed, Pid, ProofId, SessionRef, Reason} ->
+            {error, Reason};
         Message = {proof_nested_open, _, _, _, _, _, _, _, _} ->
             serve_nested(Message),
             await_scope_reply_loop(
@@ -1481,16 +1504,13 @@ refresh_session(St) ->
         _ -> quod_proof_session:refresh(St)
     end.
 
-%% A completion's failure stack was bounded by the target under the wire
-%% contract; check it here under that same contract. Erlog's native default
-%% would measure the decoded terms' external size, which wrapped foreign
-%% symbols inflate past the cap for a stack the target legitimately filled.
+%% Validate the incoming completion stack under the target's wire contract
+%% before exposing its reasons to the caller. One whole-stack check: replaying
+%% it reason by reason under that policy would re-encode the stack per reason.
 checked_completion(Reasons) ->
-    Wire = erlog_int:set_failure_reason_policy(
-             {quod_wire_term, valid_failure_reason_stack}, #est{}),
-    case erlog_int:merge_failure_reasons(Reasons, Wire) of
-        {ok, _} -> {complete, Reasons};
-        error -> error
+    case quod_wire_term:valid_failure_reason_stack(Reasons) of
+        true -> {complete, Reasons};
+        false -> error
     end.
 
 close_stream({scope_invocation, Handle, InvocationId,
@@ -1562,7 +1582,7 @@ open_authorized_scope(Principal, RequestedGoal, Chain,
     %% network invocations enter here before policy and execution, so relays
     %% never materialize another ontology's goal and the two transports cannot
     %% drift into different admission paths.
-    case quod_wire_term:materialize_goal_symbols(RequestedGoal) of
+    case quod_wire_term:materialize_goal_symbols(RequestedGoal, Ns) of
         {ok, Goal} ->
             Verdict =
                 case authorize_scope(
@@ -1624,8 +1644,8 @@ authenticate_agent(_Principal, _SigningKey, _Identity, _Height, _Session) ->
     false.
 
 authorize_scope_valid(Principal, Goal, Chain, Ns, Anchor, Height, Session) ->
-    Ctx = quod_predicates:proof_context(
-            Ns, Height, undefined, [{Ns, Anchor} | Chain]),
+    Ctx = quod_predicates:with_chain(
+            quod_predicates:policy_verdict_context(Ns, Height), [{Ns, Anchor} | Chain]),
     Committed = quod_predicates:set_context(
                   quod_proof_session:committed_state(Session), Ctx),
     Wrapped = quod_erlog_db_local_prove:wrap_state(
@@ -1742,12 +1762,12 @@ validate_authorization_entry(
   {Ns, _Anchor} = Target, Origin, Principal, ParentHeight, ParentEst)
   when (Verdict =:= allowed orelse Verdict =:= denied),
        is_integer(AnswerCount), AnswerCount >= 0,
-       AnswerCount =< ?QUOD_MAX_ANSWERS_PER_INVOCATION,
+       AnswerCount =< ?QUOD_SCOPE_WIRE_MAX_UINT64,
        (Tag =:= active orelse Tag =:= complete orelse
         Tag =:= error orelse Tag =:= cancelled) ->
     case {authorization_chain(FullChain, Target, Origin),
           quod_wire_term:decode_canonical(
-            GoalBlob, ?QUOD_MAX_NESTED_GOAL_BYTES)} of
+            GoalBlob, unlimited)} of
         {{ok, CallerChain}, {ok, Goal}} ->
             case fully_materialized(Goal) of
                 true ->
@@ -1787,7 +1807,7 @@ reprove_authorization(
     end.
 
 authorization_chain([Target | Rest] = FullChain, Target, Origin) ->
-    case chain_identities(FullChain, 0, [], undefined) of
+    case chain_identities(FullChain, [], undefined) of
         {ok, [_TargetNs | _CallerNamespaces], Origin} ->
             {ok, Rest};
         _ ->
@@ -1796,18 +1816,16 @@ authorization_chain([Target | Rest] = FullChain, Target, Origin) ->
 authorization_chain(_FullChain, _Target, _Origin) ->
     error.
 
-chain_identities([], _Depth, NamespacesRev, Last) ->
+chain_identities([], NamespacesRev, Last) ->
     {ok, lists:reverse(NamespacesRev), Last};
-chain_identities([{Ns, <<_:256>>} = Identity | Rest], Depth,
-                 NamespacesRev, _Last)
-  when is_binary(Ns), byte_size(Ns) > 0,
-       Depth < ?QUOD_MAX_ACTIVE_PROOF_DEPTH ->
-    chain_identities(Rest, Depth + 1, [Ns | NamespacesRev], Identity);
-chain_identities(_ImproperOrTooDeep, _Depth, _NamespacesRev, _Last) ->
+chain_identities([{Ns, <<_:256>>} = Identity | Rest], NamespacesRev, _Last)
+  when is_binary(Ns), byte_size(Ns) > 0 ->
+    chain_identities(Rest, [Ns | NamespacesRev], Identity);
+chain_identities(_Improper, _NamespacesRev, _Last) ->
     error.
 
 authorization_goal({Ns, _Anchor}, Goal, Principal, Chain) ->
-    case chain_identities(Chain, 0, [], undefined) of
+    case chain_identities(Chain, [], undefined) of
         {ok, CallChain, _Last} ->
             case policy_principal(Principal) of
                 {ok, PolicyPrincipal} ->
@@ -1868,9 +1886,18 @@ prove_bool(Goal, W) ->
         invalid -> false
     end.
 
--doc "Evaluate local policy on the pinned committed base and retain its OCC dependencies.".
+-doc "Evaluate the operation guard on committed views through the existing signed proof scopes.".
 -spec committed_authorization_result(term(), tuple()) -> allowed | denied | invalid.
 committed_authorization_result(Policy, St) ->
+    %% Preserve the caller's staged work before a guard can re-enter its owner.
+    Published = publish_session(St),
+    Guard = quod_predicates:operation_guard_context(quod_predicates:context(St)),
+    ReadOnly = quod_erlog_db_local_prove:committed_read_state(Published),
+    authorization_result({once, Policy}, quod_predicates:set_context(ReadOnly, Guard)).
+
+-doc "Evaluate strictly local policy on the committed base and retain its OCC dependencies.".
+-spec local_authorization_result(term(), tuple()) -> allowed | denied | invalid.
+local_authorization_result(Policy, St) ->
     Context = quod_predicates:context(St),
     Strict = quod_predicates:with_chain(quod_predicates:policy_verdict_context(
         quod_predicates:ctx_ns(Context), quod_predicates:ctx_height(Context)),

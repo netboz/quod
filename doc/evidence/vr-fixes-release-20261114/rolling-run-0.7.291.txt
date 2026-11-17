@@ -1,0 +1,5 @@
+Job registration successful
+Evaluation ID: fe94ac34-e00f-06ab-7509-6fa3a1a3ebcf
+
+
+==> View this job in the Web UI: http://192.168.1.10:4646/ui/jobs/quod@default

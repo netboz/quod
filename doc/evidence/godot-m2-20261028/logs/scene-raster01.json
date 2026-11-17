@@ -1,0 +1,27 @@
+{
+  "command": [
+    "env",
+    "M1B_PHASE=scene",
+    "M1B_RESULT=/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m2-20261028/scene-raster01-result.json",
+    "M2_SCENE_CAPTURE=/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m2-20261028/scene-raster01.png",
+    "python3",
+    "client/godot-tools/run.py",
+    "--",
+    "--display-driver",
+    "wayland",
+    "--",
+    "--qualification",
+    "--profile",
+    "/home/yan/.cache/quod-m2-artifacts/private/scene-raster01"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-28T06:31:01Z",
+  "elapsed_seconds": 2.774122476577759,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m2-artifacts/private/logs/scene-raster01.log",
+  "raw_sha256": "aebf185d296a5bfdf37a314d0816e1b78909e546621def08ed6fb87fd65088b4",
+  "sanitized_sha256": "aebf185d296a5bfdf37a314d0816e1b78909e546621def08ed6fb87fd65088b4",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

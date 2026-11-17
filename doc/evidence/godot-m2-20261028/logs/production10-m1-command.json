@@ -1,0 +1,33 @@
+{
+  "command": [
+    "python3",
+    "client/godot-tests/journey.py",
+    "--journey",
+    "gui",
+    "--desktop",
+    "--export",
+    "/home/yan/.cache/quod-m2-artifacts/quod-m2-client-final19/source/client/godot/dist/quod.x86_64",
+    "--backend-port",
+    "44751",
+    "--backend-ca",
+    "/home/yan/.cache/quod-m2-artifacts/private/quod-m2-live-production10-server/backend-ca.pem",
+    "--control-port",
+    "44693",
+    "--network",
+    "4I6kDzRllXDI1yUjVX810LG5vwrWo_w9v7BljmgkR00",
+    "--evidence",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m2-20261028/production10-m1",
+    "--private",
+    "/home/yan/.cache/quod-m2-artifacts/private/production10-m1"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-28T10:16:52Z",
+  "elapsed_seconds": 99.25475525856018,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m2-artifacts/private/logs/production10-m1-command.log",
+  "raw_sha256": "c8861bb79b50c6b1ee50894e0551565db8baf736b887a62397bafccba0a45dd8",
+  "sanitized_sha256": "c8861bb79b50c6b1ee50894e0551565db8baf736b887a62397bafccba0a45dd8",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

@@ -1,0 +1,32 @@
+{
+  "passed": false,
+  "software_only": true,
+  "stage": "/tmp/quod-vr-reliability-wld2vove",
+  "inputs": {
+    "doc/evidence/godot-visibility-test-20261103/inputs/client-visibility-visual-companion04-manifest.json": "16d2c211c6687494bcf188f249c88ba054c1bcd8b97b685e56c936b46cc0cef7",
+    "doc/evidence/godot-visibility-test-20261103/VrFrameReady.cs": "1ad52bbc5e95e3b9828bd16518b072774763809e63216a04a973c7480565baca",
+    "doc/evidence/godot-visibility-test-20261103/FrameObservation.cs": "141e4876c3d9561819c9e9421e91494214a220f37705719f2eabba9e60610f35",
+    "doc/evidence/godot-vr-visual-readiness-20261102/live.py": "33578872bc9fb6ddc68721bea157272e38898ef5ce05d2f7736185f74accd781",
+    "doc/evidence/godot-vr-visual-readiness-20261102/supervision.py": "a579a7cc7dfc6cd17e87345989ba16e1b0b938fcd5c548207eb6bba121977f5b",
+    "doc/evidence/godot-vr-visual-readiness-20261102/owned_commands.py": "60c693b94cc8113263f0238f47337430a18108ac544132bfff8ed3f5ef8aa6a0",
+    "doc/evidence/godot-vr-visual-readiness-20261102/pipe_ownership.py": "9c0c91893306d33ed415170164004cacff276364748564bb481e67aa8b80fa89",
+    "doc/evidence/godot-vr-visual-readiness-20261102/test_supervision.py": "5dada091889c47fa7d443bcc40e21d8076053497a9939cb2df5e483ef04807ce",
+    "doc/evidence/godot-vr-visual-readiness-20261102/test_owned_commands.py": "1fd3edb42e2426114d1d0eae6ccbd17d1ae7e39890ca47aaa205756f5e0563c1",
+    "doc/evidence/godot-vr-visual-readiness-20261102/FrameObservationChecks.cs": "e5a0cd212889d0dfdc0950a6e448e6ccb9fc14b25bc6bff1aa19661c3ae33993"
+  },
+  "commands": [],
+  "binding": {
+    "manifest_sha256": "16d2c211c6687494bcf188f249c88ba054c1bcd8b97b685e56c936b46cc0cef7",
+    "live_inputs": 98,
+    "supplied_inputs": 100,
+    "saved_build_phase_exits": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "managed_export_files_verified": 4,
+    "full_native_export_reaudit": false
+  }
+}

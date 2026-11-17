@@ -1,0 +1,20 @@
+{
+  "command": [
+    "docker",
+    "run",
+    "--rm",
+    "--init",
+    "--entrypoint",
+    "/usr/bin/env",
+    "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+    "rebar3",
+    "help",
+    "eunit"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-28T01:32:17Z",
+  "elapsed_seconds": 0.8200817108154297,
+  "child_exit": 0,
+  "timed_out": false,
+  "error_diagnostics": 0
+}

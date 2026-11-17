@@ -32,8 +32,21 @@ unknown() -> #{parent => true}.
 -spec affected(basis(), #{term() => term()}) -> boolean().
 affected(Basis, Changed) ->
     maps:is_key(parent, Basis) orelse
-        maps:fold(fun(Key, _, Found) -> Found orelse maps:is_key(Key, Changed) end,
-                  false, Basis).
+        begin
+            Keys = maps:from_keys([dependency_identity(K) || K <- maps:keys(Changed)],true),
+            maps:fold(fun(Key, _, Found) ->
+                Found orelse maps:is_key(dependency_identity(Key),Keys)
+            end,false,Basis)
+        end.
+
+%% A remote read can retain an opaque symbol until a later installed delta
+%% materializes it. Both spellings identify the same predicate dependency.
+dependency_identity({fact,{Symbol,Arity}}) ->
+    {ok,[Name]} = quod_wire_term:symbol_names(Symbol),
+    {fact,{Name,Arity}};
+dependency_identity({source,World,Identity,{fact,Functor}}) ->
+    {source,World,Identity,dependency_identity({fact,Functor})};
+dependency_identity(Key) -> Key.
 
 dependency_keys({fact, Functor}) -> [{fact, Functor}];
 dependency_keys(predicate_registry) -> [predicate_registry];

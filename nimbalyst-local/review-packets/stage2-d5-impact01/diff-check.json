@@ -1,0 +1,11 @@
+{
+  "label": "diff-check",
+  "command": [
+    "git",
+    "diff",
+    "--check"
+  ],
+  "child_exit": 0,
+  "stdout_eof": true,
+  "stderr_eof": true
+}

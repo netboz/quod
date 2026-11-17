@@ -1,0 +1,11 @@
+Ns = <<"human:65-UXSmsVRF0pjNPJ7mZGfwD8aRlsgoBaf47ODsr22o">>, Sp = <<"quod:space">>,
+G = {findall, {state, {'S'}, {'N'}, {'L'}},
+      {',', {current_ontology_identity, {'Ns'}, {'A'}},
+       {',', {'::', Sp, {space_instance, {entity_ref, {'Ns'}, {'A'}, {'S'}}, space}},
+        {',', {attribute, {'S'}, name, {'N'}},
+         {'::', Sp, {space_location, {entity_ref, {'Ns'}, {'A'}, {'S'}}, {'L'}}}}}},
+      {'R'}},
+{ok, [#{'R' := R}], _} = quod_prolog:prove_ro(Ns, G),
+Short = fun({entity_ref, _, _, E}) -> E; (X) -> X end,
+Loc = fun({placed, D, T}) -> {in, Short(D), T}; (X) -> X end,
+#{height => quod_prolog:applied(Ns), spaces => [{S, N, Loc(L)} || {state, S, N, L} <- R]}.

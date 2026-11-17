@@ -1,0 +1,149 @@
+===> Verifying dependencies...
+===> Fetching rebar3_hex v7.4.0
+===> Errors loading plugin rebar3_hex. Run rebar3 with DEBUG=1 set to see errors.
+===> Analyzing applications...
+===> Compiling quic
+===> Compiling quantile_estimator
+===> Compiling prometheus
+===> Compiling prometheus_httpd
+===> Compiling ssl_verify_fun
+===> Compiling tls_certificate_check
+===> Compiling opentelemetry_api
+===> Compiling opentelemetry
+===> Compiling gproc
+===> Compiling hpack
+===> Compiling chatterbox
+===> Compiling acceptor_pool
+===> Compiling grpcbox
+===> Compiling opentelemetry_exporter
+===> Compiling erlang_qq
+===> Compiling typerefl
+===> Compiling getopt
+===> Compiling hocon
+===> Compiling erlog
+===> Compiling ranch
+===> Compiling cowlib
+===> Compiling cowboy
+===> Getting log of git repo failed in /work/_checkouts/typerefl. Falling back to version 0.0.0
+===> Getting log of git repo failed in /work/_checkouts/hocon. Falling back to version 0.0.0
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+      \x{250C}\x{2500} src/quod_physics.erl:
+      \x{2502}
+ 1193 \x{2502}      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      \x{2502}                                                               \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} src/quod_physics.erl:
+      \x{2502}
+ 1193 \x{2502}      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      \x{2502}                                                                   \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} src/quod_physics.erl:
+      \x{2502}
+ 1193 \x{2502}      Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+      \x{2502}                                                                       \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+     \x{250C}\x{2500} src/quod_wire_term.erl:
+     \x{2502}
+ 423 \x{2502}  collect_goal_symbols({'$quod_symbol', Name}, Acc, Owner) when is_binary(Name) ->
+     \x{2502}                                                    \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+
+     \x{250C}\x{2500} src/quod_wire_term.erl:
+     \x{2502}
+ 425 \x{2502}  collect_goal_symbols(Tuple, _Acc, Owner)
+     \x{2502}                                    \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+
+     \x{250C}\x{2500} src/quod_wire_term.erl:
+     \x{2502}
+ 454 \x{2502}  collect_goal_symbols(_Goal, Acc, Owner) ->
+     \x{2502}                                   \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+
+     \x{250C}\x{2500} src/quod_wire_term.erl:
+     \x{2502}
+ 487 \x{2502}  collect_opaque_goal_positions(_Name, _Tuple, Acc, Owner) ->
+     \x{2502}                                                    \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+
+     \x{250C}\x{2500} src/quod_wire_term.erl:
+     \x{2502}
+ 496 \x{2502}  collect_clause_symbol(_Tuple, _Position, _Acc, Owner) ->
+     \x{2502}                                                 \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+
+     \x{250C}\x{2500} src/quod_wire_term.erl:
+     \x{2502}
+ 523 \x{2502}  collect_goal_positions(_Tuple, [], Acc, Owner) ->
+     \x{2502}                                          \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+
+     \x{250C}\x{2500} src/quod_wire_term.erl:
+     \x{2502}
+ 536 \x{2502}  replace_goal_symbols({'$quod_symbol', Name}, Owner) ->
+     \x{2502}                                               \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+
+     \x{250C}\x{2500} src/quod_wire_term.erl:
+     \x{2502}
+ 565 \x{2502}  replace_goal_symbols(Goal, Owner) ->
+     \x{2502}                             \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+
+     \x{250C}\x{2500} src/quod_wire_term.erl:
+     \x{2502}
+ 571 \x{2502}  replace_clause_symbol(Tuple, _Position, Owner) ->
+     \x{2502}                                          \x{2570}\x{2500}\x{2500} Warning: variable 'Owner' is unused
+
+
+    \x{250C}\x{2500} test/quod_physics_coordinates_tests.erl:
+    \x{2502}
+ 56 \x{2502}      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    \x{2502}                               \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    \x{250C}\x{2500} test/quod_physics_coordinates_tests.erl:
+    \x{2502}
+ 56 \x{2502}      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    \x{2502}                                   \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+    \x{250C}\x{2500} test/quod_physics_coordinates_tests.erl:
+    \x{2502}
+ 56 \x{2502}      ?assertMatch({ok,{_,[{1,{0.0,0.0,0.0},_,_}],_}},quod_physics_native:sample(W)),
+    \x{2502}                                       \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+      \x{250C}\x{2500} test/quod_physics_tests.erl:
+      \x{2502}
+ 1524 \x{2502}              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+      \x{2502}                                                \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} test/quod_physics_tests.erl:
+      \x{2502}
+ 2152 \x{2502}          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      \x{2502}                                   \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      \x{250C}\x{2500} test/quod_physics_tests.erl:
+      \x{2502}
+ 2152 \x{2502}          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      \x{2502}                                         \x{2570}\x{2500}\x{2500} Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Running Common Test suites...
+%%% quod_ask_SUITE: 
+%%% quod_ask_SUITE ==> answer_policy_producer_consumer_and_signed_change: FAILED
+%%% quod_ask_SUITE ==> {{badmatch,{error,invalid_term}},
+ [{quod_ask_SUITE,answer_policy_producer_consumer_and_signed_change,1,
+                  [{file,"/work/test/quod_ask_SUITE.erl"},{line,1063}]},
+  {test_server,ts_tc,3,[{file,"test_server.erl"},{line,1796}]},
+  {test_server,run_test_case_eval1,6,[{file,"test_server.erl"},{line,1305}]},
+  {test_server,run_test_case_eval,9,[{file,"test_server.erl"},{line,1237}]}]}
+
+EXPERIMENTAL: Writing retry specification at /work/_build/test/logs/retry.spec
+              call rebar3 ct with '--retry' to re-run failing cases.
+Failed 1 tests. Passed 0 tests. 
+Results written to "/work/_build/test/logs/index.html".
+===> Failures occurred running tests: 1

@@ -1,0 +1,54 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-m5-package-20261031/inspect_package.py",
+    "final-inspection02",
+    "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/quod-stage2-linux-x86_64-private02.tar.gz",
+    "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/m5-package-inputs03/package02.json"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 0,
+  "timed_out": false,
+  "driver_inputs": {
+    "build_companion.py": "bfb2c42599eb8582faaff77acee060cd029d5077f997e826587660c2ebe9f2ce",
+    "hashes.py": "89dc6c71b55621c19aa9cbec568942159d4235503710e2dcdd8e571c0d216212",
+    "inspect_package.py": "e8e046448bea6ff64db8d9fd22c5e19bf3ef1526093126788e16f7c310d20656",
+    "isolation.py": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8",
+    "isolation_probe.py": "067bf0138ae2c4442041860685850a4dad386b40d12aebb05de0b35c2011009e",
+    "journey.py": "730e63508cc9d24daabf94e204bd0369a15bd856e75f90eb6428d594416355e7",
+    "ordinary_launch.py": "7140354863b67923bf859d69db9755619b8566d5f04043e5585df7a1b26a89fa",
+    "package_checks.py": "31d97bd2e224e2c20c473378590ef4522602ec12016efafe9d18f96285cdb57e",
+    "prepare.py": "ee149ee48ffec269c63bb945e93bbd94bb7a136621a5b54bfa1f82f955086973",
+    "retirement_inventory.py": "3d56723929e33e7a57a080283569cc436def789886cacc9ce2b65466a99aa9c6",
+    "run.py": "20ace533ea6238853b692dde4a651472517e4bf91a4cacdd966f348fc37b1afd",
+    "serve.py": "334a9602cfd32a7c3679264e1900e89cc8c08613f040b09a639adee6f265fb8f",
+    "package.py": "909f502a6b5252313764a63887b3de44fce51a6f9e153886046ba7dcf19aab3e"
+  },
+  "start_utc": "2026-10-31T17:09:58Z",
+  "elapsed_seconds": 2.4207522869110107,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/m5-final-inspection02/stdout.raw",
+      "sha256": "465531e4e22d50a8a54e5f74500bf08f17b465c33969abe664ff2cf209293b15",
+      "bytes": 1193
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/m5-final-inspection02/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m5-package-20261031/logs/m5-final-inspection02-stdout.log",
+      "sha256": "465531e4e22d50a8a54e5f74500bf08f17b465c33969abe664ff2cf209293b15",
+      "bytes": 1193
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m5-package-20261031/logs/m5-final-inspection02-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

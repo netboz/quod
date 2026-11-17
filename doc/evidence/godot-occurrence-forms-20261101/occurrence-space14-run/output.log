@@ -1,0 +1,32 @@
+PASS enabled action create-key
+PASS enabled action connect
+PASS enabled action register
+PASS enabled action prepare
+PASS enabled action setup
+PASS authorized same-ontology fixture offers a non-space instance form and two visual occurrences
+PASS actual two-occurrence native raster retained
+PASS both real native picks resolve the same exact anchored subject
+PASS native selection retains each chosen visual occurrence and pose alongside the same subject
+PASS remove only the separate diagnostic instrument membership before the space task
+PASS enabled action create-operations
+PASS actual bounded space-form control is reachable: representation-browse
+PASS actual bounded space-form control is reachable: @Button@81
+PASS actual bounded space-form control is reachable: control0
+PASS actual bounded space-form control is reachable: control7
+PASS ordinary offered Create commits the named space exactly once
+PASS actual bounded space-form control is reachable: hide-subject-form
+PASS named space exterior is an actual visible native selection target
+PASS the visible centre resolves the chosen space rather than an occluding subject
+PASS space pick retains its exact exterior occurrence without entering
+PASS actual bounded space-form control is reachable: representation-browse
+PASS actual bounded space-form control is reachable: @Button@179
+PASS retained actual space-enter-associated raster
+PASS the same class-selected authored Enter form targets the exact depicted space
+PASS actual bounded space-form control is reachable: form-personal-workspace
+PASS actual bounded space-form control is reachable: form-near-object
+PASS space-form relocation preserves its controller draft revision and original creation outcome
+PASS retained actual space-enter-spatial raster
+PASS space action uses the same associated spatial surface without native XR
+PASS viewing choosing and relocating the space form cause no travel or duplicate instruction
+PASS actual bounded space-form control is reachable: control0
+{"passed": false, "failure": "AssertionError: ", "children": {"server": 0, "client-occurrence-space": 1}, "native_inputs": 0}

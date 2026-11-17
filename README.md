@@ -25,6 +25,11 @@ architectural changes and verification.
 
 ## Current foundation and direction
 
+The [clean Godot .NET client](client/godot/README.md) implements the new identity
+and ontology-driven GUI path. Its [M1b evidence](doc/evidence/godot-m1b-20261028/README.md)
+records current qualification and remaining hardware scope; it uses no old Quod
+Rust core or GDExtension.
+
 The implemented substrate includes anchored ontology histories,
 DispersedSimplex ordering, signed agent goals, cross-ontology proofs and
 writes, committed event reactions, hosted agents, internal FIPA Request
@@ -46,6 +51,15 @@ references can show the same instance in multiple spaces.
 personal agent's signed route, with explicit storage, exact finite or infinite
 extent, optional atomic placement and recovery of the original reference/name.
 Empty creation allocates no terrain or simulation.
+Fresh local founding now composes seven shared foundations: root, node, agent,
+GUI, controllers, space and user. Normal signed signup creates a private human U;
+authorized setup assigns its distinct personal agent A and constructs an ordinary,
+parentless U-owned S0 in explicitly selected account storage. A starts in S0,
+which requires no floor, sky, terrain, physics or shared lobby. Private account,
+instruction, HUD and preference state stays with its owner. The
+[foundation contract](doc/godot-foundation-contract.md) and
+[M1a evidence](doc/evidence/godot-m1a-20261027/README.md) describe source pins,
+atomic setup, disclosure policy, qualification and remaining client obligations.
 Shared [offered operations](doc/gui-implementation-plan.md#offered-class-and-instance-operations)
 bind explicit class recipes to exact subjects, typed inputs and named results.
 The normal World screen opens those forms with explicit storage selection,
@@ -60,7 +74,7 @@ that boundary. The source release version is in [`src/quod.app.src`](src/quod.ap
 
 ## Build and verification
 
-A recent Erlang/OTP, `rebar3`, and Rust/Cargo are required. CI and release
+Erlang/OTP 27 or newer, `rebar3`, and Rust/Cargo are required. CI and release
 builders use Rust 1.90.0. The build hook compiles the pinned Rapier/Rustler
 [adapter](native/quod_physics/Cargo.toml) with its committed lockfile; the
 release includes the native library. The QUIC stack is pure Erlang.

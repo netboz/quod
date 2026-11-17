@@ -25,6 +25,10 @@ before changing architecture or semantics. Flag conflicts rather than guessing.
   Trace and reuse the established path first; any demonstrated missing generic
   capability belongs in its existing shared owner. Remove superseded special
   cases rather than keeping both paths.
+- A class may define its Eidolon recipes in the same ontology as the class.
+  Do not create a separate ontology merely to house its representations. Use
+  the existing class-selected recipe path and exact owner references; a separate
+  recipe ontology is optional, not a requirement of Eidolon selection.
 - Do not hardcode resource budgets or population ceilings in Erlang. Resource
   allocation is Prolog policy, including future pricing of scarce resources.
   When an existing numeric cap blocks ordinary work, fix its policy ownership

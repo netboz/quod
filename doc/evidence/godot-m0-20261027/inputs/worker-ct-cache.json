@@ -1,0 +1,11 @@
+{
+  "path": "test/quod_ask_SUITE.erl",
+  "prerequisite_sha256": "b5ca45464ea53a87cf230a8c21d7a594b66ac5eaacf4b3b83a155da3087f46fe",
+  "worker_sha256": "80c2c69fcfcad213e6620699f662c32d06c6d8f8acb178ba08caa220529f2d55",
+  "scope": "Four test-fixture lines cache the peer actual installed fixed module directories. No runtime/common/dependency source or existing deadline changes.",
+  "evidence": [
+    "remote-policy-05",
+    "remote-path-regressions-06"
+  ],
+  "remaining": "remote signed gateway outcome query timeout; one of three regression cases failed"
+}

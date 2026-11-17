@@ -1,0 +1,47 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-m4-presentation-20261030/preflight.py",
+    "presentation-resize-diagnostic01"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "driver_inputs": {
+    "PhysicalChecks.cs": "7de73e525a93220673450acb24e4faa4ffac3d41e25cbcaa6106cf4643fe9fc8",
+    "extract_api.py": "ea28ad8957392a81be430af77850f2b055ea860b7b0c86918060fa13741caf59",
+    "freeze.py": "28b03566b75f2d6050b504442f4232a15c21c6c7c45677eb0841c377d46c37a7",
+    "godot_m3b_fixture.erl": "c895246b8d4df73560cc042b0ff459b4f33bb46a8870aa52bc4330c3817db769",
+    "godot_m3b_physics_fixture.erl": "06b764596bf6aaa4e58549a21d56ae10b56f60f9891d38e4ef8c74601da7392d",
+    "environment.py": "c3a54c8ce4d8360f8711e027d31f7a98f29cf3b9b4436c43a84984cf2c1f20f9",
+    "digests.py": "6557f2c6e7ec5581e785bb58ecb8a36a3e8d9136e69577ab7422ab1e24a74895",
+    "run.py": "860a082e115d37d86b18b0f588412bbbbff63f65757aa63e9acd358cf8e573eb",
+    "inventory.py": "2e2211415eb28889defe7f8e7281ccb022852c4191d4e790d346f0cadb876aa0",
+    "check_builds.py": "748cf2fa9de2f9683c0577f102f1268b716829c4c04fb66eb057ad30e74cd1af",
+    "serve.py": "f4cebe56f7939c887333d2fa357dc5df1a2c79cd42f56a3b8cc9bc43305eb96c",
+    "build.py": "7fa203569ca2462b86b624b5c5d27eae16937e5701432c9d3a66784b802f26f4",
+    "physical.py": "d5d9b98230b72125fba87a75acd08675e14b2e1b177813361b58559548393547",
+    "verify_freeze.py": "4d1193f3b02a3bb6bc6d472e74f00c31bb048e103e322cb9eb00d6c7d90e77b2",
+    "manual_run.py": "08df30b590f09ffdc24f8aa4fc7b1a0a61637adb14d0f1c653c565c9e08dc89f"
+  },
+  "bound_seconds": 2100,
+  "reader_errors": [],
+  "child_exit": 0,
+  "eof": {
+    "stdout": true,
+    "stderr": true
+  },
+  "elapsed_seconds": 0.21667265892028809,
+  "streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/presentation-resize-diagnostic-preflight01/stdout.raw",
+      "sha256": "a37a000d2f93f58afa720724033b2efc9f269b72d9c307e05cd91c60a5ca827e",
+      "bytes": 117,
+      "sanitized_sha256": "a37a000d2f93f58afa720724033b2efc9f269b72d9c307e05cd91c60a5ca827e"
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/presentation-resize-diagnostic-preflight01/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "sanitized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  }
+}

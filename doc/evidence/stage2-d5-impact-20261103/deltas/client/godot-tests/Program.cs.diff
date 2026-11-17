@@ -1,0 +1,10 @@
+--- stage2-product01/client/godot-tests/Program.cs
++++ current/client/godot-tests/Program.cs
+@@ -13,6 +13,7 @@
+     public static int Main(string[] args)
+     {
+         try {
++            if (args[0] == "resource-errors") { ResourceErrorChecks.Run().GetAwaiter().GetResult(); return 0; }
+             if (args[0] == "crash") { Crash(args); return 0; }
+             string repo = Path.GetFullPath(args[0]);
+             var corpus = JsonNode.Parse(File.ReadAllText(Path.Combine(repo, "client/test/fixtures/native-contract/contracts.json")))!;

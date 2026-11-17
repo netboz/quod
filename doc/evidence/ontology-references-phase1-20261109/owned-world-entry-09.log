@@ -1,0 +1,52 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;31mF[0m
+Failures:
+
+  1) quod_gui_examples_tests:world_library/0
+[0;31m     Failure/Error: {error,
+                        {world_entry_request_failed,
+                            {request_not_submitted,
+                                {error,signing_not_authorized}}},
+                        [{quod_gui_examples_tests,world_entry_ready,2,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_gui_examples_tests.erl"},
+                              {line,183}]},
+                         {quod_gui_examples_tests,
+                             '-world_library/0-lc$^22/1-4-',5,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_gui_examples_tests.erl"},
+                              {line,97}]},
+                         {quod_gui_examples_tests,'-world_library/0-fun-47-',
+                             11,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_gui_examples_tests.erl"},
+                              {line,116}]},
+                         {quod_gui_question_tests,with_receiver,3,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_gui_question_tests.erl"},
+                              {line,385}]},
+                         {quod_gui_examples_tests,'-world_library/0-fun-48-',
+                             6,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_gui_examples_tests.erl"},
+                              {line,51}]},
+                         {quod_gui_examples_tests,with_responder,4,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_gui_examples_tests.erl"},
+                              {line,494}]},
+                         {quod_gui_examples_tests,world_library,0,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_gui_examples_tests.erl"},
+                              {line,21}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]}]}
+[0m[0;36m     Output: World library fixture retained at /tmp/quod-world-library-7DC9D2776DCD7AD842DE39E9
+[0m
+
+Finished in 5.942 seconds
+[0;31m1 tests, 1 failures
+[0m===> Error running tests

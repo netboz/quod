@@ -1,0 +1,24 @@
+[
+  {
+    "phase": "m2-fresh",
+    "command": [
+      "/home/yan/.cache/quod-m2-artifacts/quod-m2-client-final17/source/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/home/yan/.cache/quod-m2-artifacts/private/production08-m2/identity",
+      "--node",
+      "https://127.0.0.1:41589",
+      "--ca",
+      "/home/yan/.cache/quod-m2-artifacts/private/production08-m2/proxy-ca.pem"
+    ],
+    "child_exit": 1,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": false,
+    "elapsed_seconds": 30.495379099003912,
+    "godot_error_diagnostics": false,
+    "passed": false
+  }
+]

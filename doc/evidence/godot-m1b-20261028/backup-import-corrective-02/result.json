@@ -1,0 +1,22 @@
+[
+  {
+    "phase": "backup-import",
+    "case": "backup-import",
+    "command": [
+      "/home/yan/.cache/quod-m1b-artifacts/quod-m1b-client-corrective-02/source/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m1b-backup-import-corrective-02-private/identity",
+      "--node",
+      "https://127.0.0.1:38499",
+      "--ca",
+      "/tmp/quod-m1b-live-corrective-03/backend-ca.pem"
+    ],
+    "child_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "passed": true
+  }
+]

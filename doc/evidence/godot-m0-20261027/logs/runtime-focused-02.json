@@ -1,0 +1,19 @@
+{
+  "command": [
+    "env",
+    "ERL_FLAGS=+S 4:4 +SDio 2 +SDcpu 2",
+    "REBAR_CACHE_DIR=/tmp/quod-m0-rebar-cache",
+    "rebar3",
+    "as",
+    "test",
+    "eunit",
+    "--module=quod_material_admission_tests,quod_proof_session_tests,quod_proof_session_savepoint_tests,quod_proof_context_tests,quod_scope_session_tests,quod_scope_wire_tests,quod_ask_router_tests,quod_ask_tests,quod_atomic_tests,quod_dtx_tests,quod_client_goal_tests,quod_client_auth_tests,quod_client_result_tests,quod_space_tests,quod_space_creation_tests,quod_gui_operations_tests,quod_controller_tests,quod_personal_agent_tests,quod_lifecycle_single_path_tests",
+    "--verbose"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-27T14:51:46Z",
+  "elapsed_seconds": 29.016565084457397,
+  "child_exit": 1,
+  "timed_out": false,
+  "error_diagnostics": 0
+}

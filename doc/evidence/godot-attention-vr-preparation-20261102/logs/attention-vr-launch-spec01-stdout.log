@@ -1,0 +1,9 @@
+PASS fresh M1B_READY binds original-outcome resolution to its actual owned control port
+PASS Qt xcb and SteamVR selection are process-only overrides
+PASS actual display/socket/plugin settings are inherited without replacement
+PASS literal spaces and shell punctuation reach the finite child unchanged with true exit37 and EOF
+PASS Godot retains its explicit Wayland Vulkan mobile path
+PASS the current fixture endpoint and CA are exact literal arguments
+PASS invalid port is refused without invoking an application
+PASS invalid control_port is refused without invoking an application
+LAUNCH_SPEC_PASS {"checks": 8, "finite_child_exit": 37, "eof": true, "application_or_fixture_or_runtime": false}

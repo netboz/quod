@@ -1,0 +1,12 @@
+{
+  "previous_boundary": "/home/yan/.cache/quod-m3a-artifacts/quod-godot-m3a-handoff-8d55a3f3-20261028-01",
+  "previous_snapshot_sha256": "318a51191e540aa9f37efbd527569027593b73415f5e3620d003d5459e757f4c",
+  "prior_source_entries_checked": 20749,
+  "only_changed_prior_entries": [
+    "doc/physics-native.md",
+    "src/quod_runtime.erl",
+    "test/quod_physics_tests.erl"
+  ],
+  "all_other_prior_source_and_evidence_bytes_preserved": true,
+  "missing_entries": []
+}

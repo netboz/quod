@@ -1,0 +1,444 @@
+ERLOG_OPTIONS [debug_info,
+               {d,'ERLANG_VERSION',"28.0.2"},
+               {d,'HAS_MAPS',true},
+               {d,'HAS_FULL_KEYS',true},
+               {d,'NEW_REC_CORE',true},
+               {d,'NEW_RAND',true},
+               {d,'NEW_BOOL_GUARD',true},
+               {d,'HAS_FLOOR',true},
+               {d,'HAS_CEIL',true},
+               {d,'NEW_STACKTRACE',true},
+               {d,'EEP48',true}]
+/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_physics.erl:1183:62: Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+% 1183|     Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+%     |                                                              ^
+
+/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_physics.erl:1183:66: Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+% 1183|     Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+%     |                                                                  ^
+
+/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_physics.erl:1183:70: Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+% 1183|     Direction = physical_vector(Axis), true = Direction =/= {0.0,0.0,0.0},
+%     |                                                                      ^
+
+/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_wire_term.erl:416:51: Warning: variable 'Owner' is unused
+%  416| collect_goal_symbols({'$quod_symbol', Name}, Acc, Owner) when is_binary(Name) ->
+%     |                                                   ^
+
+/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_wire_term.erl:418:35: Warning: variable 'Owner' is unused
+%  418| collect_goal_symbols(Tuple, _Acc, Owner)
+%     |                                   ^
+
+/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_wire_term.erl:447:34: Warning: variable 'Owner' is unused
+%  447| collect_goal_symbols(_Goal, Acc, Owner) ->
+%     |                                  ^
+
+/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_wire_term.erl:480:51: Warning: variable 'Owner' is unused
+%  480| collect_opaque_goal_positions(_Name, _Tuple, Acc, Owner) ->
+%     |                                                   ^
+
+/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_wire_term.erl:489:48: Warning: variable 'Owner' is unused
+%  489| collect_clause_symbol(_Tuple, _Position, _Acc, Owner) ->
+%     |                                                ^
+
+/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_wire_term.erl:516:41: Warning: variable 'Owner' is unused
+%  516| collect_goal_positions(_Tuple, [], Acc, Owner) ->
+%     |                                         ^
+
+/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_wire_term.erl:529:46: Warning: variable 'Owner' is unused
+%  529| replace_goal_symbols({'$quod_symbol', Name}, Owner) ->
+%     |                                              ^
+
+/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_wire_term.erl:558:28: Warning: variable 'Owner' is unused
+%  558| replace_goal_symbols(Goal, Owner) ->
+%     |                            ^
+
+/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_wire_term.erl:564:41: Warning: variable 'Owner' is unused
+%  564| replace_clause_symbol(Tuple, _Position, Owner) ->
+%     |                                         ^
+
+/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_catchup.erl:1180:1: Warning: function test_transfer_parts/2 is unused
+% 1180| test_transfer_parts(Parts, Allowances) ->
+%     | ^
+
+COMPILE_RESULTS [{"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_dtx_phase_index.erl",
+                  {ok,quod_dtx_phase_index}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_dtx_recovery.erl",
+                  {ok,quod_dtx_recovery}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_consensus_trace.erl",
+                  {ok,quod_consensus_trace}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_file.erl",
+                  {ok,quod_file}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_dtx_coordinator.erl",
+                  {ok,quod_dtx_coordinator}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_effect_journal.erl",
+                  {ok,quod_effect_journal}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_attempt_span.erl",
+                  {ok,quod_attempt_span}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_ns.erl",
+                  {ok,quod_ns}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_schema.erl",
+                  {ok,quod_schema}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_signing_journal.erl",
+                  {ok,quod_signing_journal}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_material_admission.erl",
+                  {ok,quod_material_admission}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_agent_identity.erl",
+                  {ok,quod_agent_identity}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_proof_scope.erl",
+                  {ok,quod_proof_scope}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_brahms.erl",
+                  {ok,quod_brahms}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_selection_basis.erl",
+                  {ok,quod_selection_basis}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_http_headers_h.erl",
+                  {ok,quod_http_headers_h}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_quorum.erl",
+                  {ok,quod_quorum}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_link.erl",
+                  {ok,quod_link}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_scope_session.erl",
+                  {ok,quod_scope_session}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_runtime.erl",
+                  {ok,quod_runtime}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_safe_term.erl",
+                  {ok,quod_safe_term}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_ask_router.erl",
+                  {ok,quod_ask_router}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_foreign_projection.erl",
+                  {ok,quod_foreign_projection}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_commit_validation.erl",
+                  {ok,quod_commit_validation}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_dtx.erl",
+                  {ok,quod_dtx}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_system_ontology.erl",
+                  {ok,quod_system_ontology}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_explorer_http.erl",
+                  {ok,quod_explorer_http}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_time.erl",
+                  {ok,quod_time}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_client_auth.erl",
+                  {ok,quod_client_auth}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_ledger_store.erl",
+                  {ok,quod_ledger_store}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_proof_savepoint.erl",
+                  {ok,quod_proof_savepoint}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_trace.erl",
+                  {ok,quod_trace}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_transaction_scope.erl",
+                  {ok,quod_transaction_scope}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_client_goal_parser.erl",
+                  {ok,quod_client_goal_parser}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_diff.erl",
+                  {ok,quod_diff}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_log_formatter.erl",
+                  {ok,quod_log_formatter}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_physics_frames.erl",
+                  {ok,quod_physics_frames}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_client_result.erl",
+                  {ok,quod_client_result}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_voxel.erl",
+                  {ok,quod_voxel}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_directory_shape.erl",
+                  {ok,quod_directory_shape}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_client_cursor.erl",
+                  {ok,quod_client_cursor}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_relay.erl",
+                  {ok,quod_relay}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_effect.erl",
+                  {ok,quod_effect}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_ontology_name.erl",
+                  {ok,quod_ontology_name}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_simplex.erl",
+                  {ok,quod_simplex}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_client_http.erl",
+                  {ok,quod_client_http}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_http_listener.erl",
+                  {ok,quod_http_listener}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_durable_term.erl",
+                  {ok,quod_durable_term}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_read_set.erl",
+                  {ok,quod_read_set}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_client_view.erl",
+                  {ok,quod_client_view}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_client_goal_router.erl",
+                  {ok,quod_client_goal_router}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_scope_wire.erl",
+                  {ok,quod_scope_wire}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_brahms_sup.erl",
+                  {ok,quod_brahms_sup}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_resource_basis.erl",
+                  {ok,quod_resource_basis}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_rate.erl",
+                  {ok,quod_rate}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_applied_certificate.erl",
+                  {ok,quod_applied_certificate}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_operation.erl",
+                  {ok,quod_operation}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_process.erl",
+                  {ok,quod_process}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_client_goal.erl",
+                  {ok,quod_client_goal}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_directory_generation.erl",
+                  {ok,quod_directory_generation}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_conn.erl",
+                  {ok,quod_conn}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_gui_presentation.erl",
+                  {ok,quod_gui_presentation}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_dtx_endpoint.erl",
+                  {ok,quod_dtx_endpoint}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_c4_sampler_observation.erl",
+                  {ok,quod_c4_sampler_observation}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_agent.erl",
+                  {ok,quod_agent}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_peer_route.erl",
+                  {ok,quod_peer_route}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_c4_sdk_config.erl",
+                  {ok,quod_c4_sdk_config}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_predicates.erl",
+                  {ok,quod_predicates}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_brahms_sampler.erl",
+                  {ok,quod_brahms_sampler}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_c4_attempt.erl",
+                  {ok,quod_c4_attempt}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_client_goal_ingress.erl",
+                  {ok,quod_client_goal_ingress}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_client_goal_target.erl",
+                  {ok,quod_client_goal_target}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_erlog_db_local_prove.erl",
+                  {ok,quod_erlog_db_local_prove}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_proof_context.erl",
+                  {ok,quod_proof_context}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_outcome.erl",
+                  {ok,quod_outcome}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_metrics.erl",
+                  {ok,quod_metrics}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_agent_observer.erl",
+                  {ok,quod_agent_observer}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_brahms_population.erl",
+                  {ok,quod_brahms_population}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_node_actor.erl",
+                  {ok,quod_node_actor}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_physics.erl",
+                  {ok,quod_physics}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_ontology.erl",
+                  {ok,quod_ontology}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_observation.erl",
+                  {ok,quod_observation}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_feed.erl",
+                  {ok,quod_feed}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_ledger.erl",
+                  {ok,quod_ledger}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_physics_native.erl",
+                  {ok,quod_physics_native}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_directory_control.erl",
+                  {ok,quod_directory_control}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_foreign_log.erl",
+                  {ok,quod_foreign_log}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_namespace_manager.erl",
+                  {ok,quod_namespace_manager}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_transaction.erl",
+                  {ok,quod_transaction}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_explorer.erl",
+                  {ok,quod_explorer}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_directory.erl",
+                  {ok,quod_directory}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_erlog_db_mvcc.erl",
+                  {ok,quod_erlog_db_mvcc}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_explorer_ws.erl",
+                  {ok,quod_explorer_ws}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_client_tls.erl",
+                  {ok,quod_client_tls}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_wire_term.erl",
+                  {ok,quod_wire_term}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_agent_ref.erl",
+                  {ok,quod_agent_ref}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_atomic_admission.erl",
+                  {ok,quod_atomic_admission}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_sup.erl",
+                  {ok,quod_sup}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_app.erl",
+                  {ok,quod_app}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_client_goal_endpoint.erl",
+                  {ok,quod_client_goal_endpoint}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_identity.erl",
+                  {ok,quod_identity}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_agent_vault.erl",
+                  {ok,quod_agent_vault}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_ns_sup.erl",
+                  {ok,quod_ns_sup}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_reg.erl",
+                  {ok,quod_reg}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_operation_vector.erl",
+                  {ok,quod_operation_vector}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_physics_coordinates.erl",
+                  {ok,quod_physics_coordinates}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_atomic.erl",
+                  {ok,quod_atomic}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_quic.erl",
+                  {ok,quod_quic}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_terrain_wire.erl",
+                  {ok,quod_terrain_wire}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_prolog.erl",
+                  {ok,quod_prolog}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_proof_continuation.erl",
+                  {ok,quod_proof_continuation}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_dtx_owner.erl",
+                  {ok,quod_dtx_owner}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_client.erl",
+                  {ok,quod_client}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_committed_projection.erl",
+                  {ok,quod_committed_projection}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_catchup.erl",
+                  {ok,quod_catchup}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_dtx_current_view.erl",
+                  {ok,quod_dtx_current_view}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_proof_session.erl",
+                  {ok,quod_proof_session}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_ingress_state.erl",
+                  {ok,quod_ingress_state}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/quod_read_certificate.erl",
+                  {ok,quod_read_certificate}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/predicates/quod_runtime_predicates.erl",
+                  {ok,quod_runtime_predicates}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/predicates/quod_agent_work_predicates.erl",
+                  {ok,quod_agent_work_predicates}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/predicates/quod_transaction_predicates.erl",
+                  {ok,quod_transaction_predicates}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/predicates/quod_action_predicates.erl",
+                  {ok,quod_action_predicates}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/predicates/quod_gui_predicates.erl",
+                  {ok,quod_gui_predicates}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/predicates/quod_ontology_predicates.erl",
+                  {ok,quod_ontology_predicates}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/predicates/quod_directory_predicates.erl",
+                  {ok,quod_directory_predicates}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/predicates/quod_common_primitives.erl",
+                  {ok,quod_common_primitives}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/predicates/quod_ask.erl",
+                  {ok,quod_ask}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/predicates/quod_committee_predicates.erl",
+                  {ok,quod_committee_predicates}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/predicates/quod_agent_predicates.erl",
+                  {ok,quod_agent_predicates}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/src/predicates/quod_physics_predicates.erl",
+                  {ok,quod_physics_predicates}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/test/quod_agent_hosting_tests.erl",
+                  {ok,quod_agent_hosting_tests}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/test/quod_agent_reaction_tests.erl",
+                  {ok,quod_agent_reaction_tests}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/test/quod_ct.erl",
+                  {ok,quod_ct}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/test/quod_gui_question_tests.erl",
+                  {ok,quod_gui_question_tests}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/test/quod_lobby_tests.erl",
+                  {ok,quod_lobby_tests}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/test/quod_predicate_removal_tests.erl",
+                  {ok,quod_predicate_removal_tests}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/test/quod_predicate_withdrawal_tests.erl",
+                  {ok,quod_predicate_withdrawal_tests}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/test/quod_source_view_tests.erl",
+                  {ok,quod_source_view_tests}},
+                 {"/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/test/quod_space_tests.erl",
+                  {ok,quod_space_tests}}]
+======================== EUnit ========================
+module 'quod_predicate_removal_tests'
+  quod_predicate_removal_tests: -signed_definition_removal_test_/0-fun-5-...[0.709 s] ok
+  quod_predicate_removal_tests: -signed_origin_removal_recovery_test_/0-fun-2-...[0.162 s] ok
+  quod_predicate_removal_tests: -signed_denial_atomic_rollback_and_conflict_test_/0-fun-2-...=WARNING REPORT==== 3-Nov-2026::21:59:03.111078 ===
+quod: client-visible outcome_unknown producer=target_execute cause=engine_result kind=operation namespace=<<"host-test-node">> id=edac15393f856a0de2aa16b3327c1e37246a783077e0c321e48d52395829723d
+*failed*
+in function quod_predicate_removal_tests:denied/2 (/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/test/quod_predicate_removal_tests.erl, line 150)
+in call from quod_predicate_removal_tests:'-signed_denial_atomic_rollback_and_conflict_test_/0-fun-1-'/1 (/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/test/quod_predicate_removal_tests.erl, line 64)
+in call from quod_agent_hosting_tests:with_host/4 (/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/test/quod_agent_hosting_tests.erl, line 1654)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+**error:{assertMatch,
+    [{module,quod_predicate_removal_tests},
+     {line,150},
+     {expression,"quod_client_goal_ingress : submit ( Bytes , Sig )"},
+     {pattern,"{ ok , _ , { normalized , { failed , _ } } }"},
+     {value,
+         {ok,#{request =>
+                   #{mode => execute,not_after_ms => 1793739543110,
+                     network_identity => <<0,0,0,0,0,0,...>>,
+                     agent_namespace => <<"host-test-node">>,
+                     agent_genesis_anchor => <<151,0,16,83,130,15,...>>,
+                     signing_public_key => <<162,180,244,8,8,136,...>>,
+                     goal_text => <<"<<\"host-test-agent\">> ::"...>>,...},
+               signature => <<224,204,124,151,105,230,237,...>>,
+               variables => [],
+               goal =>
+                   {'::',<<"host-test-agent">>,
+                       {{'$quod_symbol',<<"abol"...>>},{'/',{...},...}}},
+               operation_ref =>
+                   {operation,<<"host-test-node">>,
+                       <<151,0,16,83,...>>,
+                       <<131,104,2,...>>,
+                       <<"í¬"...>>},
+               request_digest => <<140,70,97,18,126,97,143,...>>,
+               agent_ref_blob => <<131,104,2,97,4,108,0,...>>,
+               request_bytes => <<"quod.agent.goal.v1"...>>,...},
+             {normalized,{pending,{operation,<<"host"...>>,<<...>>,...}}}}}]}
+  output:<<"Failed hosted-agent fixture retained at /tmp/quod_hosted_24945FFA8BDC807D
+">>
+
+  quod_predicate_removal_tests: empty_definition_has_durable_write_and_conflict_key_test...[0.008 s] ok
+  [done in 21.037 s]
+quod_predicate_withdrawal_tests: -signed_contents_and_selected_editor_withdraw_test_/0-fun-24- (module 'quod_predicate_withdrawal_tests')...[2.736 s] ok
+module 'quod_agent_reaction_tests'
+  quod_agent_reaction_tests: -committed_assertions_use_existing_event_admission_and_composition_test_/0-fun-10-...[0.318 s] ok
+  quod_agent_reaction_tests: -committed_definition_removal_keeps_retract_reactions_test_/0-fun-9-...*failed*
+in function quod_agent_reaction_tests:'-committed_definition_removal_keeps_retract_reactions_test_/0-fun-1-'/2 (/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/test/quod_agent_reaction_tests.erl, line 51)
+in call from quod_agent_reaction_tests:'-committed_definition_removal_keeps_retract_reactions_test_/0-fun-8-'/1 (/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/test/quod_agent_reaction_tests.erl, line 54)
+in call from quod_agent_hosting_tests:with_host/4 (/home/yan/src/quod_worktrees/pearl-stone/_build/stage2-predicate-removal/signed06/source/test/quod_agent_hosting_tests.erl, line 1654)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+**error:{assertMatch,
+    [{module,quod_agent_reaction_tests},
+     {line,51},
+     {expression,"quod_client_goal_ingress : submit ( Bytes , Sig )"},
+     {pattern,"{ ok , _ , { normalized , { committed , _ , _ } } }"},
+     {value,
+         {ok,#{request =>
+                   #{mode => execute,not_after_ms => 1793739566269,
+                     network_identity => <<0,0,0,0,0,0,...>>,
+                     agent_namespace => <<"host-test-node">>,
+                     agent_genesis_anchor => <<67,115,0,113,39,51,...>>,
+                     signing_public_key => <<22,201,97,158,223,146,...>>,
+                     goal_text => <<"<<\"host-test-agent\">> ::"...>>,...},
+               signature => <<7,82,171,149,48,187,167,...>>,
+               variables => [],
+               goal =>
+                   {'::',<<"host-test-agent">>,
+                       {{'$quod_symbol',<<"goal">>},
+                        {{'$quod_symbol',...},{...},...}}},
+               operation_ref =>
+                   {operation,<<"host-test-node">>,
+                       <<67,115,0,113,...>>,
+                       <<131,104,2,...>>,
+                       <<"\ntR\f"...>>},
+               request_digest => <<190,31,172,217,171,130,17,...>>,
+               agent_ref_blob => <<131,104,2,97,4,108,0,...>>,
+               request_bytes => <<"quod.agent.goal.v1"...>>,...},
+             {normalized,{failed,<<131,104,3,...>>}}}}]}
+  output:<<"Failed hosted-agent fixture retained at /tmp/quod_hosted_E0F74B7E36ED7721
+">>
+
+  quod_agent_reaction_tests: -ordinary_owned_reactions_use_signed_goal_admission_test_/0-fun-12-...=WARNING REPORT==== 3-Nov-2026::21:59:06.540492 ===
+quod_prolog[host-test-agent]: can_invoke refused a top-level goal at pinned height 7
+[0.356 s] ok
+  quod_agent_reaction_tests: reaction_guard_matching_is_read_only_test...ok
+  quod_agent_reaction_tests: -nonground_committed_clause_events_do_not_capture_reaction_variables_test_/0-fun-3-...[0.173 s] ok
+  [done in 0.944 s]
+=======================================================
+  Failed: 2.  Skipped: 0.  Passed: 8.

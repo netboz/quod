@@ -1,0 +1,361 @@
+/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/Quod.Client.Tests.csproj : warning NU1900: Error occurred while getting package vulnerability data: Unable to load the service index for source https://api.nuget.org/v3/index.json.
+/home/yan/src/quod_worktrees/pearl-stone/client/godot-tests/Quod.Client.Tests.csproj : warning NU1900: Error occurred while getting package vulnerability data: Unable to load the service index for source https://api.nuget.org/v3/index.json.
+PASS browser backup public identity
+PASS unknown encrypted-backup version refuses
+PASS browser exact UTF8 uint64 wire
+PASS browser Ed25519 signature
+PASS browser exact UTF8 uint64 wire
+PASS browser Ed25519 signature
+PASS challenge signature
+PASS wrong backup passphrase
+PASS GCM tamper
+PASS new encrypted backup restores original identity
+PASS functional data term canonical bytes
+PASS functional data term canonical bytes
+PASS functional data term canonical bytes
+PASS functional data term canonical bytes
+PASS functional data term canonical bytes
+PASS functional data term canonical bytes
+PASS malformed functional term
+PASS malformed functional term
+PASS malformed functional term
+PASS malformed functional term
+PASS malformed functional term
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS production exact request and signature
+PASS all 100 real production fixtures including Reset
+PASS unchanged read exact original key
+PASS unchanged read exact original key
+PASS unchanged read exact original key
+PASS unchanged update does not replace active file
+PASS second writer lease
+PASS portable backup retains exact account references
+PASS restart retains account identity
+PASS durability failure remains visible
+PASS failed durability blocks later overwrites until reopen
+PASS reopen observes original post-rename result
+PASS durability failure preserves original key
+PASS insecure active file
+PASS corrupt store never replaced
+PASS symlink refuses
+PASS nested generic fields preserve above-uint64 integers
+PASS offered numeric step
+PASS choice membership
+PASS unsupported descriptor explicit refusal
+PASS unsupported executable descriptor property
+PASS nonground projection
+PASS required unchecked and empty defaults remain displayable
+PASS required defaults still need edits before submission
+PASS empty required selection still refuses submission
+PASS edited required fields retain exact typed bindings
+PASS initial boolean type stays strict
+PASS initial choice membership stays strict
+PASS completed vector preserves aggregate all_applied
+PASS direct vector preserves aggregate all_applied
+PASS completed vector preserves aggregate all_rejected
+PASS direct vector preserves aggregate all_rejected
+PASS completed vector preserves aggregate mixed
+PASS direct vector preserves aggregate mixed
+PASS completed without an aggregate cannot install account refs
+PASS scene retains odd and submillimetre exact rational lengths and parent
+PASS rational conversion occurs at engine boundary without millimetre rounding
+PASS scene keeps exact anchored subject independent of occurrence
+PASS default wireframe extent is 100 metres
+PASS surface opacity is decoded as authored permille
+PASS opacity above 1000 refuses
+PASS a surface without opacity refuses
+PASS wide exact fractions convert without intermediate double overflow
+PASS orphan relative scene refuses
+PASS duplicate scene occurrence refuses
+PASS unreduced scene rational refuses
+PASS floating scene dimensions refuse
+PASS wrong depicted anchor refuses
+PASS unrenderable finite extent refuses explicitly
+PASS unplaced navigation preserves a wide committed assignment revision
+PASS unknown navigation does not become unplaced
+PASS wide exact origins and body IDs survive independent appearances
+PASS native control binds the exact signed principal and authoritative body
+PASS another principal cannot acquire the projected control binding
+PASS unqualified tracking mapping cannot silently become a desktop viewpoint
+PASS duplicate native cursor does no presentation work
+PASS older native tick is ignored
+PASS retired view cannot move current bodies
+PASS retired native registration cannot move current bodies
+PASS changed pose at the same cursor refuses
+PASS missing required body refuses instead of using static pose
+PASS a later tick cannot change the exact origin without advancing its origin sequence
+PASS a real native advance still applies
+PASS missing decorative source receipt refuses
+PASS unavailable physical selection never becomes an empty successful scene
+PASS controller bytes match authored class-selected digest
+PASS portable GLB measurement agrees with existing verified Vive model metadata
+PASS each appearance enforces transfer allowance against reusable verification
+PASS verified model refuses mismatched declared bounds
+PASS invalid GLB is rejected before engine decode
+PASS malformed optional GLB arrays refuse instead of becoming empty facilities
+PASS pie decodes authored wedges, confirmation and back direction
+PASS a subject without a menu decodes as none
+PASS a back wedge may not overlap an item
+PASS only menus and menu items form a pie
+PASS forward, right and back map to wedges 1, 3 and 5
+PASS the authored dead zone keeps the centre
+PASS every wedge round-trips its own direction
+PASS the HUD strip keeps its heading until the head turns past 35°, across north
+PASS commit in the centre cancels
+PASS a confirmed item asks for a second press
+PASS moving off an armed wedge disarms it; empty wedges count as centre
+PASS a short rest does not open the sub-pie
+PASS resting on a sub-pie opens it (marking mode)
+PASS the still-held pad direction points nothing in the new level, however long it rests
+PASS wedge 2 of the sub-pie is empty, so that direction is the centre
+PASS a disabled wedge stays visible with its reason and never selects
+PASS the reserved back wedge returns to the parent
+PASS click and keyboard choice open sub-pies and select a leaf
+PASS every authored icon declares its own resources
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS authored icon digest, transfer and pixels match the served file
+PASS form preserves the declared image allowance
+PASS menu carries the declared image allowance to its consumer
+PASS changed icon allowance invalidates the menu signature
+PASS missing or invalid authored icon allowance refuses
+PASS missing or invalid authored icon allowance refuses
+PASS missing or invalid authored icon allowance refuses
+PASS missing or invalid authored icon allowance refuses
+CORE_PASS checks=358

@@ -1,0 +1,10 @@
+PASS deep term retains exact structure
+PASS long symbol retains exact identity
+PASS large request signs exact encoded bytes
+PASS large exact actor text survives uint32 length encoding
+PASS large exact goal occupies complete signed request
+PASS long namespace keeps exact signed UTF8 bytes
+PASS long namespace keeps exact signed UTF8 bytes
+PASS long namespace keeps exact signed UTF8 bytes
+PASS uint16 representation overflow refuses
+PASS trailing projection still refuses

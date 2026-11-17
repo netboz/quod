@@ -1,7 +1,14 @@
 -module(quod_resource_basis_tests).
 -include_lib("eunit/include/eunit.hrl").
--include_lib("erlog/src/erlog_int.hrl").
 -export([opaque_native/3]).
+
+remote_symbol_and_installed_predicate_have_one_identity_test() ->
+    Opaque = {fact,{{'$quod_symbol',<<"definition">>},2}},
+    Installed = {fact,{definition,2}},
+    ?assert(quod_resource_basis:affected(#{Opaque => true},#{Installed => true})),
+    ?assert(quod_resource_basis:affected(#{Installed => true},#{Opaque => true})),
+    ?assertNot(quod_resource_basis:affected(#{Opaque => true},#{{fact,{definition,3}} => true})).
+-include_lib("erlog/src/erlog_int.hrl").
 
 voxel_arithmetic_does_not_invalidate_on_unrelated_commits_test() ->
     Base = quod_committed_projection:new_est(),

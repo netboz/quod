@@ -1,0 +1,7 @@
+PASS enabled action create-key
+PASS enabled action connect
+PASS ordinary signed Connect uses the fresh fixture trust
+PASS enabled action register
+PASS enabled action prepare
+PASS enabled action setup
+{"passed": false, "failure": "Empty: ", "children": {"server": 0, "client-initial": -15}, "native_inputs": 0}

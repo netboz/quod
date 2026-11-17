@@ -1,0 +1,90 @@
+{
+  "passed": true,
+  "reader_errors": [],
+  "host_input_or_focus_action": false,
+  "software_native_Control_inputs": true,
+  "setup_Control_signals": true,
+  "no_headset_or_runtime": true,
+  "companion_not_distributed": true,
+  "production_auth_lifetime_unchanged": true,
+  "manifest_sha256": "fa6fe02972c31e7587809211bf67244753ce633277cd7611ab8e628546b9634d",
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-appearance-question-stdout": true,
+    "client-appearance-question-stderr": true
+  },
+  "streams": {
+    "server-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-question-layout-baseline10/server-stdout.raw",
+      "sha256": "7f469c5e4c1442975e6fe2e16dc9141a8a77281250cbb9afd468b56ab0c01a1e",
+      "bytes": 129
+    },
+    "client-appearance-question-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-question-layout-baseline10/client-appearance-question-stdout.raw",
+      "sha256": "0b127487ad7fab6b4cb92a42fe5952a372cc065e9495dc0dfed8bbb95c1ec41a",
+      "bytes": 178900
+    },
+    "client-appearance-question-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-question-layout-baseline10/client-appearance-question-stderr.raw",
+      "sha256": "9faee901efd231152076fcde9be460be08252114e7e7d68aad945d86f14ffc85",
+      "bytes": 137
+    },
+    "server-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/appearance-question-layout-baseline10/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "native_input_count": 0,
+  "children": {
+    "server": {
+      "true_exit": 0
+    },
+    "client-appearance-question": {
+      "explicit_completion": true,
+      "completion_monotonic": 181649.498888971,
+      "true_exit": 0,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "explicit authored question fixture transaction commits",
+        "explicit authored question fixture transaction commits",
+        "explicit authored question fixture transaction commits",
+        "question appearance refresh preserves native controls draft and style resource",
+        "question refresh retains dirty native text selection and caret",
+        "appearance does not stale or replace the original deferred question contract",
+        "question colour applies while existing withdrawal revokes focus",
+        "authored question target enclosed in every actual clipping ancestor at (True, 1200, 26)",
+        "authored question target enclosed in every actual clipping ancestor at (True, 1200, 26)",
+        "authored question target enclosed in every actual clipping ancestor at (True, 1200, 26)",
+        "authored native popup is enclosed in the current surface at (True, 1200, 26)",
+        "popup foreground and background remain opaque",
+        "native popup selects the exact changed item once without disturbing the text draft",
+        "current native authored question raster retained",
+        "authored question target enclosed in every actual clipping ancestor at (True, 1200, 48)",
+        "authored question target enclosed in every actual clipping ancestor at (True, 1200, 48)",
+        "authored question target enclosed in every actual clipping ancestor at (True, 1200, 48)",
+        "authored native popup is enclosed in the current surface at (True, 1200, 48)",
+        "popup foreground and background remain opaque",
+        "native popup selects the exact changed item once without disturbing the text draft",
+        "current native authored question raster retained",
+        "authored question target enclosed in every actual clipping ancestor at (False, 560, 26)",
+        "authored question target enclosed in every actual clipping ancestor at (False, 560, 26)",
+        "authored question target enclosed in every actual clipping ancestor at (False, 560, 26)",
+        "authored native popup is enclosed in the current surface at (False, 560, 26)",
+        "popup foreground and background remain opaque",
+        "native popup selects the exact changed item once without disturbing the text draft",
+        "current native authored question raster retained",
+        "appearance and local choices send no question answer or continuation",
+        "one native explicit answer action reaches the original question owner",
+        "the original question continuation commits exactly once with the preserved dirty values",
+        "enabled action disconnect",
+        "all authored question appearance consumers retire"
+      ]
+    }
+  }
+}

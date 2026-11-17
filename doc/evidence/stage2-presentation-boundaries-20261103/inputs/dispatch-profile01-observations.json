@@ -1,0 +1,7 @@
+[
+  "CONTENTS_RENEWAL_RECEIPT 0",
+  "RENEWAL_MS 14970",
+  "RENEWAL_WORK {\"profile\":[{\"function\":\"erlog_int(dderef,2)\",\"calls\":135393915,\"measurement\":135393915}],\"profile_type\":\"call_count\",\"engine_md5\":\"Uf7CdUYK91LbraAwuRgjJw==\",\"work\":{\"calls\":[],\"watched\":[[\"quod_foreign_projection\",\"start_monitor\",4],[\"quod_committed_projection\",\"apply_entry\",3],[\"quod_physics_native\",\"install\",3],[\"quod_physics_native\",\"install_hinges\",2],[\"quod_physics_native\",\"new_world\",3],[\"quod_ledger_store\",\"fold\",5],[\"quod_ledger_store\",\"open\",3],[\"file\",\"write\",2],[\"file\",\"pwrite\",3],[\"file\",\"sync\",1],[\"file\",\"datasync\",1]]},\"wall_us\":15013786,\"cpu_ms\":15278}",
+  "RENEWAL_ENGINE /m1b/ebin/erlog_int.beam Uf7CdUYK91LbraAwuRgjJw==",
+  "RENEWAL_PROFILE {\"profile\":[{\"function\":\"erlog_int(dderef,2)\",\"calls\":135393915,\"measurement\":135393915}],\"profile_type\":\"call_count\",\"engine_md5\":\"Uf7CdUYK91LbraAwuRgjJw==\",\"work\":{\"calls\":[],\"watched\":[[\"quod_foreign_projection\",\"start_monitor\",4],[\"quod_committed_projection\",\"apply_entry\",3],[\"quod_physics_native\",\"install\",3],[\"quod_physics_native\",\"install_hinges\",2],[\"quod_physics_native\",\"new_world\",3],[\"quod_ledger_store\",\"fold\",5],[\"quod_ledger_store\",\"open\",3],[\"file\",\"write\",2],[\"file\",\"pwrite\",3],[\"file\",\"sync\",1],[\"file\",\"datasync\",1]]},\"wall_us\":15013786,\"cpu_ms\":15278}"
+]

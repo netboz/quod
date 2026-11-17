@@ -1,0 +1,49 @@
+{
+  "passed": false,
+  "reader_errors": [],
+  "host_input_or_focus_action": false,
+  "software_native_Control_inputs": true,
+  "setup_Control_signals": true,
+  "no_headset_or_runtime": true,
+  "companion_not_distributed": true,
+  "production_auth_lifetime_unchanged": true,
+  "manifest_sha256": "c37ba106a431837e89f39d007032220d4842545f723bf80b64ea6c7bb2b773f6",
+  "failure": "AssertionError: ",
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-space-experience-stdout": true,
+    "client-space-experience-stderr": true
+  },
+  "streams": {
+    "server-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/space-experience-baseline01/server-stdout.raw",
+      "sha256": "aff71d6d99331cced9f9ea6f84fbd1c851123b1eb471ee3a675ffe36e8f4614f",
+      "bytes": 129
+    },
+    "client-space-experience-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/space-experience-baseline01/client-space-experience-stderr.raw",
+      "sha256": "58a483955b9331ebb509cb6b353f2184049d3904421dafa2f0119c4aa5896da2",
+      "bytes": 4820
+    },
+    "server-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/space-experience-baseline01/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "client-space-experience-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/space-experience-baseline01/client-space-experience-stdout.raw",
+      "sha256": "1f538b5dca369bd2ae3bad67d0436ba647c34c3e9c6f3bdedb4559f05e98e93b",
+      "bytes": 47368
+    }
+  },
+  "native_input_count": 0,
+  "children": {
+    "server": {
+      "true_exit": 0
+    },
+    "client-space-experience": {
+      "true_exit": 1
+    }
+  }
+}

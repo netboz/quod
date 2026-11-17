@@ -507,7 +507,7 @@ receive_control(Link, Ns) ->
     end.
 
 with_feed_anchor(Ns, Anchor, Fun) ->
-    Name = binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
+    Name = binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
     Table = ets:new(Name, [named_table, protected, set]),
     true = ets:insert(Table, {anchor, Anchor}),
     try Fun()

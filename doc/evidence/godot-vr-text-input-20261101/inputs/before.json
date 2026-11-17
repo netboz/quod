@@ -1,0 +1,116 @@
+{
+  "client/godot/SpatialGui.cs": {
+    "before": "doc/evidence/godot-vr-text-input-20261101/inputs/before/client/godot/SpatialGui.cs",
+    "sha256": "4f88460313b9a498bae6f2ba728cbf8a7d0dd39d51f05055378cf9eb469dad29",
+    "stat_key": [
+      66305,
+      23514453,
+      12835,
+      1793496914896327880,
+      1793496914896327880
+    ],
+    "mode": 33188,
+    "before_stat_key": [
+      66305,
+      28206100,
+      12835,
+      1793496914896327880,
+      1793499779742252091
+    ]
+  },
+  "client/godot/OpenXRInput.cs": {
+    "before": "doc/evidence/godot-vr-text-input-20261101/inputs/before/client/godot/OpenXRInput.cs",
+    "sha256": "21d422587077eb652eadbedab8dc290f2a5b018e466d1292d946b05ee57fa780",
+    "stat_key": [
+      66305,
+      23514456,
+      29253,
+      1793460040875165123,
+      1793460040875165123
+    ],
+    "mode": 33188,
+    "before_stat_key": [
+      66305,
+      28206101,
+      29253,
+      1793460040875165123,
+      1793499779742577096
+    ]
+  },
+  "client/godot/FormPanel.cs": {
+    "before": "doc/evidence/godot-vr-text-input-20261101/inputs/before/client/godot/FormPanel.cs",
+    "sha256": "1d50d0f762bfcbdc125f9191303e6c4c2741376da9f5567954591bbfc99115c5",
+    "stat_key": [
+      66305,
+      23512508,
+      15115,
+      1793498422278263011,
+      1793498422278263011
+    ],
+    "mode": 33188,
+    "before_stat_key": [
+      66305,
+      28206102,
+      15115,
+      1793498422278263011,
+      1793499779742833559
+    ]
+  },
+  "client/godot/SourcePanel.cs": {
+    "before": "doc/evidence/godot-vr-text-input-20261101/inputs/before/client/godot/SourcePanel.cs",
+    "sha256": "dd72023f26b0007d7e1880201e4098bc6707b625269096c419acb486e9bcaf19",
+    "stat_key": [
+      66305,
+      23512513,
+      16422,
+      1793496915440341138,
+      1793496915440341138
+    ],
+    "mode": 33188,
+    "before_stat_key": [
+      66305,
+      28206103,
+      16422,
+      1793496915440341138,
+      1793499779743046592
+    ]
+  },
+  "client/godot/OperationsPanel.cs": {
+    "before": "doc/evidence/godot-vr-text-input-20261101/inputs/before/client/godot/OperationsPanel.cs",
+    "sha256": "53358fa41212d1f2ecb789db833eea3c4c58fb9b5ef2d8d641ceed11fa1ecd4f",
+    "stat_key": [
+      66305,
+      23512509,
+      20578,
+      1793499215119603869,
+      1793499215119603869
+    ],
+    "mode": 33188,
+    "before_stat_key": [
+      66305,
+      28206104,
+      20578,
+      1793499215119603869,
+      1793499779743258542
+    ]
+  },
+  "client/godot/README.md": {
+    "before": "doc/evidence/godot-vr-text-input-20261101/inputs/before/client/godot/README.md",
+    "sha256": "8c576bb9bf8090c48e1848270867044251b7a589678f1e45859462b45c4995a0",
+    "stat_key": [
+      66305,
+      23513097,
+      15534,
+      1793498825831789812,
+      1793498825831789812
+    ],
+    "mode": 33188,
+    "before_stat_key": [
+      66305,
+      28206105,
+      15534,
+      1793498825831789812,
+      1793499779743475995
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+PASS governed name does not invent contents or control
+PASS absent name remains explicit and malformed names refuse
+PASS name cannot override selection or admit a physical frame
+PASS name cannot override absolute authorization expiry

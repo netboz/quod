@@ -1,0 +1,9 @@
+PASS enabled action create-key
+PASS enabled action connect
+PASS enabled action register
+PASS enabled action prepare
+PASS enabled action setup
+PASS enabled action inspect
+PASS existing native keyboard edits only the exact durable source draft before recovery
+PASS named unchanged-work observation installed before accepted renewal
+{"passed": false, "failure": "AssertionError: ", "children": {"server": 0, "client-onboarding-source": 1}, "native_inputs": 0}

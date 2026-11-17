@@ -1,0 +1,16 @@
+{
+  "command": [
+    "cat",
+    "/home/yan/.cache/quod-m3b-artifacts/private/quod-m3b-live-physics-development07-server/server-raw.log"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T02:06:18Z",
+  "elapsed_seconds": 0.008136987686157227,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/tmp/quod-m3b-8b352c53/private/logs/physics-development07-server-log.log",
+  "raw_sha256": "b80d8293469055e862c5c41d004f1d2d5d7d93d69e87d51a56ec707a88cc7831",
+  "sanitized_sha256": "a8baaa690208662d750a85e7085277a4d7e090b3a2b37db52aa1bc604179bd9d",
+  "redactions": 19,
+  "error_diagnostics": 0
+}

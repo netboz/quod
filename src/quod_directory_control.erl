@@ -894,7 +894,7 @@ install_control_link(
   S = #s{control_links = Links}) ->
     case maps:get(NodeKey, Links, undefined) of
         {Endpoint, LinkPid, _MonitorRef} ->
-            send_current_and_resync(LinkPid, S),
+            _ = send_current_and_resync(LinkPid, S),
             S;
         {OldEndpoint, LinkPid, _MonitorRef}
           when OldEndpoint =/= Endpoint ->
@@ -912,7 +912,7 @@ install_control_link(
                 undefined -> ok;
                 _ -> retire_control_link(OldEntry)
             end,
-            send_current_and_resync(LinkPid, S1),
+            _ = send_current_and_resync(LinkPid, S1),
             S1
     end.
 

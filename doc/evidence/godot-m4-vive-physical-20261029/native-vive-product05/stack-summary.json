@@ -1,0 +1,642 @@
+{
+  "private_raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product05/stacks/native.raw",
+  "sha256": "23002b368fd998b16bbcd83ce41939b8f8a3ecd4419bbe63e2db0376d2f8a436",
+  "bytes": 34979,
+  "file_mode": "0o600",
+  "directory_mode": "0o700",
+  "scope": "Owned disposable qualification client during normal close; bounded argument-free native stack capture20s after close request; eventual client/runtime/server0, no60s watchdog expiry. One new observation, not historical causality.",
+  "threads": [
+    {
+      "header": "Thread 41 (Thread <address> (LWP 1568658) \"quod.x86_64\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_wait () from <path>/libc.so.6",
+        "#3  <address> in ?? ()",
+        "#4  <address> in ?? ()",
+        "#5  <address> in ?? ()",
+        "#6  <address> in ?? ()",
+        "#7  <address> in ?? () from <path>/libc.so.6",
+        "#8  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 40 (Thread <address> (LWP 1568662) \"WorkerThread 0\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_wait () from <path>/libc.so.6",
+        "#3  <address> in ?? ()",
+        "#4  <address> in ?? ()",
+        "#5  <address> in ?? ()",
+        "#6  <address> in ?? ()",
+        "#7  <address> in ?? () from <path>/libc.so.6",
+        "#8  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 39 (Thread <address> (LWP 1568663) \"WorkerThread 1\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_wait () from <path>/libc.so.6",
+        "#3  <address> in ?? ()",
+        "#4  <address> in ?? ()",
+        "#5  <address> in ?? ()",
+        "#6  <address> in ?? ()",
+        "#7  <address> in ?? () from <path>/libc.so.6",
+        "#8  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 38 (Thread <address> (LWP 1568664) \"WorkerThread 2\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_wait () from <path>/libc.so.6",
+        "#3  <address> in ?? ()",
+        "#4  <address> in ?? ()",
+        "#5  <address> in ?? ()",
+        "#6  <address> in ?? ()",
+        "#7  <address> in ?? () from <path>/libc.so.6",
+        "#8  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 37 (Thread <address> (LWP 1568665) \"WorkerThread 3\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_wait () from <path>/libc.so.6",
+        "#3  <address> in ?? ()",
+        "#4  <address> in ?? ()",
+        "#5  <address> in ?? ()",
+        "#6  <address> in ?? ()",
+        "#7  <address> in ?? () from <path>/libc.so.6",
+        "#8  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 36 (Thread <address> (LWP 1568666) \"WorkerThread 4\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_wait () from <path>/libc.so.6",
+        "#3  <address> in ?? ()",
+        "#4  <address> in ?? ()",
+        "#5  <address> in ?? ()",
+        "#6  <address> in ?? ()",
+        "#7  <address> in ?? () from <path>/libc.so.6",
+        "#8  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 35 (Thread <address> (LWP 1568667) \"WorkerThread 5\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_wait () from <path>/libc.so.6",
+        "#3  <address> in ?? ()",
+        "#4  <address> in ?? ()",
+        "#5  <address> in ?? ()",
+        "#6  <address> in ?? ()",
+        "#7  <address> in ?? () from <path>/libc.so.6",
+        "#8  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 34 (Thread <address> (LWP 1568668) \"WorkerThread 6\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_wait () from <path>/libc.so.6",
+        "#3  <address> in ?? ()",
+        "#4  <address> in ?? ()",
+        "#5  <address> in ?? ()",
+        "#6  <address> in ?? ()",
+        "#7  <address> in ?? () from <path>/libc.so.6",
+        "#8  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 33 (Thread <address> (LWP 1568669) \"WorkerThread 7\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_wait () from <path>/libc.so.6",
+        "#3  <address> in ?? ()",
+        "#4  <address> in ?? ()",
+        "#5  <address> in ?? ()",
+        "#6  <address> in ?? ()",
+        "#7  <address> in ?? () from <path>/libc.so.6",
+        "#8  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 32 (Thread <address> (LWP 1568693) \"[pango] fontcon\"):",
+      "frames": [
+        "#0  <address> in syscall () from <path>/libc.so.6",
+        "#1  <address> in g_cond_wait () from <path>/libglib-2.0.so.0",
+        "#2  <address> in ?? () from <path>/libglib-2.0.so.0",
+        "#3  <address> in g_async_queue_pop () from <path>/libglib-2.0.so.0",
+        "#4  <address> in ?? () from <path>/libpangoft2-1.0.so.0",
+        "#5  <address> in ?? () from <path>/libglib-2.0.so.0",
+        "#6  <address> in ?? () from <path>/libc.so.6",
+        "#7  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 31 (Thread <address> (LWP 1568694) \"pool-spawner\"):",
+      "frames": [
+        "#0  <address> in syscall () from <path>/libc.so.6",
+        "#1  <address> in g_cond_wait () from <path>/libglib-2.0.so.0",
+        "#2  <address> in ?? () from <path>/libglib-2.0.so.0",
+        "#3  <address> in ?? () from <path>/libglib-2.0.so.0",
+        "#4  <address> in ?? () from <path>/libglib-2.0.so.0",
+        "#5  <address> in ?? () from <path>/libc.so.6",
+        "#6  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 30 (Thread <address> (LWP 1568695) \"gmain\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ppoll () from <path>/libc.so.6",
+        "#2  <address> in ?? () from <path>/libglib-2.0.so.0",
+        "#3  <address> in g_main_context_iteration () from <path>/libglib-2.0.so.0",
+        "#4  <address> in ?? () from <path>/libglib-2.0.so.0",
+        "#5  <address> in ?? () from <path>/libglib-2.0.so.0",
+        "#6  <address> in ?? () from <path>/libc.so.6",
+        "#7  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 29 (Thread <address> (LWP 1568697) \"dconf worker\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ppoll () from <path>/libc.so.6",
+        "#2  <address> in ?? () from <path>/libglib-2.0.so.0",
+        "#3  <address> in g_main_context_iteration () from <path>/libglib-2.0.so.0",
+        "#4  <address> in ?? () from <path>/libdconfsettings.so",
+        "#5  <address> in ?? () from <path>/libglib-2.0.so.0",
+        "#6  <address> in ?? () from <path>/libc.so.6",
+        "#7  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 28 (Thread <address> (LWP 1568698) \"gdbus\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ppoll () from <path>/libc.so.6",
+        "#2  <address> in ?? () from <path>/libglib-2.0.so.0",
+        "#3  <address> in g_main_loop_run () from <path>/libglib-2.0.so.0",
+        "#4  <address> in ?? () from <path>/libgio-2.0.so.0",
+        "#5  <address> in ?? () from <path>/libglib-2.0.so.0",
+        "#6  <address> in ?? () from <path>/libc.so.6",
+        "#7  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 27 (Thread <address> (LWP 1568699) \"Wayland Events\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in poll () from <path>/libc.so.6",
+        "#2  <address> in ?? ()",
+        "#3  <address> in ?? ()",
+        "#4  <address> in ?? ()",
+        "#5  <address> in ?? () from <path>/libc.so.6",
+        "#6  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 26 (Thread <address> (LWP 1568703) \"quod.x86_64\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_timedwait () from <path>/libc.so.6",
+        "#3  <address> in ?? () from <path>/libnvidia-glcore.so.615.71.09",
+        "#4  <address> in ?? () from <path>/libnvidia-glcore.so.615.71.09",
+        "#5  <address> in ?? () from <path>/libnvidia-glcore.so.615.71.09",
+        "#6  <address> in ?? () from <path>/libc.so.6",
+        "#7  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 25 (Thread <address> (LWP 1568704) \"[vkcf] Analysis\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_wait () from <path>/libc.so.6",
+        "#3  <address> in ?? () from <path>/libnvidia-glcore.so.615.71.09",
+        "#4  <address> in ?? () from <path>/libnvidia-glcore.so.615.71.09",
+        "#5  <address> in ?? () from <path>/libnvidia-glcore.so.615.71.09",
+        "#6  <address> in ?? () from <path>/libc.so.6",
+        "#7  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 24 (Thread <address> (LWP 1568706) \"[vkrt] Analysis\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_wait () from <path>/libc.so.6",
+        "#3  <address> in ?? () from <path>/libnvidia-glcore.so.615.71.09",
+        "#4  <address> in ?? () from <path>/libnvidia-glcore.so.615.71.09",
+        "#5  <address> in ?? () from <path>/libnvidia-glcore.so.615.71.09",
+        "#6  <address> in ?? () from <path>/libc.so.6",
+        "#7  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 23 (Thread <address> (LWP 1568707) \"[vkps] Update\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_timedwait () from <path>/libc.so.6",
+        "#3  <address> in ?? () from <path>/libnvidia-glcore.so.615.71.09",
+        "#4  <address> in ?? () from <path>/libnvidia-glcore.so.615.71.09",
+        "#5  <address> in ?? () from <path>/libnvidia-glcore.so.615.71.09",
+        "#6  <address> in ?? () from <path>/libc.so.6",
+        "#7  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 22 (Thread <address> (LWP 1568723) \"quod.x86_64\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_timedwait () from <path>/libc.so.6",
+        "#3  <address> in ?? () from <path>/libnvidia-glcore.so.615.71.09",
+        "#4  <address> in ?? () from <path>/libnvidia-glcore.so.615.71.09",
+        "#5  <address> in ?? () from <path>/libnvidia-glcore.so.615.71.09",
+        "#6  <address> in ?? () from <path>/libnvidia-glcore.so.615.71.09",
+        "#7  <address> in ?? () from <path>/libc.so.6",
+        "#8  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 21 (Thread <address> (LWP 1568724) \"quod.x86_64\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in clock_nanosleep () from <path>/libc.so.6",
+        "#2  <address> in nanosleep () from <path>/libc.so.6",
+        "#3  <address> in ?? ()",
+        "#4  <address> in ?? ()",
+        "#5  <address> in ?? ()",
+        "#6  <address> in ?? ()",
+        "#7  <address> in ?? () from <path>/libc.so.6",
+        "#8  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 20 (Thread <address> (LWP 1568725) \"quod.x86_64\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in clock_nanosleep () from <path>/libc.so.6",
+        "#2  <address> in nanosleep () from <path>/libc.so.6",
+        "#3  <address> in usleep () from <path>/libc.so.6",
+        "#4  <address> in ?? ()",
+        "#5  <address> in ?? ()",
+        "#6  <address> in ?? ()",
+        "#7  <address> in ?? () from <path>/libc.so.6",
+        "#8  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 19 (Thread <address> (LWP 1568737) \"quod.x86_64\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in clock_nanosleep () from <path>/libc.so.6",
+        "#2  <address> in nanosleep () from <path>/libc.so.6",
+        "#3  <address> in ?? ()",
+        "#4  <address> in ?? ()",
+        "#5  <address> in ?? ()",
+        "#6  <address> in ?? ()",
+        "#7  <address> in ?? () from <path>/libc.so.6",
+        "#8  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 18 (Thread <address> (LWP 1568742) \"quod.x86_64\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_wait () from <path>/libc.so.6",
+        "#3  <address> in ?? ()",
+        "#4  <address> in ?? ()",
+        "#5  <address> in ?? ()",
+        "#6  <address> in ?? () from <path>/libc.so.6",
+        "#7  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 17 (Thread <address> (LWP 1568743) \".NET SynchManag\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in poll () from <path>/libc.so.6",
+        "#2  <address> in ?? () from <path>/libcoreclr.so",
+        "#3  <address> in ?? () from <path>/libcoreclr.so",
+        "#4  <address> in ?? () from <path>/libcoreclr.so",
+        "#5  <address> in ?? () from <path>/libc.so.6",
+        "#6  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 16 (Thread <address> (LWP 1568744) \".NET EventPipe\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in poll () from <path>/libc.so.6",
+        "#2  <address> in ?? () from <path>/libcoreclr.so",
+        "#3  <address> in ?? () from <path>/libcoreclr.so",
+        "#4  <address> in ?? () from <path>/libcoreclr.so",
+        "#5  <address> in ?? () from <path>/libcoreclr.so",
+        "#6  <address> in ?? () from <path>/libc.so.6",
+        "#7  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 15 (Thread <address> (LWP 1568745) \".NET DebugPipe\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in open64 () from <path>/libc.so.6",
+        "#2  <address> in ?? () from <path>/libcoreclr.so",
+        "#3  <address> in ?? () from <path>/libcoreclr.so",
+        "#4  <address> in ?? () from <path>/libcoreclr.so",
+        "#5  <address> in ?? () from <path>/libcoreclr.so",
+        "#6  <address> in ?? () from <path>/libc.so.6",
+        "#7  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 14 (Thread <address> (LWP 1568746) \".NET Debugger\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_wait () from <path>/libc.so.6",
+        "#3  <address> in ?? () from <path>/libcoreclr.so",
+        "#4  <address> in ?? () from <path>/libcoreclr.so",
+        "#5  <address> in ?? () from <path>/libcoreclr.so",
+        "#6  <address> in ?? () from <path>/libcoreclr.so",
+        "#7  <address> in ?? () from <path>/libcoreclr.so",
+        "#8  <address> in ?? () from <path>/libcoreclr.so",
+        "#9  <address> in ?? () from <path>/libcoreclr.so",
+        "#10 <address> in ?? () from <path>/libcoreclr.so",
+        "#11 <address> in ?? () from <path>/libc.so.6",
+        "#12 <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 13 (Thread <address> (LWP 1568747) \".NET Finalizer\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_timedwait () from <path>/libc.so.6",
+        "#3  <address> in ?? () from <path>/libcoreclr.so",
+        "#4  <address> in ?? () from <path>/libcoreclr.so",
+        "#5  <address> in ?? () from <path>/libcoreclr.so",
+        "#6  <address> in ?? () from <path>/libcoreclr.so",
+        "#7  <address> in ?? () from <path>/libcoreclr.so",
+        "#8  <address> in ?? () from <path>/libcoreclr.so",
+        "#9  <address> in ?? () from <path>/libcoreclr.so",
+        "#10 <address> in ?? () from <path>/libcoreclr.so",
+        "#11 <address> in ?? () from <path>/libcoreclr.so",
+        "#12 <address> in ?? () from <path>/libcoreclr.so",
+        "#13 <address> in ?? () from <path>/libc.so.6",
+        "#14 <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 12 (Thread <address> (LWP 1568755) \".NET SigHandler\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in read () from <path>/libc.so.6",
+        "#2  <address> in ?? () from <path>/libSystem.Native.so",
+        "#3  <address> in ?? () from <path>/libc.so.6",
+        "#4  <address> in ?? () from <path>/libc.so.6"
+      ]
+    },
+    {
+      "header": "Thread 11 (Thread <address> (LWP 1568756) \".NET Timer\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_timedwait () from <path>/libc.so.6",
+        "#3  <address> in ?? () from <path>/libcoreclr.so",
+        "#4  <address> in ?? () from <path>/libcoreclr.so",
+        "#5  <address> in ?? () from <path>/libcoreclr.so",
+        "#6  <address> in ?? () from <path>/libcoreclr.so",
+        "#7  <address> in ?? () from <path>/libcoreclr.so",
+        "#8  <address> in ?? () from <path>/libcoreclr.so",
+        "#9  <address> in ?? () from <path>/libcoreclr.so",
+        "#10 <address> in ?? ()",
+        "#11 <address> in ?? ()",
+        "#12 <address> in ?? ()"
+      ]
+    },
+    {
+      "header": "Thread 10 (Thread <address> (LWP 1568774) \".NET TP Gate\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_wait () from <path>/libc.so.6",
+        "#3  <address> in ?? () from <path>/libcoreclr.so",
+        "#4  <address> in ?? () from <path>/libcoreclr.so",
+        "#5  <address> in ?? () from <path>/libcoreclr.so",
+        "#6  <address> in ?? () from <path>/libcoreclr.so",
+        "#7  <address> in ?? () from <path>/libcoreclr.so",
+        "#8  <address> in ?? () from <path>/libcoreclr.so",
+        "#9  <address> in ?? () from <path>/libcoreclr.so",
+        "#10 <address> in ?? ()",
+        "#11 <address> in ?? ()",
+        "#12 <address> in ?? ()"
+      ]
+    },
+    {
+      "header": "Thread 9 (Thread <address> (LWP 1568779) \".NET Sockets\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in epoll_wait () from <path>/libc.so.6",
+        "#2  <address> in SystemNative_WaitForSocketEvents () from <path>/libSystem.Native.so",
+        "#3  <address> in ?? ()",
+        "#4  <address> in ?? ()"
+      ]
+    },
+    {
+      "header": "Thread 8 (Thread <address> (LWP 1735530) \".NET TP Worker\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_timedwait () from <path>/libc.so.6",
+        "#3  <address> in ?? () from <path>/libcoreclr.so",
+        "#4  <address> in ?? () from <path>/libcoreclr.so",
+        "#5  <address> in ?? () from <path>/libcoreclr.so",
+        "#6  <address> in ?? () from <path>/libcoreclr.so",
+        "#7  <address> in ?? () from <path>/libcoreclr.so",
+        "#8  <address> in ?? ()",
+        "#9  <address> in ?? ()",
+        "#10 <address> in ?? ()",
+        "#11 <address> in ?? ()",
+        "#12 <address> in ?? ()",
+        "#13 <address> in ?? ()",
+        "#14 <address> in ?? ()",
+        "#15 <address> in ?? ()",
+        "#16 <address> in ?? ()",
+        "#17 <address> in ?? ()",
+        "#18 <address> in ?? ()",
+        "#19 <address> in ?? ()"
+      ]
+    },
+    {
+      "header": "Thread 7 (Thread <address> (LWP 1747470) \".NET TP Worker\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_timedwait () from <path>/libc.so.6",
+        "#3  <address> in ?? () from <path>/libcoreclr.so",
+        "#4  <address> in ?? () from <path>/libcoreclr.so",
+        "#5  <address> in ?? () from <path>/libcoreclr.so",
+        "#6  <address> in ?? () from <path>/libcoreclr.so",
+        "#7  <address> in ?? () from <path>/libcoreclr.so",
+        "#8  <address> in ?? ()",
+        "#9  <address> in ?? ()"
+      ]
+    },
+    {
+      "header": "Thread 6 (Thread <address> (LWP 1752775) \".NET TP Worker\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_timedwait () from <path>/libc.so.6",
+        "#3  <address> in ?? () from <path>/libcoreclr.so",
+        "#4  <address> in ?? () from <path>/libcoreclr.so",
+        "#5  <address> in ?? () from <path>/libcoreclr.so",
+        "#6  <address> in ?? () from <path>/libcoreclr.so",
+        "#7  <address> in ?? () from <path>/libcoreclr.so",
+        "#8  <address> in ?? ()",
+        "#9  <address> in ?? ()",
+        "#10 <address> in ?? ()",
+        "#11 <address> in ?? ()",
+        "#12 <address> in ?? ()",
+        "#13 <address> in ?? ()",
+        "#14 <address> in ?? ()",
+        "#15 <address> in ?? ()",
+        "#16 <address> in ?? ()",
+        "#17 <address> in ?? ()",
+        "#18 <address> in ?? ()",
+        "#19 <address> in ?? ()"
+      ]
+    },
+    {
+      "header": "Thread 5 (Thread <address> (LWP 1754098) \".NET TP Worker\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_timedwait () from <path>/libc.so.6",
+        "#3  <address> in ?? () from <path>/libcoreclr.so",
+        "#4  <address> in ?? () from <path>/libcoreclr.so",
+        "#5  <address> in ?? () from <path>/libcoreclr.so",
+        "#6  <address> in ?? () from <path>/libcoreclr.so",
+        "#7  <address> in ?? () from <path>/libcoreclr.so",
+        "#8  <address> in ?? ()",
+        "#9  <address> in ?? ()",
+        "#10 <address> in ?? ()",
+        "#11 <address> in ?? ()",
+        "#12 <address> in ?? ()",
+        "#13 <address> in ?? ()",
+        "#14 <address> in ?? ()",
+        "#15 <address> in ?? ()",
+        "#16 <address> in ?? ()",
+        "#17 <address> in ?? ()",
+        "#18 <address> in ?? ()",
+        "#19 <address> in ?? ()"
+      ]
+    },
+    {
+      "header": "Thread 4 (Thread <address> (LWP 1754099) \".NET TP Worker\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_timedwait () from <path>/libc.so.6",
+        "#3  <address> in ?? () from <path>/libcoreclr.so",
+        "#4  <address> in ?? () from <path>/libcoreclr.so",
+        "#5  <address> in ?? () from <path>/libcoreclr.so",
+        "#6  <address> in ?? () from <path>/libcoreclr.so",
+        "#7  <address> in ?? () from <path>/libcoreclr.so",
+        "#8  <address> in ?? ()",
+        "#9  <address> in ?? ()",
+        "#10 <address> in ?? ()",
+        "#11 <address> in ?? ()",
+        "#12 <address> in ?? ()",
+        "#13 <address> in ?? ()",
+        "#14 <address> in ?? ()",
+        "#15 <address> in ?? ()",
+        "#16 <address> in ?? ()",
+        "#17 <address> in ?? ()",
+        "#18 <address> in ?? ()",
+        "#19 <address> in ?? ()"
+      ]
+    },
+    {
+      "header": "Thread 3 (Thread <address> (LWP 1754100) \".NET TP Worker\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_timedwait () from <path>/libc.so.6",
+        "#3  <address> in ?? () from <path>/libcoreclr.so",
+        "#4  <address> in ?? () from <path>/libcoreclr.so",
+        "#5  <address> in ?? () from <path>/libcoreclr.so",
+        "#6  <address> in ?? () from <path>/libcoreclr.so",
+        "#7  <address> in ?? () from <path>/libcoreclr.so",
+        "#8  <address> in ?? ()",
+        "#9  <address> in ?? ()",
+        "#10 <address> in ?? ()",
+        "#11 <address> in ?? ()",
+        "#12 <address> in ?? ()",
+        "#13 <address> in ?? ()",
+        "#14 <address> in ?? ()",
+        "#15 <address> in ?? ()",
+        "#16 <address> in ?? ()",
+        "#17 <address> in ?? ()",
+        "#18 <address> in ?? ()",
+        "#19 <address> in ?? ()"
+      ]
+    },
+    {
+      "header": "Thread 2 (Thread <address> (LWP 1754101) \".NET TP Worker\"):",
+      "frames": [
+        "#0  <address> in ?? () from <path>/libc.so.6",
+        "#1  <address> in ?? () from <path>/libc.so.6",
+        "#2  <address> in pthread_cond_timedwait () from <path>/libc.so.6",
+        "#3  <address> in ?? () from <path>/libcoreclr.so",
+        "#4  <address> in ?? () from <path>/libcoreclr.so",
+        "#5  <address> in ?? () from <path>/libcoreclr.so",
+        "#6  <address> in ?? () from <path>/libcoreclr.so",
+        "#7  <address> in ?? () from <path>/libcoreclr.so",
+        "#8  <address> in ?? ()",
+        "#9  <address> in ?? ()"
+      ]
+    },
+    {
+      "header": "Thread 1 (Thread <address> (LWP 1568652) \"quod.x86_64\"):",
+      "frames": [
+        "#0  <address> in ioctl () from <path>/libc.so.6",
+        "#1  <address> in drmIoctl () from <path>/libdrm.so.2",
+        "#2  <address> in drmSyncobjTimelineWait () from <path>/libdrm.so.2",
+        "#3  <address> in ?? () from <path>/libnvidia-glcore.so.615.71.09",
+        "#4  <address> in ?? () from <path>/libnvidia-glcore.so.615.71.09",
+        "#5  <address> in ?? () from <path>/libnvidia-glcore.so.615.71.09",
+        "#6  <address> in ?? ()",
+        "#7  <address> in ?? ()",
+        "#8  <address> in ?? ()",
+        "#9  <address> in ?? ()",
+        "#10 <address> in ?? ()",
+        "#11 <address> in ?? ()",
+        "#12 <address> in ?? ()",
+        "#13 <address> in ?? ()",
+        "#14 <address> in ?? () from <path>/libc.so.6",
+        "#15 <address> in __libc_start_main () from <path>/libc.so.6",
+        "#16 <address> in ?? ()"
+      ]
+    }
+  ]
+}

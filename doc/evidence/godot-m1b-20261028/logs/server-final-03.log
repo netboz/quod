@@ -1,0 +1,13 @@
+M1B_READY {"port":37333,"network":"K5U1NJEEwVcBuc03WHZCYfCry0dKxdA-LuIj_2QUhT8","control_port":37301,"ca":"/m1b/backend-ca.pem"}
+=WARNING REPORT==== 28-Oct-2026::04:16:50.119299 ===
+quod_prolog[human:qS69MCWCEdFI_U-4wh9kbmpp_9jyaG10hAjQbopu-Ps]: can_invoke refused a top-level goal at pinned height 11
+=WARNING REPORT==== 28-Oct-2026::04:16:58.265644 ===
+quod_prolog[human:qS69MCWCEdFI_U-4wh9kbmpp_9jyaG10hAjQbopu-Ps]: can_invoke refused a top-level goal at pinned height 11
+=WARNING REPORT==== 28-Oct-2026::04:20:46.835319 ===
+quod_prolog[human:P0c1KhxbO9xbhyY47ZjWFwjweIZHa6qt9R3Y2O1j-YI]: can_invoke refused a top-level goal at pinned height 11
+=WARNING REPORT==== 28-Oct-2026::04:20:54.645959 ===
+quod_prolog[human:P0c1KhxbO9xbhyY47ZjWFwjweIZHa6qt9R3Y2O1j-YI]: can_invoke refused a top-level goal at pinned height 11
+=WARNING REPORT==== 28-Oct-2026::04:32:31.929102 ===
+quod_prolog[human:D4uwLBfYS-qbVd4giqul6h4tQ-ylzFcNEJROdGe28SY]: can_invoke refused a top-level goal at pinned height 11
+=WARNING REPORT==== 28-Oct-2026::04:32:39.887514 ===
+quod_prolog[human:D4uwLBfYS-qbVd4giqul6h4tQ-ylzFcNEJROdGe28SY]: can_invoke refused a top-level goal at pinned height 11

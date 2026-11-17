@@ -1,0 +1,1221 @@
+diff --git a/client/godot/Core/Controllers.cs b/client/godot/Core/Controllers.cs
+index c65b46f1..0a7c75c3 100644
+--- a/client/godot/Core/Controllers.cs
++++ b/client/godot/Core/Controllers.cs
+@@ -260,7 +260,8 @@ public sealed class ControllerInput(IControllerConsumer consumer) : IDisposable
+             } else {
+                 if(pointer!=null && !(pointer==s && menu==s)) { g.Armed=false;continue; }
+                 if(down && menu==null && consumer.OpenMenu(s.Input,c.Axes,g.Binding.Threshold)) { StopTravel();menu=s; }
+-                if(menu==s) { consumer.MoveMenu(c.Axes,g.Binding.Threshold);if(up){menu=null;consumer.CommitMenu();ContextChanged();} }
++                // The sample on which the pad comes up is the thumb lifting, not a choice.
++                if(menu==s) { if(up){menu=null;consumer.CommitMenu();ContextChanged();} else consumer.MoveMenu(c.Axes,g.Binding.Threshold); }
+             }
+         }
+         foreach(var e in edges.Where(e=>e.G.Binding.Id is not ("select" or "menu"))) {
+diff --git a/client/godot/Core/Menus.cs b/client/godot/Core/Menus.cs
+index f37c4406..d13e5f31 100644
+--- a/client/godot/Core/Menus.cs
++++ b/client/godot/Core/Menus.cs
+@@ -142,13 +142,21 @@ public sealed class PieNavigator(MenuNode root, float threshold, double markingD
+ 
+ // The only placement numbers the client introduces (decision 4, 2026-11-05):
+ // a first Vive profile, to be measured on the headset. Not domain policy.
+-// The working panel takes the pie's angle below eye level, raised so that it
+-// ends above the HUD strip (Yan, 2026-11-13).
+-// The HUD strip numbers (25° below eye level, following after a 35° head turn)
+-// were chosen by Yan on 2026-11-06 for the same first profile.
+-public sealed record DeviceProfile(float ReadingDistance, float BelowEyeDegrees, float HudBelowEyeDegrees, float HudFollowDegrees)
++// Yan chose the strip's follow angle on 2026-11-06 and, on 2026-11-14 after
++// the ergonomics audit: the panel 9° below eye level, the strip 35° below and
++// placed in the room (it moves after a turn past the follow angle or a walk
++// of half a metre, in a 0.3 s glide), the panel no nearer than 1.25 m. The
++// pie of the space, and of any pointed thing, stays at least 15° below.
++public sealed record DeviceProfile(float ReadingDistance, float PieBelowEyeDegrees, float PanelBelowEyeDegrees,
++    float HudBelowEyeDegrees, float HudFollowDegrees, float HudFollowMetres, float HudGlideSeconds,
++    float NearestPanel, float FarthestPanel)
+ {
+-    public static readonly DeviceProfile Vive = new(1.5f, 15f, 25f, 35f);
++    public static readonly DeviceProfile Vive = new(ReadingDistance: 1.5f, PieBelowEyeDegrees: 15f, PanelBelowEyeDegrees: 9f,
++        HudBelowEyeDegrees: 35f, HudFollowDegrees: 35f, HudFollowMetres: .5f, HudGlideSeconds: .3f,
++        NearestPanel: 1.25f, FarthestPanel: 4f);
++    // The smallest text drawn on a surface in space: 0.6° at the workspace's
++    // density of 1600 surface pixels per metre of distance (Yan, 2026-11-14).
++    public const int SmallestTextPixels = 17;
+     // Tag-along: the strip keeps its heading until the head has turned past
+     // the threshold, then takes the head's heading. It never jitters with it.
+     public float? FollowYaw(float? current, float head)
+diff --git a/client/godot/HudBar.cs b/client/godot/HudBar.cs
+index 62e1697c..b5600382 100644
+--- a/client/godot/HudBar.cs
++++ b/client/godot/HudBar.cs
+@@ -11,7 +11,9 @@ using Quod.Client;
+ // and nesting.
+ public partial class HudBar : Control
+ {
+-    public const float Height=104;
++    public const float Height=112;
++    // The status sentence's own band above the commands, and its text size.
++    const float StatusBand=30;const int StatusText=18;
+     const float Icon=44;
+     static readonly Color Glass=new(0x19/255f,0x2B/255f,0x32/255f,.9f),Edge=new(0x84/255f,0x8F/255f,0xA5/255f,.5f),
+         Ink=new(0xF5/255f,0xF1/255f,0xEB/255f),Muted=new(0xC9/255f,0xD2/255f,0xDB/255f),
+@@ -42,9 +44,9 @@ public partial class HudBar : Control
+         var backdrop=new TextureRect {Name="hud-backdrop",MouseFilter=MouseFilterEnum.Ignore,StretchMode=TextureRect.StretchModeEnum.Scale,
+             ExpandMode=TextureRect.ExpandModeEnum.IgnoreSize,Texture=new GradientTexture2D {Gradient=gradient,Width=4,Height=64,FillFrom=new(0,0),FillTo=new(0,1)}};
+         backdrop.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);AddChild(backdrop);
+-        status.SetAnchorsPreset(LayoutPreset.TopWide);status.OffsetLeft=18;status.OffsetRight=-18;status.OffsetTop=2;status.OffsetBottom=26;
+-        status.AddThemeColorOverride("font_color",Muted);AddChild(status);
+-        row.SetAnchorsPreset(LayoutPreset.BottomWide);row.OffsetTop=-(Height-26);row.OffsetBottom=-4;
++        status.SetAnchorsPreset(LayoutPreset.TopWide);status.OffsetLeft=18;status.OffsetRight=-18;status.OffsetTop=2;status.OffsetBottom=StatusBand;
++        status.AddThemeColorOverride("font_color",Muted);status.AddThemeFontSizeOverride("font_size",StatusText);AddChild(status);
++        row.SetAnchorsPreset(LayoutPreset.BottomWide);row.OffsetTop=-(Height-StatusBand);row.OffsetBottom=-4;
+         row.AddThemeConstantOverride("separation",22);AddChild(row);
+         row.AddChild(device);RefreshIcons();
+     }
+@@ -61,7 +63,7 @@ public partial class HudBar : Control
+             var chosen=command;
+             var item=Command(command,"hud-"+command.Slot,button=>Activated?.Invoke(chosen,button));
+             var button=Button(item);button.Disabled=!command.Enabled;button.SetMeta("label",command.Label);
+-            if(IsAttention(command))attentionBadge=Badge(button,"",new Vector2(Icon-12,-8));
++            if(IsAttention(command))attentionBadge=Badge(button,"",new Vector2(Icon-BadgeSize+6,-10));
+             row.AddChild(item);
+         }
+         row.MoveChild(device,-1);
+@@ -93,9 +95,9 @@ public partial class HudBar : Control
+         var button=new Button {Name=name,CustomMinimumSize=new(Icon,Icon),SizeFlagsHorizontal=SizeFlags.ShrinkCenter,ExpandIcon=true,
+             IconAlignment=HorizontalAlignment.Center,TooltipText=node.Help.Length>0 ? node.Label+" · "+node.Help : node.Label,FocusMode=FocusModeEnum.None};
+         Round(button);button.Pressed+=()=>pressed(button);item.AddChild(button);shown.Add((button,node));
+-        if(!node.Leaf)Badge(button,"▸",new Vector2(Icon-14,Icon-14));
++        if(!node.Leaf)Badge(button,"▸",new Vector2(Icon-BadgeSize+4,Icon-BadgeSize+4));
+         var caption=new Label {Text=node.Label,HorizontalAlignment=HorizontalAlignment.Center,MouseFilter=MouseFilterEnum.Ignore,CustomMinimumSize=new(84,0),Modulate=new(1,1,1,0)};
+-        caption.AddThemeFontSizeOverride("font_size",12);caption.AddThemeColorOverride("font_color",Ink);
++        caption.AddThemeFontSizeOverride("font_size",DeviceProfile.SmallestTextPixels);caption.AddThemeColorOverride("font_color",Ink);
+         caption.AddThemeColorOverride("font_shadow_color",new Color(0,0,0,.75f));caption.AddThemeConstantOverride("shadow_offset_y",1);
+         button.MouseEntered+=()=>caption.Modulate=Colors.White;button.MouseExited+=()=>caption.Modulate=new(1,1,1,0);
+         item.AddChild(caption);
+@@ -112,18 +114,20 @@ public partial class HudBar : Control
+         button.AddThemeStyleboxOverride("pressed",Disc(new(0x2A/255f,0x3F/255f,0x48/255f,.95f),Gold,2));
+         button.AddThemeStyleboxOverride("focus",Disc(Glass,Gold,1));
+         button.AddThemeStyleboxOverride("disabled",Disc(Glass with {A=.6f},Edge with {A=.3f},1));
+-        button.AddThemeFontSizeOverride("font_size",15);
++        button.AddThemeFontSizeOverride("font_size",DeviceProfile.SmallestTextPixels);
+         foreach(string state in new[]{"font_color","font_hover_color","font_pressed_color","font_focus_color"})button.AddThemeColorOverride(state,Ink);
+         button.AddThemeColorOverride("font_disabled_color",new(0x8A/255f,0x9A/255f,0xA3/255f));
+         button.AddThemeColorOverride("icon_disabled_color",new(1,1,1,.55f));
+     }
+-    // A small gold disc on a command: the sub-pie mark or the attention count.
++    // A small gold disc on a command: the sub-pie mark or the attention count,
++    // as large as the smallest text it carries needs.
++    const int BadgeSize=DeviceProfile.SmallestTextPixels+9;
+     static Label Badge(Control host,string text,Vector2 at)
+     {
+         var badge=new Label {Text=text,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center,
+-            MouseFilter=MouseFilterEnum.Ignore,CustomMinimumSize=new(20,20),Position=at,Visible=text.Length>0};
+-        badge.AddThemeFontSizeOverride("font_size",11);badge.AddThemeColorOverride("font_color",Teal);
+-        var disc=new StyleBoxFlat {BgColor=Gold,ContentMarginLeft=5,ContentMarginRight=5};disc.SetCornerRadiusAll(10);
++            MouseFilter=MouseFilterEnum.Ignore,CustomMinimumSize=new(BadgeSize,BadgeSize),Position=at,Visible=text.Length>0};
++        badge.AddThemeFontSizeOverride("font_size",DeviceProfile.SmallestTextPixels);badge.AddThemeColorOverride("font_color",Teal);
++        var disc=new StyleBoxFlat {BgColor=Gold,ContentMarginLeft=5,ContentMarginRight=5};disc.SetCornerRadiusAll(BadgeSize/2);
+         badge.AddThemeStyleboxOverride("normal",disc);
+         host.AddChild(badge);return badge;
+     }
+diff --git a/client/godot/Main.cs b/client/godot/Main.cs
+index 46d9830b..de45e49c 100644
+--- a/client/godot/Main.cs
++++ b/client/godot/Main.cs
+@@ -170,7 +170,7 @@ public partial class Main : Control
+         scene.OutsidePress=DismissForm;
+         xr.Install(ControllerMapping.SignIn);
+         pie.Selected+=chosen=>{var occurrence=pieOccurrence;var at=pieAt;var source=pieView?.Target;ClosePie();Activate(chosen,occurrence,at,source);};
+-        gui.Surface.AddChild(hud);hud.Theme=gui.Appearance;hud.Icons=Icon;pie.Icons=Icon;
++        gui.Surface.AddChild(hud);hud.Theme=pie.Theme=gui.Appearance;hud.Icons=Icon;pie.Icons=Icon;
+         hud.Activated+=(command,control)=>{
+             if(hud.Commands is not {} commands||!OpenPie(null,control.GetGlobalRect().GetCenter(),local:commands))return;
+             if(pie.Choose(command.Slot))pie.Commit();
+@@ -744,7 +744,7 @@ public partial class Main : Control
+         if (@event is InputEventKey { Pressed:true, Echo:false, Keycode:Key.Menu } && !pie.IsOpen) {
+             if(OpenPie(hovered,hovered==null ? null : hoverPoint))GetViewport().SetInputAsHandled();return;
+         }
+-        if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape } && pie.IsOpen) { pie.Dismiss();GetViewport().SetInputAsHandled();return; }
++        if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape } && pie.IsOpen) { pie.Dismiss("dismissed with Escape");GetViewport().SetInputAsHandled();return; }
+         if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape }) {
+             if (backupDialog!=null) CloseBackup();
+             else if (!DismissForm()) { if (xr.Running) ToggleVr(); else action?.Cancel(); }
+diff --git a/client/godot/OpenXRInput.cs b/client/godot/OpenXRInput.cs
+index 29ffce79..c9f54660 100644
+--- a/client/godot/OpenXRInput.cs
++++ b/client/godot/OpenXRInput.cs
+@@ -75,10 +75,14 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
+     // The HUD strip: body-locked below the central view, tagging along.
+     readonly SubViewport hudViewport=new() { Name="hud-viewport",Size=new(1200,(int)HudBar.Height),TransparentBg=true,HandleInputLocally=true,Disable3D=true };
+     readonly MeshInstance3D hudQuad=new() { Name="hud-surface",Mesh=new QuadMesh(),Visible=false };
++    // The strip stands in the room: where it was placed, from which eye and
++    // heading, and the glide that takes it to a new place.
++    Transform3D? hudPlaced;
++    Transform3D hudFrom;
++    Vector3 hudEye;
+     float? hudYaw;
++    float hudGlide=1;
+     bool pointingHud;
+-    readonly Label3D rayLabel=new() { Name="ray-label",Billboard=BaseMaterial3D.BillboardModeEnum.Enabled,PixelSize=.0015f,FontSize=28,
+-        OutlineSize=8,Modulate=new(0xF5/255f,0xF1/255f,0xEB/255f),OutlineModulate=new(0x19/255f,0x2B/255f,0x32/255f),Visible=false,NoDepthTest=true };
+     readonly OpenXRApiExtension api=new();
+     OpenXRInterface? xr;
+     ScenePanel scene=null!;
+@@ -99,6 +103,9 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
+     ScenePanel.Selection? occurrence;
+     Transform3D personalPose;
+     Basis occurrenceBasis;
++    // Where the form beside a thing in the world was placed, and the thing's
++    // pose it was placed for: it stays there until the thing moves.
++    (Transform3D Thing,Transform3D Form)? besideThing;
+     IControllerSource? pointerSource,pieSource;
+     public ControllerInput Router { get; private set; }=null!;
+     public bool Running=>active;
+@@ -143,7 +150,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
+     {
+         this.scene=scene;this.gui=gui;this.models=models;this.controls=controls;this.blocked=blocked;this.pie=pie;this.openPie=openPie;this.dismissForm=dismissForm;
+         pie.Selected+=_=>MenuClosed();pie.Dismissed+=MenuClosed;
+-        AddChild(origin);origin.AddChild(camera);AddChild(panel);AddChild(pieViewport);AddChild(pieQuad);AddChild(hudViewport);AddChild(hudQuad);AddChild(rayLabel);
++        AddChild(origin);origin.AddChild(camera);AddChild(panel);AddChild(pieViewport);AddChild(pieQuad);AddChild(hudViewport);AddChild(hudQuad);
+         // The strip and the pie are the hand's own tools: they draw over any
+         // boundary or thing between the eye and them, never half behind it.
+         hudQuad.MaterialOverride=new StandardMaterial3D { ShadingMode=BaseMaterial3D.ShadingModeEnum.Unshaded,AlbedoTexture=hudViewport.GetTexture(),
+@@ -161,7 +168,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
+         xr.SessionFocussed+=Focused;xr.SessionVisible+=Unfocused;xr.SessionSynchronized+=Unfocused;xr.SessionStopping+=Stopping;
+         xr.SessionLossPending+=Stopping;xr.InstanceExiting+=Stopping;xr.PoseRecentered+=Recentered;Subscriptions+=7;
+         lifecycleSubscribed=true;xr.SetActionSetActive("quod_inputs",true);
+-        AttachSources();active=true;calibration=null;
++        AttachSources();active=true;calibration=null;hudPlaced=null;
+         scene.ReleaseInput();scene.PresentXR(true);
+         gui.Surface.GuiEmbedSubwindows=true;
+         camera.Current=true;PresentWorkspace(true);
+@@ -201,7 +208,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
+     void Focused() { Status="OpenXR focused; release controls before use.";Changed?.Invoke(); }
+     void Unfocused() { gui.EndTextInput();CancelPresentation();StopMovingWorkspace();HideVisuals();Status="OpenXR input paused: session has no focus.";Changed?.Invoke(); }
+     void Stopping() { Unfocused();Status="OpenXR runtime stopped this session.";Changed?.Invoke(); }
+-    void Recentered() { Router.Cancel();calibration=null; }
++    void Recentered() { Router.Cancel();calibration=null;hudPlaced=null; }
+     void CancelPresentation() { Router.Cancel();gui.Cancel(); }
+     bool StopMovingWorkspace() { if(!movingWorkspace)return false;movingWorkspace=false;placeRequested=false;return true; }
+     public void DesktopFocusLost() { gui.EndTextInput();CancelPresentation();if(StopMovingWorkspace())Changed?.Invoke(); }
+@@ -240,7 +247,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
+         CancelPresentation();
+         if(occurrence!=null){occurrence.Owner.PresentationChanged-=RefreshOccurrence;occurrence.Owner.HideForm();}
+         if(occurrence==null&&selected!=null)personalPose=panel.GlobalTransform;
+-        occurrence=selected;
++        occurrence=selected;besideThing=null;
+         if(selected==null){panel.GlobalTransform=personalPose;placeRequested=true;}
+         else {occurrenceBasis=selected.Owner.ViewerPose.Basis;selected.Owner.PresentationChanged+=RefreshOccurrence;
+             if(!ReferenceEquals(selected.Owner,scene)){panel.GlobalTransform=personalPose;placeRequested=true;}}
+@@ -255,30 +262,51 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
+     {
+         if(occurrence==null)return;
+         if(occurrence.Pose is not Transform3D pose){gui.EndTextInput();CancelPresentation();occurrence.Owner.HideForm();panel.Visible=false;return;}
+-        // Keep the selected view's stable orientation, but clear the solid's
+-        // full extent in that basis. Centre depth can put the form behind its
+-        // near face, especially the lower controls and adjacent keyboard.
+-        var corners=occurrence.Corners.Select(p=>occurrenceBasis.Inverse()*(p-pose.Origin)).ToArray();
+-        float top=corners.Length==0 ? 0 : corners.Max(p=>p.Y),front=corners.Length==0 ? 0 : corners.Max(p=>p.Z);
+-        var pixels=gui.FormSurface.Size;float width=1.5f*workspaceDistance/2;var size=new Vector2(width,width*pixels.Y/pixels.X);
+-        float height=size.Y*gui.FormSize.Y/pixels.Y;
+-        var next=new Transform3D(occurrenceBasis,pose.Origin+occurrenceBasis*new Vector3(0,top+.15f+height/2,front+.15f));
+         if(!ReferenceEquals(occurrence.Owner,scene)) {
+-            if(gui.Spatial&&workspaceShown&&gui.PresentationVisible){if(occurrence.Owner.PresentForm(gui.FormSurface.GetTexture(),size,pixels,new(0,-(size.Y-height)/2,0),next))CancelPresentation();panel.Visible=true;}
++            // A thing in a side view: the form is drawn inside that view, in
++            // its stable orientation, above the thing and clear of its front.
++            var corners=occurrence.Corners.Select(p=>occurrenceBasis.Inverse()*(p-pose.Origin)).ToArray();
++            float top=corners.Length==0 ? 0 : corners.Max(p=>p.Y),front=corners.Length==0 ? 0 : corners.Max(p=>p.Z);
++            var pixels=gui.FormSurface.Size;float width=1.5f*workspaceDistance/2;var size=new Vector2(width,width*pixels.Y/pixels.X);
++            float height=size.Y*gui.FormSize.Y/pixels.Y;
++            var inView=new Transform3D(occurrenceBasis,pose.Origin+occurrenceBasis*new Vector3(0,top+.15f+height/2,front+.15f));
++            if(gui.Spatial&&workspaceShown&&gui.PresentationVisible){if(occurrence.Owner.PresentForm(gui.FormSurface.GetTexture(),size,pixels,new(0,-(size.Y-height)/2,0),inView))CancelPresentation();panel.Visible=true;}
+             else occurrence.Owner.HideForm();
+             return;
+         }
+-        if(panel.GlobalTransform!=next){CancelPresentation();panel.GlobalTransform=next;}
++        // A thing in the world: the form stands as the panel does, at its
++        // distance and angle below eye level, facing the eye, beside the
++        // thing on the side toward where the head looks. It is placed once
++        // and stays until the thing moves.
++        if(besideThing is not {} placed||placed.Thing!=pose)besideThing=placed=(pose,BesideThing(pose,occurrence.Corners));
++        if(panel.GlobalTransform!=placed.Form){CancelPresentation();panel.GlobalTransform=placed.Form;}
+         panel.Visible=gui.Spatial&&workspaceShown&&gui.PresentationVisible;
+     }
++    Transform3D BesideThing(Transform3D thing,Vector3[] corners)
++    {
++        var head=Head();var eye=head.Origin;
++        static float Yaw(Vector3 v)=>Mathf.Atan2(-v.X,-v.Z);
++        static float Turn(float from,float to)=>Mathf.Wrap(to-from,-Mathf.Pi,Mathf.Pi);
++        var toward=thing.Origin-eye;toward.Y=0;var look=-head.Basis.Z;look.Y=0;
++        if(Mathf.IsZeroApprox(toward.LengthSquared()))toward=look;
++        float centre=Yaw(toward);
++        // Left is a positive turn about Up. Toward the view's centre; straight ahead, to the right.
++        float side=Mathf.IsZeroApprox(look.LengthSquared())||Turn(centre,Yaw(look))<=0 ? -1 : 1;
++        float reach=corners.Select(c=>{var v=c-eye;v.Y=0;return Mathf.IsZeroApprox(v.LengthSquared()) ? 0 : side*Turn(centre,Yaw(v));}).DefaultIfEmpty(0).Max();
++        float half=Mathf.Atan(((QuadMesh)panel.Mesh).Size.X/2/workspaceDistance);
++        float heading=centre+side*(Math.Max(0,reach)+half);
++        return BelowEye(eye,new(-Mathf.Sin(heading),0,-Mathf.Cos(heading)),workspaceDistance,Profile.PanelBelowEyeDegrees);
++    }
+     public void ShowWorkspace() { CancelPresentation();StopMovingWorkspace();workspaceShown=true;placeRequested=true;Changed?.Invoke(); }
+     public void HideWorkspace() { gui.EndTextInput();CancelPresentation();CancelMenu();workspaceShown=false;movingWorkspace=false;placeRequested=false;panel.Visible=false;Changed?.Invoke(); }
+     public void MoveWorkspace() { CancelPresentation();workspaceShown=true;movingWorkspace=!movingWorkspace;placeRequested=movingWorkspace;Changed?.Invoke(); }
+     public void WorkspaceDistance(float change)
+-    { float next=Math.Clamp(workspaceDistance+change,.6f,4);if(next==workspaceDistance)return;workspaceDistance=next;ResizePanel();ShowWorkspace(); }
+-    // Below the central view, at reading distance, facing the head; hidden
+-    // while a pie is open in front of it.
+-    void PlaceHud()
++    { float next=Math.Clamp(workspaceDistance+change,Profile.NearestPanel,Profile.FarthestPanel);if(next==workspaceDistance)return;workspaceDistance=next;ResizePanel();ShowWorkspace(); }
++    // Below the central view, at reading distance, facing the eye, standing
++    // in the room like the panel. It takes a new place in front only once the
++    // head has turned past the follow angle or walked away from where it was
++    // placed, gliding there; hidden while a pie is open in front of it.
++    void PlaceHud(double seconds)
+     {
+         // The keyboard extends below the panel, into the strip's place: the strip waits while it is up.
+         bool shown=gui.Spatial&&!pie.IsOpen&&!gui.TextEntryActive&&hudViewport.GetChildren().OfType<Control>().Any(c=>c.Visible);
+@@ -287,22 +315,19 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
+         if(head?.HasPose("default")!=true||!head.GetPose("default").HasTrackingData)return;
+         var headWorld=origin.GlobalTransform*head.GetPose("default").GetAdjustedTransform();
+         var forward=-headWorld.Basis.Z;forward.Y=0;if(Mathf.IsZeroApprox(forward.LengthSquared()))return;
+-        float yaw=Mathf.RadToDeg(Mathf.Atan2(-forward.X,-forward.Z));
+-        hudYaw=Profile.FollowYaw(hudYaw,yaw);float heading=Mathf.DegToRad(hudYaw!.Value);
+-        float reading=Profile.ReadingDistance;
++        float yaw=Mathf.RadToDeg(Mathf.Atan2(-forward.X,-forward.Z)),reading=Profile.ReadingDistance;
+         // The workspace's own angular text density: 1600 surface pixels per metre of distance.
+         ((QuadMesh)hudQuad.Mesh).Size=new(hudViewport.Size.X*reading/1600,hudViewport.Size.Y*reading/1600);
+-        hudQuad.GlobalTransform=BelowEye(headWorld.Origin,new(-Mathf.Sin(heading),0,-Mathf.Cos(heading)),reading,Profile.HudBelowEyeDegrees);
+-    }
+-    // The panel sits below eye level as the profile says, raised as far as
+-    // needed for its lower edge to end where the strip begins. Its height is
+-    // half its distance, whatever that distance is.
+-    internal float PanelBelowEyeDegrees {
+-        get {
+-            // Half the strip as the eye sees it: its pixels at 1600 per metre of distance.
+-            float strip=Mathf.RadToDeg(Mathf.Atan(hudViewport.Size.Y/3200f));
+-            return Math.Min(Profile.BelowEyeDegrees,Profile.HudBelowEyeDegrees-strip-Mathf.RadToDeg(Mathf.Atan(.25f)));
++        float? heading=Profile.FollowYaw(hudYaw,yaw);
++        if(hudPlaced==null||heading!=hudYaw||headWorld.Origin.DistanceTo(hudEye)>Profile.HudFollowMetres) {
++            hudYaw=heading;hudEye=headWorld.Origin;float turn=Mathf.DegToRad(heading!.Value);
++            var target=BelowEye(hudEye,new(-Mathf.Sin(turn),0,-Mathf.Cos(turn)),reading,Profile.HudBelowEyeDegrees);
++            if(hudPlaced==null){hudGlide=1;hudQuad.GlobalTransform=target;}else{hudGlide=0;hudFrom=hudQuad.GlobalTransform;}
++            hudPlaced=target;
+         }
++        if(hudGlide>=1)return;
++        hudGlide=Math.Min(1,hudGlide+(float)(seconds/Profile.HudGlideSeconds));
++        hudQuad.GlobalTransform=hudFrom.InterpolateWith(hudPlaced.Value,Mathf.SmoothStep(0,1,hudGlide));
+     }
+     // A surface along a level heading, the given angle below eye level, turned to face the eye.
+     static Transform3D BelowEye(Vector3 eye,Vector3 heading,float distance,float degrees)
+@@ -341,7 +366,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
+         var forward=-headWorld.Basis.Z;forward.Y=0;
+         if(Mathf.IsZeroApprox(forward.LengthSquared()))return;
+         // In front of where the head looks now, then world-locked.
+-        var target=BelowEye(headWorld.Origin,forward.Normalized(),workspaceDistance,PanelBelowEyeDegrees);
++        var target=BelowEye(headWorld.Origin,forward.Normalized(),workspaceDistance,Profile.PanelBelowEyeDegrees);
+         if(panel.GlobalTransform!=target)panel.GlobalTransform=target;
+         placeRequested=false;panel.Visible=shown;
+     }
+@@ -371,9 +396,9 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
+         ControlChanged();
+         if(tracked && calibration==null)Calibrate(head!.GetPose("default").Transform);
+         long time=api.GetPredictedDisplayTime();
+-        Advance(time>0 ? (ulong)time : 0,xr.GetSessionState()==OpenXRInterface.SessionState.Focused,api.IsRunning(),tracked);
++        Advance(time>0 ? (ulong)time : 0,xr.GetSessionState()==OpenXRInterface.SessionState.Focused,api.IsRunning(),tracked,delta);
+     }
+-    internal void Advance(ulong frame,bool focused,bool running,bool tracked)
++    internal void Advance(ulong frame,bool focused,bool running,bool tracked,double seconds)
+     {
+         ControlChanged();
+         origin.Transform=scene.ViewerPose*(calibration??Transform3D.Identity);
+@@ -381,7 +406,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
+         if(!interactive)gui.EndTextInput();
+         foreach(var source in sources.Values)source.UpdatePose();
+         // A visible session can show the workspace before it owns input focus.
+-        PlaceWorkspace(running && tracked && visible,interactive);PlaceHud();
++        PlaceWorkspace(running && tracked && visible,interactive);PlaceHud(seconds);
+         Router.Frame(frame,interactive);
+         foreach(var (source,visual) in visuals)if(visual.Model!=null)visual.Model.Visible=running && tracked && visible && visual.Profile!=null && ((Source)source).GripTracked;
+     }
+@@ -433,13 +458,12 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
+         // Only the controller that opened the pie steers it; once its ray
+         // leaves the pie's surface it points nothing.
+         if(pie.IsOpen) {
+-            rayLabel.Visible=false;
+             if(PiePoint(input) is {} on){if(pieSource==null||input==pieSource)pie.PointerAt(on);}
+             else if(input==pieSource)pie.PointerAway();
+             return;
+         }
+-        if(HudHit(input) is {} onHud){HudPointer(onHud,null);rayLabel.Visible=false;scene.PointAt(null);return;}
+-        if(hit==null&&pointerSource==null&&!Blocked&&Router.MenuOwner==null)PointTarget(input);else{rayLabel.Visible=false;scene.PointAt(null);}
++        if(HudHit(input) is {} onHud){HudPointer(onHud,null);scene.PointAt(null);return;}
++        if(hit==null&&pointerSource==null&&!Blocked&&Router.MenuOwner==null)PointTarget(input);else scene.PointAt(null);
+         if(hit is {} at){gui.Move(at.Point,gui.PresentationSurface);PadScroll(source,at.Point);}
+         else {source.PadRest=null;if(pointerSource==input && pointingGui)gui.Move(new(-10000,-10000),gui.PresentationSurface);else gui.Leave();}
+     }
+@@ -461,25 +485,22 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
+             gui.PresentationSurface.PushInput(new InputEventMouseButton { Position=at,GlobalPosition=at,ButtonIndex=button,Pressed=false,Factor=1 },true);
+         }
+     }
+-    public void Hide(IControllerSource input){((Source)input).Pointer.Visible=false;rayLabel.Visible=false;scene.PointAt(null);}
+-    // Feedback before the press: the pointed thing shows its pointed-at look
+-    // and its authored label at the ray tip. Pointing at nothing shows nothing.
++    public void Hide(IControllerSource input){((Source)input).Pointer.Visible=false;scene.PointAt(null);}
++    // Feedback before the press: the pointed thing shows its pointed-at look;
++    // its name is already written above it. Pointing at nothing shows nothing.
+     void PointTarget(IControllerSource input)
+-    {
+-        var ray=Ray(input);var hit=scene.PickRay(ray.Origin,ray.Direction);scene.PointAt(hit);
+-        if(hit?.Label is not string text||hit.Pose is not Transform3D pose){rayLabel.Visible=false;return;}
+-        float distance=Math.Max(.3f,(pose.Origin-ray.Origin).Dot(ray.Direction));
+-        rayLabel.Text=text;rayLabel.GlobalPosition=ray.Origin+ray.Direction*distance+Vector3.Up*.06f;rayLabel.Visible=true;
+-    }
++    { var ray=Ray(input);scene.PointAt(scene.PickRay(ray.Origin,ray.Direction)); }
+     // World-locked placement, never following the head: in front of the
+     // pointed object (pulled in to reading distance), or along the ray at
+-    // reading distance slightly below eye level for the space.
++    // reading distance for the space; in both cases at least as far below
++    // eye level as the profile says.
+     void PlacePie(IControllerSource input,ScenePanel.Selection? hit)
+     {
+         var ray=Ray(input);float reading=Profile.ReadingDistance,radius=PieRadius;
+         float distance=hit?.Pose is Transform3D pose ? Math.Clamp((pose.Origin-ray.Origin).Dot(ray.Direction)-radius,radius,reading) : reading;
+         var at=ray.Origin+ray.Direction*distance;var head=Head();
+-        if(hit==null){float lowest=head.Origin.Y-distance*Mathf.Sin(Mathf.DegToRad(Profile.BelowEyeDegrees));at.Y=Math.Min(at.Y,lowest);}
++        float level=new Vector2(at.X-head.Origin.X,at.Z-head.Origin.Z).Length();
++        at.Y=Math.Min(at.Y,head.Origin.Y-level*Mathf.Tan(Mathf.DegToRad(Profile.PieBelowEyeDegrees)));
+         PlacePieQuad(at,head);
+     }
+     // A strip command's pie opens just in front of that command.
+@@ -545,7 +566,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
+             gui.EndTextInput();var ray=Ray(input);
+             var hit=GuiHit(input)!=null ? null : scene.PickRay(ray.Origin,ray.Direction);
+             if(!openPie(hit))return false;
+-            pieSource=input;rayLabel.Visible=false;scene.PointAt(null);if(gui.Spatial)PlacePie(input,hit);
++            pieSource=input;scene.PointAt(null);if(gui.Spatial)PlacePie(input,hit);
+         }
+         pie.Threshold=threshold;pie.MoveAxes(axes);return true;
+     }
+@@ -556,7 +577,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
+         pie.MoveAxes(axes);
+     }
+     public void CommitMenu(){if(pie.IsOpen)pie.Commit();}
+-    public void CancelMenu()=>pie.Dismiss();
++    public void CancelMenu()=>pie.Dismiss("dismissed: input withdrawn (focus, a popup or a press elsewhere)");
+     void MenuClosed(){Router.MenuSelected();pieQuad.Visible=false;pieSource=null;}
+     public void Drive(IControllerSource source,NumericsVector2 axes)
+     {
+diff --git a/client/godot/PieMenu.cs b/client/godot/PieMenu.cs
+index 9d22bf5d..413b0e93 100644
+--- a/client/godot/PieMenu.cs
++++ b/client/godot/PieMenu.cs
+@@ -30,6 +30,9 @@ public partial class PieMenu : Control
+     public bool PointerMoved { get; private set; }
+     NumericsVector2 direction;
+     NumericsVector2? axesSeen;
++    // Which input last set the pointed direction, for the console line that
++    // says how the pie ended.
++    string steeredBy="nothing";
+     public float Threshold { get; set; }=.3f;
+     // The texture for a node's authored image, when the host has it.
+     public Func<MenuNode,Texture2D?>? Icons { get; set; }
+@@ -52,7 +55,7 @@ public partial class PieMenu : Control
+     // Opens at a point of this control while the subject's menu is read.
+     public void Open(Vector2 at,float size,string reading)
+     {
+-        navigator=null;waiting=reading;presented="";radius=size;pointerKnown=pointerAway=PointerMoved=false;axesSeen=null;direction=NumericsVector2.Zero;
++        navigator=null;waiting=reading;presented="";radius=size;pointerKnown=pointerAway=PointerMoved=false;axesSeen=null;direction=NumericsVector2.Zero;steeredBy="nothing";
+         centres.Clear();centres.Add(Clamp(at));Visible=true;GrabFocus();Refresh();
+     }
+     // An unchanged projection does no work; a changed one keeps the user's
+@@ -72,15 +75,22 @@ public partial class PieMenu : Control
+         }
+         navigator.Move(direction,Now);Refresh();
+     }
+-    public void Close(){if(!Visible)return;Visible=false;navigator=null;centres.Clear();ReleaseFocus();Refresh();}
++    public void Close()=>End("closed by the client");
++    // Every way a pie ends writes one console line: what was chosen, or why nothing was.
++    void End(string how)
++    {
++        if(!Visible)return;
++        Quod.Client.Trace.Line("pie",$"ended {how} level=\"{navigator?.Level.Label??"unanswered"}\" lit={navigator?.Hovered??0} steered_by={steeredBy}");
++        Visible=false;navigator=null;centres.Clear();ReleaseFocus();Refresh();
++    }
+     // The user gave the pie up: nothing is chosen.
+-    public void Dismiss(){if(!Visible)return;Close();Dismissed?.Invoke();}
++    public void Dismiss(string why="dismissed"){if(!Visible)return;End(why);Dismissed?.Invoke();}
+     // Pad axes: absolute direction from the pad centre. Repeated unchanged
+     // samples are not movement, so a moving ray can take over.
+     public void MoveAxes(NumericsVector2 axes)
+     {
+         if(axesSeen is {} seen&&NumericsVector2.Distance(seen,axes)<.01f)return;
+-        axesSeen=axes;Move(axes);
++        axesSeen=axes;steeredBy="pad";Move(axes);
+     }
+     // Where a point of this control aims: a wedge's direction while it is on
+     // the drawn ring, nothing on the hub or beyond the edge.
+@@ -93,10 +103,10 @@ public partial class PieMenu : Control
+     {
+         if(!pointerKnown){pointer=point;pointerKnown=true;return;}
+         if(!pointerAway&&point.DistanceTo(pointer)<1)return;
+-        pointerAway=false;PointerMoved=true;pointer=point;Move(Aim(point));
++        pointerAway=false;PointerMoved=true;pointer=point;steeredBy="pointer";Move(Aim(point));
+     }
+     // The ray left this control's surface: it points nothing until it returns.
+-    public void PointerAway(){if(!pointerKnown||pointerAway)return;pointerAway=true;Move(NumericsVector2.Zero);}
++    public void PointerAway(){if(!pointerKnown||pointerAway)return;pointerAway=true;steeredBy="pointer";Move(NumericsVector2.Zero);}
+     void Move(NumericsVector2 next)
+     {
+         direction=next;if(navigator==null)return;int depth=navigator.Path.Count;
+@@ -108,11 +118,12 @@ public partial class PieMenu : Control
+     public void Back(){if(navigator?.Back()==true){centres.RemoveAt(centres.Count-1);Refresh();}}
+     public PieOutcome Commit()
+     {
+-        if(navigator==null){Dismiss();return PieOutcome.Cancelled;}
++        if(navigator==null){Dismiss("cancelled before its contents arrived");return PieOutcome.Cancelled;}
+         int depth=navigator.Path.Count;var outcome=navigator.Commit();
+         if(outcome==PieOutcome.Open){Follow(depth);Refresh();return outcome;}
+-        var chosen=navigator.Selection;Close();
+-        if(outcome==PieOutcome.Selected)Selected?.Invoke(chosen!);else Dismissed?.Invoke();
++        var chosen=navigator.Selection;
++        if(outcome==PieOutcome.Selected){End($"chose \"{navigator.HoveredItem?.Label??chosen!.Label}\"");Selected?.Invoke(chosen!);}
++        else Dismiss("cancelled: released on no wedge");
+         return outcome;
+     }
+     // A click or trigger release decides where it lands: on a wedge it commits
+@@ -120,7 +131,7 @@ public partial class PieMenu : Control
+     public PieOutcome CommitAt(Vector2? point)
+     {
+         if(point is Vector2 at){pointer=at;pointerKnown=true;}
+-        pointerAway=point==null;int depth=navigator?.Path.Count??0;
++        pointerAway=point==null;steeredBy="pointer";int depth=navigator?.Path.Count??0;
+         Move(point is Vector2 on ? Aim(on) : NumericsVector2.Zero);
+         // Marking mode opened the pointed sub-pie at this very moment: that is the outcome.
+         return navigator!=null&&navigator.Path.Count!=depth ? PieOutcome.Open : Commit();
+@@ -190,7 +201,7 @@ public partial class PieMenu : Control
+         }
+         Disc(centre,radius*Hub,Glass,warns ? Rose : Gold,2,radius*.05f);
+         bool named=navigator?.Hovered>0;
+-        Words(font,centre,Title,Note,named ? size*3/2 : size,size,named ? pointed is {Enabled:false} ? Ink with {A=.7f} : Ink : Muted,armed ? RoseLight : Muted);
++        Words(font,centre,Title,Note,named ? size*3/2 : size,named ? pointed is {Enabled:false} ? Ink with {A=.7f} : Ink : Muted,armed ? RoseLight : Muted);
+     }
+     // A round disc with a smooth edge and, when asked, a soft shadow beneath:
+     // a few widening rings of shade, densest at the disc.
+@@ -224,13 +235,15 @@ public partial class PieMenu : Control
+     }
+     // The hub's words, centred: the title as large as asked while it fits the
+     // hub, wrapped between words; the note smaller beneath it.
+-    void Words(Font font,Vector2 centre,string title,string note,int asked,int plain,Color ink,Color quiet)
++    // The note's size: three quarters of the text size, never under the smallest text.
++    internal int NoteSize=>Math.Max(DeviceProfile.SmallestTextPixels,GetThemeDefaultFontSize()*3/4);
++    void Words(Font font,Vector2 centre,string title,string note,int asked,Color ink,Color quiet)
+     {
+-        float width=radius*Hub*1.6f,height=radius*Hub*1.2f;int small=Math.Max(12,plain*3/4),gap=note.Length>0 ? small/3 : 0;
++        float width=radius*Hub*1.6f,height=radius*Hub*1.2f;int small=NoteSize,gap=note.Length>0 ? small/3 : 0;
+         float noteHeight=note.Length>0 ? font.GetMultilineStringSize(note,HorizontalAlignment.Center,width,small).Y : 0;
+         bool Fits(int at)=>font.GetMultilineStringSize(title,HorizontalAlignment.Center,width,at).Y+gap+noteHeight<=height&&
+             title.Split(' ').All(word=>font.GetStringSize(word,HorizontalAlignment.Left,-1,at).X<=width);
+-        int chosen=asked;while(chosen>12&&!Fits(chosen))chosen-=2;
++        int chosen=asked;while(chosen>DeviceProfile.SmallestTextPixels&&!Fits(chosen))chosen-=1;
+         float titleHeight=font.GetMultilineStringSize(title,HorizontalAlignment.Center,width,chosen).Y;
+         var top=new Vector2(centre.X-width/2,centre.Y-(titleHeight+gap+noteHeight)/2);
+         DrawMultilineString(font,top+new Vector2(0,font.GetAscent(chosen)),title,HorizontalAlignment.Center,width,chosen,-1,ink);
+@@ -243,7 +256,7 @@ public partial class PieMenu : Control
+         switch(input) {
+             case InputEventMouseMotion motion: PointerAt(motion.Position);break;
+             case InputEventMouseButton {ButtonIndex:MouseButton.Left,Pressed:true} click: CommitAt(click.Position);break;
+-            case InputEventMouseButton {ButtonIndex:MouseButton.Right,Pressed:true}: Dismiss();break;
++            case InputEventMouseButton {ButtonIndex:MouseButton.Right,Pressed:true}: Dismiss("dismissed with the right button");break;
+             case InputEventKey {Pressed:true} key: if(!Key(key))return;break;
+             default: return;
+         }
+@@ -253,7 +266,7 @@ public partial class PieMenu : Control
+     {
+         int wedges=navigator?.Level.Wedges??8;
+         switch(key.Keycode) {
+-            case Godot.Key.Escape: Dismiss();return true;
++            case Godot.Key.Escape: Dismiss("dismissed with Escape");return true;
+             case Godot.Key.Backspace: Back();return true;
+             case Godot.Key.Enter or Godot.Key.KpEnter: Commit();return true;
+             case Godot.Key.Up: Choose(MenuNode.Direction(new(0,-1),.5f,wedges));return true;
+diff --git a/client/godot/README.md b/client/godot/README.md
+index 6691c764..12d08252 100644
+--- a/client/godot/README.md
++++ b/client/godot/README.md
+@@ -120,7 +120,9 @@ the previous visual consumer. Recipes may live in the same ontology as their cla
+ 
+ Solid primitives retain authored colour, metallic, roughness and emission values.
+ Neutral adapter lighting distinguishes solid faces against the ordinary black
+-background. Wire and corner geometry remains unshaded and labels stay opaque. This supplies
++background. Wire and corner geometry remains unshaded and labels stay opaque. A
++label stands with its thing in the world, written back to back so it reads from
++the thing's front and from behind; it never turns toward the viewer. This supplies
+ no physical sun, collision geometry or measured headset readability guarantee.
+ 
+ A mark may carry three surfaces: display, pointed at and selected. Every mark
+@@ -322,9 +324,12 @@ central angular extent and text/target scale. Text size remains independently
+ adjustable. This is idealized presentation geometry, not a lens/comfort claim.
+ Initial placement, explicit repositioning and every opening of a panel or form
+ use the current tracked head's position and horizontal forward direction. The
+-panel faces the eye and sits below eye level by the device profile's angle,
+-raised as far as needed for its lower edge to end where the HUD strip begins
+-(about 9° below with the first Vive profile); it is then world-locked. A vertical-only
++panel faces the eye and sits below eye level by the device profile's panel
++angle (9° with the first Vive profile, above the HUD strip); it is then
++world-locked. Nearer and Farther keep it between 1.25 m and 4 m. A form opened
++beside a thing in the world stands by the same rule (the panel's distance and
++angle, facing the eye), beside the thing on the side toward where the head
++looked when it opened, and stays there until the thing moves. A vertical-only
+ direction waits for a measurable heading. The existing XR frame owner places
+ it once; ordinary head movement leaves the panel stationary.
+ Hide retains the controls/drafts. The mapped menu can summon the hidden workspace
+@@ -368,7 +373,8 @@ the reserved back wedge returns to the parent, and a click or trigger release
+ anywhere but on a wedge cancels. Unavailable wedges stay visible with their
+ reason in the hub; a confirmed wedge asks for a second press. On desktop, Backspace goes back, Enter commits, digits pick wedges and
+ the Menu key opens the pointed target's pie. In VR the pie has its own
+-world-locked surface at the device profile's reading distance; only the
++world-locked surface at the device profile's reading distance, at least 15°
++below eye level whether it belongs to the space or to a pointed thing; only the
+ controller that opened it steers it with its ray. A re-read of the space the headset stands in (after
+ any commit there) keeps the headset's place in it; only another space, a lost
+ view or the runtime's own recentre takes it again from the agent's place.
+@@ -378,16 +384,19 @@ open form closes and cancels it, as its Close button does; a form that was sent
+ stays until its result is known. The HUD strip
+ shows the human's `hud_commands/1` view, the one local "This device" command
+ and the last status sentence: along the bottom edge on desktop, and in VR on
+-its own surface 25° below eye level that follows the body only after a 35°
+-head turn; it waits while the spatial keyboard is up, which extends below the
++its own surface 35° below eye level that stands in the room like the panel: it
++moves only after a 35° head turn or a walk of more than half a metre, gliding
++there in 0.3 s. Its smallest text, as the pie's, is 17 px (0.6°). It waits while the spatial keyboard is up, which extends below the
+ panel into its place. Agents the human already lets put questions before them may offer a command;
+ the offer waits until the human answers it through **Offered commands** in
+ their own pie. A strip click is committed by the same pie as any wedge, so a
+ command that asks for confirmation still asks.
+ For reading a session back, the client writes `QUOD_TRACE` console lines: one
+ per pie opened (when its socket opened, when the node answered, when its first
+-frame was drawn), one per icon fetched, and one per headset press and release
+-(what the ray reached). Nothing of it is shown on screen.
++frame was drawn), one per pie ended (the wedge chosen, or why none was, and
++whether the pad or the pointer set the direction last), one per icon fetched,
++and one per headset press and release (what the ray reached). Nothing of it is
++shown on screen.
+ Editable text, numeric and source fields in the spatial workspace expose an
+ opaque adjacent AZERTY keyboard. Keys use the same native editor, caret,
+ selection, undo and draft events; Enter follows the field's native semantics
+diff --git a/client/godot/ScenePanel.cs b/client/godot/ScenePanel.cs
+index c413072a..d6346efc 100644
+--- a/client/godot/ScenePanel.cs
++++ b/client/godot/ScenePanel.cs
+@@ -284,8 +284,11 @@ public partial class ScenePanel : SubViewportContainer
+             }
+             if(mark.Label.Kind!="atom" || mark.Label.Name!="unlabelled") {
+                 var label=mark.Label.Require("label",2);float y=label[1].TextValue switch {"above"=>sizes[mark.Id].Y/2+.15f,"below"=>-sizes[mark.Id].Y/2-.15f,_=>0};
+-                node.AddChild(new Label3D {Text=label[0].TextValue,Position=new(0,y,0),FontSize=32,PixelSize=.005f,
+-                    Billboard=BaseMaterial3D.BillboardModeEnum.Enabled,Modulate=new Color("#F5F1EB"),Shaded=false});
++                // Fixed in the world with its thing: one copy reads from the
++                // thing's front, its twin, turned half round, from behind.
++                foreach(float turn in new[]{0,Mathf.Pi})
++                    node.AddChild(new Label3D {Text=label[0].TextValue,Position=new(0,y,0),Rotation=new(0,turn,0),FontSize=32,PixelSize=.005f,
++                        DoubleSided=false,Modulate=new Color("#F5F1EB"),Shaded=false});
+             }
+             long identity=old!=null && Subject(old)?.ToString()==NextSubject(mark)?.ToString() ? old.Identity : ++occurrenceIdentity;
+             next.Add(mark.Id, new(mark, node, corners,lines,identity,shape,looks)); Rebuilt++;
+@@ -340,7 +343,7 @@ public partial class ScenePanel : SubViewportContainer
+         var points = occurrences.Values.SelectMany(o => o.Corners.Select(p => o.Node.GlobalTransform * p)
+             .Concat(o.Node.GetChildren().OfType<Label3D>().SelectMany(label=>{
+                 var padding=new Vector3(1,1,0)*label.OutlineSize*label.PixelSize;
+-                return (label.GenerateTriangleMesh()?.GetFaces()??[]).SelectMany(p=>new[]{label.GlobalPosition+p-padding,label.GlobalPosition+p+padding});
++                return (label.GenerateTriangleMesh()?.GetFaces()??[]).SelectMany(p=>new[]{label.GlobalTransform*(p-padding),label.GlobalTransform*(p+padding)});
+             }))).Concat(formSurface?.Visible==true ? Corners(new(((QuadMesh)formSurface.Mesh).Size.X,((QuadMesh)formSurface.Mesh).Size.Y,0)).Select(p=>formSurface.GlobalTransform*(p+((QuadMesh)formSurface.Mesh).CenterOffset)) : []).ToArray();
+         if (points.Length == 0) { camera.Position = new(0,0,5); camera.Rotation = Vector3.Zero; camera.Near = 0.05f; camera.Far = 1000; return; }
+         if (points.Any(p => !p.IsFinite())) throw new FormatException("Scene frame exceeds the engine's numeric range.");
+diff --git a/client/godot/tests/ControllerChecks.cs b/client/godot/tests/ControllerChecks.cs
+index 480f264f..b8938103 100644
+--- a/client/godot/tests/ControllerChecks.cs
++++ b/client/godot/tests/ControllerChecks.cs
+@@ -44,7 +44,7 @@ public partial class ExportChecks
+         adapter.Install(ControllerMapping.SignIn);adapter.AttachSources();
+         var left=Tracker("m4_left",XRPositionalTracker.TrackerHand.Left);var right=Tracker("m4_right",XRPositionalTracker.TrackerHand.Right);
+         ulong frame=0;
+-        void Advance(bool focused=true,bool running=true,bool tracked=true)=>adapter.Advance(++frame,focused,running,tracked);
++        void Advance(bool focused=true,bool running=true,bool tracked=true)=>adapter.Advance(++frame,focused,running,tracked,Frame90);
+         void Pose(XRControllerTracker t,Vector2 pixel) {
+             var size=((QuadMesh)adapter.GuiSurface.Mesh).Size;
+             var p=new Vector3((pixel.X/gui.Surface.Size.X-.5f)*size.X,(.5f-pixel.Y/gui.Surface.Size.Y)*size.Y,1);
+@@ -148,7 +148,7 @@ public partial class ExportChecks
+         Check(clicked==expectedClicks && adapter.Sources.Single(s=>s.Tracker==left).Grip.GetChildren().OfType<Node3D>().All(n=>!n.Visible),
+             "lost grip pose hides that wand and cannot select through a retained ray");
+         left.SetPose("grip",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);Advance();
+-        Held(left,"trigger_press",true);adapter.Advance(frame,true,true,true);Held(left,"trigger_press",false);
++        Held(left,"trigger_press",true);adapter.Advance(frame,true,true,true,Frame90);Held(left,"trigger_press",false);
+         Check(clicked==expectedClicks,"duplicate stale frame cancels pending selection");
+         Advance();Held(left,"trigger_press",true);adapter.Visibility(false);Advance();
+         Check(ModelsHidden() && gui.Captures==0,"desktop visibility remains a persistent input and model gate");
+@@ -230,6 +230,18 @@ public partial class ExportChecks
+         Pose(right,gui.Surface.Size/2);Advance();Pose(right,onWedge);Advance();
+         Held(right,"trigger_press",true);Held(right,"trigger_press",false);Held(right,"pad_press",false);
+         Check(menuActivated==2 && adapter.Router.MenuOwner==null,"trigger wedge choice consumes its later pad release exactly once");
++        // Yan's gesture of 2026-11-14: the pad pressed near its centre and held,
++        // the ray brought onto a wedge, then the pad released. A thumb that
++        // shifts while lifting, or lifts off, must not take the ray's wedge away.
++        foreach(var lift in new[]{Vector2.Zero,new Vector2(.05f,.02f)}) {
++            int chosenBefore=menuActivated;
++            right.SetInput("pad_axes",Vector2.Zero);Advance();right.SetInput("pad_axes",new Vector2(.02f,.03f));Held(right,"pad_press",true);
++            Pose(right,gui.Surface.Size/2);Advance();Pose(right,onWedge);Advance();
++            Check(pie.Navigator!.Hovered==1,"the ray lights its wedge while the pad stays pressed near its centre");
++            right.SetInput("pad_axes",lift);Held(right,"pad_press",false);
++            Check(menuActivated==chosenBefore+1 && !pie.IsOpen,$"releasing the pad chooses the ray's wedge though the thumb moved to {lift} while lifting");
++            if(pie.IsOpen)adapter.CancelMenu();
++        }
+         right.SetInput("pad_axes",Vector2.Zero);Advance();right.Hand=XRPositionalTracker.TrackerHand.Unknown;Advance();beforeRedraw=adapter.MenuRedraws;Held(right,"pad_press",true);
+         Check(adapter.MenuRedraws==beforeRedraw,"unknown handedness does not receive the default menu role");Held(right,"pad_press",false);
+         left.Profile="unsupported-profile";Advance();Pose(left,button.GetGlobalRect().GetCenter());Held(left,"trigger_press",true);Held(left,"trigger_press",false);
+diff --git a/client/godot/tests/ControllerLiveChecks.cs b/client/godot/tests/ControllerLiveChecks.cs
+index e78a8804..9c5c321f 100644
+--- a/client/godot/tests/ControllerLiveChecks.cs
++++ b/client/godot/tests/ControllerLiveChecks.cs
+@@ -26,7 +26,7 @@ public partial class ExportChecks
+         adapter.Changed+=SourceInstalled;
+         try { XRServer.AddTracker(tracker);await installed.Task.WaitAsync(TimeSpan.FromSeconds(30)); }
+         finally { adapter.Changed-=SourceInstalled; }
+-        await adapter.Completion;adapter.Advance(1,true,true,true);
++        await adapter.Completion;adapter.Advance(1,true,true,true,Frame90);
+         var resources=JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(adapter.Metrics))!["resources"]!;
+         Check(resources["Decodes"]!.GetValue<int>()==1 && resources["LiveLeases"]!.GetValue<int>()==1,"real HTTPS asset bytes pass digest/profile/cost admission and instantiate in the production scene owner");
+         using var probe=new System.Net.Sockets.TcpClient();await probe.ConnectAsync("127.0.0.1",int.Parse(Env("M1B_CONTROL_PORT")));
+@@ -38,7 +38,7 @@ public partial class ExportChecks
+             var received=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);void Projection(JsonNode _)=>received.TrySetResult();view.Projection+=Projection;
+             try { await view.Renew();await received.Task.WaitAsync(TimeSpan.FromSeconds(30)); }finally { view.Projection-=Projection; }
+         }
+-        for(int i=0;i<3;i++){await Renew();adapter.Advance((ulong)i+2,true,true,true);}
++        for(int i=0;i<3;i++){await Renew();adapter.Advance((ulong)i+2,true,true,true,Frame90);}
+         await stream.WriteAsync(System.Text.Encoding.UTF8.GetBytes("finish\n"));var work=JsonNode.Parse((await reader.ReadLineAsync())!)!;
+         Check(work["work"]!["calls"]!.AsArray().Count==0,"unchanged signed mapping renewals perform zero watched history/reader/install/write/sync calls");
+         var after=JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(adapter.Metrics))!["resources"]!;
+diff --git a/client/godot/tests/ExportChecks.cs b/client/godot/tests/ExportChecks.cs
+index 5a0fc163..b7dc6258 100644
+--- a/client/godot/tests/ExportChecks.cs
++++ b/client/godot/tests/ExportChecks.cs
+@@ -17,6 +17,8 @@ public partial class ExportChecks : Node
+     string Env(string name) => Environment.GetEnvironmentVariable(name) ?? throw new Exception(name);
+     JsonNode State => JsonNode.Parse(app.Inspect())!;
+     bool Busy => State["busy"]!.GetValue<bool>();
++    // One injected headset frame lasts as long as a 90 Hz display's.
++    const double Frame90=1/90.0;
+     void Check(bool yes, string name) { if (!yes) throw new Exception(name + ": " + State["status"]?.ToString()); checks.Add(name); Console.WriteLine("PASS " + name); Console.Out.Flush(); }
+     async Task Until(Func<bool> predicate)
+     {
+diff --git a/client/godot/tests/PhysicsChecks.cs b/client/godot/tests/PhysicsChecks.cs
+index 09dae252..d78a4438 100644
+--- a/client/godot/tests/PhysicsChecks.cs
++++ b/client/godot/tests/PhysicsChecks.cs
+@@ -130,7 +130,7 @@ public partial class ExportChecks
+         tracker.SetInput("trigger_press",false);tracker.SetInput("trigger_value",0.0);tracker.SetInput("squeeze_press",false);tracker.SetInput("pad_press",false);tracker.SetInput("pad_touch",false);tracker.SetInput("pad_axes",Vector2.Zero);
+         tracker.SetPose("aim",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);tracker.SetPose("grip",Transform3D.Identity,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);
+         XRServer.AddTracker(tracker);await Frame();await mapped.Completion;ulong mappedFrame=0;
+-        void MappedFrame()=>mapped.Advance(++mappedFrame,true,true,true);
++        void MappedFrame()=>mapped.Advance(++mappedFrame,true,true,true,Frame90);
+         MappedFrame();
+         async Task Applied(Func<bool> gesture,string name) {
+             ulong prior=ulong.Parse(current!.Sample!.ControlState!["sequence"]!.GetValue<string>());
+diff --git a/client/godot/tests/SceneChecks.cs b/client/godot/tests/SceneChecks.cs
+index 5a6d89dd..01d66f13 100644
+--- a/client/godot/tests/SceneChecks.cs
++++ b/client/godot/tests/SceneChecks.cs
+@@ -64,6 +64,15 @@ public partial class ExportChecks
+             Part(thing,"sides","box",Looks("#848FA5",0,30,40,120),"unlabelled") + "," + Part(thing,"corners","corner_box",Looks("#C9D2DB",1000,1000,1000,1000),"label(<<\"Space\">>,<<\"above\">>)");
+         var markers = Term.Parse("[" + Marker("subject","transform(0,0,0,0,30,0)","artifact") + "," + Marker("other","transform(1500,0,0,0,30,0)","neighbour") + "," + Marker("third","transform(3000,0,0,0,30,0)","bystander") + "]");
+         scene.Apply(markers); await Frame();
++        // A label stands with its thing: never turned toward the camera, written
++        // twice back to back so it reads from the front and from behind.
++        var named=scene.SceneRoot.FindChildren("*","Label3D",true,false).OfType<Label3D>().Where(l=>l.Text=="Space").GroupBy(l=>l.GetParent()).ToArray();
++        Check(named.Length==3 && named.All(g=>g.Count()==2 && g.All(l=>l.Billboard==BaseMaterial3D.BillboardModeEnum.Disabled && !l.DoubleSided)),
++            "each thing's label is fixed in the world, written twice, each copy seen from one side only");
++        var facing=named.OrderBy(g=>g.First().GlobalPosition.DistanceTo(scene.WorldPose("subject").Origin)).First().ToArray();
++        var thingFront=scene.WorldPose("subject").Basis.Z;
++        Check(facing[0].GlobalBasis.Z.DistanceTo(thingFront)<.001f && facing[1].GlobalBasis.Z.Dot(thingFront)<-.999f,
++            "the label turns with its thing: one copy faces the thing's front, its twin the back");
+         var fading=scene.SceneRoot.FindChildren("*","MeshInstance3D",true,false).OfType<MeshInstance3D>().First(m=>m.Mesh is ImmediateMesh);
+         var drawn=RenderingServer.MeshGetSurface(fading.Mesh.GetRid(),0);
+         Check(drawn["primitive"].AsInt32()==(int)RenderingServer.PrimitiveType.Lines && drawn["vertex_count"].AsInt32()==48 &&
+@@ -100,7 +109,7 @@ public partial class ExportChecks
+         Check(scene.ShowMode(here!,Term.Parse(Model("artifact",""))) && scene.Count==count && scene.Rebuilt==built,"the display model shown again in place changes and rebuilds nothing");
+         Check(scene.ShowMode(here,Term.Parse(Model("artifact",sizeLine))) && scene.Count==count+1 && scene.Rebuilt==built+1,"another mode adds only its own new part to that one thing");
+         Check(scene.WorldPose("subject").IsEqualApprox(place) && scene.WorldPose("subject/size").Origin.IsEqualApprox(place.Origin+new Vector3(0,-.25f,0)),"the mode is drawn where the thing stands, not at the model's own pose");
+-        Check(scene.SceneRoot.FindChildren("*","Label3D",true,false).OfType<Label3D>().Count(l=>l.Text=="10 m")==1 && here.Pose!=null && here.Label=="Space","the thing keeps its selection and shows the mode's line");
++        Check(scene.SceneRoot.FindChildren("*","Label3D",true,false).OfType<Label3D>().Count(l=>l.Text=="10 m")==2 && here.Pose!=null && here.Label=="Space","the thing keeps its selection and shows the mode's line");
+         scene.ShowSelected(here);Check(Shown(ours,2) && Shown(theirs,0),"a thing drawn in another mode still shows its selected look");
+         scene.Apply(markers);Check(scene.Count==count+1 && scene.Rebuilt==built+1,"an unchanged world view keeps the thing in its mode and rebuilds nothing");
+         Check(!scene.ShowMode(here,Term.Parse(Model("neighbour",sizeLine))) && !scene.ShowMode(here,markers) && scene.Count==count+1,"a model of another thing, or of several, is not drawn in this thing's place");
+diff --git a/client/godot/tests/WorkspaceChecks.cs b/client/godot/tests/WorkspaceChecks.cs
+index 0472fddf..a7a6149f 100644
+--- a/client/godot/tests/WorkspaceChecks.cs
++++ b/client/godot/tests/WorkspaceChecks.cs
+@@ -91,7 +91,7 @@ public partial class ExportChecks
+         void PresentForm()=>form.Visible=adapter.WorkspaceVisible;
+         adapter.Changed+=PresentForm;form.TreeExiting+=()=>adapter.Changed-=PresentForm;
+         adapter.AttachSources();adapter.Install(mapping);adapter.PresentWorkspace(true);
+-        ulong frame=0;void Advance(bool focused=true,bool running=true,bool tracked=true)=>adapter.Advance(++frame,focused,running,tracked);
++        ulong frame=0;void Advance(bool focused=true,bool running=true,bool tracked=true)=>adapter.Advance(++frame,focused,running,tracked,Frame90);
+         Advance(tracked:false);
+         Check(!adapter.GuiSurface.Visible,"a missing tracked head cannot invent an initial panel placement");
+         void Head(Vector3 position,float yaw)=>head.SetPose("default",new(new Basis(Vector3.Up,yaw),position),Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);
+@@ -109,11 +109,10 @@ public partial class ExportChecks
+         var openingHead=((Node3D)adapter.FindChild("xr-origin",true,false)).GlobalTransform*head.GetPose("default").GetAdjustedTransform();
+         var openingPanel=adapter.GuiSurface.GlobalTransform;var flatForward=-openingHead.Basis.Z;flatForward.Y=0;flatForward=flatForward.Normalized();
+         var toPanel=openingPanel.Origin-openingHead.Origin;float tilt=Mathf.RadToDeg(Mathf.Atan2(-toPanel.Y,new Vector2(toPanel.X,toPanel.Z).Length()));
+-        // 25° to the strip's centre, less half the strip (104 px of 1600 per metre) and half the panel (1 m at 2 m).
+-        float panelBelow=25-Mathf.RadToDeg(Mathf.Atan(104f/1600/2))-Mathf.RadToDeg(Mathf.Atan(.25f));
+-        Check(panelBelow<adapter.Profile.BelowEyeDegrees && Math.Abs(tilt-panelBelow)<.01f && Math.Abs(toPanel.Length()-2)<.0001f &&
++        float panelBelow=adapter.Profile.PanelBelowEyeDegrees;
++        Check(Math.Abs(tilt-panelBelow)<.01f && Math.Abs(toPanel.Length()-2)<.0001f &&
+             new Vector3(toPanel.X,0,toPanel.Z).Normalized().DistanceTo(flatForward)<.0001f && (-openingPanel.Basis.Z).DistanceTo(toPanel.Normalized())<.0001f,
+-            "the actual first tilted tracked head opens the workspace in its level forward heading, 2 m away, facing the eye, its lower edge ending where the strip begins");
++            $"the actual first tilted tracked head opens the workspace in its level forward heading, 2 m away, {panelBelow}° below eye level, facing the eye");
+         adapter.PresentWorkspace(false);adapter.PresentWorkspace(true);
+         head.SetPose("default",new(Basis.FromEuler(new(Mathf.Pi/2,0,0)),new(1.2f,1.4f,-.7f)),Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);Advance();
+         Check(!adapter.GuiSurface.Visible,"a vertical-only head direction waits for a measurable horizontal heading rather than inventing one");
+@@ -182,23 +181,39 @@ public partial class ExportChecks
+         Check(adapter.Router.MenuOwner!=null && adapter.PieQuad.Visible && !adapter.GuiSurface.Visible && !form.IsVisibleInTree(),"the pie opens on its own surface while the working panel stays hidden");
+         right.SetInput("pad_press",false);Advance();Advance();
+         Check(adapter.WorkspaceVisible && form.IsVisibleInTree() && adapter.Router.MenuOwner==null && ReferenceEquals(form.Draft,draft) && submits==0,"mapped menu recall restores the same unsent working form without submitting it");
+-        // The HUD strip is body-locked below the view and tags along.
++        // The HUD strip stands in the room below the view and follows the body.
+         var strip=new Button {Text="Strip command",Size=new(200,60)};adapter.HudSurface.AddChild(strip);
+         Head(new(0,1.6f,0),0);Advance();
+         var hudPose=adapter.HudQuad.GlobalTransform;var eye=(origin.GlobalTransform*head.GetPose("default").GetAdjustedTransform()).Origin;
+         var offset=hudPose.Origin-eye;float below=Mathf.RadToDeg(Mathf.Atan2(-offset.Y,new Vector2(offset.X,offset.Z).Length()));
+-        Check(adapter.HudQuad.Visible && Math.Abs(below-25)<.5f && Math.Abs(offset.Length()-1.5f)<.01f,"the HUD strip sits 25° below eye level at reading distance");
+-        // The panel placed from this same head ends above the strip: no ray reaches both.
++        Check(adapter.HudQuad.Visible && Math.Abs(below-35)<.5f && Math.Abs(offset.Length()-1.5f)<.01f && (-hudPose.Basis.Z).DistanceTo(offset.Normalized())<.001f,
++            "the HUD strip sits 35° below eye level at reading distance, facing the eye");
++        // The panel placed from this same head stays above the strip: no ray reaches both.
+         adapter.ShowWorkspace();Advance();
+         var panelMesh=(QuadMesh)adapter.GuiSurface.Mesh;var stripMesh=(QuadMesh)adapter.HudQuad.Mesh;
+         float Below(Vector3 point){var toward=point-eye;return Mathf.RadToDeg(Mathf.Atan2(-toward.Y,new Vector2(toward.X,toward.Z).Length()));}
+         float panelLowest=Below(adapter.GuiSurface.GlobalTransform*new Vector3(0,-gui.WorkspaceSize.Y*panelMesh.Size.Y/gui.PresentationSurface.Size.Y/2,0));
+         float stripHighest=Below(adapter.HudQuad.GlobalTransform*new Vector3(0,stripMesh.Size.Y/2,0));
+-        Check(panelLowest<=stripHighest+.01f && stripHighest-panelLowest<.5f,$"the working panel's lower edge ({panelLowest:0.0}° below) ends where the strip begins ({stripHighest:0.0}° below)");
++        Check(panelLowest<stripHighest,$"the working panel's lower edge ({panelLowest:0.0}° below) stays above the strip ({stripHighest:0.0}° below)");
++        bool Near(Transform3D a,Transform3D b)=>a.Origin.DistanceTo(b.Origin)<.001f && a.Basis.IsEqualApprox(b.Basis);
++        Transform3D Strip(Vector3 at,float yaw) {
++            var level=new Vector3(-Mathf.Sin(yaw),0,-Mathf.Cos(yaw));float angle=Mathf.DegToRad(35);
++            var place=at+level*1.5f*Mathf.Cos(angle)-Vector3.Up*1.5f*Mathf.Sin(angle);
++            return new(Basis.LookingAt((place-at).Normalized(),Vector3.Up),place);
++        }
+         Head(new(0,1.6f,0),Mathf.DegToRad(30));Advance();
+         Check(Same(adapter.HudQuad.GlobalTransform,hudPose),"a head turn within 35° leaves the strip where it is");
++        Head(new(.3f,1.6f,0),Mathf.DegToRad(30));Advance();
++        Check(Same(adapter.HudQuad.GlobalTransform,hudPose),"a step of 0.3 m leaves the strip where it is");
+         Head(new(0,1.6f,0),Mathf.DegToRad(40));Advance();
+-        Check(!Same(adapter.HudQuad.GlobalTransform,hudPose),"a head turn past 35° brings the strip along");
++        var turnedEye=(origin.GlobalTransform*head.GetPose("default").GetAdjustedTransform());var turnedLook=-turnedEye.Basis.Z;
++        var turnedTarget=Strip(turnedEye.Origin,Mathf.Atan2(-turnedLook.X,-turnedLook.Z));
++        Check(!Same(adapter.HudQuad.GlobalTransform,hudPose) && !Near(adapter.HudQuad.GlobalTransform,turnedTarget),"a head turn past 35° starts the strip's glide, not a jump");
++        for(int i=0;i<27;i++)Advance();
++        Check(Near(adapter.HudQuad.GlobalTransform,turnedTarget),"0.3 s later the strip stands 35° below the new heading");
++        Head(new(0,1.6f,.6f),Mathf.DegToRad(40));for(int i=0;i<28;i++)Advance();
++        var walkedEye=(origin.GlobalTransform*head.GetPose("default").GetAdjustedTransform());
++        Check(Near(adapter.HudQuad.GlobalTransform,Strip(walkedEye.Origin,Mathf.Atan2(-turnedLook.X,-turnedLook.Z))),"a walk of more than half a metre brings the strip along");
+         strip.Free();Advance();Check(!adapter.HudQuad.Visible,"an empty strip surface shows nothing");
+         string retained=System.Text.Json.JsonSerializer.Serialize(models.Metrics);fixedPose=adapter.GuiSurface.GlobalTransform;
+         for(int i=0;i<20;i++)Advance();
+@@ -273,6 +288,59 @@ public partial class ExportChecks
+         Check(!stood.IsEqualApprox(Transform3D.Identity) && origin.GlobalTransform.IsEqualApprox(stood),"a re-read of the same space leaves the headset where it stands in it");
+         adapter.InvalidateWorld();Advance();
+         Check(origin.GlobalTransform.IsEqualApprox(Transform3D.Identity),"another world takes the headset's place again from the agent's");
++        // The form beside a thing in the world: the panel's distance, angle and
++        // facing, beside the thing on the side toward the view, then fixed there.
++        string zero=Term.Binary(new byte[32]).ToString();
++        string Thing(int x)=>$"[mark(<<\"beside\">>,<<\"box\">>,[f(<<\"width\">>,500),f(<<\"height\">>,500),f(<<\"depth\">>,500)],transform({x},1600,-2250,0,0,0),surface(<<\"#6A90D9\">>,0,700,0,1000,[]),label(<<\"Foamstoke\">>,<<\"above\">>),depicts(<<\"scene-fixture\">>,{zero},thing))]";
++        scene.Apply(Term.Parse(Thing(0)));await Frame();
++        adapter.HideWorkspace();adapter.ShowWorkspace();Head(new(0,1.6f,0),0);Advance();
++        var looking=origin.GlobalTransform*head.GetPose("default").GetAdjustedTransform();
++        float personalDistance=(adapter.GuiSurface.GlobalTransform.Origin-looking.Origin).Length();
++        var thing=scene.PickRay(looking.Origin,(scene.WorldPose("beside").Origin-looking.Origin).Normalized());
++        Check(thing!=null && thing.Label=="Foamstoke","the fixture thing is picked by a ray from the eye");
++        float Yaw(Vector3 v)=>Mathf.Atan2(-v.X,-v.Z);
++        float BelowFrom(Vector3 from,Vector3 point){var toward=point-from;return Mathf.RadToDeg(Mathf.Atan2(-toward.Y,new Vector2(toward.X,toward.Z).Length()));}
++        float Off(Vector3 point,Vector3 from,Vector3 toward)=>Mathf.Wrap(Yaw(point-from)-Yaw(toward),-Mathf.Pi,Mathf.Pi);
++        void Beside(string when,int side) {
++            var eyeAt=(origin.GlobalTransform*head.GetPose("default").GetAdjustedTransform()).Origin;var form=adapter.GuiSurface.GlobalTransform;var to=form.Origin-eyeAt;
++            var toward=thing!.Pose!.Value.Origin-eyeAt;
++            float reach=thing.Corners.Max(c=>side*Off(c,eyeAt,toward)),half=Mathf.Atan(((QuadMesh)adapter.GuiSurface.Mesh).Size.X/2/personalDistance);
++            float edge=side*Off(form.Origin,eyeAt,toward)-half;
++            Check(adapter.GuiSurface.Visible && Math.Abs(to.Length()-personalDistance)<.001f && Math.Abs(BelowFrom(eyeAt,form.Origin)-adapter.Profile.PanelBelowEyeDegrees)<.01f &&
++                (-form.Basis.Z).DistanceTo(to.Normalized())<.001f && Math.Abs(edge-reach)<.001f,
++                $"{when}: the form beside the thing stands {personalDistance:0.00} m away, {adapter.Profile.PanelBelowEyeDegrees}° below eye level, facing the eye, its edge at the thing's {(side<0 ? "right" : "left")}");
++        }
++        adapter.PresentForm(true);adapter.BindOccurrence(thing);Advance();
++        Beside("looking at the thing",-1);var besidePose=adapter.GuiSurface.GlobalTransform;
++        Head(new(.3f,1.5f,.2f),.5f);Advance();
++        Check(Same(adapter.GuiSurface.GlobalTransform,besidePose),"head movement leaves the form beside the thing where it is");
++        adapter.BindOccurrence(null);Head(new(0,1.6f,0),Mathf.DegToRad(30));Advance();adapter.BindOccurrence(thing);Advance();
++        Beside("looking to the thing's left",1);
++        Head(new(0,1.6f,0),0);scene.Apply(Term.Parse(Thing(800)));await Frame();Advance();
++        // Moved to the right of the view: the form takes its left, toward the view's centre.
++        Beside("after the thing moved to the right of the view",1);
++        adapter.BindOccurrence(null);adapter.PresentForm(false);Advance();
++        // A pointed thing's pie stays as far below eye level as the space's.
++        adapter.HideWorkspace();Head(new(0,1.6f,0),0);Advance();
++        var eyeNow=(origin.GlobalTransform*head.GetPose("default").GetAdjustedTransform()).Origin;
++        var aimAtThing=new Transform3D(Basis.LookingAt((scene.WorldPose("beside").Origin-eyeNow).Normalized(),Vector3.Up),eyeNow);
++        right.SetPose("aim",origin.GlobalTransform.AffineInverse()*aimAtThing,Vector3.Zero,Vector3.Zero,XRPose.TrackingConfidenceEnum.High);
++        right.SetInput("pad_axes",Vector2.Zero);right.SetInput("pad_press",false);Advance();right.SetInput("pad_press",true);Advance();
++        float pieBelow=BelowFrom(eyeNow,adapter.PieQuad.GlobalTransform.Origin);
++        Check(adapter.PieQuad.Visible && pieBelow>=adapter.Profile.PieBelowEyeDegrees-.01f,$"the pie of a thing pointed at eye level opens {pieBelow:0.0}° below eye level, as the space's does");
++        adapter.Router.CancelMenu();right.SetInput("pad_press",false);Advance();
++        // Nearer stops at the nearest comfortable distance.
++        adapter.WorkspaceDistance(-10);Advance();
++        Check(Math.Abs((adapter.GuiSurface.GlobalTransform.Origin-eyeNow).Length()-adapter.Profile.NearestPanel)<.001f,$"Nearer stops at {adapter.Profile.NearestPanel} m");
++        // Text on the strip and on the pie is never smaller than 0.6°.
++        var device=(Button)app.FindChild("hud-this-device",true,false);var caption=device.GetParent().GetChildren().OfType<Label>().Single();
++        var mark=device.GetChildren().OfType<Label>().Single();var status=(Label)app.FindChild("hud-status",true,false);
++        int smallest=DeviceProfile.SmallestTextPixels;int statusSize=status.GetThemeFontSize("font_size");
++        Check(device.GetThemeFontSize("font_size")>=smallest && caption.GetThemeFontSize("font_size")>=smallest && mark.GetThemeFontSize("font_size")>=smallest &&
++            statusSize>=smallest && status.GetThemeFont("font").GetHeight(statusSize)<=status.OffsetBottom-status.OffsetTop,
++            "the strip's initials, captions, badges and status are at least 17 px, the status inside its band");
++        var mainPie=(PieMenu)app.FindChild("pie-menu",true,false);
++        Check(mainPie.GetThemeDefaultFontSize()==gui.Appearance.DefaultFontSize && mainPie.NoteSize>=smallest,"the pie takes the shared text size and its smallest words are at least 17 px");
+         scene.Stand(null);scene.Withdraw();
+         adapter.StopSession();await adapter.Completion;
+         Check(adapter.Subscriptions==0 && models.LiveLeases==0 && models.LiveTemplates==0 && gui.Captures==0,"workspace retirement releases real input/render consumers and captures");
+diff --git a/doc/spaces.md b/doc/spaces.md
+index 48c3ba20..0683844d 100644
+--- a/doc/spaces.md
++++ b/doc/spaces.md
+@@ -284,8 +284,12 @@ transaction; refusal or conflict restores all owners.
+ 
+ The offered Enter and Leave forms bind the existing personal agent and its
+ exact assignment revision. Their ordinary U-to-A instruction executes this
+-operation; navigation reads the resulting assignment. Leave may explicitly make
+-the agent unplaced. Storage and display references do not supply an inferred
++operation; navigation reads the resulting assignment. Leave returns the agent
++to the space the left space stands in, near in front of its marker and facing
++it, where its creator stood (`space_leave_to/2`, the same near distance as
++`placement_pose/2`); leaving a space that stands in no other makes the agent
++unplaced. A parent that refuses the agent refuses the leave; it never falls back
++to unplaced. Storage and display references do not supply an inferred
+ parent or destination. A newly asserted instance uses its class policy; later operations use its
+ committed membership and per-instance ACLs.
+ 
+diff --git a/priv/ontologies/common_predicates.pl b/priv/ontologies/common_predicates.pl
+index 62574384..b0e78376 100644
+--- a/priv/ontologies/common_predicates.pl
++++ b/priv/ontologies/common_predicates.pl
+@@ -249,18 +249,29 @@ client_eidolon_scene(Entity,_,_,Layout,Model,
+     in_ontology(MNs,MA,model(Parts,Marks)).
+ 
+ class_eidolons(Classes,Eidolons) :- class_eidolons(Classes,_,_,Eidolons).
++%% For a class another ontology owns, every isa/2 answer is a proof in that
++%% ontology. Each class's ancestors are therefore read once, and the test that
++%% keeps only the most specific recipe compares those lists.
+ class_eidolons(Classes,Purpose,Style,Eidolons) :-
+     findall(candidate(Class,Purpose,Style,Recipe),
+-        (member(Direct,Classes), (Class = Direct; isa(Direct,Class)),
++        (member(Direct,Classes), class_ancestors(Direct,Above), member(Class,Above),
+          class_eidolon(Class,Purpose,Style,Recipe)), Candidates),
++    findall(Class, member(candidate(Class,_,_,_),Candidates), Raw), sort(Raw, Declaring),
++    findall(Class-Above, (member(Class,Declaring), class_ancestors(Class,Above)), Chains),
+     findall(eidolon(Purpose,Style,Recipe),
+         (member(Candidate,Candidates),
+          Candidate = candidate(Class,Purpose,Style,Recipe),
+          \+ (member(candidate(Other,Purpose,Style,_),Candidates),
+-             isa(Other,Class), \+ isa(Class,Other)),
++             class_below(Other,Class,Chains), \+ class_below(Class,Other,Chains)),
+          \+ local_recipe_overrides(Candidate,Candidates)), Choices),
+     sort(Choices, Eidolons).
+ 
++%% A class with every class above it, itself included, as canonical names.
++class_ancestors(Class,Above) :-
++    findall(Name,((C = Class; isa(Class,C)), '$quod_name_normalize'(C,Name)),Raw), sort(Raw,Above).
++%% Whether Sub is Super or below it, from the ancestors already read.
++class_below(Sub,Super,Chains) :- member(Class-Above,Chains), Class == Sub, !, member_eq(Super,Above).
++
+ %% A locally authored recipe of the same class, purpose, style and name
+ %% replaces an imported copy. Other imported choices remain alternatives.
+ local_recipe_overrides(candidate(Class,Purpose,Style,recipe(OtherNs,_,Name)),Candidates) :-
+@@ -583,6 +594,8 @@ no_follow('$quod_isa_path'/3).
+ no_follow('$quod_direct_isa'/2).
+ no_follow('$quod_isa_semantics'/1).
+ no_follow(most_specific_classes/3).
++no_follow(class_ancestors/2).
++no_follow(class_below/3).
+ no_follow(member_eq/2).
+ 
+ '$quod_owner_name'(Ns:Tail, Owner, Name) :-
+diff --git a/priv/ontologies/quod_space.pl b/priv/ontologies/quod_space.pl
+index 57d96101..bbca7665 100644
+--- a/priv/ontologies/quod_space.pl
++++ b/priv/ontologies/quod_space.pl
+@@ -82,23 +82,28 @@ space_location(Subject, Location) :-
+       space_transform(Transform), Location = placed(Destination, Transform)).
+ 
+ %% An omitted pose is resolved relative to the acting personal agent, at
+-%% Yan's chosen two metres plus half the shared marker's depth along negative
+-%% Z. The marker stands for the space outside, whatever it measures inside.
+-%% On that line the new thing takes the first free place, so it never lands
+-%% on a thing already placed there and never moves one.
++%% the near distance along negative Z. On that line the new thing takes the
++%% first free place, so it never lands on a thing already placed there and
++%% never moves one.
+ placement_pose(Destination, Pose) :-
+     (nonvar(Pose) -> space_transform(Pose)
+     ; quod:user::personal_agent(Agent, _),
+       Agent = agent_instance_ref(Ns,A,Entity),
+       space_location(entity_ref(Ns,A,Entity), placed(Destination,transform(X,Y,Z,RX,RY,RZ))),
+-      unique_solution(scene_vocabulary(Scene,Anchor)),
+-      in_ontology(Scene,Anchor,marker_size(Size)),
+-      NearZ is Z - 2000 - Size // 2,
++      space_near(Size, Near),
++      NearZ is Z - Near,
+       Destination = entity_ref(DNs,DA,D),
+       in_ontology(DNs,DA,findall(Subject,space_placement(D,Subject,_),Placed)),
+       findall(Taken,(member(Subject,Placed),space_location(Subject,placed(Destination,Taken))),Poses),
+       space_free_place(0,X,Y,NearZ,Size,Poses,FreeX),
+       Pose = transform(FreeX,Y,NearZ,RX,RY,RZ)).
++%% Near: Yan's chosen two metres plus half the shared marker's depth, between
++%% an agent and a thing in front of it. The marker stands for the space
++%% outside, whatever it measures inside.
++space_near(Size, Near) :-
++    unique_solution(scene_vocabulary(Scene,Anchor)),
++    in_ontology(Scene,Anchor,marker_size(Size)),
++    Near is 2000 + Size // 2.
+ %% Candidates run straight ahead, then alternately right and left, one and a
+ %% half markers apart. A place is free when no placed thing whose location
+ %% can be read stands within one marker of it on every axis.
+@@ -324,18 +329,35 @@ eidolon(space_enter,subject(ontology_ref(Ns,A),instance(Space)),operation(Form))
+     Form = space_travel_form(Agent,Revision,Before,placed(Destination,transform(0,0,0,0,0,0))).
+ eidolon(space_leave,subject(ontology_ref(Ns,A),instance(Space)),operation(Form)) :-
+     space_travel_context(Agent,Revision,entity_ref(Ns,A,Space)),
+-    Form = space_travel_form(Agent,Revision,entity_ref(Ns,A,Space),unplaced).
++    space_leave_to(entity_ref(Ns,A,Space),After),
++    Form = space_travel_form(Agent,Revision,entity_ref(Ns,A,Space),After).
++%% Leaving a space that stands in another returns to that one, where a
++%% creator of the space stood: near in front of its marker, facing it. A
++%% space that stands nowhere is left for nowhere. A parent that refuses the
++%% agent refuses the leave; it never falls back to nowhere.
++space_leave_to(Space,After) :-
++    space_assignment(Space,_,Parent),
++    (Parent == none -> After = unplaced
++    ; space_location(Space,placed(Parent,transform(X,Y,Z,RX,RY,RZ))),
++      space_near(_,Near), StandZ is Z + Near,
++      After = parent(Parent,transform(X,Y,StandZ,RX,RY,RZ))).
+ space_travel_context(Agent,Revision,Before) :-
+     quod:user::personal_agent(Agent,_),
+     Agent = agent_instance_ref(Ns,A,Entity), space_assignment(entity_ref(Ns,A,Entity),Revision,Before).
+ instance_of(quod:gui:form,space_travel_form(_,_,_,_)).
+ instance_of(quod:gui:button,space_travel_submit).
+ attribute(space_travel_form(_,_,_,placed(_,_)),label,<<"Enter space">>).
+-attribute(space_travel_form(_,_,_,unplaced),label,<<"Leave space">>).
++attribute(space_travel_form(_,_,_,Left),label,<<"Leave space">>) :- space_leaving(Left).
+ attribute(space_travel_form(_,_,_,placed(_,_)),image,Icon) :- menu_icon(enter,Icon).
+-attribute(space_travel_form(_,_,_,unplaced),image,Icon) :- menu_icon(leave,Icon).
+-attribute(space_travel_form(_,_,_,_),help,
+-    <<"Move the same personal agent. Navigation follows the committed location. Leaving without a destination makes the agent unplaced.">>).
++attribute(space_travel_form(_,_,_,Left),image,Icon) :- space_leaving(Left), menu_icon(leave,Icon).
++attribute(space_travel_form(_,_,_,placed(_,_)),help,
++    <<"Move the same personal agent into this space. Navigation follows the committed location.">>).
++attribute(space_travel_form(_,_,_,parent(_,_)),help,
++    <<"Go back to the space this one stands in, in front of it.">>).
++attribute(space_travel_form(_,_,_,unplaced),help,
++    <<"This space stands in no other: leaving makes the personal agent unplaced.">>).
++space_leaving(unplaced).
++space_leaving(parent(_,_)).
+ attribute(space_travel_submit,label,<<"Move">>).
+ gui_children(space_travel_form(_,_,_,_),[space_travel_submit]).
+ gui_form(space_travel_form(Agent,Expected,Before,After),[],
+@@ -344,11 +366,11 @@ gui_form(space_travel_form(Agent,Expected,Before,After),[],
+          Move,
+          quod:space::space_assignment(entity_ref(Source,Anchor,Entity),Revision,Destination)),
+         operation(space_visit(Agent,Destination),
+-            [result(agent,Agent),result(location,After),result(revision,Revision)]))) :-
++            [result(agent,Agent),result(location,Location),result(revision,Revision)]))) :-
+     Agent = agent_instance_ref(Source,Anchor,Entity),
+-    (After = unplaced -> Destination = none,
++    (After = unplaced -> Destination = none, Location = unplaced,
+         Move = quod:space::goal(unplaced(entity_ref(Source,Anchor,Entity)))
+-    ; After = placed(Destination,Pose),
++    ; (After = placed(Destination,Pose) ; After = parent(Destination,Pose)), Location = placed(Destination,Pose),
+       Move = quod:space::goal(inside(Destination,entity_ref(Source,Anchor,Entity),Pose))).
+ 
+ %% The space's own pie overrides the default. Fixed wedges keep paths
+@@ -374,19 +396,20 @@ eidolon(space_menu,subject(ontology_ref(Ns,A),Space),menu(Tree)) :-
+     append([group(<<"Create here">>,[slot(1),image(CreateIcon)],[operation(class)],Class),
+             group(<<"Show as">>,[slot(2),image(ShowIcon)],[operation(instance)],Shows),
+             group(<<"Inspect">>,[slot(3),image(InspectIcon)],[prolog,inspection,workspace],Storage)|Actions],
+-           [group(<<"Go to">>,[],[operation(instance)],Destinations)],Entries),
++           [group(<<"Go to">>,[image(GoIcon)],[operation(instance)],Destinations)],Entries),
+     (binary(Name), Name \== <<"">> -> Title = Name; Title = <<"Space">>),
+     menu_vocabulary(Gui,GuiAnchor),
+     in_ontology(Gui,GuiAnchor,menu_tree(menu(Title,<<"">>,[],Entries),Tree)).
+ space_menu_shows(item(choice(_,eidolon(operation(instance),Name,_)),_,_,_,_)) :- space_show_recipe(Name,_,_).
+-space_menu_action(item(T,L,H,Av,_),item(T,L,H,Av,[slot(5),confirm(true)])) :-
++%% Leave takes the bottom wedge and a second press, keeping its form's icon.
++space_menu_action(item(T,L,H,Av,Options),item(T,L,H,Av,[slot(5),confirm(true)|Options])) :-
+     T = choice(_,eidolon(operation(instance),leave,_)), !.
+ space_menu_action(Item,Item) :- Item = item(choice(_,eidolon(operation(_),_,_)),_,_,_,_).
+-space_menu_destination(Space,Ns,A,item(T,Label,H,Av,[])) :-
++space_menu_destination(Space,Ns,A,item(T,Label,H,Av,Options)) :-
+     space_contains(entity_ref(Ns,A,Space),entity_ref(CNs,CA,Child)),
+     entity_ref(CNs,CA,Child) \== entity_ref(Ns,A,Space), space_instance(entity_ref(CNs,CA,Child),space),
+     in_ontology(CNs,CA,gui_menu_source(Child,menu_source(ChildName,Items))),
+-    member(item(T,Offered,H,Av,_),Items), T = choice(_,eidolon(operation(instance),enter,_)),
++    member(item(T,Offered,H,Av,Options),Items), T = choice(_,eidolon(operation(instance),enter,_)),
+     (binary(ChildName), ChildName \== <<"">> -> Label = ChildName; Label = Offered).
+ 
+ %% Show as: this space's interior choices as offered actions without input
+diff --git a/priv/ontologies/quod_user.pl b/priv/ontologies/quod_user.pl
+index 791ec860..c8a4f948 100644
+--- a/priv/ontologies/quod_user.pl
++++ b/priv/ontologies/quod_user.pl
+@@ -422,15 +422,16 @@ eidolon(personal_menu, subject(ontology_ref(Ns, A), personal), menu(Tree)) :-
+              gui_menu_source(Human, menu_source(_, Own)), member(Item, Own)), Choices))),
+     (quod:space::space_location(entity_ref(Ns, A, personal), unplaced) ->
+         Title = <<"You are nowhere yet">>; Title = <<"You">>),
++    menu_icon(go_to, KnownIcon), menu_icon(create_here, CreateIcon), menu_icon(me, MeIcon),
+     menu_vocabulary(Gui, GuiAnchor),
+     in_ontology(Gui, GuiAnchor, menu_tree(menu(Title, <<"">>, [],
+-        [group(<<"Enter a known space">>, [slot(1)], [operation(instance)], Known),
+-         group(<<"Create a space">>, [slot(3)], [operation(class)], Create),
+-         group(<<"Your choices">>, [slot(5)], [operation(instance),playing,edition,prolog,inspection,workspace], Choices)]), Tree)).
+-personal_menu_destination(ontology_ref(Ns, A), item(T, Label, Help, Availability, [])) :-
++        [group(<<"Enter a known space">>, [slot(1), image(KnownIcon)], [operation(instance)], Known),
++         group(<<"Create a space">>, [slot(3), image(CreateIcon)], [operation(class)], Create),
++         group(<<"Your choices">>, [slot(5), image(MeIcon)], [operation(instance),playing,edition,prolog,inspection,workspace], Choices)]), Tree)).
++personal_menu_destination(ontology_ref(Ns, A), item(T, Label, Help, Availability, Options)) :-
+     quod:space::space_instance(entity_ref(Ns, A, Space), space), Space \= ontology_ref(_, _),
+     in_ontology(Ns, A, gui_menu_source(Space, menu_source(Name, Items))),
+-    member(item(T, Offered, Help, Availability, _), Items),
++    member(item(T, Offered, Help, Availability, Options), Items),
+     T = choice(_, eidolon(operation(instance), enter, _)),
+     (binary(Name), Name \== <<"">> -> Label = Name; Label = Offered).
+ 
+diff --git a/src/predicates/quod_ask.erl b/src/predicates/quod_ask.erl
+index 43cd49c7..d3f45769 100644
+--- a/src/predicates/quod_ask.erl
++++ b/src/predicates/quod_ask.erl
+@@ -305,13 +305,24 @@ native_scope_once(Scope,Goal,Chain) ->
+         {error,_} = Error -> Error
+     end.
+ 
++%% Tracing only: the called goal as predicate indicators, its first three
++%% conjuncts at most (`name/arity`, joined by commas). Arguments never leave.
++goal_names(Goal) ->
++    iolist_to_binary(lists:join(<<",">>, [goal_indicator(G) || G <- goal_conjuncts(Goal, 3)])).
++goal_conjuncts({',', Left, Right}, N) when N > 1 -> [Left | goal_conjuncts(Right, N - 1)];
++goal_conjuncts(Goal, _) -> [Goal].
++goal_indicator(Goal) when is_atom(Goal) -> [atom_to_binary(Goal), <<"/0">>];
++goal_indicator(Goal) when is_tuple(Goal), tuple_size(Goal) > 1, is_atom(element(1, Goal)) ->
++    [atom_to_binary(element(1, Goal)), $/, integer_to_binary(tuple_size(Goal) - 1)];
++goal_indicator(_) -> <<"_">>.
++
+ %% A shared proof session routes every selection through its one origin-owned
+ %% scope map. Raw snapshot adapters have no origin authority and are rejected
+ %% here before directory resolution, dialing, or target-worker allocation.
+ open(_Self, Target, GoalTerm, Chain, St) ->
+     quod_trace:with_span(
+       quod_trace:context(), <<"quod.ask.open">>, internal,
+-      #{'quod.namespace' => Target},
++      #{'quod.namespace' => Target, 'quod.ask.goal' => goal_names(GoalTerm)},
+       fun(_Span) ->
+           St1 = publish_session(St),
+           case session_metadata(St1) of
+diff --git a/test/quod_gui_menu_tests.erl b/test/quod_gui_menu_tests.erl
+index a2aca2f3..f43dd365 100644
+--- a/test/quod_gui_menu_tests.erl
++++ b/test/quod_gui_menu_tests.erl
+@@ -110,6 +110,8 @@ space_pie_overrides_the_default_test_() ->
+         ?assertEqual(<<"Closet">>,property(Closet,label)),
+         ?assertMatch({choice,{entity_ref,Ns,Anchor,closed},{eidolon,{operation,instance},enter,_}},
+                      property(Closet,target)),
++        %% Every wedge of the space's pie carries its icon from quod:gui.
++        ?assertEqual([icon(C,leave),icon(C,go_to),icon(C,enter)],[property(W,image) || W <- [Leave,GoTo,Closet]]),
+         %% The class itself keeps the shared default pie: its creation forms.
+         {menu,ClassPie} = menu(C,space_class()),
+         ?assertEqual(lists:sort([<<"Create space">>,<<"Create space with rational lengths">>,<<"Create infinite space">>]),
+@@ -278,6 +280,9 @@ unplaced_agent_pie_offers_the_ways_in_test_() ->
+         ?assertEqual(<<"You are nowhere yet">>,property(Tree,label)),
+         plain_labels(Tree),
+         Known = wedge(Tree,1), ?assertEqual(<<"Enter a known space">>,property(Known,label)),
++        %% Each group and each known space carries its icon from quod:gui.
++        ?assertEqual([icon(C,go_to),icon(C,create_here),icon(C,me)],[property(wedge(Tree,N),image) || N <- [1,3,5]]),
++        ?assertEqual([icon(C,enter)],lists:usort([property(I,image) || I <- children(Known)])),
+         ?assertMatch([{<<"Workshop">>,{choice,{entity_ref,Ns,Anchor,room},{eidolon,{operation,instance},enter,_}}}],
+             [{property(I,label),property(I,target)} || I <- children(Known), property(I,label) =:= <<"Workshop">>]),
+         ?assertEqual(<<"Create a space">>,property(wedge(Tree,3),label)),
+@@ -383,6 +388,7 @@ read(C,Goal) ->
+         {ok,_,{normalized,Other}} -> error({menu_read_error,element(1,Other)})
+     end.
+ ref(Ns,Id) -> {entity_ref,Ns,quod_simplex:genesis_hash(Ns),Id}.
++icon(C,Name) -> read(C,{'::',<<"quod:gui">>,{gui_icon,Name,{'Icon'}}}).
+ space_class() -> {':',quod,{':',space,space}}.
+ space(Goal) -> {'::',<<"quod:space">>,Goal}.
+ 
+diff --git a/test/quod_lifecycle_single_path_tests.erl b/test/quod_lifecycle_single_path_tests.erl
+index 1e5be62f..8c65d89e 100644
+--- a/test/quod_lifecycle_single_path_tests.erl
++++ b/test/quod_lifecycle_single_path_tests.erl
+@@ -767,6 +767,7 @@ m3a_travel(User=#{reference:={agent_instance_ref,Ns,_,me}},Other,S1) ->
+     Resolve(), quod_outcome_result_tests:assert_unchanged_reads([Ns],Resolve,3),
+     ?assertEqual({placed,S0,{transform,0,0,0,0,0,0}},m1a_read(User,m2_space({space_location,m2_entity(User,personal),{0}}))),
+     m3a_recursive(User,C,S0,S1,S2),
++    FinalRevision=m3a_leave_to_parent(User,C,S0,S1,S2),
+     FinalState=m2_state([Ns]),
+     io:format("M3a signed same-agent route: ~p -> ~p -> ~p -> ~p -> ~p~n",[S0,S1,S2,S1,S0]),
+     fun() ->
+@@ -775,15 +776,15 @@ m3a_travel(User=#{reference:={agent_instance_ref,Ns,_,me}},Other,S1) ->
+     ?assertEqual(FinalState,m2_state([Ns])),
+     ?assertEqual({placed,S0,{transform,0,0,0,0,0,0}},m1a_read(User,m2_space({space_location,m2_entity(User,personal),{0}}))),
+     {agent_instance_ref,_,_,Personal}=Actor,
+-    ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{space_assignment_state,Personal,11,S0})),
++    ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{space_assignment_state,Personal,FinalRevision,S0})),
+     Resolve(),
+     ok=quod_ct:write_evidence_json("QUOD_M3A_EVIDENCE","same-agent-route",
+         #{schema => <<"m3a-same-agent-v1">>,
+           agent => quod_client_goal_parser:value_text(Actor),
+-          route => [quod_client_goal_parser:value_text(S)||S<-[S0,S1,S2,S1,S0,unplaced,S0]],
++          route => [quod_client_goal_parser:value_text(S)||S<-[S0,S1,S2,S1,S0,unplaced,S0,S2,S1,S2,S0]],
+           original_enter_request_sha256 => binary:encode_hex(crypto:hash(sha256,EnterBytes)),
+           original_enter_result => quod_client_goal_parser:value_text(m1a_output(EnterResult)),
+-          final_assignment_revision => 11,
++          final_assignment_revision => FinalRevision,
+           original_outcome_after_owner_restart => true,
+           exact_state_after_owner_restart => true})
+     end.
+@@ -887,6 +888,34 @@ m3a_recursive(User,C,S0,S1,S2) ->
+     quod_outcome_result_tests:assert_unchanged_reads([Ns],Read,0),
+     ?assertEqual({placed,S0,{transform,0,0,0,0,0,0}},m1a_read(User,m2_space({space_location,m2_entity(User,personal),{0}}))).
+ 
++%% Leaving a space that stands in another returns the agent to that one, near
++%% in front of the space's marker and facing it, as its creator stood; the
++%% starting space stands nowhere, so leaving it makes the agent unplaced
++%% (m3a_travel). A parent that refuses the agent refuses the leave: nothing
++%% moves and the agent is not made unplaced.
++m3a_leave_to_parent(User,C,S0,S1,S2) ->
++    Ns=element(2,S0), Actor=maps:get(agent,C), Personal=m2_entity(User,personal),
++    {placed,S1,{transform,X,Y,Z,RX,RY,RZ}}=m1a_read(User,m2_space({space_location,S2,{0}})),
++    Stand={transform,X,Y,Z+2250,RX,RY,RZ},
++    Revision=fun() -> m1a_read(User,m2_space({space_assignment,Personal,{0},{'_'}})) end,
++    Enter=fun() -> {Entered,_}=m2_create(C,Ns,m3a_offer(User,S2,enter),[]), m3a_committed(Entered) end,
++    Enter(), Before=Revision(),
++    Leave=m3a_offer(User,S2,leave),
++    {Left,_}=m2_create(C,Ns,Leave,[]), m3a_committed(Left),
++    ?assertEqual([{result,agent,Actor},{result,location,{placed,S1,Stand}},{result,revision,Before+2}],m1a_output(Left)),
++    ?assertEqual({placed,S1,Stand},m1a_read(User,m2_space({space_location,Personal,{0}}))),
++    Enter(),
++    Deny={instance_permission,element(4,S1),space_admit,deny},
++    m2_edit(User,{assertz,Deny}),
++    Refused=m3a_offer(User,S2,leave), Unchanged=m2_state([Ns]),
++    {{failed,_},_}=m2_create(C,Ns,Refused,[]),
++    ?assertEqual(Unchanged,m2_state([Ns])),
++    ?assertEqual({placed,S2,{transform,0,0,0,0,0,0}},m1a_read(User,m2_space({space_location,Personal,{0}}))),
++    m2_edit(User,{retract,Deny}),
++    {Home,_}=m2_create(C,Ns,m3a_offer(User,S0,enter),[]), m3a_committed(Home),
++    ?assertEqual({placed,S0,{transform,0,0,0,0,0,0}},m1a_read(User,m2_space({space_location,Personal,{0}}))),
++    ?assertEqual(Before+6,Revision()), Revision().
++
+ m3a_offer(User,Space,Name) ->
+     Offers = m1a_read(User,{gui_operations,Space,{0}}),
+     case [O || O <- Offers, element(2,O) =:= Name] of

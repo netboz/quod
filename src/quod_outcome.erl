@@ -255,6 +255,7 @@ open(_Ns, _Anchor, _Config) ->
     {error, outcome_index_bad_anchor}.
 
 open_disk(Ns, Anchor, DataDir) ->
+    ok = quod_ledger_store:check_namespace_layout(DataDir, Ns),
     Dir = quod_ledger_store:ns_dir(DataDir, Ns),
     ok = filelib:ensure_path(Dir),
     Path = filename:join(Dir, "outcomes.dets"),
@@ -1020,15 +1021,19 @@ group_outcome(Ref, #{applied := Applied}, _Floor) ->
 
 -doc "Read one indexed transaction while its ontology is running or stopped.".
 -spec lookup_live(binary(), file:filename_all(), binary()) ->
-          {ok, map()} | {error, not_found | ontology_unreachable |
-                                outcome_index_corrupt}.
+          {ok, map()} | {error, not_found | ontology_unreachable | outcome_index_corrupt |
+                                {unsupported_namespace_layout, file:filename_all()} |
+                                {namespace_layout_io, file:filename_all(), term()}}.
 lookup_live(Ns, LedgerDir, <<_:256>> = TxId)
   when is_binary(Ns), byte_size(Ns) > 0 ->
-    Path = filename:join(quod_ledger_store:ns_dir(LedgerDir, Ns),
-                         "outcomes.dets"),
-    case dets:info(Path) of
-        undefined -> lookup_closed(Path, Ns, TxId);
-        _ -> lookup_table(Path, Ns, TxId)
+    case quod_ledger_store:check_namespace_layout(LedgerDir, Ns) of
+        ok ->
+            Path = filename:join(quod_ledger_store:ns_dir(LedgerDir, Ns), "outcomes.dets"),
+            case dets:info(Path) of
+                undefined -> lookup_closed(Path, Ns, TxId);
+                _ -> lookup_table(Path, Ns, TxId)
+            end;
+        {error, _} = Error -> Error
     end;
 lookup_live(_Ns, _LedgerDir, _TxId) ->
     {error, not_found}.
@@ -1346,8 +1351,7 @@ valid_participant_slots(Slots) ->
 
 valid_participant_slots([], _Previous, Count) -> Count >= 2;
 valid_participant_slots([{Identity, Slot, Generation} | Rest], Previous, Count)
-  when Count < ?QUOD_MAX_DTX_PARTICIPANTS,
-       (Previous =:= none orelse Previous < Identity),
+  when (Previous =:= none orelse Previous < Identity),
        is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64,
        is_integer(Generation), Generation >= 0,
        Generation =< ?MAX_UINT64 ->

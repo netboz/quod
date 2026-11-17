@@ -1,0 +1,3 @@
+COMPOSITION_OWNER_ERROR {protocol_error,request_binding}
+STAGE2_CURSOR_NORMALIZE {{error,proof_unavailable},
+                         {error,{protocol_error,request_binding}}}

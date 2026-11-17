@@ -21,18 +21,19 @@ validation consumes that material under the existing trusted execution boundary.
   divisor, wrong divisor type/domain, or nonportable salt raises an error. Ontologies reach it through
   `proof_draw/3` in `common_predicates.pl`. It is deterministic selection:
   neither secure randomness nor a uniqueness guarantee.
-- `'$quod_committed_check'(+Goal)` — a boolean, strictly local read-only
-  policy check over the pinned committed base. Reuses custody authorization's
-  evaluator and absorbs its read dependencies even on denial; never exports
-  bindings or consults staged policy. The shared Prolog operation guard binds
-  the authenticated actor before calling it.
+- `'$quod_committed_check'(+Goal)` — a boolean read-only policy check over
+  pinned committed views, including foreign class owners. Reads remain in the
+  proof's dependencies even on denial; it never exports bindings or consults
+  staged policy. The shared Prolog operation guard binds the authenticated
+  actor before calling it. Custody and verdict re-proofs remain strictly local.
 - `'$quod_with_build_plan'(+Inputs, Goal)` and `'$quod_build_plan'(-Inputs)`
   carry temporary constructor inputs through private logical bindings. Prolog
   owns shape checks, inheritance and defaults. Scope release restores inputs on
   success, failure, redo and error; no facts, transaction mode or authority change.
-- `'$quod_construction'(+Id, -Class, -Inputs)` observes only an active assertion
-  scope. The operation guard checks that class's committed policy for work on
-  its new identity. The input wrapper cannot establish construction context.
+- `'$quod_construction'(+Id, -Class, -Inputs)` observes the original assertion
+  context in the current transaction revision, including after scope re-entry.
+  The operation guard checks that class's committed policy for work on its new
+  identity. The input wrapper cannot establish construction context.
 - `binary_codes(?Binary, ?Codes)` — a binary and its byte list, either way
   round, so generated text stays a binary and never becomes an atom. Fails
   on unequal valid values; malformed arguments raise errors.
@@ -67,13 +68,17 @@ validation consumes that material under the existing trusted execution boundary.
   never creates atoms: new symbols remain data until the client submits its
   actual editing goal through ordinary signed admission. Invalid source fails
   with a bounded syntax/parser-resource reason through the ordinary diagnostics.
+- `'$quod_program_layout'(+Clauses, ?Layout)` — pure canonical source keys and
+  predicate groups for the existing Prolog editor. It owns no stored catalogue,
+  authorization, transaction or edit decision.
 """.
 
 -include_lib("erlog/src/erlog_int.hrl").
 
 -export([load/1, draw_3/3, binary_codes_2/3, term_digest_2/3, variant_digest_2/3,
          ontology_name_2/3, binary_1/3, agent_request_bytes_2/3, signed_agent_request_3/3,
-         predicate_source_2/3, source_chunk_3/3, source_indicator_2/3, retract_exact_1/3, program_source_2/3,
+         predicate_source_2/3, source_chunk_3/3, source_indicator_2/3, retract_exact_1/3,
+         program_source_2/3, program_layout_2/3,
          authored_clauses/2, voxel_compute_3/3, committed_check_1/3,
          with_build_plan_2/3, build_plan_1/3, build_plan_return_1/3,
          assert_instance/4, instance_id_1/3, construction_3/3]).
@@ -97,8 +102,10 @@ load(#est{db = Db0} = Est) ->
             {'$quod_source_chunk', 3}, ?MODULE, source_chunk_3, Db4),
     Db6 = erlog_int:add_compiled_proc(
             {'$quod_program_source', 2}, ?MODULE, program_source_2, Db5),
+    Db6a = erlog_int:add_compiled_proc(
+             {'$quod_program_layout', 2}, ?MODULE, program_layout_2, Db6),
     Db7 = erlog_int:add_compiled_proc(
-            {term_digest, 2}, ?MODULE, term_digest_2, Db6),
+            {term_digest, 2}, ?MODULE, term_digest_2, Db6a),
     Db8 = erlog_int:add_compiled_proc(
             {ontology_name, 2}, ?MODULE, ontology_name_2, Db7),
     Db9 = erlog_int:add_compiled_proc(
@@ -146,15 +153,13 @@ assert_instance(Method, {instance_of, Class, Instance}, Next, #est{bs = Bs} = St
     end).
 
 %% Only the assertion hook establishes this context. Build-plan input data
-%% cannot impersonate an active construction or authorize an existing instance.
+%% cannot replace a creation's original inputs or authorize an existing instance.
 construction_3({'$quod_construction', Instance, Class, Inputs}, Next, #est{bs = Bs} = St) ->
-    {_, Active} = build_context(Bs),
     Id = erlog_int:deref(Instance, Bs),
-    case [{C, P} || {C, I, P} <- Active, erlog_int:deref(I, Bs) =:= Id,
-                    quod_wire_term:is_ground(Id)] of
-        [{C, P} | _] -> erlog_int:unify_prove_body(
+    case quod_erlog_db_local_prove:construction(St, Id) of
+        {ok, {C, P}} -> erlog_int:unify_prove_body(
             {construction, Class, Inputs}, {construction, C, P}, Next, St);
-        [] -> erlog_int:fail(St)
+        error -> erlog_int:fail(St)
     end.
 
 %% Full ULID: 48-bit Unix milliseconds and 80 independently secure random bits.
@@ -172,7 +177,15 @@ instance_id_1({'$quod_instance_id', Instance}, Next,
             Alphabet = <<"0123456789ABCDEFGHJKMNPQRSTVWXYZ">>,
             Id = << <<(binary:at(Alphabet, (Value bsr Shift) band 31))>>
                     || Shift <- lists:seq(125, 0, -5) >>,
-            erlog_int:unify_prove_body(Instance, Id, Next, St);
+            {_, Active} = build_context(Bs),
+            Recorded = case [{C, P} || {C, I, P} <- Active,
+                                     erlog_int:deref(I, Bs) =:= erlog_int:deref(Instance, Bs)] of
+                [{Class, Inputs} | _] ->
+                    quod_erlog_db_local_prove:put_construction(
+                        St, Id, erlog_int:dderef(Class, Bs), erlog_int:dderef(Inputs, Bs));
+                [] -> St
+            end,
+            erlog_int:unify_prove_body(Instance, Id, Next, Recorded);
         _ -> erlog_int:fail(St)
     end.
 
@@ -217,11 +230,12 @@ build_plan_failed(#cp{next = #build_scope{ref = Ref}, bs = Bs, vn = Vn}, Cps, St
     quod_proof_continuation:prove(Ref, [fail], St#est{bs = Bs, vn = Vn, cps = Cps}).
 
 build_plan_step(Fun, #build_scope{ref = Ref, previous = Previous}) ->
-    quod_proof_continuation:run(Ref, Fun, fun
-        (throw, {erlog_error, Error, ErrorSt}, _, _) ->
-            erlog_int:erlog_error(Error, set_build_context(Previous, ErrorSt));
-        (Class, Reason, Stack, _) -> erlang:raise(Class, Reason, Stack)
-    end, none).
+    quod_proof_continuation:run(Ref, Fun, fun build_plan_error/4, Previous).
+
+-spec build_plan_error(atom(), term(), list(), term()) -> no_return().
+build_plan_error(throw, {erlog_error, Error, ErrorSt}, _, Previous) ->
+    erlog_int:erlog_error(Error, set_build_context(Previous, ErrorSt));
+build_plan_error(Class, Reason, Stack, _) -> erlang:raise(Class, Reason, Stack).
 
 build_context(Bs) ->
     case erlog_int:get_binding(?BUILD_CONTEXT, Bs) of
@@ -407,6 +421,47 @@ program_source_2({'$quod_program_source', Clauses, Source0}, Next,
             end;
         _ -> erlog_int:type_error(binary, Source0, St)
     end.
+
+%% Batch the pure source bookkeeping once; Prolog still chooses the guarded
+%% edits and runs their ordinary transaction in the target ontology.
+program_layout_2({'$quod_program_layout', Program0, Layout}, Next,
+                 #est{bs = Bs} = St) ->
+    case erlog_int:dderef(Program0, Bs) of
+        Program when is_list(Program) ->
+            {Clauses, Entries, Keyed, Sources} = layout_entries(Program, 0, St),
+            Sorted = lists:sort(Keyed),
+            Ordered = [Clause || {'-', _, {code, _, _, Clause}} <- Sorted],
+            Groups = layout_groups(Sorted),
+            Unique = length(Sources) =:= length(lists:usort(Sources)),
+            erlog_int:unify_prove_body(Layout,
+                {layout, Clauses, Entries, Ordered, Groups, Unique}, Next, St);
+        {_} -> erlog_int:instantiation_error(St);
+        _ -> erlog_int:type_error(list, Program0, St)
+    end.
+
+layout_entries([], _, _) -> {[], [], [], []};
+layout_entries([Term | Rest], Index, St) ->
+    Clause = source_clause(Term),
+    {':-', Head, _} = Clause,
+    Indicator = case quod_wire_term:callable_functor(Head) of
+        {ok, {Name, Arity}} -> {'/', Name, Arity};
+        error -> erlog_int:type_error(callable, Head, St)
+    end,
+    Source = iolist_to_binary(format_clause(Clause, St)),
+    {Clauses, Entries, Keyed, Sources} = layout_entries(Rest, Index + 1, St),
+    {[Clause | Clauses], [{code, Source, Clause} | Entries],
+     [{'-', Indicator, {code, Index, Source, Clause}} | Keyed],
+     [Source | Sources]}.
+
+layout_groups([]) -> [];
+layout_groups([{'-', Indicator, {code, _, Source, Clause}} | Rest]) ->
+    {Entries, Tail} = layout_group_tail(Rest, Indicator, [{code, Source, Clause}]),
+    [{predicate, Indicator, Entries} | layout_groups(Tail)].
+
+layout_group_tail([{'-', Indicator, {code, _, Source, Clause}} | Rest],
+                  Indicator, Acc) ->
+    layout_group_tail(Rest, Indicator, [{code, Source, Clause} | Acc]);
+layout_group_tail(Tail, _, Acc) -> {lists:reverse(Acc), Tail}.
 
 fresh_program([#{goal := Clause} | Tail], Vn) ->
     {Fresh, _Variables, Vn1} = erlog_int:term_instance(existing_symbols(Clause), Vn),

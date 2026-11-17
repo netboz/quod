@@ -19,7 +19,7 @@ export function decodeVoxel(input, palette, allowed, phase = [0, 0, 0]) {
   const vertices = triangles * 3
   const costs = [bytes.length, vertices * 36, vertices, triangles]
   requireProfile(Array.isArray(allowed) && allowed.length === costs.length &&
-    allowed.every(n => Number.isSafeInteger(n) && n >= 0), 'invalid allocation')
+    allowed.every(n => n === Infinity || Number.isSafeInteger(n) && n >= 0), 'invalid allocation')
   costs.forEach((n, i) => requireProfile(n <= allowed[i], `${COSTS[i]} exceeded: ${n} > ${allowed[i]}`))
   requireProfile(palette instanceof Map, 'missing material palette')
   requireProfile(phase.length === 3 && phase.every(n => Number.isInteger(n) && n >= 0 && n < 1000000),

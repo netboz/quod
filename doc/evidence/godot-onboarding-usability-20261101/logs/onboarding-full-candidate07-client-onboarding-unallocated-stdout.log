@@ -1,0 +1,24 @@
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS returning or imported key starts offline with explicit Connect
+PASS current native action is enabled and enclosed: connect
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS one real native pointer press/release reaches the current action
+<private fixture/client diagnostic>
+PASS unallocated imported key cannot replace its missing original account by registration
+PASS imported-key unavailability has a distinct truthful next-state explanation
+PASS current native action is enabled and enclosed: disconnect
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS one real native pointer press/release reaches the current action
+PASS disconnect retires sockets and text/controller captures without native XR
+ONBOARDING_PASS
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>

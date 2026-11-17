@@ -1,0 +1,129 @@
+{
+  "scope": "Independent read-only verification of manual observation04, not automated or full native acceptance",
+  "files": {
+    "invocation.json": {
+      "path": "doc/evidence/godot-m4-r2-20261029/vive-interactive04/invocation.json",
+      "sha256": "ceca88f4635ad5ec59860afc90ca455d55f35d6f215f201f503a0731b92549f4",
+      "bytes": 1971
+    },
+    "result.json": {
+      "path": "doc/evidence/godot-m4-r2-20261029/vive-interactive04/result.json",
+      "sha256": "de203879c2caef7b1099f70bd500ddeafae3763d0c2c9d6f4ff481f8b29201d2",
+      "bytes": 2567
+    },
+    "observation.json": {
+      "path": "doc/evidence/godot-m4-r2-20261029/vive-interactive04/observation.json",
+      "sha256": "a8c54080b64e0f4d599ee62a14f3749a5232e5ace826f60e98d1016cf56d0938",
+      "bytes": 704
+    },
+    "client.log": {
+      "path": "doc/evidence/godot-m4-r2-20261029/vive-interactive04/client.log",
+      "sha256": "ed96d1c44b76ccefc7f6d6bf62a8eaf0df3ee70f14a13424b5d69260e684f3e7",
+      "bytes": 5070
+    },
+    "runtime.log": {
+      "path": "doc/evidence/godot-m4-r2-20261029/vive-interactive04/runtime.log",
+      "sha256": "9ee8576121d24b5b00b3aeb05483b5020b8eb9f611dbcede73f8486244842ef9",
+      "bytes": 12079
+    }
+  },
+  "driver_checks": [
+    {
+      "file": "doc/evidence/godot-m4-r2-20261029/vive-interactive04/interactive-observer.gd",
+      "sha256": "e3f2660a4ed025f11ffdf69c9755e2c9bcb5151e774330fb1fb24a968dc07b3a",
+      "matches_invocation": true
+    },
+    {
+      "file": "doc/evidence/godot-m4-r2-20261029/vive-interactive04/interactive-vive.py",
+      "sha256": "8cdf817d25a4494c22850bf424a0fef9555169d7d626c3dc9ae4fbc44b07f7e5",
+      "matches_invocation": true
+    },
+    {
+      "file": "doc/evidence/godot-m4-r2-20261029/vive-interactive04/private_vive.py",
+      "sha256": "e85993e8196ffbf2f4d2e0cd318c36a158be4c0de54b11391c7bacdc9594593c",
+      "matches_invocation": true
+    }
+  ],
+  "sources": {
+    "left_hand": {
+      "profile": "/interaction_profiles/htc/vive_controller",
+      "hand": 1,
+      "edges": [
+        {
+          "component": "squeeze_press",
+          "frame": 7190,
+          "pressed": true
+        },
+        {
+          "component": "squeeze_press",
+          "frame": 7251,
+          "pressed": false
+        }
+      ],
+      "released": [
+        "squeeze_press"
+      ],
+      "aim_confidence_raw": "2",
+      "grip_lookup_result": "missing",
+      "combined_tracked_frames": 0
+    },
+    "right_hand": {
+      "profile": "/interaction_profiles/htc/vive_controller",
+      "hand": 2,
+      "edges": [
+        {
+          "component": "squeeze_press",
+          "frame": 7549,
+          "pressed": true
+        },
+        {
+          "component": "squeeze_press",
+          "frame": 7596,
+          "pressed": false
+        }
+      ],
+      "released": [
+        "squeeze_press"
+      ],
+      "aim_confidence_raw": "1",
+      "grip_lookup_result": "missing",
+      "combined_tracked_frames": 0
+    }
+  },
+  "frames": 37393,
+  "states_raw": {
+    "2": 1,
+    "5": 37390,
+    "8": 2
+  },
+  "process_exits": {
+    "client": 0,
+    "runtime": 0
+  },
+  "close_delivery_exit": 0,
+  "shutdown_timeout": false,
+  "client_eof": true,
+  "runtime_eof": true,
+  "reader_errors": [],
+  "observation_finalization_marker": true,
+  "participant_finish_received": true,
+  "original_calibration_unchanged": true,
+  "retained_window_identity": "0x557166652050",
+  "initial_title": "Godot",
+  "close_title": "Quod \u2014 Vive observation (DEBUG)",
+  "engine_diagnostics": {
+    "unmatched_spatial_disconnect": true,
+    "interaction_profile_RID_leak": true,
+    "SESSION_NOT_STOPPING": false
+  },
+  "automated_qualification_pass": false,
+  "physical_headset_pixels": false,
+  "limits": [
+    "Source-project/pinned-editor observation, not a qualified current production export.",
+    "Only squeeze press/release is recorded for each hand in this case. Earlier trigger/pad edges belong to separate failed observation03.",
+    "Nonzero aim confidence values are recorded. Observer still used wrong grip_pose key, so missing grip/zero combined tracked frames cannot prove canonical native grip unavailable.",
+    "Engine teardown errors remain; exit0 is not resource-teardown acceptance. Wrapper exit is not independently provided by these public records.",
+    "Observation04 title changes do not prove the exact reason for observation03 window-match failure.",
+    "Historical desktop stalls remain failed/unattributed; no causal link or resolution inferred."
+  ]
+}

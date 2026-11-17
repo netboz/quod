@@ -1,0 +1,85 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+ACL_DIAGNOSTIC {can_invoke,
+                   {',',
+                       {current_ontology_identity,<<"gui:world-library">>,
+                           <<107,122,35,60,20,205,205,139,73,206,...>>},
+                       {world_library,{0}}},
+                   {agent_instance_ref,<<"lobby-test-user">>,
+                       <<56,52,42,129,156,254,228,219,68,76,241,...>>,
+                       {human_user,other_agent}},
+                   [<<"lobby-test-user">>],
+                   <<"gui:world-library">>}
+ACL_DIAGNOSTIC {can_invoke,
+                   {',',
+                       {agent_hosted,world_responder,
+                           {agent_instance_ref,<<"gui:examples-node">>,
+                               <<158,101,37,192,16,165,101,...>>,
+                               physical_node},
+                           1,
+                           <<158,244,0,39,207,139,103,132,...>>},
+                       {sign_agent_request,
+                           {agent_goal_v1,
+                               <<170,124,255,44,157,181,240,196,...>>,
+                               {agent_instance_ref,<<"gui:world-library">>,
+                                   <<"kz#<"...>>,world_responder},
+                               <<"world_responder.\n">>,
+                               <<158,244,0,39,207,...>>,
+                               <<21,186,240,116,...>>,
+                               1794256029550,execute,3,<<...>>},
+                           {0}}},
+                   {agent_instance_ref,<<"gui:examples-node">>,
+                       <<158,101,37,192,16,165,101,74,17,157,121,...>>,
+                       physical_node},
+                   [<<"gui:examples-node">>],
+                   <<"gui:world-library">>}
+SIGNING_DIAGNOSTIC {ok,[{'::',<<"gui:world-library">>,
+                              {',',{agent_hosted,world_responder,{...},...},
+                                   {sign_agent_request,{...},...}}},
+                        {not_allowed,<<"gui:world-library">>}]}
+[0;31mF[0m
+Failures:
+
+  1) quod_gui_examples_tests:world_library/0
+[0;31m     Failure/Error: {error,function_clause,
+                        [{quod_gui_question_tests,await_commit,
+                             [{error,signing_not_authorized}],
+                             []},
+                         {quod_gui_examples_tests,'-world_library/0-fun-8-',
+                             7,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_gui_examples_tests.erl"},
+                              {line,63}]},
+                         {quod_gui_examples_tests,'-world_library/0-fun-47-',
+                             11,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_gui_examples_tests.erl"},
+                              {line,71}]},
+                         {quod_gui_question_tests,with_receiver,3,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_gui_question_tests.erl"},
+                              {line,385}]},
+                         {quod_gui_examples_tests,'-world_library/0-fun-48-',
+                             6,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_gui_examples_tests.erl"},
+                              {line,51}]},
+                         {quod_gui_examples_tests,with_responder,4,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_gui_examples_tests.erl"},
+                              {line,479}]},
+                         {quod_gui_examples_tests,world_library,0,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_gui_examples_tests.erl"},
+                              {line,21}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]}]}
+[0m[0;36m     Output: World library fixture retained at /tmp/quod-world-library-1E523E287E8A71142C63B37E
+[0m
+
+Finished in 2.593 seconds
+[0;31m1 tests, 1 failures
+[0m===> Error running tests

@@ -1,0 +1,168 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 1567 │              #{World := #{spec := #{gravity := 0.0}}} = worlds(Ns),
+      │                                                ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 2196 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                   ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+      ┌─ test/quod_physics_tests.erl:
+      │
+ 2196 │          ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
+      │                                         ╰── Warning: matching on the float 0.0 will no longer also match -0.0 in OTP 27.
+If you specifically intend to match 0.0 alone, write +0.0 instead.
+
+
+===> Performing EUnit tests...
+=WARNING REPORT==== 9-Nov-2026::21:10:43.287360 ===
+quod_prolog[hinged-gallery]: can_invoke refused a top-level goal at pinned height 10
+[0;31mF[0m
+Failures:
+
+  1) quod_physics_tests:-generic_hinged_signed_view_recovery_test_/0-fun-2-/0
+[0;31m     Failure/Error: {error,
+                     {hinged_view_fixture,<<"hinged-workshop">>,
+                      {'::',<<"quod:space">>,
+                       {world_view,
+                        {entity_ref,<<"hinged-workshop">>,
+                         <<147,139,94,107,128,102,102,135,11,97,206,211,124,
+                           116,99,111,241,165,108,244,194,96,224,253,210,46,10,
+                           1,124,229,23,175>>,
+                         room},
+                        playing,
+                        [{mark,<<"hinged-example">>,<<"group">>,[],
+                          {body_pose,10,2},
+                          no_surface,
+                          {label,<<"Ready to close">>,<<"above">>},
+                          {depicts,<<"hinged-workshop">>,
+                           <<147,139,94,107,128,102,102,135,11,97,206,211,124,
+                             116,99,111,241,165,108,244,194,96,224,253,210,46,
+                             10,1,124,229,23,175>>,
+                           container_lid}},
+                         {mark,<<"hinged-example/panel">>,<<"box">>,
+                          [{f,<<"width">>,2000},
+                           {f,<<"height">>,200},
+                           {f,<<"depth">>,2000}],
+                          {relative,<<"hinged-example">>,
+                           {transform,0,0,0,0,0,0}},
+                          {surface,<<"#C48A45">>,0,900,0,1000,[]},
+                          unlabelled,depicts_nothing},
+                         {mark,<<"hinged-example/handle">>,<<"sphere">>,
+                          [{f,<<"diameter">>,300}],
+                          {relative,<<"hinged-example">>,
+                           {transform,0,150,-700,0,0,0}},
+                          {surface,<<"#D7CB9F">>,600,450,0,1000,[]},
+                          unlabelled,depicts_nothing}]}},
+                      {fail,
+                       [{'::',<<"quod:space">>,
+                         {world_view,
+                          {entity_ref,<<"hinged-workshop">>,
+                           <<147,139,94,107,128,102,102,135,11,97,206,211,124,
+                             116,99,111,241,165,108,244,194,96,224,253,210,46,
+                             10,1,124,229,23,175>>,
+                           room},
+                          playing,
+                          [{mark,<<"hinged-example">>,<<"group">>,[],
+                            {body_pose,10,2},
+                            no_surface,
+                            {label,<<"Ready to close">>,<<"above">>},
+                            {depicts,<<"hinged-workshop">>,
+                             <<147,139,94,107,128,102,102,135,11,97,206,211,
+                               124,116,99,111,241,165,108,244,194,96,224,253,
+                               210,46,10,1,124,229,23,175>>,
+                             container_lid}},
+                           {mark,<<"hinged-example/panel">>,<<"box">>,
+                            [{f,<<"width">>,2000},
+                             {f,<<"height">>,200},
+                             {f,<<"depth">>,2000}],
+                            {relative,<<"hinged-example">>,
+                             {transform,0,0,0,0,0,0}},
+                            {surface,<<"#C48A45">>,0,900,0,1000,[]},
+                            unlabelled,depicts_nothing},
+                           {mark,<<"hinged-example/handle">>,<<"sphere">>,
+                            [{f,<<"diameter">>,300}],
+                            {relative,<<"hinged-example">>,
+                             {transform,0,150,-700,0,0,0}},
+                            {surface,<<"#D7CB9F">>,600,450,0,1000,[]},
+                            unlabelled,depicts_nothing}]}},
+                        {world_view,
+                         {entity_ref,<<"hinged-workshop">>,
+                          <<147,139,94,107,128,102,102,135,11,97,206,211,124,
+                            116,99,111,241,165,108,244,194,96,224,253,210,46,
+                            10,1,124,229,23,175>>,
+                          room},
+                         playing,
+                         [{mark,<<"hinged-example">>,<<"group">>,[],
+                           {body_pose,10,2},
+                           no_surface,
+                           {label,<<"Ready to close">>,<<"above">>},
+                           {depicts,<<"hinged-workshop">>,
+                            <<147,139,94,107,128,102,102,135,11,97,206,211,124,
+                              116,99,111,241,165,108,244,194,96,224,253,210,46,
+                              10,1,124,229,23,175>>,
+                            container_lid}},
+                          {mark,<<"hinged-example/panel">>,<<"box">>,
+                           [{f,<<"width">>,2000},
+                            {f,<<"height">>,200},
+                            {f,<<"depth">>,2000}],
+                           {relative,<<"hinged-example">>,
+                            {transform,0,0,0,0,0,0}},
+                           {surface,<<"#C48A45">>,0,900,0,1000,[]},
+                           unlabelled,depicts_nothing},
+                          {mark,<<"hinged-example/handle">>,<<"sphere">>,
+                           [{f,<<"diameter">>,300}],
+                           {relative,<<"hinged-example">>,
+                            {transform,0,150,-700,0,0,0}},
+                           {surface,<<"#D7CB9F">>,600,450,0,1000,[]},
+                           unlabelled,depicts_nothing}]}]}},
+                     [{quod_physics_tests,
+                       '-verify_hinged_signed_view/1-lc$^3/1-1-',2,
+                       [{file,
+                         "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"},
+                        {line,5362}]},
+                      {quod_physics_tests,verify_hinged_signed_view,1,
+                       [{file,
+                         "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"},
+                        {line,5363}]},
+                      {quod_physics_tests,
+                       '-generic_hinged_signed_view_recovery_test_/0-lc$^0/1-0-',
+                       1,
+                       [{file,
+                         "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"},
+                        {line,5334}]},
+                      {quod_physics_tests,
+                       '-generic_hinged_signed_view_recovery_test_/0-lc$^0/1-0-',
+                       1,
+                       [{file,
+                         "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"},
+                        {line,5334}]},
+                      {quod_physics_tests,'-with_hinged_examples/1-fun-2-',2,
+                       [{file,
+                         "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"},
+                        {line,5519}]},
+                      {quod_physics_tests,'-with_world/3-fun-0-',3,
+                       [{file,
+                         "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"},
+                        {line,3314}]},
+                      {quod_agent_hosting_tests,with_host,4,
+                       [{file,
+                         "/home/yan/src/quod_worktrees/pearl-stone/test/quod_agent_hosting_tests.erl"},
+                        {line,1809}]},
+                      {quod_physics_tests,with_world,3,
+                       [{file,
+                         "/home/yan/src/quod_worktrees/pearl-stone/test/quod_physics_tests.erl"},
+                        {line,3318}]}]}
+[0m[0;36m     Output: Failed hosted-agent fixture retained at /tmp/quod_hosted_2F9E5DD8FDDAA1DD
+[0m
+
+Finished in 2.874 seconds
+[0;31m1 tests, 1 failures
+[0m===> Error running tests

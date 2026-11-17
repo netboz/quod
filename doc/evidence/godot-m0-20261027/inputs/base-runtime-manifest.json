@@ -1,0 +1,4185 @@
+{
+  "head": "f6c29fe925e666dd68ee7fa68c0e03f5d03391a2",
+  "branch": "worktree/pearl-stone",
+  "files": [
+    {
+      "path": "Dockerfile",
+      "sha256": "13af2c5664fc80a584ee2a4886269f43df1b3bb19b818322f1126e9f36febe2e",
+      "bytes": 3351,
+      "physical_lines": 81,
+      "nonblank_noncomment_lines": 44
+    },
+    {
+      "path": "client/native/Cargo.lock",
+      "sha256": "5f2a1c04e6f0a36c2fbcf03bcd6dd3d9f95ae0653620181b2fa04043ffdcd2db",
+      "bytes": 15543,
+      "physical_lines": 626,
+      "nonblank_noncomment_lines": 556
+    },
+    {
+      "path": "client/package-lock.json",
+      "sha256": "3669120cd18de6b5009a947d6742a55126b1c681801574add5245b64181ea3f5",
+      "bytes": 27060,
+      "physical_lines": 791,
+      "nonblank_noncomment_lines": 791
+    },
+    {
+      "path": "config/quod.conf",
+      "sha256": "78c4588a477d3c06a1d6ea7b9df6c6e7f98fd0bd1c2eb5f2e837cdb593f56189",
+      "bytes": 3313,
+      "physical_lines": 72,
+      "nonblank_noncomment_lines": 36
+    },
+    {
+      "path": "config/sys.config",
+      "sha256": "82f86b24ff6d5a39836cab63d58e27d85b3f52c2a915e63ad897f1bad5d971c9",
+      "bytes": 1364,
+      "physical_lines": 41,
+      "nonblank_noncomment_lines": 29
+    },
+    {
+      "path": "config/vm.args",
+      "sha256": "d44386b142f9c7a20da6077346e25b0061d3d5a79666fbdead33756b9fd5d2cd",
+      "bytes": 1619,
+      "physical_lines": 32,
+      "nonblank_noncomment_lines": 11
+    },
+    {
+      "path": "deploy/ci/Dockerfile",
+      "sha256": "468c5668df470e169923b04dffff697cd8b0733f5df40624dec489feb8c8b473",
+      "bytes": 1530,
+      "physical_lines": 27,
+      "nonblank_noncomment_lines": 16
+    },
+    {
+      "path": "include/quod_c4_attempt.hrl",
+      "sha256": "01ada5034fedcfebc909eb6ececf31aed3324b6081ae3d2987c542215342c663",
+      "bytes": 335,
+      "physical_lines": 9,
+      "nonblank_noncomment_lines": 9
+    },
+    {
+      "path": "include/quod_client_goal_limits.hrl",
+      "sha256": "77b41a6cdb682a35433c01814eee99501edb8f38b93acff5e5cdaf119589f7b4",
+      "bytes": 2341,
+      "physical_lines": 45,
+      "nonblank_noncomment_lines": 20
+    },
+    {
+      "path": "include/quod_directory_limits.hrl",
+      "sha256": "a7c360b5cd582ae6e34256a29691431e47447dafdda6d85955b5a3832ba3b4e0",
+      "bytes": 253,
+      "physical_lines": 8,
+      "nonblank_noncomment_lines": 5
+    },
+    {
+      "path": "include/quod_dtx_owner.hrl",
+      "sha256": "aabb061be7221f0b78ae7cc0e2a061af758328d19df9ecff959310bec34dd8ce",
+      "bytes": 1605,
+      "physical_lines": 29,
+      "nonblank_noncomment_lines": 15
+    },
+    {
+      "path": "include/quod_ingress_limits.hrl",
+      "sha256": "62389470e8b035526e2c79723996de3ddae97c39a7a433b9473dcf98742ea33a",
+      "bytes": 2394,
+      "physical_lines": 41,
+      "nonblank_noncomment_lines": 20
+    },
+    {
+      "path": "include/quod_ledger.hrl",
+      "sha256": "15b00d149bfee607701f3fd9f6a30ce661008af1ad11539da6e36836d773364d",
+      "bytes": 12042,
+      "physical_lines": 165,
+      "nonblank_noncomment_lines": 74
+    },
+    {
+      "path": "include/quod_proof_limits.hrl",
+      "sha256": "53679a9766bc59573c813e0072e5684ad539e24bd268db2bd7fc032b911d101c",
+      "bytes": 5408,
+      "physical_lines": 100,
+      "nonblank_noncomment_lines": 46
+    },
+    {
+      "path": "include/quod_term_limits.hrl",
+      "sha256": "affe244d7aa341161b29b1c9eb68c3c830bc12e449058e94c21e7cebfbd3e785",
+      "bytes": 268,
+      "physical_lines": 8,
+      "nonblank_noncomment_lines": 4
+    },
+    {
+      "path": "include/quod_transport_limits.hrl",
+      "sha256": "0221f1df8a41184e7114a53ec61bb6c45528cc93bac3bd0cab637365366c09a3",
+      "bytes": 429,
+      "physical_lines": 10,
+      "nonblank_noncomment_lines": 5
+    },
+    {
+      "path": "include/quod_vm_limits.hrl",
+      "sha256": "032443e83f6157be144f774d01764dfe2059d6134ed7164f801d78c452a11bd0",
+      "bytes": 543,
+      "physical_lines": 13,
+      "nonblank_noncomment_lines": 5
+    },
+    {
+      "path": "native/quod_physics/Cargo.lock",
+      "sha256": "c7f1649421b7126fc4b80d752174b44b2247c012218b47f937c5ee14cd982736",
+      "bytes": 15730,
+      "physical_lines": 623,
+      "nonblank_noncomment_lines": 552
+    },
+    {
+      "path": "native/quod_physics/Cargo.toml",
+      "sha256": "ef6d89cb0ffa24cf220931215dcf9eac6aed70849e3bfd221a68afb313710329",
+      "bytes": 469,
+      "physical_lines": 22,
+      "nonblank_noncomment_lines": 17
+    },
+    {
+      "path": "native/quod_physics/src/geometry.rs",
+      "sha256": "08a4b2d0d18ccf056260ca97adc6f0e21978012f92485fa9fb4f627aaf6858be",
+      "bytes": 9392,
+      "physical_lines": 221,
+      "nonblank_noncomment_lines": 191
+    },
+    {
+      "path": "native/quod_physics/src/lib.rs",
+      "sha256": "8ede6173538af945ec590ef2f8fbeaeb4f476f443eaf9477008a23a99de2f563",
+      "bytes": 42162,
+      "physical_lines": 928,
+      "nonblank_noncomment_lines": 834
+    },
+    {
+      "path": "native/quod_physics/src/motion.rs",
+      "sha256": "987dc63e276fe85001ba637bb20d82563e09a5c751fa0f92f150fa880832f17b",
+      "bytes": 45394,
+      "physical_lines": 794,
+      "nonblank_noncomment_lines": 690
+    },
+    {
+      "path": "native/quod_physics/src/origin.rs",
+      "sha256": "1518e2c13e1f8ea846a84510c7560f642ef29bdd6bc6e7e964f92399cfe48b9d",
+      "bytes": 10888,
+      "physical_lines": 206,
+      "nonblank_noncomment_lines": 189
+    },
+    {
+      "path": "native/quod_physics/src/terrain.rs",
+      "sha256": "449a49a3a0fbcc7259a65469f40d3ae001e2ddc0210d3129bdb3a6eac64f8136",
+      "bytes": 25951,
+      "physical_lines": 486,
+      "nonblank_noncomment_lines": 425
+    },
+    {
+      "path": "native/quod_physics/src/voxel/MC33-LICENSE.txt",
+      "sha256": "b8e1c58fe7f4e6b2183a42c7caa2005a04c866b30d6e419911b4cf24db19631b",
+      "bytes": 1105,
+      "physical_lines": 21,
+      "nonblank_noncomment_lines": 17
+    },
+    {
+      "path": "native/quod_physics/src/voxel/chunk.rs",
+      "sha256": "d66127564aed2887951aba7409698c4dfff0e253c6c49fba2495644e50da2e82",
+      "bytes": 11388,
+      "physical_lines": 224,
+      "nonblank_noncomment_lines": 194
+    },
+    {
+      "path": "native/quod_physics/src/voxel/mc33.rs",
+      "sha256": "102a073afa367f50ebe74ee441d407b19ce52481d183c38befd873748386c5c6",
+      "bytes": 5560,
+      "physical_lines": 121,
+      "nonblank_noncomment_lines": 111
+    },
+    {
+      "path": "native/quod_physics/src/voxel/mc33_reference.txt",
+      "sha256": "60daa56837d9f4be9a927eb8173fbea12c223acd204ad0f30735eb330dceab92",
+      "bytes": 25256,
+      "physical_lines": 512,
+      "nonblank_noncomment_lines": 512
+    },
+    {
+      "path": "native/quod_physics/src/voxel/mc33_table.rs",
+      "sha256": "26f8799f9744acda7112c6e202ce9ee2b9e92cf89a3bf8318ef2705307d2283c",
+      "bytes": 19518,
+      "physical_lines": 198,
+      "nonblank_noncomment_lines": 195
+    },
+    {
+      "path": "native/quod_physics/src/voxel/mod.rs",
+      "sha256": "902528869f4733b453806f68c8fc215164820bb1c9813d3c3c07c345958a991a",
+      "bytes": 9695,
+      "physical_lines": 204,
+      "nonblank_noncomment_lines": 176
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64-source.json",
+      "sha256": "1261b9e2c12135465f769d2151348cbd3744e8920ba3028ce5893cd3ddff4236",
+      "bytes": 40593,
+      "physical_lines": 360,
+      "nonblank_noncomment_lines": 360
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64.patch",
+      "sha256": "57cb288b13f079a489b46ba322b70cc91e5c23066e75d5542e68d9a76ffd71d9",
+      "bytes": 2745,
+      "physical_lines": 73,
+      "nonblank_noncomment_lines": 63
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/.cargo_vcs_info.json",
+      "sha256": "b7b4f55107d75af4516d79ee69757455c8a5103b2079813e162145e57b0b5464",
+      "bytes": 131,
+      "physical_lines": 7,
+      "nonblank_noncomment_lines": 7
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/Cargo.lock",
+      "sha256": "3ca90d1e283d15eeb432df8b42542a58f7cedbbc34beab20694ce28afd3cb8a4",
+      "bytes": 34627,
+      "physical_lines": 1362,
+      "nonblank_noncomment_lines": 1211
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/Cargo.toml",
+      "sha256": "0f1a3c3cdb38a224a27e0383f4dc748ebb81b3d47d1a54a6cf5db10454373adc",
+      "bytes": 4496,
+      "physical_lines": 255,
+      "nonblank_noncomment_lines": 209
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/Cargo.toml.orig",
+      "sha256": "f80d3f21e2cc89b70ef64b5425e3edd239e2658507b1166e39d0824aa2e117da",
+      "bytes": 2740,
+      "physical_lines": 97,
+      "nonblank_noncomment_lines": 86
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/LICENSE",
+      "sha256": "ceacfa4d7fa67df64ab09a56fe248c50a3bfc9bc00374d69bd74ad763b14b89c",
+      "bytes": 11347,
+      "physical_lines": 201,
+      "nonblank_noncomment_lines": 169
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/README.md",
+      "sha256": "0c6aafe3c498cc28d582c05cf88b71f0e48491b0026fa20d4c6940d77c6697cc",
+      "bytes": 1648,
+      "physical_lines": 37,
+      "nonblank_noncomment_lines": 29
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/aabb.rs",
+      "sha256": "4cefe850de824b84fde8fcacc1abeb5f200ce26b0c1783996ca120c296c961c3",
+      "bytes": 35335,
+      "physical_lines": 1031,
+      "nonblank_noncomment_lines": 476
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/aabb_ball.rs",
+      "sha256": "7b599d95e0a97db4ca5c38d7a2d36e2f28c4f263d89c77b5770904b6d0990cad",
+      "bytes": 909,
+      "physical_lines": 34,
+      "nonblank_noncomment_lines": 21
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/aabb_capsule.rs",
+      "sha256": "9a6e452321cb829b92f742a5b1341b87167275886d2db8e2859ab700c00e4d74",
+      "bytes": 601,
+      "physical_lines": 21,
+      "nonblank_noncomment_lines": 15
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/aabb_convex_polygon.rs",
+      "sha256": "738b48ecc445c9ce63b201e80c0a2da75d4f3efb3aa9318497bbbe4977101dd4",
+      "bytes": 524,
+      "physical_lines": 17,
+      "nonblank_noncomment_lines": 11
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/aabb_convex_polyhedron.rs",
+      "sha256": "22c69ac1b6f68c1dd47c12c964aa1653a7182df57c6f26edd47d34129d185ee7",
+      "bytes": 536,
+      "physical_lines": 17,
+      "nonblank_noncomment_lines": 11
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/aabb_cuboid.rs",
+      "sha256": "456cdce398abf3fd8b9882138ad639e78a4e4283e90cf73dcbb4ef73bbeb6f26",
+      "bytes": 623,
+      "physical_lines": 21,
+      "nonblank_noncomment_lines": 14
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/aabb_halfspace.rs",
+      "sha256": "88b30a55a4661226c062bad235753f6278fca83a1c771bbb16f98a64c24b2145",
+      "bytes": 591,
+      "physical_lines": 20,
+      "nonblank_noncomment_lines": 12
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/aabb_heightfield.rs",
+      "sha256": "090887bfc86149da7c60be52e1df9eabfab5c3dadc36a1e366f5b2f4b6d8a693",
+      "bytes": 452,
+      "physical_lines": 17,
+      "nonblank_noncomment_lines": 11
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/aabb_support_map.rs",
+      "sha256": "2032b6599e762003ecb60e120f49e5e57077877b49998666637fae34ada028db",
+      "bytes": 1422,
+      "physical_lines": 50,
+      "nonblank_noncomment_lines": 29
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/aabb_triangle.rs",
+      "sha256": "d65e275077f852072171e48eb7aa5394302515a65f3639cf3bca2774f7cb9f11",
+      "bytes": 1531,
+      "physical_lines": 61,
+      "nonblank_noncomment_lines": 42
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/aabb_utils.rs",
+      "sha256": "dafba81db1dad306332b1c32e479ef7a3b6f5ce22806c3c58eda013ccc773f6a",
+      "bytes": 2923,
+      "physical_lines": 115,
+      "nonblank_noncomment_lines": 83
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/aabb_voxels.rs",
+      "sha256": "28494c428174b1c5084faf0d010370494c31da5fe6a1b8a4fc2700c6baf9760f",
+      "bytes": 461,
+      "physical_lines": 17,
+      "nonblank_noncomment_lines": 11
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/bounding_sphere.rs",
+      "sha256": "a1b00114091b9e0caef202ac96debbf0770c233a99dda9408e97b17b38cbbde0",
+      "bytes": 20343,
+      "physical_lines": 590,
+      "nonblank_noncomment_lines": 89
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/bounding_sphere_ball.rs",
+      "sha256": "793875af36be9f6b52b7f4429342f0ca9108cfc721c147fca24206701131d902",
+      "bytes": 567,
+      "physical_lines": 18,
+      "nonblank_noncomment_lines": 12
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/bounding_sphere_capsule.rs",
+      "sha256": "6064d5a3bece5d6da25bf3e7831760af90652482103e038d5b084ca089b65444",
+      "bytes": 594,
+      "physical_lines": 18,
+      "nonblank_noncomment_lines": 12
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/bounding_sphere_cone.rs",
+      "sha256": "0c2d26c19b678e4b1dda5a09be394a2f9bb8ce0c07b4d2d5bb64f8e9e3c5c1f8",
+      "bytes": 733,
+      "physical_lines": 22,
+      "nonblank_noncomment_lines": 15
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/bounding_sphere_convex.rs",
+      "sha256": "36b43a5fc407269418f70a49e384705b278e83a34fa7d2a649b57378996ca365",
+      "bytes": 668,
+      "physical_lines": 19,
+      "nonblank_noncomment_lines": 13
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/bounding_sphere_convex_polygon.rs",
+      "sha256": "7960bfa09622e7e6dc1fdaf7f04d37fcdb7c5f4ab5555897cc3295019b23be6f",
+      "bytes": 656,
+      "physical_lines": 19,
+      "nonblank_noncomment_lines": 13
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/bounding_sphere_cuboid.rs",
+      "sha256": "a9a286ed57af886c7390c020486e35083ae4eb5a9177f4ff3c4c4565938464ed",
+      "bytes": 630,
+      "physical_lines": 19,
+      "nonblank_noncomment_lines": 13
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/bounding_sphere_cylinder.rs",
+      "sha256": "bff939b949cc746447c9d6389616b68435e606184425faad4d4a371323008a57",
+      "bytes": 749,
+      "physical_lines": 22,
+      "nonblank_noncomment_lines": 15
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/bounding_sphere_halfspace.rs",
+      "sha256": "8f18becf1c281fd5730e32f9b71524ccb060b64770aabaaff5a42af2057b55cb",
+      "bytes": 661,
+      "physical_lines": 22,
+      "nonblank_noncomment_lines": 14
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/bounding_sphere_heightfield.rs",
+      "sha256": "8d5c1f0f4a5b390773b7c9f7b609231537fdc8ada710e8cb082f24c50c32e993",
+      "bytes": 557,
+      "physical_lines": 17,
+      "nonblank_noncomment_lines": 11
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/bounding_sphere_polyline.rs",
+      "sha256": "70d5843959963a3a0c0aa92942678506ada7b6d90b1d382ddb76eac2a3ca2973",
+      "bytes": 543,
+      "physical_lines": 17,
+      "nonblank_noncomment_lines": 11
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/bounding_sphere_segment.rs",
+      "sha256": "6d5f2c6da72ba7e21e2e4731d1d152941dfc651f32b2481ca4a8e605a70acfa7",
+      "bytes": 661,
+      "physical_lines": 20,
+      "nonblank_noncomment_lines": 14
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/bounding_sphere_triangle.rs",
+      "sha256": "98f7fa95a7647633d81d233e3a5225ea2ceb22f2e0f99a6891dd28143435e006",
+      "bytes": 673,
+      "physical_lines": 20,
+      "nonblank_noncomment_lines": 14
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/bounding_sphere_trimesh.rs",
+      "sha256": "a361e6f4aa28330f16472121c38118a4ed05aafe67f63b9cb95cda8eac003da2",
+      "bytes": 551,
+      "physical_lines": 17,
+      "nonblank_noncomment_lines": 11
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/bounding_sphere_utils.rs",
+      "sha256": "f7260442bbb77936e87a819fcdc77d5ee7cd5cb9669a0e26125cec051c53ab45",
+      "bytes": 749,
+      "physical_lines": 25,
+      "nonblank_noncomment_lines": 16
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/bounding_sphere_voxels.rs",
+      "sha256": "573c8703c71e40b7bba30870382345f02729448373857bb427c6323d7051a9bb",
+      "bytes": 549,
+      "physical_lines": 17,
+      "nonblank_noncomment_lines": 11
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/bounding_volume.rs",
+      "sha256": "da4743842af497361235a67464344784ba450567ace14837be40fd8403e8f8d4",
+      "bytes": 1827,
+      "physical_lines": 45,
+      "nonblank_noncomment_lines": 12
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/mod.rs",
+      "sha256": "5a6d88646a6a6b94e861ad87018b224274de5c4902064a56a768fefd79981c28",
+      "bytes": 1916,
+      "physical_lines": 75,
+      "nonblank_noncomment_lines": 40
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/bounding_volume/simd_aabb.rs",
+      "sha256": "5b19f0bdce093deaeb0bff58d6232ad3655da794d3f2799cbb101edb4040d1a0",
+      "bytes": 13123,
+      "physical_lines": 351,
+      "nonblank_noncomment_lines": 253
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/lib.rs",
+      "sha256": "293e5f96b3c0c291e9bc494d904a1cf73bb437de5d2e23386cf768226a1502ed",
+      "bytes": 3545,
+      "physical_lines": 111,
+      "nonblank_noncomment_lines": 45
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/macros.rs",
+      "sha256": "2e876d84fea62d6a37bb8bf42452ce9f83937e61c9436c3b33cfed11aa0d051a",
+      "bytes": 3294,
+      "physical_lines": 94,
+      "nonblank_noncomment_lines": 42
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/mass_properties/mass_properties.rs",
+      "sha256": "6f985ee56e7066b4fe9d6d06cba1ad482b3caa55669fd06f9f05398335fd782e",
+      "bytes": 28203,
+      "physical_lines": 789,
+      "nonblank_noncomment_lines": 452
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/mass_properties/mass_properties_ball.rs",
+      "sha256": "ee80bcae87a856975172b12d562a2aec49d9579667d19d7626c22e48c14e14f1",
+      "bytes": 4567,
+      "physical_lines": 115,
+      "nonblank_noncomment_lines": 23
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/mass_properties/mass_properties_capsule.rs",
+      "sha256": "8940000f484d6a3a0ee814868b806636780d9180c33117717797915ccad99198",
+      "bytes": 6639,
+      "physical_lines": 158,
+      "nonblank_noncomment_lines": 28
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/mass_properties/mass_properties_compound.rs",
+      "sha256": "d74bc0c7715fa1851b5d666e901dab083eb666fcb1030c11c4aed6011679f457",
+      "bytes": 6671,
+      "physical_lines": 166,
+      "nonblank_noncomment_lines": 11
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/mass_properties/mass_properties_cone.rs",
+      "sha256": "33338e6680bbb0d320b569d1dd664c60e8ad75d043a6dd4f0de8f321ff04f3cd",
+      "bytes": 7470,
+      "physical_lines": 181,
+      "nonblank_noncomment_lines": 25
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/mass_properties/mass_properties_convex_polygon.rs",
+      "sha256": "cf2eb1fbcfe9977bd8ab71d8fad12b4a63478e6b9a01bb2d2cc03e5daa98d294",
+      "bytes": 7053,
+      "physical_lines": 188,
+      "nonblank_noncomment_lines": 46
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/mass_properties/mass_properties_convex_polyhedron.rs",
+      "sha256": "3d900842c4064c91e781bd2fd8fc4bf09cb27324562affc3f584565186892fe5",
+      "bytes": 4972,
+      "physical_lines": 128,
+      "nonblank_noncomment_lines": 11
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/mass_properties/mass_properties_cuboid.rs",
+      "sha256": "7884e563deabff79bff1d0961167bb900499b87cf3232f1bdb64de8ff2c2f6eb",
+      "bytes": 6506,
+      "physical_lines": 155,
+      "nonblank_noncomment_lines": 26
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/mass_properties/mass_properties_cylinder.rs",
+      "sha256": "0d69238df9d98e2472827592f7b1cfff54b1d425f8bb43cd60526af5bb40a92b",
+      "bytes": 7047,
+      "physical_lines": 180,
+      "nonblank_noncomment_lines": 31
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/mass_properties/mass_properties_triangle.rs",
+      "sha256": "ef09f651d3d45c2deb5d745b92766bbc47b72059e4aee5dbd1f367db0c91144c",
+      "bytes": 6901,
+      "physical_lines": 183,
+      "nonblank_noncomment_lines": 15
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/mass_properties/mass_properties_trimesh2d.rs",
+      "sha256": "e936cf904af0ad5ea996098260c4425f6790dbde0b121d9ffd87add36f50a713",
+      "bytes": 7848,
+      "physical_lines": 219,
+      "nonblank_noncomment_lines": 51
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/mass_properties/mass_properties_trimesh3d.rs",
+      "sha256": "867a834ca436377c56ed96688999a41b3b44c97141347d4b8691f40a0d7961f7",
+      "bytes": 10558,
+      "physical_lines": 342,
+      "nonblank_noncomment_lines": 289
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/mass_properties/mass_properties_voxels.rs",
+      "sha256": "ba2d58a9cbd9496e714690343956a3ea6b31bca55b73a91228fa7f0f42775ba8",
+      "bytes": 7692,
+      "physical_lines": 206,
+      "nonblank_noncomment_lines": 29
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/mass_properties/mod.rs",
+      "sha256": "1fb11cffa8685ab05e9b5681386b8fc7edd6388eaa9bf052bf5fa723859e7441",
+      "bytes": 1394,
+      "physical_lines": 45,
+      "nonblank_noncomment_lines": 21
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/math/mod.rs",
+      "sha256": "f1b05b3e1a27c95127e70c59bc0269e9a191b64f4c8f7b02d0f9e402f1752c8c",
+      "bytes": 9340,
+      "physical_lines": 314,
+      "nonblank_noncomment_lines": 123
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/math/vector_ext.rs",
+      "sha256": "301a2c8ae50bb58684ef16e914a48deea95fc631669c09970005c48b729da117",
+      "bytes": 4429,
+      "physical_lines": 154,
+      "nonblank_noncomment_lines": 92
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/partitioning/bvh/bvh_binned_build.rs",
+      "sha256": "8d5e345ad0b421669d7d9bf8fdf81b958ca9233c1197e9c19c149c242d14585b",
+      "bytes": 7480,
+      "physical_lines": 200,
+      "nonblank_noncomment_lines": 148
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/partitioning/bvh/bvh_insert.rs",
+      "sha256": "ac18dae2e80623be8aa1014729ed28d71595e9e12b99f2f21d38ec4c7a789336",
+      "bytes": 32214,
+      "physical_lines": 730,
+      "nonblank_noncomment_lines": 422
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/partitioning/bvh/bvh_optimize.rs",
+      "sha256": "e6159fd10ad6f9b484178de2b79fc31895bd457b054981a749133fef57902140",
+      "bytes": 20724,
+      "physical_lines": 578,
+      "nonblank_noncomment_lines": 289
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/partitioning/bvh/bvh_ploc_build.rs",
+      "sha256": "006d9b6d5c8dac97ed8a01fe79bfe6d10a877a4985c24211cdc250badf79fc03",
+      "bytes": 3685,
+      "physical_lines": 94,
+      "nonblank_noncomment_lines": 78
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/partitioning/bvh/bvh_queries.rs",
+      "sha256": "ca89a441b74341dc714d7534e53571b99bd36b9685410219f6ba821da8444a13",
+      "bytes": 12613,
+      "physical_lines": 319,
+      "nonblank_noncomment_lines": 87
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/partitioning/bvh/bvh_refit.rs",
+      "sha256": "e59a6221dd23eeed2c2aa6ec9baf566de2ee711aa5ba824a8d1bb7ea17a99a04",
+      "bytes": 29847,
+      "physical_lines": 766,
+      "nonblank_noncomment_lines": 436
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/partitioning/bvh/bvh_tests.rs",
+      "sha256": "17188466ad71f51ff1d4f835708c7886ec775729df1d0fd453354c673f3c7876",
+      "bytes": 17568,
+      "physical_lines": 460,
+      "nonblank_noncomment_lines": 342
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/partitioning/bvh/bvh_traverse.rs",
+      "sha256": "f43f6296da38696d2e005605faa2336c1ce9f1cd415f6f2fd280c02703d5557b",
+      "bytes": 15372,
+      "physical_lines": 445,
+      "nonblank_noncomment_lines": 219
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/partitioning/bvh/bvh_traverse_bvtt.rs",
+      "sha256": "193328ce7cb69f72914f518e7823cd89485d3647c1eda0037c63fe33e804edbe",
+      "bytes": 20645,
+      "physical_lines": 528,
+      "nonblank_noncomment_lines": 438
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/partitioning/bvh/bvh_tree.rs",
+      "sha256": "f46261e1e4ddeda600c5ca34ca4838b0130c5d01afbe1524c5f4cfccc7819bfe",
+      "bytes": 85279,
+      "physical_lines": 2480,
+      "nonblank_noncomment_lines": 480
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/partitioning/bvh/bvh_validation.rs",
+      "sha256": "e69d7a60eca09a954365cbd508171e011443bba56467c9c189472c829ee7d915",
+      "bytes": 8090,
+      "physical_lines": 218,
+      "nonblank_noncomment_lines": 178
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/partitioning/bvh/mod.rs",
+      "sha256": "f461abcff2a371eddec6c37be75da3303a61c9f23382478bee39a5ec955d2445",
+      "bytes": 446,
+      "physical_lines": 19,
+      "nonblank_noncomment_lines": 15
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/partitioning/mod.rs",
+      "sha256": "97e5544d6c40861220c6856b598de366ca54540d0ca494f43168c0de9523673c",
+      "bytes": 251,
+      "physical_lines": 10,
+      "nonblank_noncomment_lines": 5
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/clip/clip_aabb_line.rs",
+      "sha256": "8748a7c3e314866051ad695a8d19becaa46c439b77263450a1ed7f042dc63fd8",
+      "bytes": 7556,
+      "physical_lines": 219,
+      "nonblank_noncomment_lines": 155
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/clip/clip_aabb_polygon.rs",
+      "sha256": "a1ab52cfd4176aa208e6daa214cef3e4bc204f628f02da91b07e16485a828cec",
+      "bytes": 1567,
+      "physical_lines": 40,
+      "nonblank_noncomment_lines": 23
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/clip/clip_halfspace_polygon.rs",
+      "sha256": "94572921d55ed7b81e546f1ec063adcfcf464710847dcbb6229d44a7c46e3381",
+      "bytes": 1603,
+      "physical_lines": 57,
+      "nonblank_noncomment_lines": 40
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/clip/clip_segment_segment.rs",
+      "sha256": "432a112cb2f140e1bd0bd55961f70eb9cabc8ac3880b79784b4497409413e7db",
+      "bytes": 4002,
+      "physical_lines": 141,
+      "nonblank_noncomment_lines": 103
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/clip/mod.rs",
+      "sha256": "854b0db1306522803faf0ba1b9e9dd3322a271308f7aa5e187cfdcb73b0980b4",
+      "bytes": 437,
+      "physical_lines": 13,
+      "nonblank_noncomment_lines": 8
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/closest_points/closest_points.rs",
+      "sha256": "ad07dff0b9390401cf43af6475a0df83df8f4a909be8b99d73fc5e2c6eb8404e",
+      "bytes": 10872,
+      "physical_lines": 300,
+      "nonblank_noncomment_lines": 31
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/closest_points/closest_points_ball_ball.rs",
+      "sha256": "5d0cbfef7e930044257096c03b0eb8c77a97ec2163d6195f57c61b3d892b626d",
+      "bytes": 969,
+      "physical_lines": 33,
+      "nonblank_noncomment_lines": 26
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/closest_points/closest_points_ball_convex_polyhedron.rs",
+      "sha256": "bfc1f85a51439bd88b2773b993cb8666368d5fb615594acea2591deac58704ee",
+      "bytes": 1553,
+      "physical_lines": 49,
+      "nonblank_noncomment_lines": 37
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/closest_points/closest_points_composite_shape_shape.rs",
+      "sha256": "5223051a528b2605b4f28e9b72e0b5b7e0b068ea62fc305ea9813000163be088",
+      "bytes": 3876,
+      "physical_lines": 103,
+      "nonblank_noncomment_lines": 85
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/closest_points/closest_points_cuboid_cuboid.rs",
+      "sha256": "d832021a77ab7fce6ff5b801b19f2296db8d0c48bc1649e5af6661f40befe1cc",
+      "bytes": 3807,
+      "physical_lines": 97,
+      "nonblank_noncomment_lines": 64
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/closest_points/closest_points_cuboid_triangle.rs",
+      "sha256": "a4c85443bbd4c515eca8b6af0417c5b09e37936b3ee048d9407d7749efcc0169",
+      "bytes": 3383,
+      "physical_lines": 89,
+      "nonblank_noncomment_lines": 60
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/closest_points/closest_points_halfspace_support_map.rs",
+      "sha256": "df6bd491d2cac4164ebbae2d9abafec0ff07c7a68cdc9f0320582132b85c414e",
+      "bytes": 1310,
+      "physical_lines": 42,
+      "nonblank_noncomment_lines": 36
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/closest_points/closest_points_line_line.rs",
+      "sha256": "e7f88b32e274f2584cd041fa10360b9dffecb74f93223816f558d7cc6101f1a7",
+      "bytes": 2304,
+      "physical_lines": 84,
+      "nonblank_noncomment_lines": 59
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/closest_points/closest_points_segment_segment.rs",
+      "sha256": "b9be1a0ea29887f867174497406a914ca7b1f023391493d5ad8863cb8a23d759",
+      "bytes": 3779,
+      "physical_lines": 118,
+      "nonblank_noncomment_lines": 93
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/closest_points/closest_points_shape_shape.rs",
+      "sha256": "1ffb9006e7ee1483d932bb3a3abc2b14b9cd33f08e9f6bdc8469b0ce28884d66",
+      "bytes": 8431,
+      "physical_lines": 231,
+      "nonblank_noncomment_lines": 15
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/closest_points/closest_points_support_map_support_map.rs",
+      "sha256": "36151185628a89cc6918ed58c19c44acb0bbc36a8db085c94c982d7cd88c3bfe",
+      "bytes": 1848,
+      "physical_lines": 62,
+      "nonblank_noncomment_lines": 53
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/closest_points/mod.rs",
+      "sha256": "8a7ce7bf8eebc36e8c781577763e01f95bd8b3743d2da21e31f85b65255e19b8",
+      "bytes": 1864,
+      "physical_lines": 43,
+      "nonblank_noncomment_lines": 38
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact/contact.rs",
+      "sha256": "bb25870587b4b450673737b17ef259074337df176754063a1d211c7f088f620a",
+      "bytes": 6922,
+      "physical_lines": 200,
+      "nonblank_noncomment_lines": 60
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact/contact_ball_ball.rs",
+      "sha256": "08e61e9deebcad23709f6ae0a55e6d2babae1f5c41a4e705eacc2643b6a10862",
+      "bytes": 1061,
+      "physical_lines": 36,
+      "nonblank_noncomment_lines": 31
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact/contact_ball_convex_polyhedron.rs",
+      "sha256": "9b165d62980c3cab7cc98eeda91721340e16f49ab7300b8af2eeb8337eb0d058",
+      "bytes": 1824,
+      "physical_lines": 60,
+      "nonblank_noncomment_lines": 45
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact/contact_composite_shape_shape.rs",
+      "sha256": "a3c0a35344b10a3f8083b9a0ae8653f59c62d093bfaa96de12a925d79d88ee88",
+      "bytes": 2900,
+      "physical_lines": 82,
+      "nonblank_noncomment_lines": 65
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact/contact_cuboid_cuboid.rs",
+      "sha256": "3da02a99e9305a778484e2cbb560ba4dc15e8a34d8d4bb5c0a0d9a622721cbf7",
+      "bytes": 4395,
+      "physical_lines": 119,
+      "nonblank_noncomment_lines": 80
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact/contact_halfspace_support_map.rs",
+      "sha256": "8128ebbbcce4c72d468a443817b580da63464a73092b71140b00b6ba3d4a99d5",
+      "bytes": 1234,
+      "physical_lines": 40,
+      "nonblank_noncomment_lines": 34
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact/contact_heightfield_shape.rs",
+      "sha256": "39c56312ac3ea0116f42363615037801417f95a2020170ed928a0614e8726b0b",
+      "bytes": 1531,
+      "physical_lines": 55,
+      "nonblank_noncomment_lines": 44
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact/contact_shape_shape.rs",
+      "sha256": "afeaf8c6d97de702ccfb3f6dd9f7a3ffa5289a73a4fd9595a148aa1e5a121c90",
+      "bytes": 5020,
+      "physical_lines": 138,
+      "nonblank_noncomment_lines": 17
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact/contact_support_map_support_map.rs",
+      "sha256": "c1af6c47f5157eb96ab528427f5a6abae79a7e3a4eb43d3c58e61d286a5ce4ac",
+      "bytes": 3856,
+      "physical_lines": 110,
+      "nonblank_noncomment_lines": 84
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact/mod.rs",
+      "sha256": "67d400956f9f0575c43fe98222569905b15c4e8948aa716451082eb46236f6b9",
+      "bytes": 1260,
+      "physical_lines": 35,
+      "nonblank_noncomment_lines": 26
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact_manifolds/contact_manifold.rs",
+      "sha256": "ea49175e6e511c93684e556c6aa08e00738afd108991aec298d73e2500e82c0a",
+      "bytes": 33698,
+      "physical_lines": 915,
+      "nonblank_noncomment_lines": 230
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact_manifolds/contact_manifolds_ball_ball.rs",
+      "sha256": "90ab4136fdaa645de5b31e05fc04027c2d25ddd4a9b4b7063730b8f9e6475a1f",
+      "bytes": 1837,
+      "physical_lines": 57,
+      "nonblank_noncomment_lines": 48
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact_manifolds/contact_manifolds_capsule_capsule.rs",
+      "sha256": "0b04715a1315ec2b0aeedde5e0a5d5c6447d13f68ad5c50d9dbcf0e837a56915",
+      "bytes": 6501,
+      "physical_lines": 180,
+      "nonblank_noncomment_lines": 148
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact_manifolds/contact_manifolds_composite_shape_composite_shape.rs",
+      "sha256": "dc3dd4a812e1b08f12ddea2e84557575f25ee1a9f434d30616cbe41f77b3cc74",
+      "bytes": 7747,
+      "physical_lines": 204,
+      "nonblank_noncomment_lines": 172
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact_manifolds/contact_manifolds_composite_shape_shape.rs",
+      "sha256": "3b492efd7f2a5289e86177705ea5c4c255d247d5e8877276dfba91203069ee76",
+      "bytes": 7532,
+      "physical_lines": 208,
+      "nonblank_noncomment_lines": 173
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact_manifolds/contact_manifolds_convex_ball.rs",
+      "sha256": "1e5d86b12e5633d3acc2d48ccc9701028383caf292a124b0e6453d5cb5feed0b",
+      "bytes": 4859,
+      "physical_lines": 145,
+      "nonblank_noncomment_lines": 121
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact_manifolds/contact_manifolds_cuboid_capsule.rs",
+      "sha256": "09f82cf07e11b0fca5ed1a20b27a31aca96927d86090f4f1840236e8602f9bca",
+      "bytes": 4728,
+      "physical_lines": 175,
+      "nonblank_noncomment_lines": 141
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact_manifolds/contact_manifolds_cuboid_cuboid.rs",
+      "sha256": "6d3057ce3eefed113c23a3085332519ca3679da88b5107ada70f8b39921c3ee6",
+      "bytes": 2961,
+      "physical_lines": 100,
+      "nonblank_noncomment_lines": 76
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact_manifolds/contact_manifolds_cuboid_triangle.rs",
+      "sha256": "ecc65b13d5a8deb3f88f05b4c488ba3e67b5d45cf126c373fc3eaa87df08cefb",
+      "bytes": 5283,
+      "physical_lines": 174,
+      "nonblank_noncomment_lines": 141
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact_manifolds/contact_manifolds_halfspace_pfm.rs",
+      "sha256": "3ddd10f9349c7275ada4e02350aac54ca5d1cd2a3c7d28e2b60cb0cf4ca5f8a6",
+      "bytes": 3041,
+      "physical_lines": 93,
+      "nonblank_noncomment_lines": 78
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact_manifolds/contact_manifolds_heightfield_composite_shape.rs",
+      "sha256": "9930f746a659884229b4c93780328bbf3126bcd859b557444085842eb2faac62",
+      "bytes": 6629,
+      "physical_lines": 182,
+      "nonblank_noncomment_lines": 151
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact_manifolds/contact_manifolds_heightfield_shape.rs",
+      "sha256": "4c29360b99f20b34d699441afb611002315ddf11a3ee0f9d823a255ccc47a994",
+      "bytes": 6276,
+      "physical_lines": 198,
+      "nonblank_noncomment_lines": 165
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact_manifolds/contact_manifolds_pfm_pfm.rs",
+      "sha256": "2c83d3a4b3dea4210c239f3d8e571101897cb61ec66b169714733031a76d719a",
+      "bytes": 6163,
+      "physical_lines": 165,
+      "nonblank_noncomment_lines": 134
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact_manifolds/contact_manifolds_trimesh_shape.rs",
+      "sha256": "8db31f4b8847bca3c129d2b4520b39e11191774fb80a7684d9c40f8dd1c617c6",
+      "bytes": 8228,
+      "physical_lines": 246,
+      "nonblank_noncomment_lines": 197
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact_manifolds/contact_manifolds_voxels_ball.rs",
+      "sha256": "c7478617082e83843fc37ca83eb4205adc0ffb636c80a7ffc075abf99cccaf76",
+      "bytes": 7977,
+      "physical_lines": 217,
+      "nonblank_noncomment_lines": 178
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact_manifolds/contact_manifolds_voxels_composite_shape.rs",
+      "sha256": "3a63e1bf024ef4d3337144503cb600e12d305c94ddadb5e07eecb29ba976f332",
+      "bytes": 13343,
+      "physical_lines": 297,
+      "nonblank_noncomment_lines": 243
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact_manifolds/contact_manifolds_voxels_shape.rs",
+      "sha256": "d64d7ab913d4ed45c433b8722c084bd8d88b1e22a5ab0307a5a022c8980f8dce",
+      "bytes": 15808,
+      "physical_lines": 405,
+      "nonblank_noncomment_lines": 316
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact_manifolds/contact_manifolds_voxels_voxels.rs",
+      "sha256": "a701c9854ac575387e889f771ae2ddabc71fbfe61fc8662d45df8700f1a19abc",
+      "bytes": 14395,
+      "physical_lines": 332,
+      "nonblank_noncomment_lines": 264
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact_manifolds/contact_manifolds_workspace.rs",
+      "sha256": "96d0ad11253b8632b5d4f82967eb823ef667ada8f25b4b4177331b4ec2a0199a",
+      "bytes": 5991,
+      "physical_lines": 142,
+      "nonblank_noncomment_lines": 104
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact_manifolds/mod.rs",
+      "sha256": "58dffedb1b7b55973912d8fa5c67341c0ace296630d2444faba5ea5eaca82783",
+      "bytes": 9401,
+      "physical_lines": 212,
+      "nonblank_noncomment_lines": 75
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact_manifolds/normals_constraint.rs",
+      "sha256": "ccbe7269fd32f07ecea4d9494aa20afa3584f477769cd46acfea0c4f107059bc",
+      "bytes": 4729,
+      "physical_lines": 125,
+      "nonblank_noncomment_lines": 68
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/contact_manifolds/polygon_polygon_contact_generator.rs",
+      "sha256": "4c5e681c08f924034ff27ae392e9d372699aa6dc09e93ea16ddd4fb08c2e026b",
+      "bytes": 4849,
+      "physical_lines": 150,
+      "nonblank_noncomment_lines": 111
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/default_query_dispatcher.rs",
+      "sha256": "b7608f6a294ddb0b1478773512579017c00a5f5c4a551bccb28de3dd2e8e3e8d",
+      "bytes": 33032,
+      "physical_lines": 823,
+      "nonblank_noncomment_lines": 603
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/distance/distance.rs",
+      "sha256": "24b1a0a5722a08215e8f6b676819391eeab00ce73011972c7f9d7af4a3aeb7b7",
+      "bytes": 4779,
+      "physical_lines": 152,
+      "nonblank_noncomment_lines": 46
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/distance/distance_ball_ball.rs",
+      "sha256": "da2d1a257c111033815757183088e3ec775b81f2bbe5dcf7f8396f3beb02556e",
+      "bytes": 488,
+      "physical_lines": 18,
+      "nonblank_noncomment_lines": 14
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/distance/distance_ball_convex_polyhedron.rs",
+      "sha256": "97cb33acfd99a67c502381cb024059a5dd9cf5ec3ae7083ffdb3eec04b9b246d",
+      "bytes": 916,
+      "physical_lines": 30,
+      "nonblank_noncomment_lines": 18
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/distance/distance_composite_shape_shape.rs",
+      "sha256": "879a57b78fed17892b2a5e39f8973475acc821813d61d385a1572c3a8788090e",
+      "bytes": 2772,
+      "physical_lines": 80,
+      "nonblank_noncomment_lines": 65
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/distance/distance_cuboid_cuboid.rs",
+      "sha256": "d8726b05109c1d431a4b0b3d173ed3d1cf6e2839ba2d77c83e4aa766f2a99169",
+      "bytes": 428,
+      "physical_lines": 12,
+      "nonblank_noncomment_lines": 9
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/distance/distance_halfspace_support_map.rs",
+      "sha256": "1c94f8726d4d98236ea6414ccfc15fa5ace17ad3de3ed6fdf7a14366e3782b27",
+      "bytes": 674,
+      "physical_lines": 22,
+      "nonblank_noncomment_lines": 18
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/distance/distance_segment_segment.rs",
+      "sha256": "693764181fbc670a6ab83e4182de0cc1c433ea7684d19ae77fafb2e14a3b7784",
+      "bytes": 479,
+      "physical_lines": 17,
+      "nonblank_noncomment_lines": 14
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/distance/distance_support_map_support_map.rs",
+      "sha256": "7606da7863f6c2f74eda91538853d9297617a6f12e7073076ab090eda55cb24d",
+      "bytes": 1539,
+      "physical_lines": 47,
+      "nonblank_noncomment_lines": 37
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/distance/mod.rs",
+      "sha256": "8ec684e18064b970fbd7ccfe56f6c8a7c505fc9116b83d4d553801219d2bd078",
+      "bytes": 1082,
+      "physical_lines": 29,
+      "nonblank_noncomment_lines": 24
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/epa/epa2.rs",
+      "sha256": "4ece32b9f0488fafda11166d6de98fdb38f1c8ca5f19b3c9a4567a3fe0a6a67c",
+      "bytes": 20442,
+      "physical_lines": 594,
+      "nonblank_noncomment_lines": 297
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/epa/epa3.rs",
+      "sha256": "def513419ea51e3bf79e3a684eabaec52ca49b7d16e69f832a28d8f5dc92e13b",
+      "bytes": 28894,
+      "physical_lines": 781,
+      "nonblank_noncomment_lines": 423
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/epa/mod.rs",
+      "sha256": "5c2ea0d4dc638b98540d276c339788dab6a7ab893039b2a012933be804bc50b9",
+      "bytes": 4006,
+      "physical_lines": 97,
+      "nonblank_noncomment_lines": 4
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/error.rs",
+      "sha256": "e95ee237e93d176d9d07b3b521432730147200978f77b1b9f87a88632b5bab59",
+      "bytes": 5589,
+      "physical_lines": 156,
+      "nonblank_noncomment_lines": 8
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/gjk/cso_point.rs",
+      "sha256": "22120d4315dc0f1d9a49f25107b3770e1ceda042e242e7503e964d6b27b02280",
+      "bytes": 3096,
+      "physical_lines": 99,
+      "nonblank_noncomment_lines": 62
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/gjk/gjk.rs",
+      "sha256": "0a73c9381a0b75e1eb8429099e3768100fc4eabaf67545acf41bf0c75f190465",
+      "bytes": 33730,
+      "physical_lines": 899,
+      "nonblank_noncomment_lines": 327
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/gjk/mod.rs",
+      "sha256": "e25e020c5418f97e1def7ae47a1cd4d5a60bd54e97480876e152009accdf0c8f",
+      "bytes": 424,
+      "physical_lines": 17,
+      "nonblank_noncomment_lines": 10
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/gjk/special_support_maps.rs",
+      "sha256": "8bbcf64aed7bbb8513575d8508cfecd3e86cb2fb8740dc8017da4408fb16f7dc",
+      "bytes": 2163,
+      "physical_lines": 84,
+      "nonblank_noncomment_lines": 52
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/gjk/voronoi_simplex2.rs",
+      "sha256": "7ef65038c9410717843aa5d01557369d9288c1dd2fd83b24d5b7bf6c28f6058e",
+      "bytes": 7009,
+      "physical_lines": 218,
+      "nonblank_noncomment_lines": 169
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/gjk/voronoi_simplex3.rs",
+      "sha256": "e98dff10973194683a5f54dd2ab7c373b9a7e8f565d15607e9e8226da00b4950",
+      "bytes": 11595,
+      "physical_lines": 345,
+      "nonblank_noncomment_lines": 281
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/intersection_test/intersection_test.rs",
+      "sha256": "86031b40aa5b002170bf0748e3e86332052f8dab6c71956e78849570814cddac",
+      "bytes": 4881,
+      "physical_lines": 143,
+      "nonblank_noncomment_lines": 41
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/intersection_test/intersection_test_ball_ball.rs",
+      "sha256": "a46202a2333d9bfd95c7def11fc23601ffef24ce2956a0ec433a72ae5103ba51",
+      "bytes": 364,
+      "physical_lines": 12,
+      "nonblank_noncomment_lines": 9
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/intersection_test/intersection_test_ball_point_query.rs",
+      "sha256": "d5d5b1651724a01e5b97438da34b963018bf1cce029f442ddc174f65d5aa2049",
+      "bytes": 1041,
+      "physical_lines": 26,
+      "nonblank_noncomment_lines": 21
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/intersection_test/intersection_test_composite_shape_shape.rs",
+      "sha256": "3e54cc07fb2ee5fd9f58269179a54fdb5dacf4145d9c5b5c775971ac380a2087",
+      "bytes": 2692,
+      "physical_lines": 72,
+      "nonblank_noncomment_lines": 59
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/intersection_test/intersection_test_cuboid_cuboid.rs",
+      "sha256": "56cee908cc5dad5323a7e68c6cafe0723802693c076e69e301a13948b4018b23",
+      "bytes": 794,
+      "physical_lines": 27,
+      "nonblank_noncomment_lines": 19
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/intersection_test/intersection_test_cuboid_segment.rs",
+      "sha256": "0f6fe17ea2e1d7988d33839e76fbe7306b9d2add694d0c4b6ce39a1b50400cf9",
+      "bytes": 1559,
+      "physical_lines": 53,
+      "nonblank_noncomment_lines": 39
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/intersection_test/intersection_test_cuboid_triangle.rs",
+      "sha256": "829436f65e54664d5614f1524c16206292a3d7c123959543c427413deee05224",
+      "bytes": 1483,
+      "physical_lines": 50,
+      "nonblank_noncomment_lines": 38
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/intersection_test/intersection_test_halfspace_support_map.rs",
+      "sha256": "ff7305a475859a5cca0e3f3cba681563c08afc93fd40154a597e823c84add428",
+      "bytes": 762,
+      "physical_lines": 22,
+      "nonblank_noncomment_lines": 18
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/intersection_test/intersection_test_polygon_polygon.rs",
+      "sha256": "1dbedecb9c2c8084909cdcdc75abd48db0672850aef2af2752400d7f1cf047db",
+      "bytes": 1493,
+      "physical_lines": 57,
+      "nonblank_noncomment_lines": 39
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/intersection_test/intersection_test_support_map_support_map.rs",
+      "sha256": "bc3b8c194c684c347b4e53b54301b4ed97645d912915f13860853f6bbadf4516",
+      "bytes": 1518,
+      "physical_lines": 51,
+      "nonblank_noncomment_lines": 43
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/intersection_test/intersection_test_voxels_shape.rs",
+      "sha256": "daed98e5dcc8f95fae95b7921133bdd789fe73f8a8bae80530f5ba4bba587b58",
+      "bytes": 2408,
+      "physical_lines": 65,
+      "nonblank_noncomment_lines": 53
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/intersection_test/mod.rs",
+      "sha256": "efd1a91bb6e6d1e56812bdbf5a61cb9e25fd1fb2bc35ff8e62dceac2629edf29",
+      "bytes": 1895,
+      "physical_lines": 45,
+      "nonblank_noncomment_lines": 38
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/mod.rs",
+      "sha256": "27f80981f67138815630093ef7b167faf1c3fa1aa3800d4871feabe95bfa3547",
+      "bytes": 3925,
+      "physical_lines": 89,
+      "nonblank_noncomment_lines": 51
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/nonlinear_shape_cast/mod.rs",
+      "sha256": "04f15d51e81d534e1a56510abe4e880c32c78b2134c112bc99dc3f44a9aacd5e",
+      "bytes": 6564,
+      "physical_lines": 152,
+      "nonblank_noncomment_lines": 16
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/nonlinear_shape_cast/nonlinear_rigid_motion.rs",
+      "sha256": "a1027a6573ec02829ba46389cf79701d46a5562ce57da2d846f57a264cbf62d0",
+      "bytes": 19747,
+      "physical_lines": 570,
+      "nonblank_noncomment_lines": 77
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/nonlinear_shape_cast/nonlinear_shape_cast.rs",
+      "sha256": "721130cbfb8e17a151eaef6dd1d84cae86eb1b48b4364dd73b66e624e039c9f8",
+      "bytes": 10322,
+      "physical_lines": 267,
+      "nonblank_noncomment_lines": 24
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/nonlinear_shape_cast/nonlinear_shape_cast_composite_shape_shape.rs",
+      "sha256": "d077b5f6df9fc466ce8464b3b5f874ca79fa190ff5c2cc4a57830bf6d12db789",
+      "bytes": 5097,
+      "physical_lines": 145,
+      "nonblank_noncomment_lines": 132
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/nonlinear_shape_cast/nonlinear_shape_cast_halfspace_support_map.rs",
+      "sha256": "e5743723e400266428c1aad6826826125293b205a5b39938a63503d9ee793ab0",
+      "bytes": 1265,
+      "physical_lines": 42,
+      "nonblank_noncomment_lines": 32
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/nonlinear_shape_cast/nonlinear_shape_cast_support_map_support_map.rs",
+      "sha256": "f10f4714200f43785ce7ae2d6613a3649d1fe95bc25ded9147eaa0eae95defaf",
+      "bytes": 19623,
+      "physical_lines": 507,
+      "nonblank_noncomment_lines": 334
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/nonlinear_shape_cast/nonlinear_shape_cast_voxels_shape.rs",
+      "sha256": "e58cad5fcbaa912e264add91392f878489e475f0250776e0ccc4cee3a34d3ce4",
+      "bytes": 7424,
+      "physical_lines": 198,
+      "nonblank_noncomment_lines": 144
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/point/mod.rs",
+      "sha256": "d47a6c019da390ee09ca61e97f2bc89a3610a5b70f624c3e5c1ba2e66df09807",
+      "bytes": 778,
+      "physical_lines": 32,
+      "nonblank_noncomment_lines": 19
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/point/point_aabb.rs",
+      "sha256": "a98fe9df3115addf7584c53a9ad86032a87501e44dc70bff0bb6335a850a8170",
+      "bytes": 5156,
+      "physical_lines": 145,
+      "nonblank_noncomment_lines": 114
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/point/point_ball.rs",
+      "sha256": "b793fd638af2d89eda71cfe0f83c3492199ee945038b4a300497a6fbabd2e606",
+      "bytes": 1193,
+      "physical_lines": 42,
+      "nonblank_noncomment_lines": 30
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/point/point_bounding_sphere.rs",
+      "sha256": "383547dbaf059b642ff97d83313af9fb6567c9d41b47860546e490c4ff54f624",
+      "bytes": 1080,
+      "physical_lines": 32,
+      "nonblank_noncomment_lines": 23
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/point/point_capsule.rs",
+      "sha256": "2bff4aaaaaa1ce72ccaba9c84c4a23ad9e03e24042b5e84acb77e2f195566952",
+      "bytes": 1855,
+      "physical_lines": 47,
+      "nonblank_noncomment_lines": 37
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/point/point_composite_shape.rs",
+      "sha256": "64e5c7feb46d26aa003ac7c7d1536fc03fdd98bc21b29dd4921922e57f62a12f",
+      "bytes": 15772,
+      "physical_lines": 404,
+      "nonblank_noncomment_lines": 295
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/point/point_cone.rs",
+      "sha256": "f85940836ce536df14f47f9c06e426b770dbf9c8463044614c5fefa8d505e2e3",
+      "bytes": 2847,
+      "physical_lines": 69,
+      "nonblank_noncomment_lines": 47
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/point/point_cuboid.rs",
+      "sha256": "1ed518c06710c75858e894f532c70c04f77724500cf072cbfdd4717d25a15130",
+      "bytes": 1103,
+      "physical_lines": 34,
+      "nonblank_noncomment_lines": 26
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/point/point_cylinder.rs",
+      "sha256": "f32c912bfcd91139c3d6478d76eb599fd4fb730a557673167fea7ba03db5c3c0",
+      "bytes": 3469,
+      "physical_lines": 77,
+      "nonblank_noncomment_lines": 63
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/point/point_halfspace.rs",
+      "sha256": "19f2194fd2e7ff395d359799686f176666bead0700d15e51f9e608d6dfb82400",
+      "bytes": 1092,
+      "physical_lines": 39,
+      "nonblank_noncomment_lines": 28
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/point/point_heightfield.rs",
+      "sha256": "8af8494316777581f3dd9d1adff6f01526ac68a3e99096697db146c2500175a6",
+      "bytes": 3516,
+      "physical_lines": 97,
+      "nonblank_noncomment_lines": 61
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/point/point_query.rs",
+      "sha256": "0dacb5e0aac2c6edd2e00c220cb005dce120da5f1805372122c77200004bddf6",
+      "bytes": 12837,
+      "physical_lines": 353,
+      "nonblank_noncomment_lines": 130
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/point/point_round_shape.rs",
+      "sha256": "5ae0ca95b0abb96e6926edf97a1e1c07c8fe80418d341c9142e43a64bb2e83ae",
+      "bytes": 1149,
+      "physical_lines": 32,
+      "nonblank_noncomment_lines": 20
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/point/point_segment.rs",
+      "sha256": "b2d960fc77c04c6a3132a85eb81e53d546feaaca12df890b4717104d9b114596",
+      "bytes": 2529,
+      "physical_lines": 77,
+      "nonblank_noncomment_lines": 55
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/point/point_support_map.rs",
+      "sha256": "ebf14a14499ec1975a495bd742dfdd7741bbe09c8449dab3c2095c5af1b736cd",
+      "bytes": 3354,
+      "physical_lines": 99,
+      "nonblank_noncomment_lines": 68
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/point/point_tetrahedron.rs",
+      "sha256": "0c5e0bc7a4262a88b1ad9fb053bae308cc17e708e4d5ecc4d32125f4e3ce9865",
+      "bytes": 10961,
+      "physical_lines": 337,
+      "nonblank_noncomment_lines": 227
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/point/point_triangle.rs",
+      "sha256": "afcc10372ac206daec8f5f9edf1c6f8db8afbcb66b1152da668a07a9843b33f4",
+      "bytes": 11268,
+      "physical_lines": 318,
+      "nonblank_noncomment_lines": 228
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/point/point_voxels.rs",
+      "sha256": "7c16ad67db0581f5ef431fbf64d62d45bc6a052b184c0495d7c77d6717faa5b3",
+      "bytes": 2483,
+      "physical_lines": 65,
+      "nonblank_noncomment_lines": 53
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/query_dispatcher.rs",
+      "sha256": "91ac7c436118b118a154883072a609b9f6e7b9203f36413f29b478848632be29",
+      "bytes": 24744,
+      "physical_lines": 668,
+      "nonblank_noncomment_lines": 159
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/ray/mod.rs",
+      "sha256": "8b2c934b0f79d50645d3eef5dbd0817e3b783cda26c16fa82f94749c9aa5e585",
+      "bytes": 939,
+      "physical_lines": 33,
+      "nonblank_noncomment_lines": 22
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/ray/ray.rs",
+      "sha256": "a48daaaafe4db16dcb259f32f9bae4bb79b0051a34a546f58ff72a4e037bd524",
+      "bytes": 13678,
+      "physical_lines": 419,
+      "nonblank_noncomment_lines": 108
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/ray/ray_aabb.rs",
+      "sha256": "eaf965d7976139800c8b610eb45cfddbf930e427269c0aa886ccf0fa92392b50",
+      "bytes": 3952,
+      "physical_lines": 119,
+      "nonblank_noncomment_lines": 93
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/ray/ray_ball.rs",
+      "sha256": "9490992bd79cee87e1e38ccfd8a03157e29ff522c0be626b3c83ac010501077b",
+      "bytes": 2573,
+      "physical_lines": 96,
+      "nonblank_noncomment_lines": 74
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/ray/ray_bounding_sphere.rs",
+      "sha256": "574d42e7a00a266fb153177250aaeaa8b5422b5af61302ff352a51a180d7a5a5",
+      "bytes": 1096,
+      "physical_lines": 33,
+      "nonblank_noncomment_lines": 27
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/ray/ray_capsule.rs",
+      "sha256": "1deb4447e93624f9713716b440a3e29361e8e22bb3ed69ba872b5f6bd33569b4",
+      "bytes": 16399,
+      "physical_lines": 440,
+      "nonblank_noncomment_lines": 322
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/ray/ray_composite_shape.rs",
+      "sha256": "cd7ae41ab16fb2febf005a5c63f944add55cbc859efe6e9f1b6bbb20d393c83d",
+      "bytes": 3981,
+      "physical_lines": 109,
+      "nonblank_noncomment_lines": 80
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/ray/ray_cuboid.rs",
+      "sha256": "30310b8efb25da98f4aacbb84aa1d6501c81101e56ad589b91092391fc651dfb",
+      "bytes": 770,
+      "physical_lines": 25,
+      "nonblank_noncomment_lines": 21
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/ray/ray_halfspace.rs",
+      "sha256": "bb08001ad256842aadd4a6d8294addfc28668b0c012bd5e88381da2b88d3345d",
+      "bytes": 1833,
+      "physical_lines": 66,
+      "nonblank_noncomment_lines": 50
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/ray/ray_heightfield.rs",
+      "sha256": "8b079ba3c27b1637ae80987b8891d01e261bc1fd5336681617a2574a18cd14a8",
+      "bytes": 7548,
+      "physical_lines": 232,
+      "nonblank_noncomment_lines": 190
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/ray/ray_round_shape.rs",
+      "sha256": "d39318adeb4686835f196d0f85e3923feda73ff1ef0f42f949deca5762d66c54",
+      "bytes": 596,
+      "physical_lines": 21,
+      "nonblank_noncomment_lines": 20
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/ray/ray_support_map.rs",
+      "sha256": "8ab6a58342ebc6917e3a9c0d4cfebcabde0267e7e9b787da82043ea9a804b9af",
+      "bytes": 8239,
+      "physical_lines": 241,
+      "nonblank_noncomment_lines": 197
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/ray/ray_triangle.rs",
+      "sha256": "4b630e2a9f9d99309c44c7af4792bcc6dab44edc26907d65ce92fa4c1682d482",
+      "bytes": 3874,
+      "physical_lines": 161,
+      "nonblank_noncomment_lines": 116
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/ray/ray_trimesh.rs",
+      "sha256": "879cb8908c894180726fc9f7b3c354e8ce217ef15538102e76e29ec25efce81d",
+      "bytes": 6733,
+      "physical_lines": 196,
+      "nonblank_noncomment_lines": 149
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/ray/ray_voxels.rs",
+      "sha256": "312748f4d743f5cd35fa38c4f18d7bfeb28fc4ff60f5d47aea0103002ed2c299",
+      "bytes": 4316,
+      "physical_lines": 126,
+      "nonblank_noncomment_lines": 98
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/ray/simd_ray.rs",
+      "sha256": "640b6ccd0151464106842875bad1725b0f091489898cd373a6aa242ef3c36543",
+      "bytes": 641,
+      "physical_lines": 23,
+      "nonblank_noncomment_lines": 14
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/sat/mod.rs",
+      "sha256": "b0ee777558b796b1a3ea7d0c106e3244804bae729eb804c5b88901c69eb19ba9",
+      "bytes": 4365,
+      "physical_lines": 106,
+      "nonblank_noncomment_lines": 14
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/sat/sat_cuboid_cuboid.rs",
+      "sha256": "2ea3de2e23c8a548dca01bb4e1dc03c43e6d27c3447f68c9f3dbb55fa79ce9f9",
+      "bytes": 10498,
+      "physical_lines": 294,
+      "nonblank_noncomment_lines": 93
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/sat/sat_cuboid_point.rs",
+      "sha256": "43649ce626029c5026c1133fd357407d69d4006378f888b537b2b02a66d81a20",
+      "bytes": 3419,
+      "physical_lines": 92,
+      "nonblank_noncomment_lines": 25
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/sat/sat_cuboid_segment.rs",
+      "sha256": "b1772161977a97a89bdc4140116fae60c669c43b1a63fa6021fd3dbec6f6d3f5",
+      "bytes": 5141,
+      "physical_lines": 155,
+      "nonblank_noncomment_lines": 28
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/sat/sat_cuboid_support_map.rs",
+      "sha256": "a5ed139437f5561b1e8e657961510f49f8fdc3633a780358dd01956418e7ddf3",
+      "bytes": 9748,
+      "physical_lines": 274,
+      "nonblank_noncomment_lines": 69
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/sat/sat_cuboid_triangle.rs",
+      "sha256": "d9771bfc37f0058b0ff146259d277a9ebe46d2c3f3ad941da23ea73200b92311",
+      "bytes": 11108,
+      "physical_lines": 332,
+      "nonblank_noncomment_lines": 99
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/sat/sat_support_map_support_map.rs",
+      "sha256": "d72885ab3545de943f4b79e6d975e04c8dfb4e1e8b7d6154a124c4ee143c9cd6",
+      "bytes": 3304,
+      "physical_lines": 88,
+      "nonblank_noncomment_lines": 12
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/sat/sat_triangle_segment.rs",
+      "sha256": "c181ae2c589df5d645d2a72c8866e1b08aeb0a363513d7b0353692fc75b99926",
+      "bytes": 6850,
+      "physical_lines": 207,
+      "nonblank_noncomment_lines": 54
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/shape_cast/mod.rs",
+      "sha256": "d612372165d6ae894f0c30d12d91760d0b542be5b0cdda8d0715ba6f6fd59a51",
+      "bytes": 1089,
+      "physical_lines": 28,
+      "nonblank_noncomment_lines": 20
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/shape_cast/shape_cast.rs",
+      "sha256": "70fc4ba61da4f1024de7c21b7242b910f3cddee66a19fb8175d36533a00fcc33",
+      "bytes": 12704,
+      "physical_lines": 310,
+      "nonblank_noncomment_lines": 88
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/shape_cast/shape_cast_ball_ball.rs",
+      "sha256": "17d0def3152276ae39b6a17603ec11893aef7b932d4984cffef7f08ae2ca52dc",
+      "bytes": 1938,
+      "physical_lines": 69,
+      "nonblank_noncomment_lines": 60
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/shape_cast/shape_cast_composite_shape_shape.rs",
+      "sha256": "32064bf8443452cce006dfd94437347a2b2778f861ebf97036838278008d1887",
+      "bytes": 3895,
+      "physical_lines": 109,
+      "nonblank_noncomment_lines": 94
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/shape_cast/shape_cast_halfspace_support_map.rs",
+      "sha256": "f85a74b0d5dcc6188db08938fe7ad2e4546df67cc872ef0c291b5e2ca7d26d5f",
+      "bytes": 2728,
+      "physical_lines": 80,
+      "nonblank_noncomment_lines": 67
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/shape_cast/shape_cast_heightfield_shape.rs",
+      "sha256": "195f99263ff646e0760a6c8ad52b0c9fa8eed3f6b551f65229b6da45ebade381",
+      "bytes": 8662,
+      "physical_lines": 277,
+      "nonblank_noncomment_lines": 225
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/shape_cast/shape_cast_support_map_support_map.rs",
+      "sha256": "8225dafcd03e43c52def722404a6b9ff063589e1968d7d551f7153598c1524e4",
+      "bytes": 3900,
+      "physical_lines": 90,
+      "nonblank_noncomment_lines": 76
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/shape_cast/shape_cast_voxels_shape.rs",
+      "sha256": "81365b3aef77afbb880deb5d65b65113e0319ce27f3e6d0d8fc78eb074d81e91",
+      "bytes": 5608,
+      "physical_lines": 157,
+      "nonblank_noncomment_lines": 123
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/split/mod.rs",
+      "sha256": "eeadcb39b27b6a1392a2488abb862f67038f9ab68c96fbaaa27434b3100f165b",
+      "bytes": 7444,
+      "physical_lines": 185,
+      "nonblank_noncomment_lines": 5
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/split/split.rs",
+      "sha256": "08daaba6dfe9c6982839630fd38a37c2e827f5e6e2294e8673869feaf91e16aa",
+      "bytes": 8508,
+      "physical_lines": 215,
+      "nonblank_noncomment_lines": 10
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/split/split_aabb.rs",
+      "sha256": "f068d35dbc6b2d7c23dcc47b8a53847b96411929c7b4bd24e4676c854640772f",
+      "bytes": 1220,
+      "physical_lines": 29,
+      "nonblank_noncomment_lines": 18
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/split/split_segment.rs",
+      "sha256": "574e2dd97c47dad053458111f0bc88691aa75be99a66dd518c652198a7ecb015",
+      "bytes": 2674,
+      "physical_lines": 66,
+      "nonblank_noncomment_lines": 43
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/split/split_trimesh.rs",
+      "sha256": "121523a73456ec6083174648597e1ac505607d80ef728f3759a2fc02b8e3ff8e",
+      "bytes": 30548,
+      "physical_lines": 738,
+      "nonblank_noncomment_lines": 551
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/sweep_toi/composite.rs",
+      "sha256": "3e3409312033041c3e964702e6018926825b105d5b7bf5339bb89b10a885159d",
+      "bytes": 11613,
+      "physical_lines": 296,
+      "nonblank_noncomment_lines": 216
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/sweep_toi/mod.rs",
+      "sha256": "73e88642841c7d65faacfdfca4dc4c1358eb4320dbdba7ca1e4b5c4b8eee6611",
+      "bytes": 1175,
+      "physical_lines": 26,
+      "nonblank_noncomment_lines": 11
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/sweep_toi/proxy_distance.rs",
+      "sha256": "0a70a90c80d0e71ccbc0d3a32820401b34ed0405ff0812c578385cda248aeb3a",
+      "bytes": 29822,
+      "physical_lines": 1027,
+      "nonblank_noncomment_lines": 767
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/sweep_toi/separation.rs",
+      "sha256": "909984d4ee074be059f9b87d39dcedb3e69325dddab65c21f4c3df84e2a74560",
+      "bytes": 22608,
+      "physical_lines": 597,
+      "nonblank_noncomment_lines": 462
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/sweep_toi/sweep.rs",
+      "sha256": "713ba48eff6eaecdaf6c3b75ffd9c08302fcab3dcf54ad2300ed715243ba2015",
+      "bytes": 3624,
+      "physical_lines": 113,
+      "nonblank_noncomment_lines": 68
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/sweep_toi/sweep_toi.rs",
+      "sha256": "29ea7906d88e10c2853888979cf47df008ab09dd52f4191c58b905736d078479",
+      "bytes": 15985,
+      "physical_lines": 443,
+      "nonblank_noncomment_lines": 300
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/query/sweep_toi/toi_proxy.rs",
+      "sha256": "6275314acc6d1a24c677dca0f0932517c43bdfc13ed84d48e0590d82d440672b",
+      "bytes": 6535,
+      "physical_lines": 179,
+      "nonblank_noncomment_lines": 134
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/ball.rs",
+      "sha256": "447e31075a88bbe2c445a66f38761e32dad323c8f17e406a48553c9c34685677",
+      "bytes": 8666,
+      "physical_lines": 248,
+      "nonblank_noncomment_lines": 63
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/capsule.rs",
+      "sha256": "7fe9e2171f96c3bf909162b7d5c34134485c2932c1b501b337e639a2748006b4",
+      "bytes": 13693,
+      "physical_lines": 404,
+      "nonblank_noncomment_lines": 110
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/composite_shape.rs",
+      "sha256": "7b89c03079b633d9282e320a707d9ddadcb960cad0142e732876997267d008d5",
+      "bytes": 4634,
+      "physical_lines": 119,
+      "nonblank_noncomment_lines": 66
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/compound.rs",
+      "sha256": "050a406c295671b2111756a3473a6029affef75755fe56fae5b4a11293d1ec60",
+      "bytes": 80398,
+      "physical_lines": 2050,
+      "nonblank_noncomment_lines": 1058
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/compound_pseudo_normals.rs",
+      "sha256": "0b502d75146512dff5ed35b6ed47fdeb5484319ec09e5583d2341648880a1380",
+      "bytes": 9690,
+      "physical_lines": 253,
+      "nonblank_noncomment_lines": 142
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/cone.rs",
+      "sha256": "38800227301dbfab19be87e4ce62a1d6b866e91ac5574825e7a0f2961457536e",
+      "bytes": 5247,
+      "physical_lines": 174,
+      "nonblank_noncomment_lines": 56
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/convex_polygon.rs",
+      "sha256": "b32c9a251647f44890e1a72fec6d007e8ea4ceb74173ea4a33a64b6a71ffd9e2",
+      "bytes": 23439,
+      "physical_lines": 672,
+      "nonblank_noncomment_lines": 230
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/convex_polyhedron.rs",
+      "sha256": "835368c31bca57ef1673c9d8d31c2e80e87e2fab59445d3a891a5a1551644d9e",
+      "bytes": 39109,
+      "physical_lines": 1076,
+      "nonblank_noncomment_lines": 467
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/cuboid.rs",
+      "sha256": "bf8ed4f60ca11f16dfee2c7cd8b550c3c1bc2acaa7c2f52f3eaff966bf14e42c",
+      "bytes": 27728,
+      "physical_lines": 821,
+      "nonblank_noncomment_lines": 535
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/cylinder.rs",
+      "sha256": "b3dba803e02a8d71df5885a91b67401d1cac5ab4d0e1c7266c24216b6e3a4dd0",
+      "bytes": 6894,
+      "physical_lines": 206,
+      "nonblank_noncomment_lines": 47
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/feature_id.rs",
+      "sha256": "088295ca8e3080642aff170c039c675a6c22bfe744215341359063b2b7ab65ea",
+      "bytes": 24626,
+      "physical_lines": 752,
+      "nonblank_noncomment_lines": 105
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/half_space.rs",
+      "sha256": "bc4e63b405610d6942eaf2e5326300cad1e0cbc8290f47a2c3503814aa00cccb",
+      "bytes": 10875,
+      "physical_lines": 323,
+      "nonblank_noncomment_lines": 16
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/heightfield2.rs",
+      "sha256": "4ccffe95457cca1830bd1100428e54b6f2d22dbefb55aab711a78c27b65a29ab",
+      "bytes": 7954,
+      "physical_lines": 256,
+      "nonblank_noncomment_lines": 165
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/heightfield3.rs",
+      "sha256": "857ed572210fb01c8dea13ad03eeea41c1226dadf8461d8c2c3b790f77831e99",
+      "bytes": 35208,
+      "physical_lines": 940,
+      "nonblank_noncomment_lines": 674
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/mod.rs",
+      "sha256": "3e3a3985278c8a385809dc43e8093d985086492c636e29571a9535b00e86e40f",
+      "bytes": 4351,
+      "physical_lines": 144,
+      "nonblank_noncomment_lines": 73
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/polygon.rs",
+      "sha256": "698df8c8892f94ba12ddaab55bc1467f9597842e2d9a7457f002220ca006af2a",
+      "bytes": 2443,
+      "physical_lines": 82,
+      "nonblank_noncomment_lines": 52
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/polygonal_feature2d.rs",
+      "sha256": "11ac1dc666b6cabf5533d1235278893699062a50da97233e3b33a31f88b40d05",
+      "bytes": 5005,
+      "physical_lines": 148,
+      "nonblank_noncomment_lines": 120
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/polygonal_feature3d.rs",
+      "sha256": "c0a9e0d5353cf47dfefa2f7f3725167fac989831055de464c997eaa6f82247c0",
+      "bytes": 15924,
+      "physical_lines": 418,
+      "nonblank_noncomment_lines": 327
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/polygonal_feature_map.rs",
+      "sha256": "56cac534a0c4e06e819429628a89a4d7c63749fb38c3d05b62d2f402b3d085db",
+      "bytes": 9451,
+      "physical_lines": 207,
+      "nonblank_noncomment_lines": 136
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/polyline.rs",
+      "sha256": "cfebec3f8d5a1c482cf54ad80508efa9099177d03a3943357d6fd7d918f409f4",
+      "bytes": 43322,
+      "physical_lines": 1210,
+      "nonblank_noncomment_lines": 413
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/pseudo_normals.rs",
+      "sha256": "1c7ac517016757bd919e73f39805121c19c45b6e495c830030d4a1d6703de02a",
+      "bytes": 2613,
+      "physical_lines": 57,
+      "nonblank_noncomment_lines": 29
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/round_shape.rs",
+      "sha256": "d623a9406d79223f511a5d772f972259ee228a0295f5deb1ba8106aceb7c119f",
+      "bytes": 13057,
+      "physical_lines": 345,
+      "nonblank_noncomment_lines": 29
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/segment.rs",
+      "sha256": "112cd94c7a144160fea66d459660ab89e179e34b8702ea2fc09ca3809cff6b04",
+      "bytes": 21087,
+      "physical_lines": 695,
+      "nonblank_noncomment_lines": 322
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/segment_pseudo_normals.rs",
+      "sha256": "3c4d8c77e6bae77bf439badc5074729bdd1ef8a1c3842b574193e98ed9f77ebd",
+      "bytes": 3409,
+      "physical_lines": 96,
+      "nonblank_noncomment_lines": 62
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/shape.rs",
+      "sha256": "ce63f619a5a7b02486b9c5d1696f3f252c1c2712a7ba0ca252b9dd71f0263b4d",
+      "bytes": 52577,
+      "physical_lines": 1729,
+      "nonblank_noncomment_lines": 1117
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/shared_shape.rs",
+      "sha256": "7cec2012b2193c9dc60738a2a1ce2b9e873a83f730e6d0d15bfe616eead271c5",
+      "bytes": 26726,
+      "physical_lines": 715,
+      "nonblank_noncomment_lines": 321
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/support_map.rs",
+      "sha256": "91cd10bb532a70ebe6cc30a3fbde28a36b0ff0f86d098687ffbf3cad9371cd49",
+      "bytes": 17823,
+      "physical_lines": 447,
+      "nonblank_noncomment_lines": 15
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/tetrahedron.rs",
+      "sha256": "d1c4f9ea287ba474551aad641479f68fea6cf02d12fe8454382dc0c81907e82e",
+      "bytes": 23877,
+      "physical_lines": 722,
+      "nonblank_noncomment_lines": 135
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/triangle.rs",
+      "sha256": "37ba3bb72d15ae0a83ad9b714dec32bfcdb0cac21e615e0e1163b18802e620c0",
+      "bytes": 30619,
+      "physical_lines": 943,
+      "nonblank_noncomment_lines": 522
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/triangle_pseudo_normals.rs",
+      "sha256": "ce27b97e8b624d079d279081537ef0af2dcb3a8c9a8e654cca5e8163af96d715",
+      "bytes": 8837,
+      "physical_lines": 239,
+      "nonblank_noncomment_lines": 166
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/trimesh.rs",
+      "sha256": "9ed70f602ffeb35e362fd24e66bb06a3993f1c2fbf20cf18b6ecb243ae844d77",
+      "bytes": 82766,
+      "physical_lines": 2303,
+      "nonblank_noncomment_lines": 860
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/voxels/mod.rs",
+      "sha256": "98257de129b192ff121bc99a44d84b95508108f86a90adbf771ff1adf5e0d645",
+      "bytes": 181,
+      "physical_lines": 11,
+      "nonblank_noncomment_lines": 9
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/voxels/voxels.rs",
+      "sha256": "cccdada5e4545ddfc3dd3ef3dbd74b5abe0792574cf3b0c8438f4137ecf1970c",
+      "bytes": 38641,
+      "physical_lines": 1028,
+      "nonblank_noncomment_lines": 267
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/voxels/voxels_chunk.rs",
+      "sha256": "05abdb9da049d0dffbd1aeeeafe7693c82418a85f94c7a2e86ff766407b3f287",
+      "bytes": 11623,
+      "physical_lines": 315,
+      "nonblank_noncomment_lines": 179
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/voxels/voxels_consts.rs",
+      "sha256": "54d64be02692ef8e3f684d1fca2a7df44b8ac2f0600bbd6be0ca30280bc4c00e",
+      "bytes": 18335,
+      "physical_lines": 639,
+      "nonblank_noncomment_lines": 501
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/voxels/voxels_edition.rs",
+      "sha256": "c7995ecb1eeb1ef526fe8b0dbbe77d373ab02575badadf66ce344274adddb441",
+      "bytes": 10630,
+      "physical_lines": 319,
+      "nonblank_noncomment_lines": 105
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/voxels/voxels_neighborhood.rs",
+      "sha256": "7f19b243b4a03337c641a3ad52a7313bb5574fcf3c5fe23dccec86fe70bcaa20",
+      "bytes": 8993,
+      "physical_lines": 205,
+      "nonblank_noncomment_lines": 145
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/shape/voxels/voxels_sizeof.rs",
+      "sha256": "6a1a1afb1f6352c8f12cb462844aca03843a7f6c11e726f7b2f3892f59d8a83b",
+      "bytes": 1111,
+      "physical_lines": 29,
+      "nonblank_noncomment_lines": 22
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/convex_hull2.rs",
+      "sha256": "e3aa542f3995d69a4ae85a112312bae903a999949815c8ed11bc73bcd5e61985",
+      "bytes": 6889,
+      "physical_lines": 262,
+      "nonblank_noncomment_lines": 193
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/convex_hull3/convex_hull.rs",
+      "sha256": "e3481cca33a6972c35fefa03cd10776e6393aa7a0e11d34b2b73682f66f0fb7b",
+      "bytes": 17791,
+      "physical_lines": 541,
+      "nonblank_noncomment_lines": 305
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/convex_hull3/error.rs",
+      "sha256": "8791c34bfd1f2b37e5a7327eefd4ec94e9b4da10379e4ea285b2d679d07356b9",
+      "bytes": 9444,
+      "physical_lines": 248,
+      "nonblank_noncomment_lines": 9
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/convex_hull3/initial_mesh.rs",
+      "sha256": "227f051af24f6b65bdbe2cb13252b4e5f97d408ebb44bdc0829809e448617ff5",
+      "bytes": 8301,
+      "physical_lines": 248,
+      "nonblank_noncomment_lines": 185
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/convex_hull3/mod.rs",
+      "sha256": "7ab778aa17b596f032f9bd0c332dc51dfac3cc186acb076737dcd180593cb243",
+      "bytes": 380,
+      "physical_lines": 13,
+      "nonblank_noncomment_lines": 11
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/convex_hull3/triangle_facet.rs",
+      "sha256": "a6ce6632c069aa3a4c9f7b64524417f4df2698fe2ba4138a7698da0b24227298",
+      "bytes": 3296,
+      "physical_lines": 118,
+      "nonblank_noncomment_lines": 92
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/convex_hull3/validation.rs",
+      "sha256": "0c6fd0d52457174d92c6b184485053c6108d2b7f44afc7d709750ee5ff1388d6",
+      "bytes": 3081,
+      "physical_lines": 105,
+      "nonblank_noncomment_lines": 70
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/convex_hull_utils.rs",
+      "sha256": "3410904baf919e6c49ec044b456785388090df5bf3be0a69684c0d3e176f4293",
+      "bytes": 7686,
+      "physical_lines": 237,
+      "nonblank_noncomment_lines": 52
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/ear_clipping.rs",
+      "sha256": "92347f88dd524fc11a9b08ced58021fb374e545f93a07e4816902f85d270ab06",
+      "bytes": 7422,
+      "physical_lines": 222,
+      "nonblank_noncomment_lines": 150
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/hertel_mehlhorn.rs",
+      "sha256": "e744657dcb3efe24630d1a67618cd0a815c24789bfac79187e31a257022ee2ee",
+      "bytes": 7313,
+      "physical_lines": 193,
+      "nonblank_noncomment_lines": 118
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/mesh_intersection/mesh_intersection.rs",
+      "sha256": "2105057c3071b90d3b6b44a52c0e88c4112cdc1025b60a2b4fd08e7b6648b507",
+      "bytes": 32516,
+      "physical_lines": 981,
+      "nonblank_noncomment_lines": 764
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/mesh_intersection/mesh_intersection_error.rs",
+      "sha256": "5ac4f6eb21e57b6ead5fc595dac009ec785c33d358a70d80d2f8a3ee9963d961",
+      "bytes": 9212,
+      "physical_lines": 217,
+      "nonblank_noncomment_lines": 15
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/mesh_intersection/mod.rs",
+      "sha256": "d10e158c2fbf2db06b9c85b962ac605763d9bf321e0b9aff7ddb9bd2176beb03",
+      "bytes": 363,
+      "physical_lines": 13,
+      "nonblank_noncomment_lines": 10
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/mesh_intersection/triangle_triangle_intersection.rs",
+      "sha256": "7e1e8b9480f95a5098180f26f6b51d81f053bdd306607e7c4a08c0574f13abda",
+      "bytes": 10758,
+      "physical_lines": 295,
+      "nonblank_noncomment_lines": 247
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/mod.rs",
+      "sha256": "6d9efffb661b70f098e821702e66e5fae0dca2c2fbcbf61972c73399fd94bbc9",
+      "bytes": 2063,
+      "physical_lines": 58,
+      "nonblank_noncomment_lines": 33
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/polygon_intersection.rs",
+      "sha256": "1b47c0990ce4fb322aa3caee8127e0b68c36a0e98ad9a351ce75149d24c67ed7",
+      "bytes": 44880,
+      "physical_lines": 1239,
+      "nonblank_noncomment_lines": 583
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_outline/ball_to_outline.rs",
+      "sha256": "a16271ec1781a091433f9f3bb4962dc0cad660b843e31e267300b97a55558eda",
+      "bytes": 2326,
+      "physical_lines": 68,
+      "nonblank_noncomment_lines": 56
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_outline/capsule_to_outline.rs",
+      "sha256": "e63c7049951669e928bc154c4945a6407ea22ef330587a5a784d68c95d870eb2",
+      "bytes": 1404,
+      "physical_lines": 43,
+      "nonblank_noncomment_lines": 34
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_outline/cone_to_outline.rs",
+      "sha256": "90393a6bbf1e2fc356336ff5008905c14e97e2d14dd0afe0b173e72666130e1b",
+      "bytes": 938,
+      "physical_lines": 24,
+      "nonblank_noncomment_lines": 19
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_outline/convex_polyhedron_to_outline.rs",
+      "sha256": "4c0dbaf3bdbc7663d5b289ca1d65917b43c27558b3113f98b215a8f5c76c8c44",
+      "bytes": 734,
+      "physical_lines": 22,
+      "nonblank_noncomment_lines": 17
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_outline/cuboid_to_outline.rs",
+      "sha256": "698e9540b3cbb4f7cc6436fe9fc81769519214e1aede9d93b766fc4d2940317f",
+      "bytes": 1354,
+      "physical_lines": 50,
+      "nonblank_noncomment_lines": 45
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_outline/cylinder_to_outline.rs",
+      "sha256": "c0f8c03c0dfd57e7b4edc05c671ec63daacd96abfcebce398b1e742b731e3573",
+      "bytes": 964,
+      "physical_lines": 24,
+      "nonblank_noncomment_lines": 19
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_outline/heightfield_to_outline.rs",
+      "sha256": "93f593d0b32145c5d00e4170c8aefb79bc9f51e0646017848771bad9a6f35267",
+      "bytes": 273,
+      "physical_lines": 10,
+      "nonblank_noncomment_lines": 8
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_outline/mod.rs",
+      "sha256": "45a49120d3a25f4f1747d1e20855b9eef014ffe6df9c68145ed879a117a6f746",
+      "bytes": 366,
+      "physical_lines": 13,
+      "nonblank_noncomment_lines": 10
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_outline/round_cone_to_outline.rs",
+      "sha256": "d5552b1eeae13cff303d5b3936e69d39d805771d84b1c59d2dbe9e1047e2c8a9",
+      "bytes": 1438,
+      "physical_lines": 41,
+      "nonblank_noncomment_lines": 33
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_outline/round_convex_polyhedron_to_outline.rs",
+      "sha256": "7bc2fdf1804e1481649fd10043a7fe178df764f3b8328cd0a375c250ae4c18ec",
+      "bytes": 2553,
+      "physical_lines": 71,
+      "nonblank_noncomment_lines": 54
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_outline/round_cuboid_to_outline.rs",
+      "sha256": "347deead1bd24fe0f2eb1ed47952e9285fff27467a23a726c584e91c45feedf6",
+      "bytes": 2263,
+      "physical_lines": 62,
+      "nonblank_noncomment_lines": 54
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_outline/round_cylinder_to_outline.rs",
+      "sha256": "78ce15923cbba9cd01e6fc2848a0b135f607d3b0fb5b59195dd3336afbad43b2",
+      "bytes": 1358,
+      "physical_lines": 39,
+      "nonblank_noncomment_lines": 32
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_outline/round_triangle_to_outline.rs",
+      "sha256": "555bfccc52cf2ec4618a260ef979bf0fc1b583dffb132183541770ec80159066",
+      "bytes": 1241,
+      "physical_lines": 33,
+      "nonblank_noncomment_lines": 29
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_outline/voxels_to_outline.rs",
+      "sha256": "e78d1e11624cd4b77d3771c917bd5de9b5b86f78614e32dd64256b7224a25784",
+      "bytes": 1995,
+      "physical_lines": 56,
+      "nonblank_noncomment_lines": 44
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_polyline/ball_to_polyline.rs",
+      "sha256": "055bbea6280976fab3b7a6f7f94b8695f0a641e8efbbbc402788b0ffdad38020",
+      "bytes": 550,
+      "physical_lines": 18,
+      "nonblank_noncomment_lines": 14
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_polyline/capsule_to_polyline.rs",
+      "sha256": "3a81269a2f1a0970da97b251fd57c631e1c6b0d5f243e0013682d74656eb6c28",
+      "bytes": 807,
+      "physical_lines": 27,
+      "nonblank_noncomment_lines": 19
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_polyline/cuboid_to_polyline.rs",
+      "sha256": "b14645b213c7e967d4f63bf63e85e7ab19da39af85931ae82c19644ce84eb240",
+      "bytes": 564,
+      "physical_lines": 21,
+      "nonblank_noncomment_lines": 17
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_polyline/heightfield_to_polyline.rs",
+      "sha256": "33acbb1e69ae4ea7adac0e9743cf6a934e18da221d446354dbdef9dfc4c5d02b",
+      "bytes": 739,
+      "physical_lines": 25,
+      "nonblank_noncomment_lines": 20
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_polyline/mod.rs",
+      "sha256": "0832c8d4cd090ee0646e07a74d12065144db4bb72a124fbe33b017dcca1887ca",
+      "bytes": 192,
+      "physical_lines": 7,
+      "nonblank_noncomment_lines": 7
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_polyline/round_convex_polygon_to_polyline.rs",
+      "sha256": "f7d18101352df08eecdab75205550d65c8bc3b7c466f2ab069a0db7997790efd",
+      "bytes": 1178,
+      "physical_lines": 34,
+      "nonblank_noncomment_lines": 27
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_polyline/round_cuboid_to_polyline.rs",
+      "sha256": "0f7b38dab7a75f978473715599d7ff6dbf2df449f1d9277e4f2897c6eea49747",
+      "bytes": 1448,
+      "physical_lines": 49,
+      "nonblank_noncomment_lines": 44
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_polyline/voxels_to_polyline.rs",
+      "sha256": "ef0ddeb76b0714fdce96e0d3c0d960e2ac7fcd61bb6b0589b989d1ff8dba2727",
+      "bytes": 1842,
+      "physical_lines": 52,
+      "nonblank_noncomment_lines": 44
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_trimesh/ball_to_trimesh.rs",
+      "sha256": "7c2de1c1f9559f835474b835075bfd7b0cebaa5e1051d2390330e8bfa001294e",
+      "bytes": 2969,
+      "physical_lines": 110,
+      "nonblank_noncomment_lines": 89
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_trimesh/capsule_to_trimesh.rs",
+      "sha256": "4a8305ff77e3a794afa6b4cb81983bab4180690941e8c1fafb53c7398c567037",
+      "bytes": 2046,
+      "physical_lines": 68,
+      "nonblank_noncomment_lines": 50
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_trimesh/cone_to_trimesh.rs",
+      "sha256": "2accfe5f47322c4648ef6466d96fc4286396b6519def1ee68fc2559387a0224e",
+      "bytes": 1078,
+      "physical_lines": 32,
+      "nonblank_noncomment_lines": 24
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_trimesh/convex_polyhedron_to_trimesh.rs",
+      "sha256": "e3843df1461e390f889239cb6cf8249cd2e3bf1a2503037464e58380e0daf712",
+      "bytes": 723,
+      "physical_lines": 22,
+      "nonblank_noncomment_lines": 17
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_trimesh/cuboid_to_trimesh.rs",
+      "sha256": "0b9d8964ec852a6778ed482c3f0e7bbd871af80775e4c8fb7bc88ef91b9aa224",
+      "bytes": 2314,
+      "physical_lines": 79,
+      "nonblank_noncomment_lines": 58
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_trimesh/cylinder_to_trimesh.rs",
+      "sha256": "b5c61f06da095e5e8ebfb1a662c15a6926f7a5840ceda55ac87e86596685e7c5",
+      "bytes": 1349,
+      "physical_lines": 38,
+      "nonblank_noncomment_lines": 29
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_trimesh/heightfield_to_trimesh.rs",
+      "sha256": "8dc64f64ea060b0b75bf9b8ba7300c1d5a04fbdd985c43f7541e193956018f65",
+      "bytes": 603,
+      "physical_lines": 22,
+      "nonblank_noncomment_lines": 17
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_trimesh/mod.rs",
+      "sha256": "32ee4012f871246930064364e770f1e1fea2298054651ff39ae80a3be3d423bd",
+      "bytes": 5604,
+      "physical_lines": 153,
+      "nonblank_noncomment_lines": 11
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/to_trimesh/voxels_to_trimesh.rs",
+      "sha256": "0a281bf110586c38e81a9bbe140a8716063f1e5d13b1445225b61f9a360cdb4d",
+      "bytes": 1547,
+      "physical_lines": 41,
+      "nonblank_noncomment_lines": 33
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/utils.rs",
+      "sha256": "2b63a0bd725ba62f2376cf04cb031063aa6f56675a8331d427c48e99b33ce297",
+      "bytes": 27234,
+      "physical_lines": 832,
+      "nonblank_noncomment_lines": 225
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/vhacd/mod.rs",
+      "sha256": "1264b3bf4afbd9a60c28a8dcfe0fbb5ddb34cc0ef7598e6c8a89138797d8ac1c",
+      "bytes": 10934,
+      "physical_lines": 275,
+      "nonblank_noncomment_lines": 5
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/vhacd/parameters.rs",
+      "sha256": "ee072a096ea57109e993774a21a5a7d36edd298e89e1773d2103dd4c6fec7141",
+      "bytes": 16473,
+      "physical_lines": 491,
+      "nonblank_noncomment_lines": 33
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/vhacd/vhacd.rs",
+      "sha256": "b685903f6f02b38378d8fdef9a482ac49e0bd339e6b3c6865b1a02aa9c87eeea",
+      "bytes": 46559,
+      "physical_lines": 1219,
+      "nonblank_noncomment_lines": 413
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/volume_mesh/cover_octree.rs",
+      "sha256": "9a09174dc06ee6e8618414a867a5cbd09e2278b9a99b8d1e5c364039fb3054fd",
+      "bytes": 15932,
+      "physical_lines": 422,
+      "nonblank_noncomment_lines": 305
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/volume_mesh/cover_smoothing.rs",
+      "sha256": "d6b58f61e4e3702a88aaaf32696f3b1fb861b42968522262929eb93695496e34",
+      "bytes": 13452,
+      "physical_lines": 354,
+      "nonblank_noncomment_lines": 300
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/volume_mesh/delaunay_refinement.rs",
+      "sha256": "90864f349da6e5936ec677b44f0d5f0f54aa079f920814ae95385228540ef0c1",
+      "bytes": 4509,
+      "physical_lines": 131,
+      "nonblank_noncomment_lines": 102
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/volume_mesh/isosurface_stuffing.rs",
+      "sha256": "42cf356b7698e1ba556886bef1c651eb7e1a40030ad066b9235cad1387710f98",
+      "bytes": 19193,
+      "physical_lines": 531,
+      "nonblank_noncomment_lines": 385
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/volume_mesh/mod.rs",
+      "sha256": "2edffc7e5b5a40c5fbb9d43df4b03c2595c876c5393384c50b9ffe11d31a59ba",
+      "bytes": 6822,
+      "physical_lines": 175,
+      "nonblank_noncomment_lines": 95
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/voxelization/mod.rs",
+      "sha256": "5296f18ca507767a999c689e0dcf348e7c56a6bbec0bee19d875a378884481aa",
+      "bytes": 9935,
+      "physical_lines": 255,
+      "nonblank_noncomment_lines": 4
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/voxelization/voxel_set.rs",
+      "sha256": "0c11f43f150a0d89c337a9fcd46ec00011e922ad4f9fdd62835701a5327b1003",
+      "bytes": 42011,
+      "physical_lines": 1131,
+      "nonblank_noncomment_lines": 459
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/voxelization/voxelized_volume.rs",
+      "sha256": "5d524dd6a933ac3f6f83293fb0d76e05a921cc9ac2efc5686c8d65f5ef1ec728",
+      "bytes": 47307,
+      "physical_lines": 1251,
+      "nonblank_noncomment_lines": 751
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/transformation/wavefront.rs",
+      "sha256": "8fb9a22aa1a818ea935dfb528cf400d9b4690f5792e96ab46752a7a1ab4d6b7c",
+      "bytes": 1515,
+      "physical_lines": 43,
+      "nonblank_noncomment_lines": 37
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/array2.rs",
+      "sha256": "29efc4149b748b9295020ca6690dde29cf094f80babbe25309fa7d7123308adb",
+      "bytes": 3105,
+      "physical_lines": 127,
+      "nonblank_noncomment_lines": 84
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/as_bytes.rs",
+      "sha256": "d5d7657ccfa04cddc7f4bdb666a00575035d05aadf3020f3be5af9451585bf18",
+      "bytes": 685,
+      "physical_lines": 28,
+      "nonblank_noncomment_lines": 19
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/ccw_face_normal.rs",
+      "sha256": "03d89f3b965c92fec1251da1fa8d9f92a4b82e6b96b8568505b9db7ba28809fd",
+      "bytes": 683,
+      "physical_lines": 26,
+      "nonblank_noncomment_lines": 12
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/center.rs",
+      "sha256": "3b45f5dd408403c71ae4790b7d9f00e78698644bb2a9ec38e1e2b1a595c01055",
+      "bytes": 2202,
+      "physical_lines": 97,
+      "nonblank_noncomment_lines": 14
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/cleanup.rs",
+      "sha256": "304a10b87c45d1e65ce10ded53bfa08c1b33311f52eae96a62c7d57f83c1046a",
+      "bytes": 988,
+      "physical_lines": 34,
+      "nonblank_noncomment_lines": 29
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/consts.rs",
+      "sha256": "1608075c9fa400c7fb3e52cdd04a9856125bc2010d6dba5105753039512c7ddc",
+      "bytes": 617,
+      "physical_lines": 13,
+      "nonblank_noncomment_lines": 4
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/cov.rs",
+      "sha256": "4b5545c0d6bd2ed6d997e4874311d99144880e474af1e701d015d8c98ca42933",
+      "bytes": 644,
+      "physical_lines": 22,
+      "nonblank_noncomment_lines": 15
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/eigen2.rs",
+      "sha256": "f63b8d84afa8f0967fcb7244d8daeff49a4a368ee5b27ec4955f0cb3783efa66",
+      "bytes": 179,
+      "physical_lines": 7,
+      "nonblank_noncomment_lines": 2
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/eigen3.rs",
+      "sha256": "fbd3f4d5821ff2ea034a69ead5625488f5530eb5c9e3483abcbba4fc28f49d79",
+      "bytes": 179,
+      "physical_lines": 7,
+      "nonblank_noncomment_lines": 2
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/fx_hasher.rs",
+      "sha256": "308c91cd45a2a0e5a819a36d9a3b4906375ab36d5fe68f5c8d6d96ffc13f3f4a",
+      "bytes": 2156,
+      "physical_lines": 80,
+      "nonblank_noncomment_lines": 57
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/hashable_partial_eq.rs",
+      "sha256": "64403d8294a40667605a9094c554d87319f525575feed4581daed132907dc730",
+      "bytes": 853,
+      "physical_lines": 31,
+      "nonblank_noncomment_lines": 19
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/hashmap.rs",
+      "sha256": "0166090169c7a69271af7371f4089a14675070076c0ebcef39ff089598217b66",
+      "bytes": 2199,
+      "physical_lines": 63,
+      "nonblank_noncomment_lines": 41
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/hashset.rs",
+      "sha256": "5f6d1bdbf15e2cc90f67600976192d0e331bc557dfff6b98e4922272816292be",
+      "bytes": 2057,
+      "physical_lines": 60,
+      "nonblank_noncomment_lines": 38
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/interval.rs",
+      "sha256": "fb4f75160057e0aab5de2dee56c5996b422b70b6eb3a41e18a14caff140587b5",
+      "bytes": 16433,
+      "physical_lines": 560,
+      "nonblank_noncomment_lines": 436
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/inv.rs",
+      "sha256": "abc623f4c76ab7b01a4262cd594fed244b8748763ff402960bd999ffdc52d2cf",
+      "bytes": 127,
+      "physical_lines": 9,
+      "nonblank_noncomment_lines": 8
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/isometry_ops.rs",
+      "sha256": "16fcfcf622ffc124c80577ba7b2457a1686d8dbc801afc7158d8ff03e0e10ec3",
+      "bytes": 2685,
+      "physical_lines": 114,
+      "nonblank_noncomment_lines": 82
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/median.rs",
+      "sha256": "cfbb47788f6cc19eca9a4ac4a2a9048dd6e7cf61a71248d8fb1b2b3a320a1b9f",
+      "bytes": 2350,
+      "physical_lines": 99,
+      "nonblank_noncomment_lines": 14
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/mod.rs",
+      "sha256": "fd94d6fe6c9c843a21cd05aaa98789ffcc1e61ed477a0721762471566db5ea93",
+      "bytes": 2408,
+      "physical_lines": 89,
+      "nonblank_noncomment_lines": 59
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/morton.rs",
+      "sha256": "3e4499f0449559c1095abcd90e28fb4266a8df32084ea053cb645ca52729ab30",
+      "bytes": 1422,
+      "physical_lines": 45,
+      "nonblank_noncomment_lines": 23
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/obb.rs",
+      "sha256": "9fae8d8a2abb19f7b2b2dac28a848b32a8fdd8f74ee551a6cf68341b0e20086b",
+      "bytes": 1336,
+      "physical_lines": 43,
+      "nonblank_noncomment_lines": 28
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/point_cloud_support_point.rs",
+      "sha256": "ce2842aac55bcdfbdcb9fd278c42bd9d0a027a96be2513cd144c5e5f95724720",
+      "bytes": 644,
+      "physical_lines": 25,
+      "nonblank_noncomment_lines": 16
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/point_in_poly2d.rs",
+      "sha256": "de076982dde4bd1cef31c9dc5983cfc740072055147475c39100f783b23a0476",
+      "bytes": 10990,
+      "physical_lines": 337,
+      "nonblank_noncomment_lines": 138
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/point_in_triangle.rs",
+      "sha256": "c3c942e8efd3871d7dcb504e84f6cb59bc49d5f1f2b6b95cf519bc5e6065a5b7",
+      "bytes": 1805,
+      "physical_lines": 61,
+      "nonblank_noncomment_lines": 31
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/relative_eq.rs",
+      "sha256": "fdda7d9a528772cacfd7afe8ad8b8b02b49e438c57d91baacd242802665d0310",
+      "bytes": 540,
+      "physical_lines": 14,
+      "nonblank_noncomment_lines": 6
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/sdp_matrix.rs",
+      "sha256": "4ea2d8818515e69b7722f37bd371b983fb0a9ddc7315ef42de218d0fc4222fe0",
+      "bytes": 11644,
+      "physical_lines": 385,
+      "nonblank_noncomment_lines": 301
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/segments_intersection.rs",
+      "sha256": "de917f5e8705c9471df122efde71c488bdc43ad232de69527b6c1f4448ae4707",
+      "bytes": 5931,
+      "physical_lines": 179,
+      "nonblank_noncomment_lines": 143
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/sort.rs",
+      "sha256": "4c49d4e53c64e69b5961b1de4519cb0d019cb9e2c6bd29147fe3f4bd928aad77",
+      "bytes": 4076,
+      "physical_lines": 186,
+      "nonblank_noncomment_lines": 47
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/sorted_pair.rs",
+      "sha256": "347bcf9af84e57f6169bc73fff5dc9f207536dc7ec1f8bdb58fd73f910279740",
+      "bytes": 5172,
+      "physical_lines": 177,
+      "nonblank_noncomment_lines": 42
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/spade.rs",
+      "sha256": "f7b6ae0cde2ff114f69c43d217d201ea51617b2a1bc5a9a55ceabe6c040ee614",
+      "bytes": 980,
+      "physical_lines": 27,
+      "nonblank_noncomment_lines": 14
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/vec_map.rs",
+      "sha256": "bac667db9df3f5c84e258e58e5d861ce3ce80b93a3a0d014b75f5b76614b7f00",
+      "bytes": 45312,
+      "physical_lines": 1691,
+      "nonblank_noncomment_lines": 1003
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/wops.rs",
+      "sha256": "51ae56e0bb6df11f73bc25b898dd0b3b597c8f706a732ec257e3986d7b1aa056",
+      "bytes": 4065,
+      "physical_lines": 143,
+      "nonblank_noncomment_lines": 101
+    },
+    {
+      "path": "native/quod_physics/vendor/parry3d-f64/src/utils/z_order.rs",
+      "sha256": "2773abaa0d9ecf1a61aaa251343f047f28165f9272afab7700a3b015f98049e2",
+      "bytes": 1670,
+      "physical_lines": 70,
+      "nonblank_noncomment_lines": 53
+    },
+    {
+      "path": "priv/ontologies/OGL-1.0a.txt",
+      "sha256": "d4f8ed42c24738286fd56c1dade10a41f08e12eabe39a0f8efbaa9dafd76c3d4",
+      "bytes": 7076,
+      "physical_lines": 101,
+      "nonblank_noncomment_lines": 96
+    },
+    {
+      "path": "priv/ontologies/agent_instance.pl",
+      "sha256": "ffec2e02cfd6bf89e1bc1d26b61cfc6b6ffc9c0feea4807c64849e8b45373613",
+      "bytes": 14877,
+      "physical_lines": 284,
+      "nonblank_noncomment_lines": 213
+    },
+    {
+      "path": "priv/ontologies/agent_recovery_policy.pl",
+      "sha256": "9839cd3f6f49115391e00963f97401f34374f977d2b1b5054fb9e0e63400b865",
+      "bytes": 6431,
+      "physical_lines": 127,
+      "nonblank_noncomment_lines": 97
+    },
+    {
+      "path": "priv/ontologies/animals.pl",
+      "sha256": "75f1a2c0cac115091b1b54c7c410cebafae9a434c414e8df9159c9445640d018",
+      "bytes": 1395,
+      "physical_lines": 36,
+      "nonblank_noncomment_lines": 18
+    },
+    {
+      "path": "priv/ontologies/common_predicates.pl",
+      "sha256": "36fb03df1de9f28262d565f5b9ca0ce561b5e5c7022e969981d015717bb7dbad",
+      "bytes": 21329,
+      "physical_lines": 465,
+      "nonblank_noncomment_lines": 331
+    },
+    {
+      "path": "priv/ontologies/construction.pl",
+      "sha256": "b86de51186ca0a308485d37f11237d26c96439a62681d449d18954c19597a266",
+      "bytes": 10281,
+      "physical_lines": 206,
+      "nonblank_noncomment_lines": 173
+    },
+    {
+      "path": "priv/ontologies/controller_preferences.pl",
+      "sha256": "171fdb28e629a8fccf7306cf231bafbd569e56565925c4f43cf59f3510aa0b1b",
+      "bytes": 10722,
+      "physical_lines": 150,
+      "nonblank_noncomment_lines": 139
+    },
+    {
+      "path": "priv/ontologies/cross_benchmark_source.pl",
+      "sha256": "3da47909be1b5265c560405e1909e592aec5ee6fbf3d5f0339ab24ed04b99608",
+      "bytes": 348,
+      "physical_lines": 8,
+      "nonblank_noncomment_lines": 2
+    },
+    {
+      "path": "priv/ontologies/cross_benchmark_target.pl",
+      "sha256": "b0b41c0b28598b4cd0143a8d11c59374f4f3898049e8c5c6ab9d05cc504e2d2e",
+      "bytes": 338,
+      "physical_lines": 9,
+      "nonblank_noncomment_lines": 3
+    },
+    {
+      "path": "priv/ontologies/fipa_request.pl",
+      "sha256": "d7a7de47079235a134eec507efeb789afdc78fc8af6d6294f93e725ca22032da",
+      "bytes": 4158,
+      "physical_lines": 78,
+      "nonblank_noncomment_lines": 50
+    },
+    {
+      "path": "priv/ontologies/gui_hud.pl",
+      "sha256": "bb987312e1300028d67033d522553ddea460ddf9f0f6770c85fc3df4b01d969e",
+      "bytes": 5086,
+      "physical_lines": 94,
+      "nonblank_noncomment_lines": 75
+    },
+    {
+      "path": "priv/ontologies/gui_instance.pl",
+      "sha256": "f1fdf2e19c101e7b8a4aec96aea1250072dfffa4ccb924add3166155fb7b810f",
+      "bytes": 14788,
+      "physical_lines": 293,
+      "nonblank_noncomment_lines": 232
+    },
+    {
+      "path": "priv/ontologies/gui_operation.pl",
+      "sha256": "c91b8d1545461aafe3b9a8f36df03dd488cba1f7944ed1b98cbbd6930f606530",
+      "bytes": 5640,
+      "physical_lines": 99,
+      "nonblank_noncomment_lines": 75
+    },
+    {
+      "path": "priv/ontologies/gui_question.pl",
+      "sha256": "d1abd3a7cf4ccdb51436bd74c78b00e1f7ba5a8042fda99c3fa46fa324d8b76b",
+      "bytes": 14668,
+      "physical_lines": 277,
+      "nonblank_noncomment_lines": 226
+    },
+    {
+      "path": "priv/ontologies/hinged_example_view.pl",
+      "sha256": "1b504de1d5f76068684b5968724944f287ef41e2cfd136d6af7c37da1e0bc935",
+      "bytes": 1532,
+      "physical_lines": 30,
+      "nonblank_noncomment_lines": 24
+    },
+    {
+      "path": "priv/ontologies/human_user_instance.pl",
+      "sha256": "332d09e43c75cdf977f40f9401f4f244796f27bc737f7f0d9241e256f693d899",
+      "bytes": 2944,
+      "physical_lines": 61,
+      "nonblank_noncomment_lines": 43
+    },
+    {
+      "path": "priv/ontologies/instrument_configuration.pl",
+      "sha256": "68bf3df1a39e184f44a42f22149fade89a1a0e51738e237df7c72018f699f561",
+      "bytes": 4303,
+      "physical_lines": 70,
+      "nonblank_noncomment_lines": 60
+    },
+    {
+      "path": "priv/ontologies/lobby_atmosphere.pl",
+      "sha256": "52e725869fb37f0c535fde08ed7576ab21b63b218559160e83d50a872414ebfd",
+      "bytes": 3341,
+      "physical_lines": 52,
+      "nonblank_noncomment_lines": 43
+    },
+    {
+      "path": "priv/ontologies/lobby_instance.pl",
+      "sha256": "5d417706be96ebdfbc79937b5106f5f12eabd1a69e5a46a438914189883ec08c",
+      "bytes": 9319,
+      "physical_lines": 163,
+      "nonblank_noncomment_lines": 134
+    },
+    {
+      "path": "priv/ontologies/lobby_worlds.pl",
+      "sha256": "d7ca4495cadeb1c16def299981721c8bf280a5d5b2a21868750fd788d43f6873",
+      "bytes": 10487,
+      "physical_lines": 179,
+      "nonblank_noncomment_lines": 155
+    },
+    {
+      "path": "priv/ontologies/material_policy.pl",
+      "sha256": "ac4642355833b057d7d9abdcc664cfe4232b6e374cab9255c17671347c36ae49",
+      "bytes": 1153,
+      "physical_lines": 20,
+      "nonblank_noncomment_lines": 11
+    },
+    {
+      "path": "priv/ontologies/node_execution.pl",
+      "sha256": "b54de016f5f413fd6a5e3118ac25b824bf4ffd3133e419924250e87678989c40",
+      "bytes": 5303,
+      "physical_lines": 91,
+      "nonblank_noncomment_lines": 63
+    },
+    {
+      "path": "priv/ontologies/personal_agent.pl",
+      "sha256": "756a92597ff3ea35c3603cdfc52d58219a5ba8b23902277b61a7bd559fb28de2",
+      "bytes": 6493,
+      "physical_lines": 124,
+      "nonblank_noncomment_lines": 93
+    },
+    {
+      "path": "priv/ontologies/pets.pl",
+      "sha256": "7940ee0b18cced9019a56b98aeda795d97986acd29869a6e9ea84afff4c24197",
+      "bytes": 1422,
+      "physical_lines": 32,
+      "nonblank_noncomment_lines": 12
+    },
+    {
+      "path": "priv/ontologies/quod_agent.pl",
+      "sha256": "58664252af00ff0137d88268a529475941641ed34a7c199e68a1c5dabc49bb5f",
+      "bytes": 513,
+      "physical_lines": 13,
+      "nonblank_noncomment_lines": 10
+    },
+    {
+      "path": "priv/ontologies/quod_environment.pl",
+      "sha256": "2ecbd5e3208cb0a21890f6e5600a1813021a18df6618d02e12a00bb8a8c87f43",
+      "bytes": 896,
+      "physical_lines": 22,
+      "nonblank_noncomment_lines": 16
+    },
+    {
+      "path": "priv/ontologies/quod_environment_eidolons.pl",
+      "sha256": "370cf34e94284de34669da8455e81634d24e723a4447b2171f9cb55f2a87a241",
+      "bytes": 1670,
+      "physical_lines": 33,
+      "nonblank_noncomment_lines": 25
+    },
+    {
+      "path": "priv/ontologies/quod_gui.pl",
+      "sha256": "f936c4e430ff3f73c8e7e3a59ad65246f13e18e7494237248d673d557cef093e",
+      "bytes": 16261,
+      "physical_lines": 372,
+      "nonblank_noncomment_lines": 310
+    },
+    {
+      "path": "priv/ontologies/quod_hinged.pl",
+      "sha256": "5a1b432da48b0439655994be2f6a8aa613db2cb18c4c1dc965d8b31a0c2078b2",
+      "bytes": 9590,
+      "physical_lines": 161,
+      "nonblank_noncomment_lines": 135
+    },
+    {
+      "path": "priv/ontologies/quod_human_user.pl",
+      "sha256": "eb323b03fe8a0168aea2077c7e07eca8ff0e0d7e4b5e41f6b0fa83fa9c330e77",
+      "bytes": 558,
+      "physical_lines": 13,
+      "nonblank_noncomment_lines": 10
+    },
+    {
+      "path": "priv/ontologies/quod_lens.pl",
+      "sha256": "db667b0a7fb5f528bec09996929904eb305162745ba1854aec664e6f0de9ed68",
+      "bytes": 20873,
+      "physical_lines": 457,
+      "nonblank_noncomment_lines": 272
+    },
+    {
+      "path": "priv/ontologies/quod_licence.pl",
+      "sha256": "a93e1664cf1cf9db7de01ce5d0b6bddef357ffcb7e7b5ab5f641db272df21112",
+      "bytes": 12170,
+      "physical_lines": 257,
+      "nonblank_noncomment_lines": 157
+    },
+    {
+      "path": "priv/ontologies/quod_lobby.pl",
+      "sha256": "d9d60da7f5f60204ecb6c144d8050f3f3085b70d0c02a7bdcf0de99f05e5e6bd",
+      "bytes": 19392,
+      "physical_lines": 350,
+      "nonblank_noncomment_lines": 316
+    },
+    {
+      "path": "priv/ontologies/quod_material.pl",
+      "sha256": "8fa34ec28eb02510164f4d05f9e31ed10dd0a39784589e843761cf73adc8f96d",
+      "bytes": 3158,
+      "physical_lines": 68,
+      "nonblank_noncomment_lines": 55
+    },
+    {
+      "path": "priv/ontologies/quod_material_eidolons.pl",
+      "sha256": "f31583679b387e679378c3908dd2503ccc803dee17e31cf5de38382e3be224cf",
+      "bytes": 4864,
+      "physical_lines": 75,
+      "nonblank_noncomment_lines": 57
+    },
+    {
+      "path": "priv/ontologies/quod_measure.pl",
+      "sha256": "43135c44d20bbf1e2ea9762f1e85898476fb1845bc8cb3e17497c56ffc96c02b",
+      "bytes": 11966,
+      "physical_lines": 285,
+      "nonblank_noncomment_lines": 181
+    },
+    {
+      "path": "priv/ontologies/quod_modelling.pl",
+      "sha256": "f57f04d1565327aeb0d8fdbbab5cd96347c9e26e76e1d4089b616ecbc5469093",
+      "bytes": 8836,
+      "physical_lines": 173,
+      "nonblank_noncomment_lines": 144
+    },
+    {
+      "path": "priv/ontologies/quod_names.pl",
+      "sha256": "b8a5f99dbf72d9f1d8498123c7ec010e37970a86879eae6008a15900873bdeee",
+      "bytes": 35561,
+      "physical_lines": 699,
+      "nonblank_noncomment_lines": 514
+    },
+    {
+      "path": "priv/ontologies/quod_node.pl",
+      "sha256": "f7531de9c3081ec26f77d43f34a937d2c7cfc2941ef4d27f6858764ae0d900a2",
+      "bytes": 5874,
+      "physical_lines": 122,
+      "nonblank_noncomment_lines": 89
+    },
+    {
+      "path": "priv/ontologies/quod_physics.pl",
+      "sha256": "b00716f34682df9a232a0468eb159ef6bfbc760267b692985dd7dc64fa45ebbc",
+      "bytes": 50078,
+      "physical_lines": 866,
+      "nonblank_noncomment_lines": 707
+    },
+    {
+      "path": "priv/ontologies/quod_prolog.pl",
+      "sha256": "f15c6f0f39a6bc897c0c9dbaac342da24178999c2992f3a299bd95448b5bc7f6",
+      "bytes": 12318,
+      "physical_lines": 242,
+      "nonblank_noncomment_lines": 186
+    },
+    {
+      "path": "priv/ontologies/quod_prolog_eidolons.pl",
+      "sha256": "1d7d90147dd1cc5403b310fa30523638df66e0dc7fb04de4bcccc38e32d28bf9",
+      "bytes": 2144,
+      "physical_lines": 45,
+      "nonblank_noncomment_lines": 36
+    },
+    {
+      "path": "priv/ontologies/quod_rendering.pl",
+      "sha256": "f157aab960fc2112abb4b6d4e4023843ef8686c138e5fc93c7d41fa8a0e64f27",
+      "bytes": 16336,
+      "physical_lines": 374,
+      "nonblank_noncomment_lines": 232
+    },
+    {
+      "path": "priv/ontologies/quod_root.pl",
+      "sha256": "5b9cc76c0d4671762f2f19dbb2f81d982841273efb1ee046b03a11ab6e4d56d8",
+      "bytes": 8319,
+      "physical_lines": 156,
+      "nonblank_noncomment_lines": 77
+    },
+    {
+      "path": "priv/ontologies/quod_signup.pl",
+      "sha256": "6c415a1c1b3ae57009fcc99ec96f8bff804fa22f473ed3e4961b78f475c1a642",
+      "bytes": 6340,
+      "physical_lines": 141,
+      "nonblank_noncomment_lines": 111
+    },
+    {
+      "path": "priv/ontologies/space.pl",
+      "sha256": "95bc3ab6a978ff3c165e3fc8dc1305022aa2fd7cf2eca20354fbbe978e656b86",
+      "bytes": 10302,
+      "physical_lines": 204,
+      "nonblank_noncomment_lines": 160
+    },
+    {
+      "path": "priv/ontologies/space_gui.pl",
+      "sha256": "5cd335338b11d1f560009676560a276ebb1c540b10185137e01cfe4d2179df5a",
+      "bytes": 3854,
+      "physical_lines": 57,
+      "nonblank_noncomment_lines": 54
+    },
+    {
+      "path": "priv/ontologies/space_view.pl",
+      "sha256": "0027a04dfa67e89f64ae9fad43d8ac2e41b647c9314b3e997cf469bcfe8bf226",
+      "bytes": 2586,
+      "physical_lines": 45,
+      "nonblank_noncomment_lines": 38
+    },
+    {
+      "path": "priv/ontologies/voxel_world.pl",
+      "sha256": "669e383e2e794184c66872e1529500ad301cfef2d35fbf92f96a1a3e72ecaf13",
+      "bytes": 12086,
+      "physical_lines": 219,
+      "nonblank_noncomment_lines": 177
+    },
+    {
+      "path": "priv/ontologies/voxel_world_gui.pl",
+      "sha256": "9e66b7089abe70078ea198da07e377bff77ed875c71e5121fe63ae8fd0f4035c",
+      "bytes": 9953,
+      "physical_lines": 156,
+      "nonblank_noncomment_lines": 136
+    },
+    {
+      "path": "priv/ontologies/voxel_world_view.pl",
+      "sha256": "02ba81af173e31059424d965825c1267c27f9b40990bae19c7b0168b4ab61f8f",
+      "bytes": 2450,
+      "physical_lines": 42,
+      "nonblank_noncomment_lines": 31
+    },
+    {
+      "path": "rebar.config",
+      "sha256": "d76c36ca1063355141f6eb556362cefa085b28cad55645ebf4038a4b353f59c9",
+      "bytes": 3612,
+      "physical_lines": 84,
+      "nonblank_noncomment_lines": 48
+    },
+    {
+      "path": "rebar.lock",
+      "sha256": "984ca552a60fd996e413c0dcce5edc4ad70c8cbe32fcf5dc52dda651f0a9c29a",
+      "bytes": 5401,
+      "physical_lines": 86,
+      "nonblank_noncomment_lines": 86
+    },
+    {
+      "path": "scripts/bench-signatures.escript",
+      "sha256": "d05bca55414c3b5a572747e1a74bb7ab2b8e50490ffc97e24b3865aceab6434e",
+      "bytes": 3897,
+      "physical_lines": 114,
+      "nonblank_noncomment_lines": 98
+    },
+    {
+      "path": "scripts/build-physics.sh",
+      "sha256": "e24cd5bed03046add86d808a1bbe5f0c8fe0d2dd4073db9aa9fbc49ebafeeb48",
+      "bytes": 636,
+      "physical_lines": 16,
+      "nonblank_noncomment_lines": 14
+    },
+    {
+      "path": "scripts/c4/analyze-phase1.mjs",
+      "sha256": "9667d297cf262d6e6879a691ae1f095b5e0880427c320ec61146c8a1053c78cd",
+      "bytes": 619,
+      "physical_lines": 9,
+      "nonblank_noncomment_lines": 8
+    },
+    {
+      "path": "scripts/c4/o/analyze-campaign-B.mjs",
+      "sha256": "0ae06d20b5c63b4c79eb315a360de2b336f5db3090973b70501b4b0149665e42",
+      "bytes": 19162,
+      "physical_lines": 242,
+      "nonblank_noncomment_lines": 222
+    },
+    {
+      "path": "scripts/c4/o/analyze-campaign-B.test.mjs",
+      "sha256": "8d2305a8f0f4cae4a4fe59b6c93bc09aea8dead2a3170d3cfb47d7f5af478968",
+      "bytes": 24582,
+      "physical_lines": 440,
+      "nonblank_noncomment_lines": 395
+    },
+    {
+      "path": "scripts/c4/o/analyze-campaign-O.mjs",
+      "sha256": "9a3e753ef3f97e5370bb79f63a73586d60a1b841e45ceca84602b19f62b06ee7",
+      "bytes": 21156,
+      "physical_lines": 259,
+      "nonblank_noncomment_lines": 233
+    },
+    {
+      "path": "scripts/c4/o/analyze-campaign160.mjs",
+      "sha256": "2184c104bc9e54930cddea95c2b07d2e054d0aeab3d96f3e40372d9009bb7955",
+      "bytes": 14034,
+      "physical_lines": 190,
+      "nonblank_noncomment_lines": 179
+    },
+    {
+      "path": "scripts/c4/o/analyze-campaign160.test.mjs",
+      "sha256": "b96af9214dbed6bdd564a5e0beae046f481627fac799e17c570dfdb1fa0d0f6a",
+      "bytes": 4733,
+      "physical_lines": 65,
+      "nonblank_noncomment_lines": 65
+    },
+    {
+      "path": "scripts/c4/o/analyze-exact.mjs",
+      "sha256": "2358ac017e2ee66475034b51c28d316975fb6437754137f5adbc4547f2c4f27f",
+      "bytes": 17026,
+      "physical_lines": 156,
+      "nonblank_noncomment_lines": 151
+    },
+    {
+      "path": "scripts/c4/o/analyze-exact.test.mjs",
+      "sha256": "e034ee98f18f96b5d09adcd47e703c829897d746d46a2ce830b3cca18f799058",
+      "bytes": 4037,
+      "physical_lines": 46,
+      "nonblank_noncomment_lines": 45
+    },
+    {
+      "path": "scripts/c4/o/chronology-O.test.mjs",
+      "sha256": "0c76cac7dcd333eb81690c69657011601c6078dfcd299d99dabe34fe1d3d8001",
+      "bytes": 11565,
+      "physical_lines": 167,
+      "nonblank_noncomment_lines": 166
+    },
+    {
+      "path": "scripts/c4/o/compatibility-O.test.mjs",
+      "sha256": "640d4142e5e04492f8cbf780fbc1aa2c229a9043ebdcb18d45608f9059456daa",
+      "bytes": 24582,
+      "physical_lines": 440,
+      "nonblank_noncomment_lines": 395
+    },
+    {
+      "path": "scripts/c4/o/coordinator-ancestry.mjs",
+      "sha256": "fcdacb4573d83da4df66923a141c13ce4d5999862a1901c1499ce176d3129bd3",
+      "bytes": 1896,
+      "physical_lines": 26,
+      "nonblank_noncomment_lines": 22
+    },
+    {
+      "path": "scripts/c4/o/coordinator-chronology.mjs",
+      "sha256": "8b7e1bd461d9497e786ee69203ea9e8f4445d77e8416301075e285a0b8bbda84",
+      "bytes": 4189,
+      "physical_lines": 76,
+      "nonblank_noncomment_lines": 67
+    },
+    {
+      "path": "scripts/c4/o/coordinator-inventory.mjs",
+      "sha256": "80c65bd402da1dc0709bbedf69e0fa5b4b9bbe55315e123dfd0bc8f227dbfc6f",
+      "bytes": 8190,
+      "physical_lines": 113,
+      "nonblank_noncomment_lines": 108
+    },
+    {
+      "path": "scripts/c4/o/owner-core.mjs",
+      "sha256": "5d80801771baccde344454ae19eedc1c4376a125fe224abe0f91616d842164f7",
+      "bytes": 4719,
+      "physical_lines": 62,
+      "nonblank_noncomment_lines": 61
+    },
+    {
+      "path": "scripts/c4/phase1-analysis.mjs",
+      "sha256": "e37ba75f7073ba5212f90cf2577af1c1882cac0b13a7b7541460b82d7c5df685",
+      "bytes": 7601,
+      "physical_lines": 115,
+      "nonblank_noncomment_lines": 110
+    },
+    {
+      "path": "scripts/c4/phase1-analysis.test.mjs",
+      "sha256": "d451548f4455ff391679db5ee5fa7a8e3ec165d5c162ffbe19d6aee04ab0d210",
+      "bytes": 5345,
+      "physical_lines": 77,
+      "nonblank_noncomment_lines": 77
+    },
+    {
+      "path": "scripts/c4/quod_c4_phase1_capture.erl",
+      "sha256": "89bc2dcdbb7bffc0b794ea9875d39cdcd09dc694df8da0953fb0e868003aeb91",
+      "bytes": 18828,
+      "physical_lines": 340,
+      "nonblank_noncomment_lines": 310
+    },
+    {
+      "path": "scripts/c4/quod_c4_phase1_capture_tests.erl",
+      "sha256": "99e47da2560abe5294793953198e03d0132278842c7a01494e1c151fde83e78f",
+      "bytes": 4523,
+      "physical_lines": 79,
+      "nonblank_noncomment_lines": 67
+    },
+    {
+      "path": "scripts/c4/sampler-reconciliation.mjs",
+      "sha256": "647d6bab588fae83559d6a57bddb079da1a1dcd9db321e3da318d64679a7982e",
+      "bytes": 7273,
+      "physical_lines": 135,
+      "nonblank_noncomment_lines": 124
+    },
+    {
+      "path": "scripts/c4/sampler-reconciliation.test.mjs",
+      "sha256": "db1173603dc3eb76b2001c53e468db2fb2ca67e69e76ef8bb20878f4c7d830d2",
+      "bytes": 5700,
+      "physical_lines": 84,
+      "nonblank_noncomment_lines": 82
+    },
+    {
+      "path": "scripts/c4/sampling-window.mjs",
+      "sha256": "1bf1bb21d2152b0c21f071e694034d78219b67af91292748dfa84c3a9c37b76e",
+      "bytes": 1641,
+      "physical_lines": 28,
+      "nonblank_noncomment_lines": 26
+    },
+    {
+      "path": "scripts/c4/sampling-window.test.mjs",
+      "sha256": "cbb54e9a591ac3ab63e58dbdb8167f7e59ba9d766cb7a02bdb0a1381b025f0da",
+      "bytes": 1032,
+      "physical_lines": 15,
+      "nonblank_noncomment_lines": 15
+    },
+    {
+      "path": "scripts/gen-cert.sh",
+      "sha256": "6617bf45cec3b01d2467eadb663157c6f5d10aca61b85e31d280fc401217d08f",
+      "bytes": 486,
+      "physical_lines": 11,
+      "nonblank_noncomment_lines": 7
+    },
+    {
+      "path": "scripts/loadtest.sh",
+      "sha256": "2dff4e075d7475d3e5d1611b723667e901412ce556ad881ef663ecd369ad7150",
+      "bytes": 65352,
+      "physical_lines": 1156,
+      "nonblank_noncomment_lines": 921
+    },
+    {
+      "path": "scripts/perf-test.sh",
+      "sha256": "747d2679c1bb36b96df7be1d3f96ec94c0944ce3fb7eb32de7dc37dd21927a55",
+      "bytes": 20257,
+      "physical_lines": 538,
+      "nonblank_noncomment_lines": 478
+    },
+    {
+      "path": "scripts/signed-goal-loadtest.mjs",
+      "sha256": "e90e38dff5720a374d72fa356a5f886f3b759eb714e284439dfbb0c95f5d7dad",
+      "bytes": 19590,
+      "physical_lines": 404,
+      "nonblank_noncomment_lines": 375
+    },
+    {
+      "path": "scripts/signed-goal-loadtest.sh",
+      "sha256": "95eeec288fd515e26acbe352008eb7203f0645207345d51e3a5a161471780ab6",
+      "bytes": 290,
+      "physical_lines": 5,
+      "nonblank_noncomment_lines": 1
+    },
+    {
+      "path": "scripts/voxel-preview.escript",
+      "sha256": "8df8eb5aa99ff7f0fdcf4b9cfe878bdc28a0073f6e0ae5a1afe52b0b511bb567",
+      "bytes": 2928,
+      "physical_lines": 46,
+      "nonblank_noncomment_lines": 41
+    },
+    {
+      "path": "src/predicates/quod_action_predicates.erl",
+      "sha256": "8c6836bccf59257dd6b25d73df9befa09e34c5064b7a46c62b7a7b142095ed9d",
+      "bytes": 7078,
+      "physical_lines": 166,
+      "nonblank_noncomment_lines": 140
+    },
+    {
+      "path": "src/predicates/quod_agent_predicates.erl",
+      "sha256": "fca6deece733286ba27ca686ef367ffbe81669d379b8f9b21f33f3468a47c36e",
+      "bytes": 11294,
+      "physical_lines": 219,
+      "nonblank_noncomment_lines": 196
+    },
+    {
+      "path": "src/predicates/quod_agent_work_predicates.erl",
+      "sha256": "a7981499f2eb5e860125a955966788f56f3e3be49afd97233cf9ca57f7d22ed5",
+      "bytes": 1041,
+      "physical_lines": 24,
+      "nonblank_noncomment_lines": 20
+    },
+    {
+      "path": "src/predicates/quod_ask.erl",
+      "sha256": "c207dcd0053356d5a73c61ea10eda94edf0586b156a128f0a967b304d606decb",
+      "bytes": 84128,
+      "physical_lines": 1904,
+      "nonblank_noncomment_lines": 1694
+    },
+    {
+      "path": "src/predicates/quod_committee_predicates.erl",
+      "sha256": "fc762b2d0b00ba48af0d5568cb3824a0815d9c4bb8e203c77fdfbcc9729ae7e6",
+      "bytes": 10678,
+      "physical_lines": 177,
+      "nonblank_noncomment_lines": 131
+    },
+    {
+      "path": "src/predicates/quod_common_primitives.erl",
+      "sha256": "f6a9e17adbf6f490c4cac0996578f7894f897d80da843928abc4b5a79f2116dc",
+      "bytes": 29600,
+      "physical_lines": 578,
+      "nonblank_noncomment_lines": 490
+    },
+    {
+      "path": "src/predicates/quod_directory_predicates.erl",
+      "sha256": "3352607e064f2869e0ebfe3717543482e6e4543d8cbd587eb58cb769ac5ea5bb",
+      "bytes": 3451,
+      "physical_lines": 80,
+      "nonblank_noncomment_lines": 66
+    },
+    {
+      "path": "src/predicates/quod_gui_predicates.erl",
+      "sha256": "cfb3a81dc2f7b5ee1099783edc9a9ad811d027165799328e220b22fc761b8fe8",
+      "bytes": 7231,
+      "physical_lines": 135,
+      "nonblank_noncomment_lines": 125
+    },
+    {
+      "path": "src/predicates/quod_ontology_predicates.erl",
+      "sha256": "5a3d04f7d31690670f85fcfdb17576e39e57b8df5fcbe7b11e8bb605ed66b8eb",
+      "bytes": 14775,
+      "physical_lines": 319,
+      "nonblank_noncomment_lines": 274
+    },
+    {
+      "path": "src/predicates/quod_physics_predicates.erl",
+      "sha256": "e0ff850700a0e6ce0b76c139160479d0ec4fc0441f8245840e300b8b8b909f5b",
+      "bytes": 12716,
+      "physical_lines": 213,
+      "nonblank_noncomment_lines": 201
+    },
+    {
+      "path": "src/predicates/quod_runtime_predicates.erl",
+      "sha256": "967058d2f40166b2d75718fffbea901869b62001ae3ed817665a47343beeae57",
+      "bytes": 23233,
+      "physical_lines": 440,
+      "nonblank_noncomment_lines": 386
+    },
+    {
+      "path": "src/predicates/quod_transaction_predicates.erl",
+      "sha256": "13493f243bef4dbc78c5bb23959e81ac2ef5a1062d43a1623e3e18e5027ded76",
+      "bytes": 5882,
+      "physical_lines": 127,
+      "nonblank_noncomment_lines": 105
+    },
+    {
+      "path": "src/quod.app.src",
+      "sha256": "2225fb3a89717a56c53b60b46d9ec68e7609ebb0b1ff40da7a1070c539519d5b",
+      "bytes": 684,
+      "physical_lines": 30,
+      "nonblank_noncomment_lines": 29
+    },
+    {
+      "path": "src/quod_agent.erl",
+      "sha256": "db1179dc1536d9f0a9d89d53bf99da7d3520ff7f88a6a9ca13a9884a00de78b2",
+      "bytes": 23437,
+      "physical_lines": 458,
+      "nonblank_noncomment_lines": 406
+    },
+    {
+      "path": "src/quod_agent_identity.erl",
+      "sha256": "6596a9aa0f5cf595839a4c914ced923493d2480ca237a54788cc8d8ea3f37af5",
+      "bytes": 9096,
+      "physical_lines": 213,
+      "nonblank_noncomment_lines": 186
+    },
+    {
+      "path": "src/quod_agent_observer.erl",
+      "sha256": "dceefb4e86457a0315bbac3887f52126cf10182269dd66e0d16b02dbbb44d3ea",
+      "bytes": 16411,
+      "physical_lines": 324,
+      "nonblank_noncomment_lines": 275
+    },
+    {
+      "path": "src/quod_agent_ref.erl",
+      "sha256": "ca5065c341b9f2ac5303bc0ec01bc4dd4cb1a4ae3b0c6c4150bd33cfb4acd81c",
+      "bytes": 5469,
+      "physical_lines": 132,
+      "nonblank_noncomment_lines": 116
+    },
+    {
+      "path": "src/quod_agent_vault.erl",
+      "sha256": "12a3e8f27d76ea1acad49c00c9a23a70d795be003eb4161a4530e99265c483b9",
+      "bytes": 21084,
+      "physical_lines": 463,
+      "nonblank_noncomment_lines": 403
+    },
+    {
+      "path": "src/quod_app.erl",
+      "sha256": "e26722804eccdfbf35cb671460a7858f5772bf9c181e85dd4f07212d449f25dd",
+      "bytes": 23223,
+      "physical_lines": 493,
+      "nonblank_noncomment_lines": 348
+    },
+    {
+      "path": "src/quod_applied_certificate.erl",
+      "sha256": "3e55056fde9e2d683db51a98a02eac8cfcab8fafc371dfe3345c71eca69ea381",
+      "bytes": 14545,
+      "physical_lines": 302,
+      "nonblank_noncomment_lines": 272
+    },
+    {
+      "path": "src/quod_ask_router.erl",
+      "sha256": "b56438513f1e81fa2f1b8e32869eb0dbf3b82ce5f1d950c191346d1bdabba1c2",
+      "bytes": 90103,
+      "physical_lines": 2128,
+      "nonblank_noncomment_lines": 1874
+    },
+    {
+      "path": "src/quod_atomic.erl",
+      "sha256": "7ca48b07abc02de2b1995d1705dd8a8d480f0c7afc754d1fc53dd323573750ed",
+      "bytes": 62659,
+      "physical_lines": 1213,
+      "nonblank_noncomment_lines": 1065
+    },
+    {
+      "path": "src/quod_atomic_admission.erl",
+      "sha256": "039dec0cc5b9fae34b542f695f58a8a290fcfd61534f20adf89fe00b9a8fe9ed",
+      "bytes": 12994,
+      "physical_lines": 261,
+      "nonblank_noncomment_lines": 225
+    },
+    {
+      "path": "src/quod_attempt_span.erl",
+      "sha256": "10188981fc430307e0dce2cb296dedd9a70208fe95311e1d6226729357da2b1b",
+      "bytes": 2531,
+      "physical_lines": 58,
+      "nonblank_noncomment_lines": 52
+    },
+    {
+      "path": "src/quod_brahms.erl",
+      "sha256": "823f8294e62e94125066da61a83e87cd3684e54a7f639e0a9dea1a4a645e221a",
+      "bytes": 50052,
+      "physical_lines": 937,
+      "nonblank_noncomment_lines": 609
+    },
+    {
+      "path": "src/quod_brahms_population.erl",
+      "sha256": "2d93e75d5130b2c950cf9b9f75d930f5f6b41382879d0ad467c1f881acbdc519",
+      "bytes": 6946,
+      "physical_lines": 151,
+      "nonblank_noncomment_lines": 118
+    },
+    {
+      "path": "src/quod_brahms_sampler.erl",
+      "sha256": "c6a834a065fe3c6ec6ea8f8aa1f0c826c75976a1a22a80f08a98adc089774e50",
+      "bytes": 3985,
+      "physical_lines": 100,
+      "nonblank_noncomment_lines": 73
+    },
+    {
+      "path": "src/quod_brahms_sup.erl",
+      "sha256": "42157c3924d6fe6a2b91d4a5aca493f30d7a34ce6a83fa430ff1cf518b5f5c78",
+      "bytes": 1458,
+      "physical_lines": 47,
+      "nonblank_noncomment_lines": 39
+    },
+    {
+      "path": "src/quod_c4_attempt.erl",
+      "sha256": "d1d8543e7a2cb176d2c58dd6a606a3f95deaf08435a547ae553ce79d98b6d099",
+      "bytes": 3796,
+      "physical_lines": 81,
+      "nonblank_noncomment_lines": 63
+    },
+    {
+      "path": "src/quod_c4_sampler_observation.erl",
+      "sha256": "bc881efb7ae1915fd036ed2eea5bda02598f4848c7ffdae9a1387d9f1333ae48",
+      "bytes": 3667,
+      "physical_lines": 73,
+      "nonblank_noncomment_lines": 53
+    },
+    {
+      "path": "src/quod_c4_sdk_config.erl",
+      "sha256": "e93c34f364feedcafa1a5ad0ded8a08ec2453ccedfb47137b88bda80fa4bbf11",
+      "bytes": 1570,
+      "physical_lines": 37,
+      "nonblank_noncomment_lines": 34
+    },
+    {
+      "path": "src/quod_catchup.erl",
+      "sha256": "d3a26d35f84e41ae179596ede8f822b5929104074f3299426e9fbc1c5cc90737",
+      "bytes": 86597,
+      "physical_lines": 1697,
+      "nonblank_noncomment_lines": 1485
+    },
+    {
+      "path": "src/quod_client.erl",
+      "sha256": "95965c77bab1719618a094241783f76c59d5e943dd848f293f29e6fa5dc05113",
+      "bytes": 8929,
+      "physical_lines": 192,
+      "nonblank_noncomment_lines": 152
+    },
+    {
+      "path": "src/quod_client_auth.erl",
+      "sha256": "f3e9e1d14e153b23e5f6cbaced33074c84d36244afb54fea18413cb45345302f",
+      "bytes": 25432,
+      "physical_lines": 593,
+      "nonblank_noncomment_lines": 474
+    },
+    {
+      "path": "src/quod_client_cursor.erl",
+      "sha256": "5b950fae8997388420b920bfbb9194b79f5b28b5c0febfdbc438708d1af6a3d7",
+      "bytes": 14896,
+      "physical_lines": 367,
+      "nonblank_noncomment_lines": 324
+    },
+    {
+      "path": "src/quod_client_goal.erl",
+      "sha256": "c92e9d8cb494a003b2f5c1a07d9338b1ac1aa7db5550ac65a3ed1cc33b6f46ad",
+      "bytes": 24925,
+      "physical_lines": 587,
+      "nonblank_noncomment_lines": 522
+    },
+    {
+      "path": "src/quod_client_goal_endpoint.erl",
+      "sha256": "4e8ceb6ff917d265ec27643da7963c92ee64abb1b0ea2ce61f5b1f9bf4360e2a",
+      "bytes": 12502,
+      "physical_lines": 307,
+      "nonblank_noncomment_lines": 268
+    },
+    {
+      "path": "src/quod_client_goal_ingress.erl",
+      "sha256": "9cb2ce2fc66b0de0d61491b1eb43c734cece3bcffd50d9af2cc14866f3c9fccb",
+      "bytes": 26554,
+      "physical_lines": 585,
+      "nonblank_noncomment_lines": 516
+    },
+    {
+      "path": "src/quod_client_goal_parser.erl",
+      "sha256": "4f6319487ee89dc00919c76015745fd6cd10429af5dab063d09d9b45f1d5a4d5",
+      "bytes": 31504,
+      "physical_lines": 787,
+      "nonblank_noncomment_lines": 680
+    },
+    {
+      "path": "src/quod_client_goal_router.erl",
+      "sha256": "96362eb7980b1a79e308d5ed9baea29613239a70af2d120f11e667630235def4",
+      "bytes": 34657,
+      "physical_lines": 828,
+      "nonblank_noncomment_lines": 712
+    },
+    {
+      "path": "src/quod_client_goal_target.erl",
+      "sha256": "a12fcae0bb00e86c737e5bfff3c032bcb65412fa023a86422d62df996436bf0a",
+      "bytes": 9721,
+      "physical_lines": 237,
+      "nonblank_noncomment_lines": 210
+    },
+    {
+      "path": "src/quod_client_http.erl",
+      "sha256": "d5f72f410e746245eec29d37d218e8f81766667540e48ba91ce07efdbef174d8",
+      "bytes": 23104,
+      "physical_lines": 519,
+      "nonblank_noncomment_lines": 449
+    },
+    {
+      "path": "src/quod_client_result.erl",
+      "sha256": "44c85572279b9c616a2fdb84dda2e0f1556f522ff18af03007f3751ea62bb4e6",
+      "bytes": 23338,
+      "physical_lines": 546,
+      "nonblank_noncomment_lines": 486
+    },
+    {
+      "path": "src/quod_client_tls.erl",
+      "sha256": "3df9a43cfde270e22c2e6c5752488a75f6bc34e12ce94fd7164afedce1927ba9",
+      "bytes": 9475,
+      "physical_lines": 233,
+      "nonblank_noncomment_lines": 170
+    },
+    {
+      "path": "src/quod_client_view.erl",
+      "sha256": "fb63de6dc02a8d95404ad65a5cecd8ff9a281babb5e161451b03485778395b04",
+      "bytes": 49677,
+      "physical_lines": 894,
+      "nonblank_noncomment_lines": 786
+    },
+    {
+      "path": "src/quod_commit_validation.erl",
+      "sha256": "8a1e8fe61918a0b07a0c306b483ef2ddb05523fb6e0ef1e6f2e78e49feeb9e28",
+      "bytes": 41475,
+      "physical_lines": 900,
+      "nonblank_noncomment_lines": 797
+    },
+    {
+      "path": "src/quod_committed_projection.erl",
+      "sha256": "55cebb7a58a61fd933efba443d5e4b3ed4071f4c98949ff81103df61a0ec531b",
+      "bytes": 28290,
+      "physical_lines": 628,
+      "nonblank_noncomment_lines": 549
+    },
+    {
+      "path": "src/quod_conn.erl",
+      "sha256": "1d46d0b0e593393a512a9be097f233b1e94559bd3dd6c9702e2d334989f72d9b",
+      "bytes": 38396,
+      "physical_lines": 855,
+      "nonblank_noncomment_lines": 690
+    },
+    {
+      "path": "src/quod_consensus_trace.erl",
+      "sha256": "35b56d8f3611196ed0eb07abb0658af1fc834bf824b744b94bcfa1ab43c85141",
+      "bytes": 1706,
+      "physical_lines": 36,
+      "nonblank_noncomment_lines": 28
+    },
+    {
+      "path": "src/quod_diff.erl",
+      "sha256": "8d4442157af3f191ead3e7a7e2522a63e8914d88bdbf5440dc857f43978dad26",
+      "bytes": 15714,
+      "physical_lines": 358,
+      "nonblank_noncomment_lines": 300
+    },
+    {
+      "path": "src/quod_directory.erl",
+      "sha256": "ad28f8c62554ab99a33d06bc2d03dce85eec67e48ca6d8868b6010d9ada36fc4",
+      "bytes": 27292,
+      "physical_lines": 664,
+      "nonblank_noncomment_lines": 580
+    },
+    {
+      "path": "src/quod_directory_control.erl",
+      "sha256": "21a9a9969601ab4660785c066b8d3404396c1f5324bca02a94abb7b4132d32d2",
+      "bytes": 74536,
+      "physical_lines": 1951,
+      "nonblank_noncomment_lines": 1700
+    },
+    {
+      "path": "src/quod_directory_generation.erl",
+      "sha256": "4e6dec503d092a549a6a8b4e8177c9e87c0e96229d9f90c0c61d92ae5a9636dd",
+      "bytes": 15138,
+      "physical_lines": 333,
+      "nonblank_noncomment_lines": 306
+    },
+    {
+      "path": "src/quod_directory_shape.erl",
+      "sha256": "7dc13769ddb006b9b177df89df6eecaff132a769b3b55e36e7ef238ede29e8c3",
+      "bytes": 1121,
+      "physical_lines": 30,
+      "nonblank_noncomment_lines": 24
+    },
+    {
+      "path": "src/quod_dtx.erl",
+      "sha256": "a8d360f2314f3a09059ca490a82f322cf2a154d3f81e8c75aa78afb9e320361e",
+      "bytes": 57794,
+      "physical_lines": 1359,
+      "nonblank_noncomment_lines": 1198
+    },
+    {
+      "path": "src/quod_dtx_coordinator.erl",
+      "sha256": "6c7fc24ec4b1fe9025e0cbd7f56bafe16510d07e76fa92f1ad9a0692503ea0f6",
+      "bytes": 130998,
+      "physical_lines": 2829,
+      "nonblank_noncomment_lines": 2333
+    },
+    {
+      "path": "src/quod_dtx_current_view.erl",
+      "sha256": "2fcbf18d460be43a068b11a31e1c04c7f661d1893281e031dbdc9b07efac5861",
+      "bytes": 71617,
+      "physical_lines": 1636,
+      "nonblank_noncomment_lines": 1447
+    },
+    {
+      "path": "src/quod_dtx_endpoint.erl",
+      "sha256": "283d598ddaf9a32517fcbba0c307c27db741a66418c686293e63cc41219e4385",
+      "bytes": 39698,
+      "physical_lines": 872,
+      "nonblank_noncomment_lines": 752
+    },
+    {
+      "path": "src/quod_dtx_owner.erl",
+      "sha256": "acf012113c6d27f9bf1025a324324f8cc2147f8a5c02db97ef73d95b0636b4ea",
+      "bytes": 16539,
+      "physical_lines": 346,
+      "nonblank_noncomment_lines": 283
+    },
+    {
+      "path": "src/quod_dtx_phase_index.erl",
+      "sha256": "15ab5594245f081348512cb5ca60d1851397bb835a9b1f30d8740bc3bdb6a8a2",
+      "bytes": 30559,
+      "physical_lines": 724,
+      "nonblank_noncomment_lines": 642
+    },
+    {
+      "path": "src/quod_dtx_recovery.erl",
+      "sha256": "c3b1aaa534178f515357beff146cf1f8749e8e92d371dc29b142bc79e2a86993",
+      "bytes": 15852,
+      "physical_lines": 313,
+      "nonblank_noncomment_lines": 263
+    },
+    {
+      "path": "src/quod_durable_term.erl",
+      "sha256": "96984214589ec2116d2f0053091aa0c632c2a8e78b97f856c2d8361e134ac7e0",
+      "bytes": 3004,
+      "physical_lines": 72,
+      "nonblank_noncomment_lines": 56
+    },
+    {
+      "path": "src/quod_effect.erl",
+      "sha256": "09cbbe7763e183859cd07d059ef0f7bc7406b271891807d62d586954d3060fdd",
+      "bytes": 7472,
+      "physical_lines": 191,
+      "nonblank_noncomment_lines": 162
+    },
+    {
+      "path": "src/quod_effect_journal.erl",
+      "sha256": "2b18c43682c5421002d63a8dcb343ae19d5b06fae34fdbcb589812b0abf3e0d9",
+      "bytes": 74569,
+      "physical_lines": 1779,
+      "nonblank_noncomment_lines": 1535
+    },
+    {
+      "path": "src/quod_erlog_db_local_prove.erl",
+      "sha256": "92ee874fd43324ae379449cf6aff4da8870eade457ab55df5eafcb50a88e1dc0",
+      "bytes": 45328,
+      "physical_lines": 1018,
+      "nonblank_noncomment_lines": 785
+    },
+    {
+      "path": "src/quod_erlog_db_mvcc.erl",
+      "sha256": "a746644188250d169b373ce61e71261df1032c58b46857adc79f521384671542",
+      "bytes": 13849,
+      "physical_lines": 337,
+      "nonblank_noncomment_lines": 274
+    },
+    {
+      "path": "src/quod_explorer.erl",
+      "sha256": "93d72efe17c531f3e66ae2754a587d40946949c1afb236a163ea488749bd5d28",
+      "bytes": 2196,
+      "physical_lines": 62,
+      "nonblank_noncomment_lines": 51
+    },
+    {
+      "path": "src/quod_explorer_http.erl",
+      "sha256": "71c74fa123bb545bdb839fd0d4e74d586d7543e8769ee918298a7ac5f9c891bf",
+      "bytes": 44291,
+      "physical_lines": 1007,
+      "nonblank_noncomment_lines": 796
+    },
+    {
+      "path": "src/quod_explorer_ws.erl",
+      "sha256": "97dd8d8cff377446ea9a665580e968e9ca4a7afdbfb8bf8842d32ef772f77488",
+      "bytes": 5016,
+      "physical_lines": 109,
+      "nonblank_noncomment_lines": 90
+    },
+    {
+      "path": "src/quod_feed.erl",
+      "sha256": "3582302dfa36598eaf2ceb8937253fe5dde5bf94e8489cd7b5c6898bcef3f8cd",
+      "bytes": 50323,
+      "physical_lines": 979,
+      "nonblank_noncomment_lines": 681
+    },
+    {
+      "path": "src/quod_file.erl",
+      "sha256": "f2a0b5b6f4ee3dc5f16824a933f35a19d6a0f8a99c66a49b0a3241cc8b8937e2",
+      "bytes": 3049,
+      "physical_lines": 82,
+      "nonblank_noncomment_lines": 69
+    },
+    {
+      "path": "src/quod_foreign_log.erl",
+      "sha256": "809f5d3b8c26225c1a98977244d2c41ffb8e3d981a9f65add7b6a0102d0876d7",
+      "bytes": 324812,
+      "physical_lines": 7040,
+      "nonblank_noncomment_lines": 5979
+    },
+    {
+      "path": "src/quod_foreign_projection.erl",
+      "sha256": "c28ce574d7df74c3e55f2913b4a195a8d27cedc2901f6307afc8f338ba49deed",
+      "bytes": 18911,
+      "physical_lines": 431,
+      "nonblank_noncomment_lines": 389
+    },
+    {
+      "path": "src/quod_gui_presentation.erl",
+      "sha256": "0ed4320a2618a2329048deb8250d2967d49bc6ef10774f7b21dcd52455926740",
+      "bytes": 5476,
+      "physical_lines": 117,
+      "nonblank_noncomment_lines": 103
+    },
+    {
+      "path": "src/quod_http_headers_h.erl",
+      "sha256": "530c66c5cd50cc85b00eddbfbe2de29e38dcba2414f75a733f2e57b5d8e4e61a",
+      "bytes": 3002,
+      "physical_lines": 73,
+      "nonblank_noncomment_lines": 50
+    },
+    {
+      "path": "src/quod_http_listener.erl",
+      "sha256": "4c2e3820573b96d6095c62c818f65ca0d7d71f04b4546a1ddc51060228dbdb73",
+      "bytes": 3628,
+      "physical_lines": 83,
+      "nonblank_noncomment_lines": 68
+    },
+    {
+      "path": "src/quod_identity.erl",
+      "sha256": "880c2789f1a6d8e074cb2861666f39ee44b2931e3da6dd2c239aeeba496b6d8f",
+      "bytes": 17672,
+      "physical_lines": 398,
+      "nonblank_noncomment_lines": 326
+    },
+    {
+      "path": "src/quod_ingress_state.erl",
+      "sha256": "418d75a7361de55ccf6300f483ad6b5ab3787a6c9982e00016bc09e98b6bb474",
+      "bytes": 24239,
+      "physical_lines": 697,
+      "nonblank_noncomment_lines": 600
+    },
+    {
+      "path": "src/quod_ledger.erl",
+      "sha256": "1c40d1989d53f1c8f02129cf06395b128ea2996bcb946aca240bedd3594ee30b",
+      "bytes": 28496,
+      "physical_lines": 624,
+      "nonblank_noncomment_lines": 536
+    },
+    {
+      "path": "src/quod_ledger_store.erl",
+      "sha256": "463b29b6a0be9e607f4e71e229166b585d80bfab887685e207cfc88cef00ac3b",
+      "bytes": 52286,
+      "physical_lines": 1059,
+      "nonblank_noncomment_lines": 892
+    },
+    {
+      "path": "src/quod_link.erl",
+      "sha256": "cd78778a0558b2b4a664f8f189e6e37521bbf53a38cd030917a22b53ff2ff03b",
+      "bytes": 32538,
+      "physical_lines": 764,
+      "nonblank_noncomment_lines": 638
+    },
+    {
+      "path": "src/quod_log_formatter.erl",
+      "sha256": "12fba0ea5985485192569522cb7ee1ccee3caec7c16abefb227e5f7820b8bbf2",
+      "bytes": 7637,
+      "physical_lines": 164,
+      "nonblank_noncomment_lines": 129
+    },
+    {
+      "path": "src/quod_material_admission.erl",
+      "sha256": "f69e899c07838042943d85c8ab684bbcb81c387f022fdaabff854c2badff7bf1",
+      "bytes": 3769,
+      "physical_lines": 89,
+      "nonblank_noncomment_lines": 76
+    },
+    {
+      "path": "src/quod_metrics.erl",
+      "sha256": "13fb9fc786f71b4a652fc2bfdd032b0075af9d4a73e2d7e4d5dcccb605480f36",
+      "bytes": 110213,
+      "physical_lines": 1807,
+      "nonblank_noncomment_lines": 1640
+    },
+    {
+      "path": "src/quod_namespace_manager.erl",
+      "sha256": "98c9b0e8e44d16b104b9612c7d9c275f6ad88e4308b9fd067f468194bf263050",
+      "bytes": 65005,
+      "physical_lines": 1615,
+      "nonblank_noncomment_lines": 1413
+    },
+    {
+      "path": "src/quod_node_actor.erl",
+      "sha256": "ba524931431f69371971e0ec40ebaade2efdef5e28b74214c629fc94c967ddab",
+      "bytes": 23765,
+      "physical_lines": 499,
+      "nonblank_noncomment_lines": 454
+    },
+    {
+      "path": "src/quod_ns.erl",
+      "sha256": "85da5bbd42816917baa5a3d382afa7bcd0d42fe39aea0f280a0f6b7b2ff618ee",
+      "bytes": 3045,
+      "physical_lines": 49,
+      "nonblank_noncomment_lines": 29
+    },
+    {
+      "path": "src/quod_ns_sup.erl",
+      "sha256": "24af47a6c0774e7d5c5cd1404b4039db93fd4363945aceb841bef3dff0cf268c",
+      "bytes": 1839,
+      "physical_lines": 55,
+      "nonblank_noncomment_lines": 46
+    },
+    {
+      "path": "src/quod_observation.erl",
+      "sha256": "6b7a46c3331afa1628ae4889cbd6ec46136209a1f692d1cbbd28a059eefb4598",
+      "bytes": 1341,
+      "physical_lines": 30,
+      "nonblank_noncomment_lines": 27
+    },
+    {
+      "path": "src/quod_ontology.erl",
+      "sha256": "371e2070a6991ed60ac0507d9e774db6a65c67e57475c2f047cc0d111b5498d0",
+      "bytes": 36320,
+      "physical_lines": 940,
+      "nonblank_noncomment_lines": 816
+    },
+    {
+      "path": "src/quod_ontology_name.erl",
+      "sha256": "703a84274b2e87a136c6fc98e8bad67fbea9e6dae655fca8655ed73b002610f1",
+      "bytes": 1139,
+      "physical_lines": 35,
+      "nonblank_noncomment_lines": 31
+    },
+    {
+      "path": "src/quod_operation.erl",
+      "sha256": "3e0df88cf990754c595b3ba01eaaf55455f5213985e399650924dc28f2e33daa",
+      "bytes": 12999,
+      "physical_lines": 251,
+      "nonblank_noncomment_lines": 202
+    },
+    {
+      "path": "src/quod_operation_vector.erl",
+      "sha256": "9fddd3048c4b240e048ed78d00687de4eb42730156faed7da407803c4bba3b16",
+      "bytes": 6748,
+      "physical_lines": 172,
+      "nonblank_noncomment_lines": 145
+    },
+    {
+      "path": "src/quod_outcome.erl",
+      "sha256": "c35213ea08288691cd6cc3314fdd4e2f2f92469036e98df0fbdfc534f7f0d44c",
+      "bytes": 66484,
+      "physical_lines": 1482,
+      "nonblank_noncomment_lines": 1271
+    },
+    {
+      "path": "src/quod_peer_route.erl",
+      "sha256": "fe8eaa33144f5d4360677b4c0dc35e7a549d735448e8a4832c9564bd087591d2",
+      "bytes": 1287,
+      "physical_lines": 27,
+      "nonblank_noncomment_lines": 26
+    },
+    {
+      "path": "src/quod_physics.erl",
+      "sha256": "bbb4a0182fdab52722ee4fd3ced71186aa21660f40abeb98e513187f66de0d54",
+      "bytes": 79606,
+      "physical_lines": 1421,
+      "nonblank_noncomment_lines": 1259
+    },
+    {
+      "path": "src/quod_physics_coordinates.erl",
+      "sha256": "9d93925f2868b1639d4b1f1c99dac655ac17fb058e5e23967727e74762420cd1",
+      "bytes": 5895,
+      "physical_lines": 121,
+      "nonblank_noncomment_lines": 99
+    },
+    {
+      "path": "src/quod_physics_native.erl",
+      "sha256": "919b4f1e4289d361094834a23ce8ec35750edc0c05404a75225419d2c0cfd3cc",
+      "bytes": 2250,
+      "physical_lines": 34,
+      "nonblank_noncomment_lines": 29
+    },
+    {
+      "path": "src/quod_predicates.erl",
+      "sha256": "833ee4ae0f65f877d2fb02031c32878a0cd442ae3efab803bce04b730ce25ec7",
+      "bytes": 21656,
+      "physical_lines": 493,
+      "nonblank_noncomment_lines": 394
+    },
+    {
+      "path": "src/quod_process.erl",
+      "sha256": "9ba78f981c9ed686f1f6544a2135b011e702ac4662b99a8b3aa30fd34e46c718",
+      "bytes": 908,
+      "physical_lines": 27,
+      "nonblank_noncomment_lines": 25
+    },
+    {
+      "path": "src/quod_prolog.erl",
+      "sha256": "442c13fb02d4ead8c93357221811ae7fc1ee6d309cc5369ffd5fd4f011ef51ae",
+      "bytes": 342964,
+      "physical_lines": 7617,
+      "nonblank_noncomment_lines": 6461
+    },
+    {
+      "path": "src/quod_proof_context.erl",
+      "sha256": "8c6ab4a984e14dbd500ce323da54f35ebf0e99edd96246650814b34dcbd54be9",
+      "bytes": 52185,
+      "physical_lines": 1259,
+      "nonblank_noncomment_lines": 1109
+    },
+    {
+      "path": "src/quod_proof_continuation.erl",
+      "sha256": "47d07c42720b1a842be90d524ed0b09ad518cfef6afd6cabdd2d5cac1806df55",
+      "bytes": 1815,
+      "physical_lines": 41,
+      "nonblank_noncomment_lines": 36
+    },
+    {
+      "path": "src/quod_proof_savepoint.erl",
+      "sha256": "e0084db6acefd86ae907df1a1ec575291f767170ededb55708ec643a1c683970",
+      "bytes": 6119,
+      "physical_lines": 112,
+      "nonblank_noncomment_lines": 96
+    },
+    {
+      "path": "src/quod_proof_scope.erl",
+      "sha256": "2f60b04dccba0f297029a9931467f333ed0919efa286ea7e990399231804c748",
+      "bytes": 6449,
+      "physical_lines": 156,
+      "nonblank_noncomment_lines": 127
+    },
+    {
+      "path": "src/quod_proof_session.erl",
+      "sha256": "713fc2f4cf2ff9188e274238743ab008ffca15dc8bf56d760d713da251a0c50b",
+      "bytes": 42846,
+      "physical_lines": 1045,
+      "nonblank_noncomment_lines": 903
+    },
+    {
+      "path": "src/quod_quic.erl",
+      "sha256": "7ee3e7e374527f419f74f2036e5b19c1546f5d3e525865bb9025fed17882a143",
+      "bytes": 51222,
+      "physical_lines": 1045,
+      "nonblank_noncomment_lines": 855
+    },
+    {
+      "path": "src/quod_quorum.erl",
+      "sha256": "70c42ec81aaceae4f1a4dd96cd3e86c906b038338b0ab22d5129bf4a70d13b36",
+      "bytes": 4451,
+      "physical_lines": 113,
+      "nonblank_noncomment_lines": 96
+    },
+    {
+      "path": "src/quod_rate.erl",
+      "sha256": "318bda483c6388499e12a23abbd4d685161795969fce73ca5f4e0347a1360ca0",
+      "bytes": 2983,
+      "physical_lines": 73,
+      "nonblank_noncomment_lines": 60
+    },
+    {
+      "path": "src/quod_read_certificate.erl",
+      "sha256": "7dfc682dd411ced6e1e1cf730c685f9e3e8fb8d8c0beb04b268bd182a44b81c8",
+      "bytes": 6780,
+      "physical_lines": 160,
+      "nonblank_noncomment_lines": 142
+    },
+    {
+      "path": "src/quod_read_set.erl",
+      "sha256": "c71450a6248ef6c61bda6016b902a388d17e99488ad8b513a62caa2599a55449",
+      "bytes": 6145,
+      "physical_lines": 148,
+      "nonblank_noncomment_lines": 125
+    },
+    {
+      "path": "src/quod_reg.erl",
+      "sha256": "285d1168f9f0b3f5fd47a9f5e997df322f22a0fdf147abd624c8c526f8374598",
+      "bytes": 5699,
+      "physical_lines": 130,
+      "nonblank_noncomment_lines": 98
+    },
+    {
+      "path": "src/quod_relay.erl",
+      "sha256": "40e66e56a909f3ec044b9b71c6d8d4907528492822808a7bfcbd6fb97966f030",
+      "bytes": 6965,
+      "physical_lines": 190,
+      "nonblank_noncomment_lines": 169
+    },
+    {
+      "path": "src/quod_resource_basis.erl",
+      "sha256": "03cdedc29f5e709e619db3beb9b314343110019febdda4292551d8cb6da021d5",
+      "bytes": 4186,
+      "physical_lines": 82,
+      "nonblank_noncomment_lines": 70
+    },
+    {
+      "path": "src/quod_runtime.erl",
+      "sha256": "69d42a397bc9a800dce0a9faf13188b7a76ed8d49d228e68a0657704c2607162",
+      "bytes": 171661,
+      "physical_lines": 3426,
+      "nonblank_noncomment_lines": 2861
+    },
+    {
+      "path": "src/quod_safe_term.erl",
+      "sha256": "6c453e00133f7b171fa7396d3e893a774b1f7b2d34591a89746fd3cf531a735a",
+      "bytes": 14625,
+      "physical_lines": 369,
+      "nonblank_noncomment_lines": 324
+    },
+    {
+      "path": "src/quod_schema.erl",
+      "sha256": "fd10bc22dbced46cf28924a109f0bb44a0932243a07fd617fcd6cb720a8971da",
+      "bytes": 9556,
+      "physical_lines": 159,
+      "nonblank_noncomment_lines": 102
+    },
+    {
+      "path": "src/quod_scope_session.erl",
+      "sha256": "a84c1344dd6022cc040aea914805eb769d735e8edc1285aa3b8af8e32ee79afc",
+      "bytes": 79472,
+      "physical_lines": 1971,
+      "nonblank_noncomment_lines": 1778
+    },
+    {
+      "path": "src/quod_scope_wire.erl",
+      "sha256": "265f56b066b837a3b412bb95b91a5e76f670da3dfc0b7323badb761d0c48dc5c",
+      "bytes": 43131,
+      "physical_lines": 1037,
+      "nonblank_noncomment_lines": 916
+    },
+    {
+      "path": "src/quod_selection_basis.erl",
+      "sha256": "917f1728a39acf3750cabdb200efd64d64b13559de23f570de4744aadcd45f6d",
+      "bytes": 3766,
+      "physical_lines": 77,
+      "nonblank_noncomment_lines": 61
+    },
+    {
+      "path": "src/quod_signing_journal.erl",
+      "sha256": "d5c6c53f0160e46e15bae1d43a832b2c8733e123c597107937c8e4ac0d861c83",
+      "bytes": 50940,
+      "physical_lines": 1138,
+      "nonblank_noncomment_lines": 963
+    },
+    {
+      "path": "src/quod_simplex.erl",
+      "sha256": "9bde0ab683a6aefe44039a286cf21389fbe0a3a914bdec9e76a6ab93a31ada74",
+      "bytes": 735628,
+      "physical_lines": 15682,
+      "nonblank_noncomment_lines": 12772
+    },
+    {
+      "path": "src/quod_sup.erl",
+      "sha256": "1f7523c91eff5cbb50170ff5ebf99a44c666a7eae14bf675d3c2e7350447665b",
+      "bytes": 2823,
+      "physical_lines": 76,
+      "nonblank_noncomment_lines": 53
+    },
+    {
+      "path": "src/quod_system_ontology.erl",
+      "sha256": "506bb36d2430167d8ba5f049fc46f35a77576a4756660311292ea25ef3f537a7",
+      "bytes": 8222,
+      "physical_lines": 216,
+      "nonblank_noncomment_lines": 188
+    },
+    {
+      "path": "src/quod_terrain_wire.erl",
+      "sha256": "43f6d82f6565d888552e0a1bacac1c72a4ec31e16f39bdd0c8b7a0fbcb8c83d9",
+      "bytes": 2907,
+      "physical_lines": 56,
+      "nonblank_noncomment_lines": 42
+    },
+    {
+      "path": "src/quod_time.erl",
+      "sha256": "eabcf2765e811ece8651f1d80798f7ae9e824969294e4790289f644fd2a28ff1",
+      "bytes": 1557,
+      "physical_lines": 29,
+      "nonblank_noncomment_lines": 25
+    },
+    {
+      "path": "src/quod_trace.erl",
+      "sha256": "16a4d6e4bb048662dc9045aa76ca8a79279309c83ae526793cfc87bf5080af57",
+      "bytes": 11430,
+      "physical_lines": 276,
+      "nonblank_noncomment_lines": 231
+    },
+    {
+      "path": "src/quod_transaction.erl",
+      "sha256": "eae76d9827346a704a1131f3213c8579a9bab716e4b9b632c6d329d28df0bae0",
+      "bytes": 87446,
+      "physical_lines": 1901,
+      "nonblank_noncomment_lines": 1681
+    },
+    {
+      "path": "src/quod_transaction_scope.erl",
+      "sha256": "a2724225e867124050785a5ad02ac0d00739fa9d29c0f58de07b59e1b59dbd65",
+      "bytes": 16971,
+      "physical_lines": 414,
+      "nonblank_noncomment_lines": 360
+    },
+    {
+      "path": "src/quod_voxel.erl",
+      "sha256": "17628ddf16fab2dbcd12f08e9a6ca30e52404207b3936a12b65c5f97770e5251",
+      "bytes": 21823,
+      "physical_lines": 406,
+      "nonblank_noncomment_lines": 359
+    },
+    {
+      "path": "src/quod_wire_term.erl",
+      "sha256": "8d2438213918ef3b6aa672ab5d314a1e735b7ba6338d857b0bd425f0b7734265",
+      "bytes": 30514,
+      "physical_lines": 766,
+      "nonblank_noncomment_lines": 671
+    },
+    {
+      "path": "ui/package-lock.json",
+      "sha256": "6984e8ee6ddb8ae197c43f117aff11c434ee1f0629627e2537dd778aea18b02e",
+      "bytes": 59057,
+      "physical_lines": 1806,
+      "nonblank_noncomment_lines": 1806
+    }
+  ]
+}

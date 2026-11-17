@@ -1,0 +1,18 @@
+diff --git a/client/godot/tests/SpaceChecks.cs b/client/godot/tests/SpaceChecks.cs
+index ded5e7a7..53ae920a 100644
+--- a/client/godot/tests/SpaceChecks.cs
++++ b/client/godot/tests/SpaceChecks.cs
+@@ -132,8 +132,12 @@ public partial class ExportChecks
+         try {
+             var viewport=scene.GetChildren().OfType<SubViewport>().Single();
+             var point=((SpatialGui)app.FindChild("shared-gui",true,false)).WindowPoint(scene.GetViewport(),scene.GlobalPosition+scene.Project(id,local)*scene.Size/(Vector2)viewport.Size);
++            Console.WriteLine($"PICK_TRACE before id={id} projected={scene.Project(id,local)} point={point} rect={scene.GetGlobalRect()} viewport={viewport.Size} pick={scene.Pick(scene.Project(id,local))?.Subject} camera={scene.CameraPose} state={State["world_accepted"]}");Console.Out.Flush();
+             NativeClick(point);
+-            Check((await picked.Task.WaitAsync(TimeSpan.FromSeconds(5))).Subject.ToString()==expected.ToString(),"normal mouse picking opens the exact rendered subject and anchor");
++            try { Check((await picked.Task.WaitAsync(TimeSpan.FromSeconds(5))).Subject.ToString()==expected.ToString(),"normal mouse picking opens the exact rendered subject and anchor"); }
++            catch(TimeoutException) {
++                Console.WriteLine($"PICK_TRACE miss projected={scene.Project(id,local)} rect={scene.GetGlobalRect()} viewport={viewport.Size} pick={scene.Pick(scene.Project(id,local))?.Subject} camera={scene.CameraPose} hovered={GetTree().Root.GuiGetHoveredControl()?.GetPath()} state={State["world_accepted"]}");Console.Out.Flush();throw;
++            }
+         } finally { scene.Selected-=Selected; }
+     }
+     async Task NativeMenu()

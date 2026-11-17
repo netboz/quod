@@ -1,0 +1,1924 @@
+diff --git a/client/godot-tests/Program.cs b/client/godot-tests/Program.cs
+index 32f51114..ad6b6837 100644
+--- a/client/godot-tests/Program.cs
++++ b/client/godot-tests/Program.cs
+@@ -133,9 +133,18 @@ static class Tests
+         Check(marks[1].Size[0] == new Length(1,3) && marks[1].Size[1] == new Length(1001,1) && marks[1].Parent == "source", "scene retains odd and submillimetre exact rational lengths and parent");
+         Check(Math.Abs(marks[1].Size[0].RenderMetres() - 1f/3000) < 1e-10f, "rational conversion occurs at engine boundary without millimetre rounding");
+         Check(marks[0].Subject!.ToString().StartsWith("entity_ref("), "scene keeps exact anchored subject independent of occurrence");
+-        Check(new Length(100000,1).RenderMetres() == 100, "default wireframe extent is 100 metres");
+-        Check(marks[1].Opacity == 1000 && SceneMark.Decode(Term.Parse("[" + group + "," + box.Replace(",1000,1000,[])", ",1000,220,[])") + "]"))[1].Opacity == 220,
++        Check(new Length(10000,1).RenderMetres() == 10, "the default extent is ten metres");
++        Check(marks[1].Looks.Single().Opacity == 1000 && SceneMark.Decode(Term.Parse("[" + group + "," + box.Replace(",1000,1000,[])", ",1000,220,[])") + "]"))[1].Looks.Single().Opacity == 220,
+             "surface opacity is decoded as authored permille");
++        string plain = "surface(<<\"#6A90D9\">>,0,700,1000,1000,[])", gold = "surface(<<\"#F9C80E\">>,0,700,0,80,[])";
++        string corners = box.Replace("wire_box", "corner_box"), states = $"surfaces({plain},{gold},{gold.Replace(",80,", ",220,")})";
++        var marker = SceneMark.Decode(Term.Parse("[" + group + "," + corners.Replace(plain, states) + "]"))[1];
++        Check(marker.Kind == "corner_box" && marker.Edges && marker.Size[0] == new Length(1,3), "a corner box keeps exact rational lengths like a wire box");
++        Check(marker.Looks.Select(l => (l.Colour, l.Opacity)).SequenceEqual([("#6A90D9",1000),("#F9C80E",80),("#F9C80E",220)]), "a mark carries its display, pointed-at and selected surfaces in order");
++        Check(marks[0].Looks.Length == 0 && SceneMark.Decode(Term.Parse("[" + group + "," + corners + "]"))[1].Looks.Length == 1, "a group has no surface and a plain surface stays one look");
++        foreach (string bad in new[] { $"surfaces({plain},{gold})", $"surfaces({plain},{gold},no_surface)", $"surfaces({plain},{gold},{gold.Replace("#F9C80E","gold")})", $"surfaces({states},{gold},{gold})" })
++            Reject(() => SceneMark.Decode(Term.Parse("[" + group + "," + corners.Replace(plain, bad) + "]")), "incomplete or invalid state surfaces refuse");
++        Reject(() => SceneMark.Decode(Term.Parse("[" + group.Replace("no_surface", states) + "]")), "a group with state surfaces refuses");
+         Reject(() => SceneMark.Decode(Term.Parse("[" + group + "," + box.Replace(",1000,1000,[])", ",1000,1001,[])") + "]")), "opacity above 1000 refuses");
+         Reject(() => SceneMark.Decode(Term.Parse("[" + group + "," + box.Replace(",1000,1000,[])", ",1000,[])") + "]")), "a surface without opacity refuses");
+         var huge = BigInteger.One << 1600;
+diff --git a/client/godot/Core/Scene.cs b/client/godot/Core/Scene.cs
+index 660a29c1..2063a0eb 100644
+--- a/client/godot/Core/Scene.cs
++++ b/client/godot/Core/Scene.cs
+@@ -41,8 +41,21 @@ public sealed record ScenePose(BigInteger[]? Transform, ulong? Body, ulong Revis
+         return new(values, null, 0, false);
+     }
+ }
+-public sealed record SceneMark(string Id, string Kind, Length[] Size, string? Parent, ScenePose Pose, string Colour, int Metallic, int Roughness, int Emission, int Opacity, Term Label, Term? Subject, string Signature)
++public sealed record SceneSurface(string Colour, int Metallic, int Roughness, int Emission, int Opacity)
+ {
++    public static SceneSurface Decode(Term term)
++    {
++        var surface = term.Require("surface", 6); string colour = surface[0].TextValue;
++        if (!System.Text.RegularExpressions.Regex.IsMatch(colour, "^#[0-9A-F]{6}$") ||
++            surface.Skip(1).Take(4).Any(v => v.Integer < 0 || v.Integer > 1000) || surface[5].Items.Length != 0)
++            throw new FormatException("Unsupported or invalid scene surface.");
++        return new(colour, (int)surface[1].Integer, (int)surface[2].Integer, (int)surface[3].Integer, (int)surface[4].Integer);
++    }
++}
++// Looks holds one surface, or three: display, pointed at, selected. A group has none.
++public sealed record SceneMark(string Id, string Kind, Length[] Size, string? Parent, ScenePose Pose, SceneSurface[] Looks, Term Label, Term? Subject, string Signature)
++{
++    public bool Edges => Kind is "wire_box" or "corner_box";
+     public static SceneMark[] Decode(Term scene)
+     {
+         scene.Ground(); var seen = new HashSet<string>();
+@@ -56,26 +69,19 @@ public sealed record SceneMark(string Id, string Kind, Length[] Size, string? Pa
+             }
+             var transform = ScenePose.Decode(pose);
+             string[] fields = kind switch {
+-                "box" or "wire_box" => ["width", "height", "depth"],
++                "box" or "wire_box" or "corner_box" => ["width", "height", "depth"],
+                 "sphere" => ["diameter"],
+                 "group" => [], _ => throw new FormatException("Unsupported scene geometry: " + kind) };
+             if (a[2].Items.Length != fields.Length) throw new FormatException("Wrong geometry field count.");
+             var sizes = a[2].Items.Select((row, i) => {
+                 var f = row.Require("f", 2);
+                 if (f[0].TextValue != fields[i]) throw new FormatException("Wrong geometry field order.");
+-                return Length.Decode(f[1], kind == "wire_box");
++                return Length.Decode(f[1], kind is "wire_box" or "corner_box");
+             }).ToArray();
+-            string colour = "#6A90D9";
+-            int metallic=0,roughness=0,emission=0,opacity=1000;
++            SceneSurface[] looks = [];
+             if (kind == "group") {
+                 if (a[4].Kind != "atom" || a[4].Name != "no_surface") throw new FormatException("Group has a surface.");
+-            } else {
+-                var surface = a[4].Require("surface", 6); colour = surface[0].TextValue;
+-                if (!System.Text.RegularExpressions.Regex.IsMatch(colour, "^#[0-9A-F]{6}$") ||
+-                    surface.Skip(1).Take(4).Any(v => v.Integer < 0 || v.Integer > 1000) || surface[5].Items.Length != 0)
+-                    throw new FormatException("Unsupported or invalid scene surface.");
+-                metallic=(int)surface[1].Integer;roughness=(int)surface[2].Integer;emission=(int)surface[3].Integer;opacity=(int)surface[4].Integer;
+-            }
++            } else looks = a[4].Name == "surfaces" ? a[4].Require("surfaces", 3).Select(SceneSurface.Decode).ToArray() : [SceneSurface.Decode(a[4])];
+             var label = a[5];
+             if (label.Kind != "atom" || label.Name != "unlabelled") {
+                 var l = label.Require("label", 2); _ = l[0].TextValue;
+@@ -91,7 +97,7 @@ public sealed record SceneMark(string Id, string Kind, Length[] Size, string? Pa
+                     ? local : Term.Call("entity_ref", depicts);
+             }
+             if (transform.Body != null && subject == null) throw new FormatException("A body occurrence requires an exact subject.");
+-            return new SceneMark(id, kind, sizes, parent, transform, colour, metallic, roughness, emission, opacity, label, subject, term.ToString());
++            return new SceneMark(id, kind, sizes, parent, transform, looks, label, subject, term.ToString());
+         }).ToArray();
+     }
+ }
+diff --git a/client/godot/EidolonPanel.cs b/client/godot/EidolonPanel.cs
+index 7848e40d..4e629884 100644
+--- a/client/godot/EidolonPanel.cs
++++ b/client/godot/EidolonPanel.cs
+@@ -22,6 +22,9 @@ public partial class EidolonPanel : VBoxContainer
+     public Eidolon? Selected { get; private set; }
+     public bool Available { get; private set; }
+     public ScenePanel.Selection? Occurrence { get; private set; }
++    // The thing in the world now drawn in the chosen mode, in its own place.
++    ScenePanel.Selection? inPlace;
++    void RestoreDisplay(){var thing=inPlace;inPlace=null;thing?.Owner.ShowMode(thing,null);}
+     public bool NearOccurrence { get; private set; }
+     public string StatusText=>status.Text;
+     public Eidolon[] Offered { get; private set; }=[];
+@@ -80,6 +83,7 @@ public partial class EidolonPanel : VBoxContainer
+         : e.Purpose.Name switch {
+             "playing"=>e.Style.Replace('_',' ')+" view",
+             "edition"=>e.Style.Replace('_',' ')+" view · editing",
++            "selected"=>e.Style.Replace('_',' ')+" view · selected",
+             "prolog"=>e.Style=="source" ? "Source" : "Source · "+e.Style.Replace('_',' '),
+             "inspection"=>"Inspect · "+e.Style.Replace('_',' '),
+             _=>e.Caption };
+@@ -97,6 +101,8 @@ public partial class EidolonPanel : VBoxContainer
+     void SetOccurrence(ScenePanel.Selection? next)
+     {
+         if(Occurrence==next)return;
++        // A new pick of the same installed thing keeps the mode it is drawn in.
++        if(next==null||Occurrence==null||!ReferenceEquals(Occurrence.Owner,next.Owner)||Occurrence.Id!=next.Id||Occurrence.Identity!=next.Identity)RestoreDisplay();
+         if(Occurrence!=null)Occurrence.Owner.PresentationChanged-=OccurrenceChanged;
+         Occurrence=next;NearOccurrence=next!=null;
+         if(next!=null)next.Owner.PresentationChanged+=OccurrenceChanged;
+@@ -181,7 +187,9 @@ public partial class EidolonPanel : VBoxContainer
+             var next=Eidolon.Decode(Json.S(message,"value"));
+             Offered=next;Available=true;
+             var chosen=next.SingleOrDefault(e=>e.Exact.ToString()==preferred);
+-            if(preferred==null)chosen=next.FirstOrDefault(e=>e.Purpose.Name=="playing")??next.FirstOrDefault(e=>e.Operation&&e.Style==Operations.Current?.Name)??next.FirstOrDefault(e=>e.Operation)??next.FirstOrDefault();
++            // A thing shown in the world that offers a selected Eidolon shows it on selection; none is required.
++            bool shown=Occurrence!=null&&!ReferenceEquals(Occurrence.Owner,preview);
++            if(preferred==null)chosen=(shown ? next.FirstOrDefault(e=>e.Purpose.Name=="selected") : null)??next.FirstOrDefault(e=>e.Purpose.Name=="playing")??next.FirstOrDefault(e=>e.Operation&&e.Style==Operations.Current?.Name)??next.FirstOrDefault(e=>e.Operation)??next.FirstOrDefault();
+             var answered=request;request=null;
+             bool asked=answered!=null&&chosen?.Exact.ToString()==answered.Choice;
+             if(chosen!=null)Choose(chosen,reveal:asked,execute:asked&&answered!.Execute);else{WithdrawRepresentation(KeepVisual);status.Text=next.Length==0 ? "No authored representations are currently offered." : "The selected representation was withdrawn. Choose a current offered representation.";}
+@@ -203,11 +211,16 @@ public partial class EidolonPanel : VBoxContainer
+         exact.Text=Current.Exact+"\n"+choice.Exact;
+         if(choice.Operation){Operations.Show();Operations.Choose(choice.Style,reveal,execute);status.Text="";Changed?.Invoke();return;}
+         Operations.Hide();bool revealPreview=reveal;var viewed=Current;
+-        string kind=choice.Purpose.Kind=="atom" && choice.Purpose.Name is "playing" or "edition" ? "eidolon_scene" : "eidolon";
++        string kind=choice.Purpose.Kind=="atom" && choice.Purpose.Name is "playing" or "edition" or "selected" ? "eidolon_scene" : "eidolon";
+         var view=new SignedView(session,accounts.Human!,viewed.Target,kind,SignedSession.ViewGoal(viewed.Target,choice.Read(viewed.Local)));representation=view;previewRead=kind=="eidolon_scene";
+         view.Projection+=message=>{
+             if(disposed||!ReferenceEquals(representation,view))return;
+-            if(message["marks"]!=null){preview.ApplyProjection(message,viewed.Target,accounts.Human!,ack=>_ = view.Send(ack));preview.NavigationBlocked=true;preview.Show();if(Selected?.Operation!=true)status.Text="View only. Movement requires an offered action.";if(revealPreview&&Selected?.Exact.ToString()==choice.Exact.ToString()){revealPreview=false;RevealPreview();}}
++            if(message["marks"]!=null){
++                // The model of one thing already shown in the world is drawn there, in its place; anything else in the side view.
++                var thing=Occurrence;
++                if(thing!=null&&!ReferenceEquals(thing.Owner,preview)&&thing.Subject.ToString()==viewed.Exact.ToString()&&thing.Owner.ShowMode(thing,Term.Parse(Json.S(message,"marks")))){inPlace=thing;preview.Withdraw();preview.Hide();status.Text="";}
++                else {RestoreDisplay();preview.ApplyProjection(message,viewed.Target,accounts.Human!,ack=>_ = view.Send(ack));preview.NavigationBlocked=true;preview.Show();if(Selected?.Operation!=true)status.Text="View only. Movement requires an offered action.";if(revealPreview&&Selected?.Exact.ToString()==choice.Exact.ToString()){revealPreview=false;RevealPreview();}}
++            }
+             else {
+                 var value=Term.Parse(Json.S(message,"value"));
+                 if(value.Name=="workbench") {
+@@ -220,11 +233,11 @@ public partial class EidolonPanel : VBoxContainer
+             }
+             Changed?.Invoke();
+         };
+-        view.Message+=message=>{if(ReferenceEquals(representation,view) && message["frame"]!=null)preview.ApplyFrame(message,ack=>_ = view.Send(ack));};
++        view.Message+=message=>{if(ReferenceEquals(representation,view) && inPlace==null && message["frame"]!=null)preview.ApplyFrame(message,ack=>_ = view.Send(ack));};
+         view.Withdrawn+=reason=>{
+             if(!ReferenceEquals(representation,view))return;
+             if(view.Updating){preview.Suspend();workbench.Suspend();source.Suspend();}
+-            else {preview.Withdraw();workbench.Withdraw();source.Withdraw();}
++            else {RestoreDisplay();preview.Withdraw();workbench.Withdraw();source.Withdraw();}
+             preview.Hide();workbench.Hide();status.Text=reason;Changed?.Invoke();
+         };
+         status.Text="Reading the chosen recipe…";_ = view.Start();Changed?.Invoke();
+@@ -236,7 +249,7 @@ public partial class EidolonPanel : VBoxContainer
+     {
+         selection++;Selected=null;workbench.Withdraw();workbench.Hide();source.Withdraw();source.Hide();
+         if(retainVisual)return;
+-        previewRead=false;preview.Withdraw();preview.Hide();
++        RestoreDisplay();previewRead=false;preview.Withdraw();preview.Hide();
+         var previous=representation;representation=null;previous?.Dispose();Keep(previous?.Completion??Task.CompletedTask);
+     }
+     void Keep(Task task)=>retired=retired.IsCompleted ? task : Task.WhenAll(retired,task);
+diff --git a/client/godot/Main.cs b/client/godot/Main.cs
+index 24cbefdb..cff84692 100644
+--- a/client/godot/Main.cs
++++ b/client/godot/Main.cs
+@@ -183,7 +183,7 @@ public partial class Main : Control
+             else if(pie.IsOpen&&pie.Navigator?.Hovered>0)pie.Commit();
+         };
+         scene.Hovered+=(hit,point)=>{
+-            hovered=hit;scene.Outline(hit);
++            hovered=hit;scene.PointAt(hit);
+             string? text=float.IsNaN(point.X)||pie.IsOpen ? null : TargetLabel(hit);
+             pointerLabel.Visible=text!=null;if(text==null)return;
+             pointerLabel.Text=text;pointerLabel.Position=point+scene.GlobalPosition+new Vector2(18,18);hoverPoint=point+scene.GlobalPosition;
+@@ -584,6 +584,8 @@ public partial class Main : Control
+         Layout();
+         xr.PresentForm(form&&!previewNear&&(!preview||representations!.Selected?.Operation==true));
+         xr.BindOccurrence(form&&representations!.NearOccurrence ? representations.Occurrence : null);
++        // The thing the open panel is about shows its selected look, in whichever view it was picked.
++        var chosen=form ? representations!.Occurrence : null;scene.ShowSelected(chosen);representations?.Preview.ShowSelected(chosen);
+     }
+     // Floating glass panels: the subject panel docks to the side farther from
+     // its target; the attention list and local tools open on the left.
+diff --git a/client/godot/OpenXRInput.cs b/client/godot/OpenXRInput.cs
+index fb6cfbbc..950ddffc 100644
+--- a/client/godot/OpenXRInput.cs
++++ b/client/godot/OpenXRInput.cs
+@@ -410,8 +410,8 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
+         // Only the controller that opened the pie steers it with its ray.
+         // Only the controller that opened the pie steers it; a strip-opened pie has none yet.
+         if(pie.IsOpen){rayLabel.Visible=false;if((pieSource==null||input==pieSource)&&(pieQuad.Visible ? PieHit(input) : hit?.Point) is {} on)pie.PointerAt(on);return;}
+-        if(HudHit(input) is {} onHud){HudPointer(onHud,null);rayLabel.Visible=false;scene.Outline(null);return;}
+-        if(hit==null&&pointerSource==null&&!Blocked&&Router.MenuOwner==null)PointTarget(input);else{rayLabel.Visible=false;scene.Outline(null);}
++        if(HudHit(input) is {} onHud){HudPointer(onHud,null);rayLabel.Visible=false;scene.PointAt(null);return;}
++        if(hit==null&&pointerSource==null&&!Blocked&&Router.MenuOwner==null)PointTarget(input);else{rayLabel.Visible=false;scene.PointAt(null);}
+         if(hit is {} at){gui.Move(at.Point,gui.PresentationSurface);PadScroll(source,at.Point);}
+         else {source.PadRest=null;if(pointerSource==input && pointingGui)gui.Move(new(-10000,-10000),gui.PresentationSurface);else gui.Leave();}
+     }
+@@ -433,12 +433,12 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
+             gui.PresentationSurface.PushInput(new InputEventMouseButton { Position=at,GlobalPosition=at,ButtonIndex=button,Pressed=false,Factor=1 },true);
+         }
+     }
+-    public void Hide(IControllerSource input){((Source)input).Pointer.Visible=false;rayLabel.Visible=false;scene.Outline(null);}
+-    // Feedback before the press: outline the pointed mark and name the target
++    public void Hide(IControllerSource input){((Source)input).Pointer.Visible=false;rayLabel.Visible=false;scene.PointAt(null);}
++    // Feedback before the press: the pointed thing shows its pointed-at look, and the target is named
+     // (the occurrence, else the containing space) at the ray tip.
+     void PointTarget(IControllerSource input)
+     {
+-        var ray=Ray(input);var hit=scene.PickRay(ray.Origin,ray.Direction);scene.Outline(hit);
++        var ray=Ray(input);var hit=scene.PickRay(ray.Origin,ray.Direction);scene.PointAt(hit);
+         string? text=TargetLabel(hit);rayLabel.Visible=text!=null;if(text==null)return;
+         float distance=hit?.Pose is Transform3D pose ? Math.Max(.3f,(pose.Origin-ray.Origin).Dot(ray.Direction)) : 2;
+         rayLabel.Text=text;rayLabel.GlobalPosition=ray.Origin+ray.Direction*distance+Vector3.Up*.06f;
+@@ -514,7 +514,7 @@ public partial class OpenXRInput : Node3D,IControllerConsumer
+             gui.EndTextInput();var ray=Ray(input);
+             var hit=GuiHit(input)!=null ? null : scene.PickRay(ray.Origin,ray.Direction);
+             if(!openPie(hit))return false;
+-            pieSource=input;rayLabel.Visible=false;scene.Outline(null);if(gui.Spatial)PlacePie(input,hit);
++            pieSource=input;rayLabel.Visible=false;scene.PointAt(null);if(gui.Spatial)PlacePie(input,hit);
+         }
+         pie.Threshold=threshold;pie.MoveAxes(axes);return true;
+     }
+diff --git a/client/godot/README.md b/client/godot/README.md
+index 6693cbe2..4048a1fc 100644
+--- a/client/godot/README.md
++++ b/client/godot/README.md
+@@ -120,9 +120,25 @@ the previous visual consumer. Recipes may live in the same ontology as their cla
+ 
+ Solid primitives retain authored colour, metallic, roughness and emission values.
+ Neutral adapter lighting distinguishes solid faces against the ordinary black
+-background. Wire geometry remains unshaded and labels stay opaque. This supplies
++background. Wire and corner geometry remains unshaded and labels stay opaque. This supplies
+ no physical sun, collision geometry or measured headset readability guarantee.
+ 
++A mark may carry three surfaces: display, pointed at and selected. Every mark
++of the pointed-at thing shows its pointed-at surface, and every mark of the
++thing the open panel is about shows its selected surface; selected wins. The
++switch is local and reads nothing. A mark with one surface looks the same in
++all three cases: the client adds no tint of its own.
++
++Each shown thing has a mode, display by default. Choosing another Eidolon of a
++thing that stands in the world (its `edition` one, or the `selected` one a
++class may offer, which is then chosen on selection) reads that one Eidolon and
++draws it in the thing's place: its parts take the place of the display parts
++under the same occurrence, everything else stays in display, and the thing
++returns to display when the choice is withdrawn. Parts that did not change are
++not rebuilt. A choice that is not the model of that one thing, such as a
++space's contents, and a subject not shown in the world, use the side view.
++A pick is the whole thing, whichever of its parts was hit.
++
+ The ontology-authored **Workbench** representation shows direct authored local class
+ inheritance and instance membership, with attributes of the selected exact node.
+ Yellow boxes/links represent classes/inheritance; blue spheres/links represent
+@@ -196,8 +212,8 @@ keeps the old draft locked rather than silently applying it to a new contract.
+ and an offered form. Catalogue/account/current-space identities are advisory;
+ an exact namespace/anchor can open other existing storage. The server validates
+ composition and permission. Space forms offer finite, rational and infinite
+-extents, placement and exterior choices through the same generic binder. The
+-shared mark adapter draws solid boxes, exact finite edge boxes and groups,
++extents and placement through the same generic binder. The
++shared mark adapter draws solid boxes, exact finite wire and corner boxes and groups,
+ and picking opens operations on the exact depicted subject. It creates no
+ collision or local simulation. Creation leaves A in the current space.
+ 
+diff --git a/client/godot/ScenePanel.cs b/client/godot/ScenePanel.cs
+index 909b40d9..ac203938 100644
+--- a/client/godot/ScenePanel.cs
++++ b/client/godot/ScenePanel.cs
+@@ -6,16 +6,22 @@ using BigInteger = System.Numerics.BigInteger;
+ // local simulation. Picking resolves the occurrence's exact depicted subject.
+ public partial class ScenePanel : SubViewportContainer
+ {
+-    sealed record Occurrence(SceneMark Mark, Node3D Node, Vector3[] Corners, long Identity);
+-    // A pick keeps its installed occurrence, not merely the depicted subject.
++    // Lines are the drawn segments of an edge-only box; Looks its materials:
++    // one, or display, pointed at and selected.
++    sealed record Occurrence(SceneMark Mark, Node3D Node, Vector3[] Corners, (Vector3 A,Vector3 B)[] Lines, long Identity, MeshInstance3D? Shape, Material[] Looks) { public int Look; }
++    // A pick keeps its installed thing, not merely the depicted subject: the
++    // mark that names the subject, with the marks beneath it that name none.
+     // Placement is always resolved from this owner; a removed/reused ID cannot
+     // revive a previous selection or confer authority to an operation.
+     public sealed record Selection(ScenePanel Owner,string Id,long Identity,Term Subject)
+     {
+         public Transform3D? Pose=>Owner.Resolve(this)?.Node.GlobalTransform;
+-        public Vector3[] Corners=>Owner.Resolve(this) is {} current ? current.Corners.Select(p=>current.Node.GlobalTransform*p).ToArray() : [];
+-        public string? Label=>Owner.Resolve(this) is {} current && current.Mark.Label.Name=="label" ? current.Mark.Label.Args[0].TextValue : null;
++        public Vector3[] Corners=>Owner.Resolve(this) is {} thing ? Owner.Parts(thing).SelectMany(p=>p.Corners.Select(c=>p.Node.GlobalTransform*c)).ToArray() : [];
++        public string? Label=>Owner.Resolve(this) is {} thing ? Owner.Parts(thing).Select(p=>p.Mark.Label).FirstOrDefault(l=>l.Name=="label")?.Args[0].TextValue : null;
+     }
++    // The marks last given, and the marks drawn once any thing's other mode has taken its place.
++    SceneMark[] source=[],drawn=[];
++    readonly Dictionary<string,SceneMark[]> modes=[];
+     long occurrenceIdentity;
+     readonly Dictionary<string, Occurrence> occurrences = [];
+     readonly SubViewport viewport = new() { Name = "scene-viewport", Size = new(1000, 400), OwnWorld3D = true, TransparentBg = false, HandleInputLocally = false };
+@@ -92,10 +98,10 @@ public partial class ScenePanel : SubViewportContainer
+     // The cursor's target before any press: the occurrence under it, or none.
+     public event Action<Selection?,Vector2>? Hovered;
+     bool menuHeld;
+-    Occurrence? highlighted;
+-    // A local tint on the pointed mark; it reads and changes no domain state.
+-    static readonly StandardMaterial3D Highlight=new() { ShadingMode=BaseMaterial3D.ShadingModeEnum.Unshaded,
+-        AlbedoColor=new(0xF9/255f,0xC8/255f,0x0E/255f,.28f),Transparency=BaseMaterial3D.TransparencyEnum.Alpha };
++    // The pointed-at and selected things show the looks their marks carry;
++    // switching reads and changes no domain state.
++    Selection? pointed,selected;
++    Occurrence? pointedThing,selectedThing;
+     public event Action? PresentationChanged;
+     public int Rebuilt { get; private set; }
+     public int Count => occurrences.Count;
+@@ -121,6 +127,23 @@ public partial class ScenePanel : SubViewportContainer
+         new Vector3(-size.X,-size.Y,size.Z)/2,new Vector3(size.X,-size.Y,size.Z)/2,
+         new Vector3(-size.X,size.Y,size.Z)/2,new Vector3(size.X,size.Y,size.Z)/2];
+     static readonly (int A, int B)[] Edges = [(0,1),(2,3),(4,5),(6,7),(0,2),(1,3),(4,6),(5,7),(0,4),(1,5),(2,6),(3,7)];
++    // A wire box draws its edges whole; a corner box draws a third of each edge from both corners.
++    static (Vector3 A,Vector3 B)[] Lines(string kind,Vector3[] c) => kind switch {
++        "wire_box" => Edges.Select(e=>(c[e.A],c[e.B])).ToArray(),
++        "corner_box" => Edges.SelectMany(e=>new[]{(c[e.A],c[e.A].Lerp(c[e.B],1/3f)),(c[e.B],c[e.B].Lerp(c[e.A],1/3f))}).ToArray(),
++        _ => [] };
++    static StandardMaterial3D Look(SceneMark mark,SceneSurface surface)
++    {
++        // Below full opacity a surface is translucent; both sides already draw.
++        // A corner line fades along its length through its vertex alpha.
++        var colour=new Color(surface.Colour) with {A=surface.Opacity/1000f};bool fading=mark.Kind=="corner_box";
++        return new() {
++            ShadingMode = mark.Edges ? BaseMaterial3D.ShadingModeEnum.Unshaded : BaseMaterial3D.ShadingModeEnum.PerPixel,
++            AlbedoColor=colour,Metallic=surface.Metallic/1000f,Roughness=surface.Roughness/1000f,
++            EmissionEnabled=surface.Emission>0,Emission=colour,EmissionEnergyMultiplier=surface.Emission/1000f,
++            Transparency=fading||surface.Opacity<1000 ? BaseMaterial3D.TransparencyEnum.Alpha : BaseMaterial3D.TransparencyEnum.Disabled,
++            VertexColorUseAsAlbedo=fading,CullMode = BaseMaterial3D.CullModeEnum.Disabled };
++    }
+     static float Finite(double value)
+     { float result = (float)value; if (!float.IsFinite(result)) throw new FormatException("Scene coordinate exceeds the engine's numeric range."); return result; }
+     static Basis RotationBasis(float x,float y,float z) => new Basis(Vector3.Back,z)*new Basis(Vector3.Up,y)*new Basis(Vector3.Right,x);
+@@ -177,7 +200,53 @@ public partial class ScenePanel : SubViewportContainer
+         if(world?.Advance(message)!=true)return false;
+         ApplyFrame();processed(world.Acknowledgement());return true;
+     }
+-    void Apply(SceneMark[] marks,WorldProjection? projection)
++    void Apply(SceneMark[] marks,WorldProjection? projection){source=marks;Install(InMode(marks),projection);}
++    // Each shown thing has a mode, display by default. Another mode's model of
++    // one thing takes the place of that thing's own parts, where it stands,
++    // until it is withdrawn with null. Returns whether the model is drawn here.
++    public bool ShowMode(Selection thing,Term? model)
++    {
++        if(Resolve(thing) is not {} shown)return false;
++        if(model==null){if(modes.Remove(shown.Mark.Id))Install(InMode(source),world);return true;}
++        if(ModeParts(shown.Mark,model) is not {} parts)return false;
++        var before=modes.GetValueOrDefault(shown.Mark.Id);modes[shown.Mark.Id]=parts;
++        var next=InMode(source);var seen=new HashSet<string>();
++        // A thing whose other marks hang from a replaced part keeps its display.
++        if(next.All(m=>(m.Parent==null||seen.Contains(m.Parent))&&seen.Add(m.Id))){Install(next,world);return true;}
++        if(before==null)modes.Remove(shown.Mark.Id);else modes[shown.Mark.Id]=before;
++        return false;
++    }
++    // The model of one thing arrives under its own root group, which depicts
++    // it. Its parts move under the shown thing; the root's own pose is unused.
++    static SceneMark[]? ModeParts(SceneMark thing,Term model)
++    {
++        var marks=SceneMark.Decode(model);
++        if(marks.Length==0||marks[0].Kind!="group"||marks[0].Parent!=null||marks[0].Subject?.ToString()!=thing.Subject!.ToString())return null;
++        string root=marks[0].Id;
++        bool Inside(string? id)=>id!=null&&(id==root||id.StartsWith(root+"/"));
++        if(marks.Skip(1).Any(m=>m.Subject!=null||m.Id==root||!Inside(m.Id)||!Inside(m.Parent)))return null;
++        Term Moved(Term id)=>Term.Text(thing.Id+id.TextValue[root.Length..]);
++        var stand=Term.Call("mark",Term.Text(thing.Id),Term.Text("group"),Term.List(),Term.Parse("transform(0,0,0,0,0,0)"),Term.Atom("no_surface"),Term.Atom("unlabelled"),Term.Atom("depicts_nothing"));
++        // Decoding the moved terms keeps one validation and makes an unchanged part compare equal to the one already drawn.
++        return SceneMark.Decode(Term.List(model.Items.Skip(1).Select(term=>{
++            var a=term.Require("mark",7);var at=a[3].Require("relative",2);
++            return Term.Call("mark",Moved(a[0]),a[1],a[2],Term.Call("relative",Moved(at[0]),at[1]),a[4],a[5],a[6]);
++        }).Prepend(stand).ToArray())).Skip(1).ToArray();
++    }
++    SceneMark[] InMode(SceneMark[] marks)
++    {
++        if(modes.Count==0)return marks;
++        var byId=marks.ToDictionary(m=>m.Id);
++        foreach(var gone in modes.Keys.Where(id=>!byId.ContainsKey(id)).ToArray())modes.Remove(gone);
++        string? ThingOf(SceneMark mark){while(mark.Subject==null){if(mark.Parent==null)return null;mark=byId[mark.Parent];}return mark.Id;}
++        var shown=new List<SceneMark>();
++        foreach(var mark in marks) {
++            if(mark.Subject==null&&ThingOf(mark) is {} thing&&modes.ContainsKey(thing))continue;
++            shown.Add(mark);if(modes.TryGetValue(mark.Id,out var parts))shown.AddRange(parts);
++        }
++        return shown.ToArray();
++    }
++    void Install(SceneMark[] marks,WorldProjection? projection)
+     {
+         var next = new Dictionary<string, Occurrence>();
+         // Validate and convert the complete candidate before changing the scene.
+@@ -193,22 +262,22 @@ public partial class ScenePanel : SubViewportContainer
+             if (occurrences.TryGetValue(mark.Id, out var old) && old.Mark.Signature == mark.Signature && Subject(old)?.ToString()==NextSubject(mark)?.ToString()) { next.Add(mark.Id, old); continue; }
+             changed = true; var node = new Node3D { Name = "occurrence" }; root.AddChild(node);
+             var corners = mark.Kind == "group" ? [] : Corners(sizes[mark.Id]);
++            var lines = Lines(mark.Kind,corners);MeshInstance3D? shape=null;
++            var looks = mark.Looks.Select(surface=>(Material)Look(mark,surface)).ToArray();
+             if (mark.Kind != "group") {
+                 Mesh mesh;
+-                if (mark.Kind == "wire_box") {
+-                    var lines = new ImmediateMesh(); lines.SurfaceBegin(Mesh.PrimitiveType.Lines);
+-                    foreach (var edge in Edges) { lines.SurfaceAddVertex(corners[edge.A]); lines.SurfaceAddVertex(corners[edge.B]); }
+-                    lines.SurfaceEnd(); mesh = lines;
++                if (mark.Edges) {
++                    var drawn = new ImmediateMesh(); drawn.SurfaceBegin(Mesh.PrimitiveType.Lines);
++                    foreach (var line in lines) {
++                        if(mark.Kind=="corner_box")drawn.SurfaceSetColor(Colors.White);
++                        drawn.SurfaceAddVertex(line.A);
++                        if(mark.Kind=="corner_box")drawn.SurfaceSetColor(new Color(1,1,1,0));
++                        drawn.SurfaceAddVertex(line.B);
++                    }
++                    drawn.SurfaceEnd(); mesh = drawn;
+                 } else if (mark.Kind=="sphere") mesh=new SphereMesh { Radius=sizes[mark.Id].X/2,Height=sizes[mark.Id].X };
+                 else mesh = new BoxMesh { Size = sizes[mark.Id] };
+-                // Below full opacity a surface is translucent; both sides already draw.
+-                var colour=new Color(mark.Colour) with {A=mark.Opacity/1000f};
+-                node.AddChild(new MeshInstance3D { Mesh = mesh, MaterialOverride = new StandardMaterial3D {
+-                    ShadingMode = mark.Kind=="wire_box" ? BaseMaterial3D.ShadingModeEnum.Unshaded : BaseMaterial3D.ShadingModeEnum.PerPixel,
+-                    AlbedoColor=colour,Metallic=mark.Metallic/1000f,Roughness=mark.Roughness/1000f,
+-                    EmissionEnabled=mark.Emission>0,Emission=colour,EmissionEnergyMultiplier=mark.Emission/1000f,
+-                    Transparency=mark.Opacity<1000 ? BaseMaterial3D.TransparencyEnum.Alpha : BaseMaterial3D.TransparencyEnum.Disabled,
+-                    CullMode = BaseMaterial3D.CullModeEnum.Disabled } });
++                shape=new MeshInstance3D { Mesh = mesh, MaterialOverride = looks[0] };node.AddChild(shape);
+             }
+             if(mark.Label.Kind!="atom" || mark.Label.Name!="unlabelled") {
+                 var label=mark.Label.Require("label",2);float y=label[1].TextValue switch {"above"=>sizes[mark.Id].Y/2+.15f,"below"=>-sizes[mark.Id].Y/2-.15f,_=>0};
+@@ -216,7 +285,7 @@ public partial class ScenePanel : SubViewportContainer
+                     Billboard=BaseMaterial3D.BillboardModeEnum.Enabled,Modulate=new Color("#F5F1EB"),Shaded=false});
+             }
+             long identity=old!=null && Subject(old)?.ToString()==NextSubject(mark)?.ToString() ? old.Identity : ++occurrenceIdentity;
+-            next.Add(mark.Id, new(mark, node, corners,identity)); Rebuilt++;
++            next.Add(mark.Id, new(mark, node, corners,lines,identity,shape,looks)); Rebuilt++;
+         }
+         foreach (var item in next.Values) {
+             var parent = item.Mark.Parent == null ? root : next[item.Mark.Parent].Node;
+@@ -227,8 +296,9 @@ public partial class ScenePanel : SubViewportContainer
+         }
+         foreach (var old in occurrences.Values) if (!next.TryGetValue(old.Mark.Id, out var current) || old.Node != current.Node) { old.Node.GetParent()?.RemoveChild(old.Node); old.Node.QueueFree(); changed = true; }
+         occurrences.Clear(); foreach (var pair in next) occurrences.Add(pair.Key, pair.Value);
+-        world = projection;
++        world = projection;drawn=marks;
+         available=true;
++        ShowLooks(true);
+         if (changed) RequestFraming();
+         MountCamera();
+         if(changed||availabilityChanged)PresentationChanged?.Invoke();
+@@ -236,7 +306,7 @@ public partial class ScenePanel : SubViewportContainer
+     public void ApplyFrame()
+     {
+         if (world == null) return;
+-        var transforms = Transforms(world.Marks,world);
++        var transforms = Transforms(drawn,world);
+         bool changed=false;
+         foreach (var item in occurrences.Values) {
+             var pose=item.Mark.Parent == null ? transforms[item.Mark.Id] : transforms[item.Mark.Parent].AffineInverse() * transforms[item.Mark.Id];
+@@ -303,9 +373,9 @@ public partial class ScenePanel : SubViewportContainer
+         direction=direction.Normalized();
+         Occurrence? hit = null; float nearest = float.PositiveInfinity;
+         foreach (var item in occurrences.Values.Where(o => o.Corners.Length > 0)) {
+-            if (item.Mark.Kind == "wire_box") {
+-                foreach (var edge in Edges) {
+-                    var a = item.Node.GlobalTransform * item.Corners[edge.A]; var b = item.Node.GlobalTransform * item.Corners[edge.B];
++            if (item.Mark.Edges) {
++                foreach (var line in item.Lines) {
++                    var a = item.Node.GlobalTransform * line.A; var b = item.Node.GlobalTransform * line.B;
+                     if(screenPoint is not Vector2 point) {
+                         var closest=Geometry3D.GetClosestPointsBetweenSegments(origin,origin+direction*camera.Far,a,b);
+                         float distance=(closest[0]-origin).Dot(direction);
+@@ -337,11 +407,12 @@ public partial class ScenePanel : SubViewportContainer
+                 if (near <= far && near < nearest) { nearest = near; hit = item; }
+             }
+         }
+-        return hit!=null && Subject(hit) is {} subject ? new(this,hit.Mark.Id,hit.Identity,subject) : null;
++        return Thing(hit) is {} thing ? new(this,thing.Mark.Id,thing.Identity,thing.Mark.Subject!) : null;
+     }
+     Term? Subject(Occurrence? item)
+     { while (item!=null) { if (item.Mark.Subject!=null) return item.Mark.Subject; item=item.Mark.Parent==null ? null : occurrences[item.Mark.Parent]; } return null; }
+-    public string[] SubjectIds(Term subject) => occurrences.Values.Where(o=>o.Corners.Length>0 && Subject(o)?.ToString()==subject.ToString()).Select(o=>o.Mark.Id).ToArray();
++    // One id per shown thing: the mark that names the subject, whatever parts its recipe draws beneath.
++    public string[] SubjectIds(Term subject) => occurrences.Values.Where(o=>o.Mark.Subject?.ToString()==subject.ToString()).Select(o=>o.Mark.Id).ToArray();
+     public string? SubjectLabel(Term subject)
+     {
+         if(!available)return null;
+@@ -394,18 +465,27 @@ public partial class ScenePanel : SubViewportContainer
+             AcceptEvent();
+         }
+     }
+-    public void Suspend(){framing++;bool was=available;available=false;ReleaseInput();Controlled=false;world=null;HideForm();if(was)PresentationChanged?.Invoke();}
++    public void Suspend(){framing++;bool was=available;available=false;ReleaseInput();Controlled=false;world=null;HideForm();ShowLooks();if(was)PresentationChanged?.Invoke();}
+     public void Withdraw()
+-    { Suspend();foreach (var item in occurrences.Values) if (IsInstanceValid(item.Node)) { item.Node.GetParent()?.RemoveChild(item.Node); item.Node.QueueFree(); } occurrences.Clear(); }
++    { Suspend();foreach (var item in occurrences.Values) if (IsInstanceValid(item.Node)) { item.Node.GetParent()?.RemoveChild(item.Node); item.Node.QueueFree(); } occurrences.Clear();source=drawn=[];modes.Clear(); }
+     internal void Select(Selection selected){if(Resolve(selected)!=null)Selected?.Invoke(selected);}
+-    public void Outline(Selection? selected)
++    public void PointAt(Selection? target){pointed=target;ShowLooks();}
++    public void ShowSelected(Selection? target){selected=target;ShowLooks();}
++    // A shown thing is the mark naming a subject, with the marks beneath it
++    // that name none. All of them change look together; selected wins.
++    Occurrence? Thing(Occurrence? item)
++    { while(item!=null&&item.Mark.Subject==null)item=item.Mark.Parent==null ? null : occurrences[item.Mark.Parent]; return item; }
++    Occurrence? Thing(Selection? target)=>target==null ? null : Resolve(target);
++    IEnumerable<Occurrence> Parts(Occurrence thing)=>occurrences.Values.Where(o=>ReferenceEquals(Thing(o),thing));
++    void ShowLooks(bool rebuilt=false)
+     {
+-        var next=selected==null ? null : Resolve(selected);
+-        if(ReferenceEquals(next,highlighted))return;
+-        foreach(var item in new[]{highlighted,next})
+-            if(item!=null&&IsInstanceValid(item.Node))
+-                foreach(var mesh in item.Node.FindChildren("*","GeometryInstance3D",true,false).OfType<GeometryInstance3D>().Prepend(item.Node as GeometryInstance3D).OfType<GeometryInstance3D>())
+-                    mesh.MaterialOverlay=item==next ? Highlight : null;
+-        highlighted=next;
++        var point=Thing(pointed);var chosen=Thing(selected);
++        if(!rebuilt&&ReferenceEquals(point,pointedThing)&&ReferenceEquals(chosen,selectedThing))return;
++        pointedThing=point;selectedThing=chosen;
++        foreach(var item in occurrences.Values.Where(o=>o.Looks.Length==3)) {
++            var thing=Thing(item);int look=thing==null ? 0 : ReferenceEquals(thing,chosen) ? 2 : ReferenceEquals(thing,point) ? 1 : 0;
++            if(item.Look!=look){item.Look=look;item.Shape!.MaterialOverride=item.Looks[look];}
++        }
+     }
++    internal int ShownLook(string id)=>occurrences[id].Look;
+ }
+diff --git a/client/godot/tests/ExportLifecycle.cs b/client/godot/tests/ExportLifecycle.cs
+index 07589886..43869267 100644
+--- a/client/godot/tests/ExportLifecycle.cs
++++ b/client/godot/tests/ExportLifecycle.cs
+@@ -45,9 +45,13 @@ public partial class ExportChecks
+         bool before = control.ButtonPressed;
+         if (DisplayServer.GetName() != "headless") await NativePress(control);
+         else {
+-            for (Node? node = control.GetParent(); node != null; node = node.GetParent())
+-                if (node is ScrollContainer scroll) scroll.EnsureControlVisible(control);
+-            await Frame();
++            // Scrolling into view lands on a later frame and announces nothing; press once the control is on screen.
++            for (int frames = 0; frames < 600; frames++) {
++                for (Node? node = control.GetParent(); node != null; node = node.GetParent())
++                    if (node is ScrollContainer scroll) scroll.EnsureControlVisible(control);
++                await Frame();
++                if (control.GetViewport().GetVisibleRect().HasPoint(control.GetGlobalRect().GetCenter())) break;
++            }
+             var toggled = new TaskCompletionSource(); void Changed(bool _) => toggled.TrySetResult();
+             control.Toggled += Changed;
+             try {
+diff --git a/client/godot/tests/NavigationChecks.cs b/client/godot/tests/NavigationChecks.cs
+index afd0960a..2166470a 100644
+--- a/client/godot/tests/NavigationChecks.cs
++++ b/client/godot/tests/NavigationChecks.cs
+@@ -159,10 +159,10 @@ public partial class ExportChecks
+         await Until(()=>State["world_accepted"]!.GetValue<bool>() && scene.SubjectIds(leaf).Length==4);
+         Check(scene.SubjectIds(leaf).Distinct().Count()==4,"independent recursive paths preserve four occurrences of the same exact subject");
+         Check(scene.FindChildren("*","Label3D",true,false).OfType<Label3D>().Count(l=>l.Text=="Contents cycle")==2,"exact ancestor cycles render explicit terminal occurrences on each independent branch");
+-        await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"<<\"quod:space\">>::space_represent({s2},contents,{t2},none,wireframe,{t2},none).",timeout.Token);
++        await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"<<\"quod:space\">>::space_represent({s2},contents,{t2},none,solid,{t2},none).",timeout.Token);
+         await Until(()=>State["world_accepted"]!.GetValue<bool>() && scene.SubjectIds(leaf).Length==1 && scene.SubjectIds(s2).Length==2);
+-        Check(scene.SubjectIds(s2).Length==2,"wireframe terminates each selected S2 occurrence while the independent S1 leaf remains visible");
+-        await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"<<\"quod:space\">>::space_represent({s2},wireframe,{t2},none,contents,{t2},none).",timeout.Token);
++        Check(scene.SubjectIds(s2).Length==2,"the marker terminates each selected S2 occurrence while the independent S1 leaf remains visible");
++        await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"<<\"quod:space\">>::space_represent({s2},solid,{t2},none,contents,{t2},none).",timeout.Token);
+         await Until(()=>State["world_accepted"]!.GetValue<bool>() && scene.SubjectIds(leaf).Length==4);
+         int rebuilt=scene.Rebuilt;var ids=scene.Ids.ToArray();
+         var view=(SignedView)typeof(Main).GetField("worldView",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.GetValue(app)!;
+diff --git a/client/godot/tests/SceneChecks.cs b/client/godot/tests/SceneChecks.cs
+index a59862a6..5a6d89dd 100644
+--- a/client/godot/tests/SceneChecks.cs
++++ b/client/godot/tests/SceneChecks.cs
+@@ -15,18 +15,23 @@ public partial class ExportChecks
+         var normal = Marks("transform(0,0,0,0,0,0)","wire_box","100000","100000","100000");
+         scene.Apply(normal); await Frame();
+         var corners = scene.WorldCorners("subject/shape");
+-        Check(corners[0].IsEqualApprox(new(-50,-50,-50)) && corners[7].IsEqualApprox(new(50,50,50)), "default real-size wireframe spans minus50 to plus50 metres");
++        Check(corners[0].IsEqualApprox(new(-50,-50,-50)) && corners[7].IsEqualApprox(new(50,50,50)), "a hundred metre wireframe spans minus50 to plus50 metres");
+         var mesh=scene.SceneRoot.FindChildren("*","MeshInstance3D",true,false).OfType<MeshInstance3D>().Single().Mesh;
+         var surface=RenderingServer.MeshGetSurface(mesh.GetRid(),0);
+         Console.WriteLine($"M2_WIRE_SURFACE primitive={surface["primitive"]} vertices={surface["vertex_count"]} expected={(int)RenderingServer.PrimitiveType.Lines}");
+         Check(surface["primitive"].AsInt32()==(int)RenderingServer.PrimitiveType.Lines && surface["vertex_count"].AsInt32()==24,"actual engine wire surface contains twelve lines and no face primitives");
+         Check(scene.PickRay(new(0,0,200),Vector3.Forward)==null,"spatial ray cannot pick a wireframe face interior");
+         Check(scene.PickRay(new(0,-50,200),Vector3.Forward)?.Subject.ToString()==subject.ToString(),"spatial ray picks a wire edge through the same exact subject owner");
+-        if(DisplayServer.GetName()!="headless") {
+-            for(Node? parent=scene.GetParent();parent!=null;parent=parent.GetParent()) if(parent is ScrollContainer scroll) scroll.EnsureControlVisible(scene);
+-            await Frame(); await ToSignal(RenderingServer.Singleton,RenderingServer.SignalName.FramePostDraw);
++        // Before sign-in the scene is hidden behind the card, so ask its viewport for one frame.
++        async Task<Image> Raster() {
+             var viewport=scene.GetChildren().OfType<SubViewport>().Single();
+-            using var raster=viewport.GetTexture().GetImage();
++            await Frame(); viewport.RenderTargetUpdateMode=SubViewport.UpdateMode.Once;
++            await ToSignal(RenderingServer.Singleton,RenderingServer.SignalName.FramePostDraw);
++            return viewport.GetTexture().GetImage();
++        }
++        if(DisplayServer.GetName()!="headless") {
++            Console.WriteLine($"M2_SCENE_VISIBLE {scene.IsVisibleInTree()}");
++            using var raster=await Raster();
+             var centre=raster.GetPixel(raster.GetWidth()/2,raster.GetHeight()/2);
+             Check(centre.R<.01f && centre.G<.01f && centre.B<.01f,"actual desktop wireframe raster leaves its face interior empty");
+             var edge=scene.Project("subject/shape",new Vector3(0,-50,-50)); bool visible=false;
+@@ -47,8 +52,60 @@ public partial class ExportChecks
+         var midpoint = new Vector3(0,-1.001f/2,-.5005f/2);
+         Check(scene.Pick(scene.Project("subject/shape",midpoint))?.Subject.ToString() == subject.ToString(), "wire edge picking resolves exact ancestor subject and history");
+         Check(scene.Pick(new(-100,-100)) == null, "wireframe does not invent a picking surface away from its edges");
++        scene.Apply(Marks("transform(1000,2000,3000,0,0,90)","corner_box","'/'(1,3)","1001","'/'(1001,2)")); await Frame(); corners = scene.WorldCorners("subject/shape");
++        Check(Math.Abs(corners[7].Y-corners[0].Y - 1f/3000) < 0.000001f && Math.Abs(corners[7].Z-corners[0].Z - .5005f) < 0.000001f, "a real-size corner box keeps the same exact rational extents at render boundary");
+         scene.Apply(Marks("transform(0,0,0,0,0,0)","box","500","500","500")); await Frame();
+         Check(scene.Pick(scene.Project("subject/shape",Vector3.Zero))?.Subject.ToString() == subject.ToString(), "default solid cube uses the same exact-subject picking adapter");
++        // The shared marker as the vocabulary sends it: see-through sides and
++        // fading corner lines, each carrying its display, pointed-at and selected surfaces.
++        string Looks(string colour,int emission,int shown,int pointed,int chosen) => $"surfaces(surface(<<\"{colour}\">>,0,700,{emission},{shown},[]),surface(<<\"#F9C80E\">>,0,700,{emission},{pointed},[]),surface(<<\"#F9C80E\">>,0,700,{emission},{chosen},[]))";
++        string Part(string thing,string name,string kind,string looks,string label) => $"mark(<<\"{thing}/{name}\">>,<<\"{kind}\">>,[f(<<\"width\">>,500),f(<<\"height\">>,500),f(<<\"depth\">>,500)],relative(<<\"{thing}\">>,transform(0,0,0,0,0,0)),{looks},{label},depicts_nothing)";
++        string Marker(string thing,string pose,string entity) => $"mark(<<\"{thing}\">>,<<\"group\">>,[],{pose},no_surface,unlabelled,depicts(<<\"scene-fixture\">>,{anchor},{entity}))," +
++            Part(thing,"sides","box",Looks("#848FA5",0,30,40,120),"unlabelled") + "," + Part(thing,"corners","corner_box",Looks("#C9D2DB",1000,1000,1000,1000),"label(<<\"Space\">>,<<\"above\">>)");
++        var markers = Term.Parse("[" + Marker("subject","transform(0,0,0,0,30,0)","artifact") + "," + Marker("other","transform(1500,0,0,0,30,0)","neighbour") + "," + Marker("third","transform(3000,0,0,0,30,0)","bystander") + "]");
++        scene.Apply(markers); await Frame();
++        var fading=scene.SceneRoot.FindChildren("*","MeshInstance3D",true,false).OfType<MeshInstance3D>().First(m=>m.Mesh is ImmediateMesh);
++        var drawn=RenderingServer.MeshGetSurface(fading.Mesh.GetRid(),0);
++        Check(drawn["primitive"].AsInt32()==(int)RenderingServer.PrimitiveType.Lines && drawn["vertex_count"].AsInt32()==48 &&
++              (drawn["format"].AsInt64()&(long)RenderingServer.ArrayFormat.FormatColor)!=0,"a corner box is twenty-four line segments whose colour fades along their length");
++        string[] ours=["subject/sides","subject/corners"],theirs=["other/sides","other/corners"],third=["third/sides","third/corners"];
++        bool Shown(string[] ids,int look)=>ids.All(id=>scene.ShownLook(id)==look);
++        var here=scene.Pick(scene.Project("subject/sides",Vector3.Zero));var there=scene.Pick(scene.Project("other/sides",Vector3.Zero));
++        Check(here?.Subject.ToString()==subject.ToString() && there!=null && there.Subject.ToString()!=subject.ToString(),"a marker is picked through its see-through sides as its exact subject");
++        Check(scene.Pick(scene.Project("subject/corners",new Vector3(.25f,.25f,.25f)))?.Subject.ToString()==subject.ToString(),"a marker corner resolves the same subject");
++        Check(Shown(ours,0) && Shown(theirs,0),"marks start in their display look");
++        built = scene.Rebuilt;
++        scene.PointAt(here);Check(Shown(ours,1) && Shown(theirs,0),"pointing switches every mark of that one thing to its pointed-at look");
++        scene.ShowSelected(here);Check(Shown(ours,2) && Shown(theirs,0),"the selected look wins while the same thing is pointed at");
++        scene.PointAt(there);Check(Shown(ours,2) && Shown(theirs,1) && Shown(third,0),"pointing elsewhere leaves the selection shown and other things untouched");
++        if(DisplayServer.GetName()!="headless") {
++            using var raster=await Raster();
++            Color Brightest(Vector2 at) { var best=Colors.Black;
++                for(int x=(int)at.X-2;x<=(int)at.X+2;x++) for(int y=(int)at.Y-2;y<=(int)at.Y+2;y++)
++                    if(x>=0 && y>=0 && x<raster.GetWidth() && y<raster.GetHeight() && raster.GetPixel(x,y).Luminance>best.Luminance) best=raster.GetPixel(x,y);
++                return best; }
++            var corner=Brightest(scene.Project("third/corners",new Vector3(-.25f,-.25f,.25f)));var middle=Brightest(scene.Project("third/corners",new Vector3(0,-.25f,.25f)));
++            var gold=Brightest(scene.Project("other/corners",new Vector3(-.25f,-.25f,.25f)));
++            Console.WriteLine($"M2_MARKER_RASTER corner={corner} middle={middle} pointed={gold}");
++            Check(corner.Luminance>.5f && middle.Luminance<corner.Luminance/2,"actual marker raster draws each corner and leaves the middle of its edge empty");
++            Check(gold.R>gold.B*2 && corner.B>corner.R*.9f,"actual marker raster shows the pointed-at thing in gold and its neighbour in gray-blue");
++            if(System.Environment.GetEnvironmentVariable("M2_MARKER_CAPTURE") is string path) Check(raster.SavePng(path)==Error.Ok,"desktop marker raster retained");
++        }
++        scene.Apply(markers);Check(scene.Rebuilt==built && Shown(ours,2) && Shown(theirs,1),"an unchanged scene keeps its resources and its shown looks");
++        scene.ShowSelected(null);scene.PointAt(null);Check(Shown(ours,0) && Shown(theirs,0) && Shown(third,0) && scene.Rebuilt==built,"looks return to display without rebuilding anything");
++        // Another mode's model of one thing, as client_eidolon returns it: its own root group, then its parts.
++        string Model(string entity,string extra) => "[" + Marker("selected","transform(900,900,900,0,0,0)",entity) + extra + "]";
++        string sizeLine=",mark(<<\"selected/size\">>,<<\"group\">>,[],relative(<<\"selected\">>,transform(0,-250,0,0,0,0)),no_surface,label(<<\"10 m\">>,<<\"below\">>),depicts_nothing)";
++        int count=scene.Count;var place=scene.WorldPose("subject");
++        Check(scene.ShowMode(here!,Term.Parse(Model("artifact",""))) && scene.Count==count && scene.Rebuilt==built,"the display model shown again in place changes and rebuilds nothing");
++        Check(scene.ShowMode(here,Term.Parse(Model("artifact",sizeLine))) && scene.Count==count+1 && scene.Rebuilt==built+1,"another mode adds only its own new part to that one thing");
++        Check(scene.WorldPose("subject").IsEqualApprox(place) && scene.WorldPose("subject/size").Origin.IsEqualApprox(place.Origin+new Vector3(0,-.25f,0)),"the mode is drawn where the thing stands, not at the model's own pose");
++        Check(scene.SceneRoot.FindChildren("*","Label3D",true,false).OfType<Label3D>().Count(l=>l.Text=="10 m")==1 && here.Pose!=null && here.Label=="Space","the thing keeps its selection and shows the mode's line");
++        scene.ShowSelected(here);Check(Shown(ours,2) && Shown(theirs,0),"a thing drawn in another mode still shows its selected look");
++        scene.Apply(markers);Check(scene.Count==count+1 && scene.Rebuilt==built+1,"an unchanged world view keeps the thing in its mode and rebuilds nothing");
++        Check(!scene.ShowMode(here,Term.Parse(Model("neighbour",sizeLine))) && !scene.ShowMode(here,markers) && scene.Count==count+1,"a model of another thing, or of several, is not drawn in this thing's place");
++        Check(scene.ShowMode(here,null) && scene.Count==count && Shown(ours,2) && scene.WorldPose("subject").IsEqualApprox(place),"withdrawing the mode returns the thing to display");
++        scene.ShowSelected(null);
+         var all = new List<Node>(); void Visit(Node node) { all.Add(node); foreach(var child in node.GetChildren()) Visit(child); }
+         Visit(scene); Check(!all.Any(n => n is CollisionObject3D), "exterior adapter creates no collision bodies or walls");
+         scene.Withdraw(); await Frame(); Check(scene.Count == 0 && scene.Pick(Vector2.Zero) == null, "withdrawal removes geometry and picking together");
+diff --git a/client/godot/tests/SpaceChecks.cs b/client/godot/tests/SpaceChecks.cs
+index 83f880fd..00249314 100644
+--- a/client/godot/tests/SpaceChecks.cs
++++ b/client/godot/tests/SpaceChecks.cs
+@@ -238,7 +238,7 @@ public partial class ExportChecks
+         var panel=(OperationsPanel)app.FindChild("operations",true,false); var scene=(ScenePanel)app.FindChild("space-scene",true,false);
+         if(phase=="m2-fresh") {
+             await CreationTarget(panel,human,"create");
+-            Check(panel.FormPanel.Draft["space_name"]=="Space" && panel.FormPanel.Draft["space_length(width)"]=="100","normal creation presents the authored default name and100 metre extent");
++            Check(panel.FormPanel.Draft["space_name"]=="Space" && panel.FormPanel.Draft["space_length(width)"]=="10","normal creation presents the authored default name and ten metre extent");
+             await Keyboard(panel,panel.Current!); Check(!panel.FormPanel.Validate(),"invalid creation draft remains local");
+             await Type((LineEdit)panel.FormPanel.Input("space_length(width)")!,"101");
+             await ClickSubmit(panel);
+@@ -257,7 +257,7 @@ public partial class ExportChecks
+         var first=SpaceResults(recovered); var firstSpace=Result(first,"space");
+         Check(Actor.FromTerm(firstSpace).Namespace==human.Namespace && Result(first,"owner").ToString()==setup[0].ToString(),"recovered generated reference and owner retain selected storage and distinct U identity");
+         Check(Result(first,"location").Require("placed",2)[0].ToString()==s0.ToString(),"original result contains exact containing space and placement");
+-        Check(scene.Count==2,"original S1 appears in S0 through the selected shared exterior recipe");
++        Check(scene.Count==3,"original S1 appears in S0 through the shared marker: its group, sides and corners");
+         string firstId=scene.SubjectIds(firstSpace).Single();
+         await PickSpace(scene,firstId,Vector3.Zero,firstSpace);
+         await Until(()=>panel.Available);
+@@ -306,16 +306,21 @@ public partial class ExportChecks
+         await ClickSubmit(panel); Check(Json.Committed(panel.LastOutcome!),"normal mouse creation commits through the current generic binder");
+         Gone(panel,"Create space");
+         var defaultResult=SpaceResults(panel.LastOutcome!); Check(Result(defaultResult,"owner").ToString()==setup[0].ToString(),"default creation result reports actual U ownership");
+-        await Until(()=>scene.Count>=4); Check(scene.Count==4,"creation remains in S0 and adds only the new exterior occurrence");
++        await Until(()=>scene.Count>=6); Check(scene.Count==6,"creation remains in S0 and adds only the new marker");
+         await CreationTarget(panel,human,"create");
+-        await FieldChoice(panel,"space_exterior(finite)",Term.Atom("wireframe"));
+-        await ClickSubmit(panel); Check(Json.Committed(panel.LastOutcome!),"normal GUI selects the real finite wireframe recipe");
+-        var wire=Result(SpaceResults(panel.LastOutcome!),"space");
+-        await Until(()=>scene.Count>=6);
+-        string wireId=scene.SubjectIds(wire).Single();
+-        var corners=scene.WorldCorners(wireId);
+-        Check(Math.Abs(corners.Max(v=>v.X)-corners.Min(v=>v.X)-100)<.0001f,"actual created default wireframe has100 metre width");
+-        Check(scene.Pick(scene.Project(wireId,new Vector3(0,-50,-50)))?.Subject.ToString()==wire.ToString(),"picking the created wireframe resolves its actual generated reference");
++        Check(panel.Current!.Form.Tree.Leaves.All(c=>!c.Role.StartsWith("space_exterior")),"the creation form offers no outside choice");
++        // Near-agent placement would put this marker exactly on the first one; give it its own place to be picked at.
++        await FieldChoice(panel,Term.Call("space_placement",human.Ontology).ToString(),Term.Call("at",s0,Term.Call("transform",Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"))));
++        await ClickSubmit(panel); Check(Json.Committed(panel.LastOutcome!),"a second default space creates through the same form");
++        var second=Result(SpaceResults(panel.LastOutcome!),"space");
++        await Until(()=>scene.Count>=9);
++        string secondId=scene.SubjectIds(second).Single();
++        var corners=scene.WorldCorners(secondId+"/corners");
++        Check(Math.Abs(corners.Max(v=>v.X)-corners.Min(v=>v.X)-.5f)<.0001f,"a default ten metre space is shown by the half metre marker");
++        // The camera re-frames a changed scene on later frames and announces nothing; look again each frame.
++        bool Picked()=>scene.Pick(scene.Project(secondId,Vector3.Zero))?.Subject.ToString()==second.ToString();
++        for(int frames=0;frames<600&&!Picked();frames++)await Frame();
++        Check(Picked(),"picking the marker through its see-through side resolves its actual generated reference");
+         for(Node? parent=scene.GetParent();parent!=null;parent=parent.GetParent()) if(parent is ScrollContainer scroll) scroll.EnsureControlVisible(scene);
+         await Frame();
+         if(System.Environment.GetEnvironmentVariable("M2_SCREENSHOT") is string screenshot) {
+@@ -326,39 +331,48 @@ public partial class ExportChecks
+             await ToSignal(RenderingServer.Singleton,RenderingServer.SignalName.FramePostDraw);
+             var rendered=scene.GetChildren().OfType<SubViewport>().Single();
+             using var pixels=rendered.GetTexture().GetImage();
+-            var face=scene.Project(wireId,new Vector3(50,0,0));
++            var face=scene.Project(secondId,Vector3.Zero);
+             var pixel=pixels.GetPixel((int)face.X,(int)face.Y);
+-            Check(pixels.SavePng(screenshot+".scene.png")==Error.Ok,"actual created wireframe viewport raster retained");
++            Check(pixels.SavePng(screenshot+".scene.png")==Error.Ok,"actual created marker viewport raster retained");
+             Console.WriteLine($"M2_RASTER face={face} pixel={pixel} camera={rendered.GetChildren().OfType<Camera3D>().Single().Position}");
+             foreach(var mesh in scene.FindChildren("*","MeshInstance3D",true,false).OfType<MeshInstance3D>()) {
+                 var surface=RenderingServer.MeshGetSurface(mesh.Mesh.GetRid(),0);
+                 Console.WriteLine($"M2_RASTER_MESH kind={mesh.Mesh.GetClass()} primitive={surface["primitive"]} vertices={surface["vertex_count"]} position={mesh.GlobalPosition}");
+             }
+-            Check(pixel.R<.01f && pixel.G<.01f && pixel.B<.01f,"actual created wireframe leaves its projected face centre empty");
++            Check(pixel.Luminance<.2f,"actual created marker keeps its sides see-through");
+             // The parent composites the SubViewport's completed texture on its
+             // next rendered frame; capture that explicit completion as well.
+             await ToSignal(RenderingServer.Singleton,RenderingServer.SignalName.FramePostDraw);
+             Check(GetViewport().GetTexture().GetImage().SavePng(screenshot)==Error.Ok,"actual created space and generic GUI rendered to evidence image");
+         }
+-        await PickSpace(scene,wireId,new Vector3(0,-50,-50),wire);
++        await PickSpace(scene,secondId,Vector3.Zero,second);
+         await Until(()=>panel.Available);
+         Check(!panel.FindChild("operation-targeting",true,false).Get("visible").AsBool(),"an exact picked instance hides the unrelated class/storage chooser");
++        // Each shown thing has a mode. Editing this one space draws its edition Eidolon where it stands.
++        var modes=(EidolonPanel)app.FindChild("representations",true,false);
++        await Until(()=>modes.Available);
++        bool SizeLine()=>scene.SceneRoot.FindChildren("*","Label3D",true,false).OfType<Label3D>().Any(l=>l.Text=="10 m × 10 m × 10 m");
++        int displayed=scene.Count;
++        modes.Choose(modes.Offered.Single(e=>e.Purpose.Name=="edition"&&e.Style=="solid"));
++        await Until(SizeLine);
++        Check(scene.Count==displayed+1 && !modes.Preview.Visible,"editing a space adds its real size in place in the world, with no side picture");
++        Check(scene.SubjectIds(second).Single()==secondId && scene.WorldCorners(secondId+"/corners").Length==8,"the edited space is the same shown thing, still drawn by the marker");
++        modes.Choose(modes.Offered.Single(e=>e.Purpose.Name=="playing"&&e.Style=="solid"));
++        Check(!SizeLine() && scene.Count==displayed,"leaving edition returns that space to display at once");
+         await CreationTarget(panel,human,"create_exact");
+         foreach(var (role,value) in new[] { ("space_length(width)","1"),("space_divisor(width)","3"),("space_length(height)","1001"),("space_divisor(height)","1"),("space_length(depth)","1001"),("space_divisor(depth)","2") })
+             await Type((LineEdit)panel.FormPanel.Input(role)!,value);
+         await FieldChoice(panel,"space_unit",Term.Text("mm"));
+         await FieldChoice(panel,Term.Call("space_placement",human.Ontology).ToString(),Term.Call("at",s0,Term.Call("transform",Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"))));
+-        await FieldChoice(panel,"space_exterior(exact)",Term.Atom("wireframe"));
+         await ClickSubmit(panel); Check(Json.Committed(panel.LastOutcome!),"rational lengths create through the same authored generic form and constructor");
+         Check(Result(SpaceResults(panel.LastOutcome!),"location").ToString()==Term.Call("placed",s0,Term.Call("transform",Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"),Term.Number("0"))).ToString(),"normal GUI explicit placement preserves the selected exact destination and pose");
+-        var rational=Result(SpaceResults(panel.LastOutcome!),"space"); await Until(()=>scene.Count>=8);
++        var rational=Result(SpaceResults(panel.LastOutcome!),"space"); await Until(()=>scene.Count>=12);
+         string rationalId=scene.SubjectIds(rational).Single();
+-        corners=scene.WorldCorners(rationalId);
+-        Check(Math.Abs(corners.Max(v=>v.X)-corners.Min(v=>v.X)-1f/3000)<.000001f &&
+-            Math.Abs(corners.Max(v=>v.Y)-corners.Min(v=>v.Y)-1.001f)<.000001f,"actual Prolog rational millimetres reach engine geometry without integer rounding");
++        corners=scene.WorldCorners(rationalId+"/corners");
++        Check(Math.Abs(corners.Max(v=>v.X)-corners.Min(v=>v.X)-.5f)<.0001f &&
++            Math.Abs(corners.Max(v=>v.Y)-corners.Min(v=>v.Y)-.5f)<.0001f,"the marker keeps its one size whatever the space measures inside");
+         await CreationTarget(panel,human,"create_infinite");
+-        var exterior=panel.Current!.Form.Tree.Leaves.Single(c=>c.Role=="space_exterior(infinite)");
+-        Check(exterior.Options.All(o=>o.Value.Name!="wireframe") && exterior.Properties["help"].TextValue.Contains("no finite wireframe"),"infinite form explicitly explains wireframe unavailability and offers the real solid recipe");
++        Check(panel.Current!.Form.Tree.Leaves.All(c=>!c.Role.StartsWith("space_exterior")),"the infinite form offers no outside choice either");
+         await FieldChoice(panel,Term.Call("space_placement",human.Ontology).ToString(),Term.Atom("unplaced"));
+         await ClickSubmit(panel); Check(Json.Committed(panel.LastOutcome!) && Result(SpaceResults(panel.LastOutcome!),"location").Name=="unplaced","normal GUI supports explicit infinite unplaced creation without placement fallback");
+         var foreign=await SpaceControl(new() { ["m2_foreign_storage"]=JsonSerializer.SerializeToNode(human) });
+@@ -372,7 +386,7 @@ public partial class ExportChecks
+         var foreignResults=SpaceResults(panel.LastOutcome!); var foreignSpace=Result(foreignResults,"space");
+         Check(Actor.FromTerm(foreignSpace).Namespace==target.Namespace && Result(foreignResults,"owner").ToString()==setup[0].ToString() &&
+             Result(foreignResults,"location").Args[0].ToString()==s0.ToString(),"foreign storage, U ownership and S0 placement remain distinct exact references");
+-        await Until(()=>scene.Count>=10); Check(scene.Count==10,"foreign-storage source appears through its authorized exact exterior recipe");
++        await Until(()=>scene.Count>=15); Check(scene.Count==15,"foreign-storage source appears through the same shared marker");
+         await CreationTarget(panel,human,"create");
+         Check(panel.FormPanel.Draft["space_name"]=="Space","a form left for another storing ontology is gone; returning opens the offered form");
+         var ids=scene.Ids.Order().ToArray();
+@@ -390,7 +404,7 @@ public partial class ExportChecks
+             "reconnect writes only its new HUD receiver selection and submits no creation instruction");
+         var navigation=Json.Binding(await app.ActiveSession.Read(human,"<<\"quod:user\">>::account_navigation(Space,Modes).",CancellationToken.None),"Space");
+         Check(navigation.ToString()==s0.ToString(),"all creations leave the same A inside original parentless S0");
+-        await File.WriteAllTextAsync(Env("M1B_RESULT"),JsonSerializer.Serialize(new { passed=true,checks,original=first.Select(t=>t.ToString()).ToArray(),wire=wire.ToString(),rational=rational.ToString(),foreign=foreignSpace.ToString() }));
++        await File.WriteAllTextAsync(Env("M1B_RESULT"),JsonSerializer.Serialize(new { passed=true,checks,original=first.Select(t=>t.ToString()).ToArray(),second=second.ToString(),rational=rational.ToString(),foreign=foreignSpace.ToString() }));
+         await Press("disconnect"); await app.ViewsDisposed; Check(SignedView.LiveSockets==0,"M2 view and operation consumers dispose all sockets");
+         Console.WriteLine("M2_EXPORT_PASS"); Console.Out.Flush(); await app.CloseApplication();
+     }
+@@ -421,7 +435,7 @@ public partial class ExportChecks
+         var detail=panel.FindChild("operation-exact-details",true,false).FindChildren("*","TextEdit",true,false).OfType<TextEdit>().Last();
+         Check(!detail.Editable && detail.WrapMode==TextEdit.LineWrappingMode.None &&
+             JsonNode.DeepEquals(JsonNode.Parse(detail.Text),panel.LastOutcome),"exact refusal details remain complete and selectable without whole-response wrapping");
+-        Check(await StateOfSpaces()==before && scene.Count==10,"denied construction leaves no generated space owner or assignment");
++        Check(await StateOfSpaces()==before && scene.Count==15,"denied construction leaves no generated space owner or assignment");
+         await ExecuteComplete(app.ActiveSession,app.ActiveStore,human,$"retract(instance_permission({space},space_admit,deny)).",timeout.Token);
+         await OpenExactTarget(panel);
+         await Type((LineEdit)panel.FindChild("exact-storage-namespace",true,false),human.Namespace);
+diff --git a/doc/godot-foundation-contract.md b/doc/godot-foundation-contract.md
+index d83e3f21..2c91a8ef 100644
+--- a/doc/godot-foundation-contract.md
++++ b/doc/godot-foundation-contract.md
+@@ -136,7 +136,7 @@ that retained content is withdrawn, without an empty valid-scene fallback.
+ 
+ Normal signup has the following Prolog composition. U, A and S0 are stable
+ exact references, not lobby navigation aliases. S0 uses the ordinary space
+-class/defaults: name `<<"Space">>`, 100 metres per axis, owner U, no containing
++class/defaults: name `<<"Space">>`, 10 metres per axis, owner U, no containing
+ space. A starts inside S0 at the authored origin. The interior is black with
+ available controllers and accessible GUI. No floor, sky, terrain, pilot body or
+ simulation is required. The eventual dedicated user-lobby subclass is outside
+@@ -241,27 +241,25 @@ S2 using the same operation, then enters S2. Each entry atomically withdraws
+ the old assignment/admission and admits the new one with the existing slot
+ revision/conflict rules. Do not move the camera first and infer entry success.
+ 
+-Exterior is a viewing purpose, not a mesh type. Retain the small solid cube as
+-one default recipe. Add a selectable **wireframe exterior**: a real-size box
+-centred at the space's local origin, with X/Y/Z extents equal to its finite
+-interior dimensions, transformed into the containing/displaying frame. The
+-100-metre default therefore spans −50 to +50 metres per axis, not half a metre.
+-It is a representation; it creates no floor, collision wall or simulation.
+-Resolve exact unit conversion in Prolog. An infinite extent has no finite box:
+-the wireframe choice must explicitly report unavailable for that extent and
+-offer the other actual Eidolons; it must never invent a finite bound or silently
+-substitute the cube. Sub-millimetre rational extents also must not be rounded.
+-The M0 integer-mm `mark/7` box plus `surface/5` vocabulary lacked an edge-only
+-box with arbitrary exact-rational dimensions. The shared `wire_box` kind carries
+-positive reduced integer/rational millimetre dimensions until conversion at the
+-render boundary. It has twelve edges independently of its dimensions, with no
+-space-specific engine branch. M2 qualifies asymmetric extents, rotation,
+-odd/rational dimensions and picking through that shared path.
++Exterior is a viewing purpose, not a mesh type. The default recipe is the
++shared fixed-size marker described in [spaces](spaces.md): half a metre
++whatever the interior measures, finite or infinite. It is a representation; it
++creates no floor, collision wall or simulation. The real size is shown from
++inside by the interior walls: a real-size outline centred at the space's local
++origin, with X/Y/Z extents equal to its finite interior dimensions. Resolve
++exact unit conversion in Prolog. An infinite extent has no finite outline:
++that choice must explicitly report unavailable and never invent a finite bound.
++Sub-millimetre rational extents also must not be rounded. The shared edge-only
++kinds `wire_box` and `corner_box` carry positive reduced integer/rational
++millimetre dimensions until conversion at the render boundary. Each has twelve
++edges independently of its dimensions, with no space-specific engine branch.
++The shared scene path qualifies asymmetric extents, rotation, odd/rational
++dimensions and picking.
+ 
+ For a contents exterior, a selected space exposes its contents recursively.
+ If S0 contains S1 and S1 contains S2 and both select contents, S2's contents
+ are visible from S0 without entry. Continue at every contents level. Mesh or
+-wireframe selection terminates expansion at that occurrence only. Do not fall
++marker selection terminates expansion at that occurrence only. Do not fall
+ back to either when contents disclosure or a dependency is unavailable.
+ 
+ The D5 subset required in M3 is:
+diff --git a/doc/physics-native.md b/doc/physics-native.md
+index a254df03..9efdf207 100644
+--- a/doc/physics-native.md
++++ b/doc/physics-native.md
+@@ -153,8 +153,8 @@ frames require the same contents recipe in playing and edition views.
+ An incompatible selection becomes unavailable. The root
+ retains `physics_frame_member(World,SpaceRef,Assignment,Revision,Path)`; every
+ path edge names the exact source, assignment and frame revision. This binding
+-does not change the source's ordinary assignment, storage or owner. A solid or
+-wireframe space admitted as an inert frame creates no collider or child world.
++does not change the source's ordinary assignment, storage or owner. A space
++shown by its marker and admitted as an inert frame creates no collider or child world.
+ 
+ One root authority, run and native world own the bodies of the component. Each
+ exact entity/assignment has one body, even with independent decorative
+diff --git a/doc/spaces.md b/doc/spaces.md
+index 9cedb9bf..f9c7d6a0 100644
+--- a/doc/spaces.md
++++ b/doc/spaces.md
+@@ -70,13 +70,13 @@ ordinary space; it does not trigger rebuilding the old physical lobby.
+ From S0, U uses the offered GUI to instruct A to create another space S1.
+ Storage remains an explicitly selected existing ontology and default owner is
+ U; near-agent placement puts S1 inside A's current space. S1 appears there via
+-the ordinary default exterior Eidolon (currently the half-metre cube), whose
++the ordinary default exterior Eidolon, the shared half-metre marker, whose
+ size is independent of its interior extent. Creating S1 does not enter it.
+ Authorized GUI entry moves the same A to S1; navigation follows the committed
+ assignment. The same creation and entry rules apply inside S1 to create S2,
+ and at further levels, without a separate agent, class or storage ledger per
+ level. The selected exterior Eidolon may display a mesh or the space's contents;
+-the current default cube is one recipe, not a restriction on exterior views.
++the marker is one recipe, not a restriction on exterior views.
+ If both S1 and S2 select contents exteriors, their contents are recursively
+ displayed in S0 as one continuous space, subject to physics and each source
+ owner's disclosure policy. No entry into S1 or S2 is required for that display.
+@@ -132,7 +132,7 @@ outputs `Ref` and `Name` use the ordinary selected-result machinery: a lost
+ reply is recovered from the original operation, including after restart or
+ later instance deletion. Recovery does not create the instance again.
+ 
+-`dimensions` defaults to `box(q(100, <<"m">>), q(100, <<"m">>),
++`dimensions` defaults to `box(q(10, <<"m">>), q(10, <<"m">>),
+ q(100, <<"m">>))`: X, Y and Z lengths centred on the local origin, extending
+ 50 metres in each direction. It also accepts `infinite` or three strictly
+ positive exact length quantities. Existing measurement conversion validates
+@@ -156,8 +156,9 @@ form's placement choice is an input to this action, not a stored slot.
+ `near_agent` reads A's exact location at `quod:space`; a successful `unplaced`
+ result leaves the new space unplaced. A `placed(Destination, Transform)` result
+ places it in front of A along that frame's −Z axis: 2 m from A's position plus
+-half the new space's depth, so its near wall opens at arm's reach plus a step
+-(Yan, 2026-11-07); an infinite space uses half-depth zero. This is one-time placement,
++half the shared marker's depth, read from the scene vocabulary's
++`marker_size/1`. With the 0.5 m marker the new space appears 2.25 m away,
++whatever it measures inside (Yan, 2026-11-12). This is one-time placement,
+ not following A. A denied, unavailable, ambiguous or incomplete location read
+ fails creation. A placed agent needs its ordinary `attribute(Agent, transform,
+ Transform)`; missing pose does not prove absence. Physical-pilot entry and live
+@@ -194,8 +195,8 @@ The shared form also offers **Create space with rational lengths**, with a
+ positive integer numerator/divisor per axis and an explicit length unit. The
+ ordinary finite form retains its integer defaults; both use the same Stage 1
+ assertion and binder. Names may be empty binary values; leaving the supplied
+-default unchanged keeps `Space`. Every form selects placement and an exterior
+-recipe. The creation subject is `class_ref(<<"quod:space">>, Anchor, space)`;
++default unchanged keeps `Space`. Every form selects placement. No form offers
++an outside choice: a new space is shown by the marker. The creation subject is `class_ref(<<"quod:space">>, Anchor, space)`;
+ its class identity is independent of the selected storing ontology. Each storing
+ ontology separately authorizes the acting principal's request and the class
+ owner's scoped callbacks. Class defaults and per-instance ACLs remain subject to
+@@ -296,8 +297,8 @@ single binary `attribute(Space,name,Name)`, or `unnamed` when absent; conflictin
+ or non-binary names refuse the view. The existing endpoint checks the exact
+ space before exposing this optional name (`name` string or null) alongside
+ the projection. It has the same retained read dependencies and authorization;
+-it is neither a naming service nor a second current-location record. Ordinary
+-solid/wireframe space recipes use the same authored name in their scene label.
++it is neither a naming service nor a second current-location record. The
++marker and the inside walls use the same authored name in their scene label.
+ An empty permitted scene remains black; its context belongs to the GUI chrome.
+ 
+ `quod:space::space_represent(SpaceRef, BeforeStyle, BeforePose, BeforeInterior,
+@@ -307,11 +308,12 @@ physical consequence in the same transaction. An unchanged representation
+ performs no state mutation.
+ 
+ `interior` (`none`, `wireframe` or `matrix`; absent means `none`) shows the
+-space's own boundary from inside. The same class-selected boundary recipes serve
+-`exterior` and `interior`: the interior projection places that boundary at the
+-space's origin after its contents, depicting the space itself. `matrix` draws the
+-exact wire box in emissive green over translucent faces. Infinite spaces refuse
+-both finite boundaries with the existing `space_exterior_unavailable` reason.
++space's own walls from inside, at its real size. Both nest the scene
++vocabulary's shared `extent` recipe: a corner outline whose lengths equal the
++exact interior dimensions, never rounded. The interior projection places it at
++the space's origin after its contents, depicting the space itself. `matrix`
++draws that outline in emissive green over translucent faces. Infinite spaces
++refuse both with the `space_interior_unavailable` reason.
+ The space's pie offers the interior choices under **Show as**.
+ 
+ ## Invocation policy
+@@ -363,21 +365,22 @@ independently of the class defaults or per-instance ACL overrides.
+ Exterior and interior describe viewing purposes, not fixed representation types: showing
+ contents does not require entering the space, moving A or changing containment.
+ 
+-Exterior choices include a **full-size wireframe** of a finite
+-space's box, centred on its local origin and transformed into the viewing
+-frame. Its extents equal the exact interior dimensions: the default box spans
+-−50 to +50 metres on X/Y/Z. It does not create collision walls or physics.
+-Infinite dimensions have no finite wire box; report that choice unavailable,
+-without inventing bounds or selecting a cube implicitly. Exact rational lengths
+-must not be rounded. The shared scene vocabulary supplies `wire_box` with exact
+-positive reduced integer/rational millimetre dimensions, as specified in the
+-[M0 exterior contract](godot-foundation-contract.md#space-exterior-and-recursive-exposure).
+-Prolog converts the stored quantities; the engine converts only when rendering.
+-Twelve edges create no collision surfaces or physical bodies. The stored
+-`exterior` selects the actual recipe. Infinite forms offer solid and contents
+-and explain wireframe unavailability; a direct infinite/wireframe request
+-refuses. The contents recipe returns a source-owned exposure, never a
+-substitute mesh.
++Seen from outside, a space is the shared fixed-size **marker** of the scene
++vocabulary (`exterior` `solid`) or its permitted contents (`exterior`
++`contents`). The marker is half a metre whatever the space measures inside,
++finite or infinite: see-through sides, corner lines that fade along each edge,
++gold while pointed at and once selected. It creates no collision surfaces or
++physical bodies. Its `edition` Eidolon is the same marker with the real size
++written beneath it as authored, for example `10 m × 1/3 mm × 2 km`, or
++`Infinite`. A client reads it for the one space being edited and draws it in
++that space's place; the other things keep their display Eidolon. A class may
++also offer a `selected` Eidolon, read the same way on selection; the space
++class offers none. The earlier full-size `wireframe` exterior is retired: it is
++not a valid new `exterior` value, and a space still storing it is shown by the
++marker. The real size is shown from inside by the `interior` walls, where exact
++rational lengths are never rounded: Prolog converts the stored quantities and
++the engine converts only when rendering. The contents recipe returns a
++source-owned exposure, never a substitute mesh.
+ 
+ [When S0 contains S1 containing S2, and both S1 and S2 select contents exteriors,
+ their contents are displayed recursively in S0, subject to physics, as if all
+diff --git a/priv/ontologies/common_predicates.pl b/priv/ontologies/common_predicates.pl
+index a589d4e9..62574384 100644
+--- a/priv/ontologies/common_predicates.pl
++++ b/priv/ontologies/common_predicates.pl
+@@ -223,12 +223,19 @@ client_eidolon(Entity,Choice,View) :-
+     Choice = eidolon(Purpose,Style,recipe(Ns,A,Recipe)),
+     entity_eidolons(Entity,Purpose,Style,Choices), member_eq(Choice,Choices),
+     current_ontology_identity(Here,History), Target = ontology_ref(Here,History),
+-    (member(Purpose,[playing,edition]) ->
+-        client_entity_scene(Entity,Purpose,appearance(_,_,Context,Layout,_)),
++    (client_scene_purpose(Purpose,Shown) ->
++        client_entity_scene(Entity,Shown,appearance(_,_,Context,Layout,_)),
+         in_ontology(Ns,A,eidolon(Recipe,Context,Model)),
+         client_eidolon_scene(Entity,Purpose,Style,Layout,Model,View)
+     ; in_ontology(Ns,A,eidolon(Recipe,subject(Target,Entity),View))).
+ 
++%% Each shown thing has a mode, display by default. A class may also offer a
++%% `selected` Eidolon; it adds to the thing as displayed, so it shares the
++%% display scene's context and place. None is required.
++client_scene_purpose(playing,playing).
++client_scene_purpose(edition,edition).
++client_scene_purpose(selected,playing).
++
+ client_eidolon_scene(Entity,Mode,_,_,contents(Exposure),
+         eidolon_scene(Subject,Marks,Selection,Exposures)) :- !,
+     current_ontology_identity(Ns,A), Subject = entity_ref(Ns,A,Entity),
+diff --git a/priv/ontologies/gui_scene.pl b/priv/ontologies/gui_scene.pl
+index d569ac66..d091389c 100644
+--- a/priv/ontologies/gui_scene.pl
++++ b/priv/ontologies/gui_scene.pl
+@@ -31,10 +31,11 @@
+ %% The descriptor:
+ %%   mark(Id, Kind, Size, Transform, Material, Label, Depicts)
+ %%     Id        a view-scoped occurrence identity, not a domain name
+-%%     Size      ordered mm fields (exact rational for wire_box), or typed assets
++%%     Size      ordered mm fields (exact rational for edge-only boxes), or typed assets
+ %%     Transform transform(X,Y,Z,RX,RY,RZ) | body_pose(Id, Revision)
+ %%               | relative(Parent, transform(...)) | relative(Parent, body_pose(...))
+ %%     Material  surface(Colour, Metal, Rough, Emission, Opacity, Textures) |
++%%               surfaces(Display, Pointed, Selected), three such surfaces |
+ %%               asset_surfaces for meshes | no_surface for groups.
+ %%               Optical factors, opacity and repeats are permille; a surface
+ %%               below full opacity is drawn from both sides.
+@@ -66,6 +67,7 @@ rendering_query(depicted(_, _, _, _, _)).
+ 
+ mark_kind(<<"box">>).
+ mark_kind(<<"wire_box">>).
++mark_kind(<<"corner_box">>).
+ mark_kind(<<"sphere">>).
+ mark_kind(<<"plane">>).
+ mark_kind(<<"cylinder">>).
+@@ -82,6 +84,9 @@ geometry_field(<<"box">>, 3, <<"depth">>).
+ geometry_field(<<"wire_box">>, 1, <<"width">>).
+ geometry_field(<<"wire_box">>, 2, <<"height">>).
+ geometry_field(<<"wire_box">>, 3, <<"depth">>).
++geometry_field(<<"corner_box">>, 1, <<"width">>).
++geometry_field(<<"corner_box">>, 2, <<"height">>).
++geometry_field(<<"corner_box">>, 3, <<"depth">>).
+ geometry_field(<<"sphere">>, 1, <<"diameter">>).
+ geometry_field(<<"plane">>, 1, <<"width">>).
+ geometry_field(<<"plane">>, 2, <<"height">>).
+@@ -120,8 +125,13 @@ sized([Field | Fields], [f(Field, Extent) | Rest]) :-
+     Extent > 0,
+     sized(Fields, Rest).
+ 
++%% Edge-only boxes. A wire_box draws its twelve edges whole. A corner_box
++%% draws each edge from both of its corners, opaque at the corner and fading
++%% to nothing a third of the way along, so the middle of every edge is empty.
+ %% Twelve edges cost the same at any extent. Interior dimensions are not a
+ %% geometry allocation budget. Keep exact reduced fractions on the wire.
++edge_box(<<"wire_box">>).
++edge_box(<<"corner_box">>).
+ exact_sized([],[]).
+ exact_sized([Field|Fields],[f(Field,Extent)|Rest]) :-
+     exact_length(Extent), exact_sized(Fields,Rest).
+@@ -130,7 +140,7 @@ exact_length(N/D) :- integer(N), integer(D), N > 0, D > 1, exact_gcd(N,D,1).
+ exact_gcd(N,0,N).
+ exact_gcd(N,D,G) :- D > 0, R is N mod D, exact_gcd(D,R,G).
+ 
+-geometry(<<"wire_box">>,Fields,Size) :- exact_sized(Fields,Size).
++geometry(Kind,Fields,Size) :- edge_box(Kind), exact_sized(Fields,Size).
+ 
+ geometry(<<"mesh">>, [],
+          mesh_asset(asset(Digest, <<"model/gltf-binary">>), <<"gltf2-static-v1">>,
+@@ -160,7 +170,7 @@ geometry(<<"terrain">>, [], terrain_geometry(<<"qvt1">>,Palette,
+     resource(Transfer), resource(Geometry),
+     resource(Vertices), resource(Triangles),
+     resource(Chunks).
+-geometry(Kind, Fields, Size) :- Kind \== <<"mesh">>, Kind \== <<"terrain">>, Kind \== <<"wire_box">>, sized(Fields, Size).
++geometry(Kind, Fields, Size) :- Kind \== <<"mesh">>, Kind \== <<"terrain">>, \+ edge_box(Kind), sized(Fields, Size).
+ 
+ terrain_palette([],_).
+ terrain_palette([material(Id,Surface)|Rest],Previous) :-
+@@ -237,7 +247,14 @@ appearance(<<"group">>, no_surface, Label) :- labelled(Label).
+ appearance(<<"mesh">>, asset_surfaces, Label) :- labelled(Label).
+ appearance(<<"terrain">>, terrain_surfaces, unlabelled).
+ appearance(Kind, Material, Label) :-
+-    Kind \== <<"group">>, Kind \== <<"mesh">>, Kind \== <<"terrain">>, surfaced(Material), labelled(Label).
++    Kind \== <<"group">>, Kind \== <<"mesh">>, Kind \== <<"terrain">>, shown(Material), labelled(Label).
++
++%% Beside its ordinary look, a mark may carry how it looks while pointed at
++%% and once selected. All three travel together and the client switches
++%% between them itself, so that feedback never waits for a read.
++shown(Surface) :- surfaced(Surface).
++shown(surfaces(Display, Pointed, Selected)) :-
++    surfaced(Display), surfaced(Pointed), surfaced(Selected).
+ 
+ %% A colour is written the way a designer writes it: 35 is "#", and the six
+ %% digits are upper-case hex so one colour has one spelling.
+@@ -336,6 +353,7 @@ modelling_query(model(_, _)).
+ modelling_query(shape(_, _, _)).
+ modelling_query(align(_, _, _, _, _, _)).
+ modelling_query(place_model(_, _, _, _, _)).
++modelling_query(marker_size(_)).
+ 
+ %% --- reusable recipe helpers -------------------------------------------------
+ %% A recipe proves Parts; model/2 derives a scene without asserting anything.
+@@ -352,7 +370,7 @@ model_parts([part(Id, Shape, At, Surface, Label, Subject) | Parts],
+     model_transform(At, Placed), model_parts(Parts, Marks).
+ 
+ %% Source-level arithmetic is evaluated by Prolog once, not shipped as client
+-%% code. Wire boxes preserve their already-resolved exact rational fields.
++%% code. Edge-only boxes preserve their already-resolved exact rational fields.
+ model_dimensions([], []).
+ model_dimensions([f(Name, Expression) | Rest], [f(Name, Value) | Values]) :-
+     Value is Expression, model_dimensions(Rest, Values).
+@@ -369,9 +387,9 @@ model_geometry(<<"mesh">>,
+     PX is EPX, PY is EPY, PZ is EPZ.
+ model_geometry(<<"terrain">>, terrain_geometry(Profile,Palette,View,Resources),
+                terrain_geometry(Profile,Palette,View,Resources)).
+-model_geometry(<<"wire_box">>,Fields,Fields).
++model_geometry(Kind,Fields,Fields) :- edge_box(Kind).
+ model_geometry(Kind, Expressions, Size) :-
+-    Kind \== <<"mesh">>, Kind \== <<"terrain">>, Kind \== <<"wire_box">>, model_dimensions(Expressions, Size).
++    Kind \== <<"mesh">>, Kind \== <<"terrain">>, \+ edge_box(Kind), model_dimensions(Expressions, Size).
+ model_transform(transform(EX, EY, EZ, ERX, ERY, ERZ), transform(X, Y, Z, RX, RY, RZ)) :-
+     X is EX, Y is EY, Z is EZ, RX is ERX, RY is ERY, RZ is ERZ.
+ model_transform(body_pose(Body, Revision), body_pose(Body, Revision)).
+@@ -385,6 +403,8 @@ shape(box(W, H, D), <<"box">>,
+       [f(<<"width">>, W), f(<<"height">>, H), f(<<"depth">>, D)]).
+ shape(wire_box(W,H,D),<<"wire_box">>,
+       [f(<<"width">>,W),f(<<"height">>,H),f(<<"depth">>,D)]).
++shape(corner_box(W,H,D),<<"corner_box">>,
++      [f(<<"width">>,W),f(<<"height">>,H),f(<<"depth">>,D)]).
+ shape(sphere(D), <<"sphere">>, [f(<<"diameter">>, D)]).
+ shape(plane(W, H), <<"plane">>, [f(<<"width">>, W), f(<<"height">>, H)]).
+ shape(cylinder(D, H), <<"cylinder">>, [f(<<"diameter">>, D), f(<<"height">>, H)]).
+@@ -409,6 +429,7 @@ align(Shape, Face, TargetShape, TargetFace, Gap, transform(X, Y, Z, 0, 0, 0)) :-
+     aligned_axis(ZMin, ZMax, FZ, TZMin, TZMax, TZ, Gap, Z).
+ 
+ bounds(box(W, H, D), W, H, D).
++bounds(corner_box(W, H, D), W, H, D).
+ bounds(sphere(D), D, D, D).
+ bounds(plane(W, H), W, H, 0).
+ bounds(cylinder(D, H), D, H, D).
+@@ -500,3 +521,41 @@ scoped_transform(Prefix, transform(X,Y,Z,RX,RY,RZ),
+                  relative(Prefix, transform(X,Y,Z,RX,RY,RZ))).
+ scoped_transform(Prefix, body_pose(Body,Revision), relative(Prefix,body_pose(Body,Revision))).
+ scoped_transform(Prefix, body_frame_pose(Body,Revision),relative(Prefix,body_frame_pose(Body,Revision))).
++
++%% --- shared recipes -----------------------------------------------------------
++%% Named looks that any class may select in class_eidolon/4 or nest through
++%% place_model/5. Each reads only its subject's label, in the subject's own
++%% ontology.
++
++%% House colours, named once so recipes do not repeat their digits.
++house_colour(gray, <<"#848FA5">>).
++house_colour(gray_blue, <<"#C9D2DB">>).
++house_colour(gold, <<"#F9C80E">>).
++
++%% marker: the fixed-size box that stands for a thing, whatever the thing
++%% measures. See-through sides and fading corner lines; gold while pointed
++%% at, fuller gold once selected. Its edge is millimetres.
++marker_size(500).
++eidolon(marker, subject(ontology_ref(Ns, A), Entity),
++        [part(<<"sides">>, box(Size, Size, Size), transform(0, 0, 0, 0, 0, 0),
++              surfaces(surface(Gray, 0, 700, 0, 30, []),
++                       surface(Gold, 0, 700, 0, 40, []),
++                       surface(Gold, 0, 700, 0, 120, [])),
++              unlabelled, depicts_nothing),
++         part(<<"corners">>, corner_box(Size, Size, Size), transform(0, 0, 0, 0, 0, 0),
++              Lines, Label, depicts_nothing)]) :-
++    marker_size(Size), house_colour(gray, Gray), house_colour(gold, Gold),
++    house_colour(gray_blue, GrayBlue), corner_lines(GrayBlue, Lines),
++    in_ontology(Ns, A, client_subject_label(Entity, Label)).
++
++%% extent: a real-size outline in the marker's corner style. The longer form
++%% draws its lines in the caller's own colour.
++eidolon(extent(W, H, D), Subject, Parts) :-
++    house_colour(gray_blue, GrayBlue), eidolon(extent(W, H, D, GrayBlue), Subject, Parts).
++eidolon(extent(W, H, D, Colour), subject(ontology_ref(Ns, A), Entity),
++        [part(<<"extent">>, corner_box(W, H, D), transform(0, 0, 0, 0, 0, 0),
++              Lines, Label, depicts_nothing)]) :-
++    corner_lines(Colour, Lines), in_ontology(Ns, A, client_subject_label(Entity, Label)).
++
++corner_lines(Colour, surfaces(surface(Colour, 0, 700, 1000, 1000, []), Pointed, Pointed)) :-
++    house_colour(gold, Gold), Pointed = surface(Gold, 0, 700, 1000, 1000, []).
+diff --git a/priv/ontologies/quod_gui.pl b/priv/ontologies/quod_gui.pl
+index 1ff9b605..38fc186f 100644
+--- a/priv/ontologies/quod_gui.pl
++++ b/priv/ontologies/quod_gui.pl
+@@ -650,13 +650,9 @@ menu_choice_label(eidolon(Purpose, Style, _), Label) :- menu_caption(Purpose, St
+ menu_choice_label(eidolon(Purpose, _, _), Label) :- menu_purpose_caption(Purpose, Label), !.
+ menu_choice_label(_, <<"Open">>).
+ menu_caption(playing, solid, <<"Solid">>).
+-menu_caption(playing, wireframe, <<"Wire box">>).
+ menu_caption(playing, contents, <<"Permitted contents">>).
+-menu_caption(playing, matrix, <<"Matrix walls">>).
+ menu_caption(edition, solid, <<"Edit as solid">>).
+-menu_caption(edition, wireframe, <<"Edit as wire box">>).
+ menu_caption(edition, contents, <<"Edit permitted contents">>).
+-menu_caption(edition, matrix, <<"Edit as matrix walls">>).
+ menu_caption(prolog, source, <<"Source">>).
+ menu_caption(inspection, policy, <<"Policy">>).
+ menu_caption(inspection, interfaces, <<"Interfaces">>).
+diff --git a/priv/ontologies/quod_physics.pl b/priv/ontologies/quod_physics.pl
+index 81868c1f..1fd95d9a 100644
+--- a/priv/ontologies/quod_physics.pl
++++ b/priv/ontologies/quod_physics.pl
+@@ -239,7 +239,7 @@ physics_component_definition(body(_,_),geometry(_,_)).
+ 
+ physics_inert_frame(entity_ref(Ns,A,Space)) :-
+     quod:space::space_instance(entity_ref(Ns,A,Space),space),
+-    in_ontology(Ns,A,attribute(Space,exterior,Style)), member(Style,[solid,wireframe]).
++    in_ontology(Ns,A,attribute(Space,exterior,Style)), Style \== contents.
+ 
+ physics_component_body(W,Frame,Subject,Kind,Pose) :-
+     current_ontology_identity(Ns,A), Frame = entity_ref(Ns,A,W),
+diff --git a/priv/ontologies/quod_space.pl b/priv/ontologies/quod_space.pl
+index 61c48153..bce0ad3a 100644
+--- a/priv/ontologies/quod_space.pl
++++ b/priv/ontologies/quod_space.pl
+@@ -28,7 +28,6 @@ space_query(space_contents_projection(_, _)).
+ space_query(world_view(_, _, _)).
+ space_query(space_exposure_projection(_, _, _, _)).
+ space_query(space_simulation_domain(_, _, _, _)).
+-space_query(space_exterior_fits(_, _, _)).
+ space_query(space_creator_owner(_, _)).
+ space_query(space_dimensions(_)).
+ space_query(space_owner(_)).
+@@ -47,21 +46,14 @@ isa(space, thing).
+ isa(physical_space, space).
+ class_permission(space, Operation, allow) :-
+     member(Operation, [create,space_enter,space_admit,space_leave,space_remove,space_visit,space_represent]).
+-class_requirement(space, create, space_exterior_fits).
+ have_attribute(space, name, binary, default(<<"Space">>)).
+ have_attribute(space, dimensions, space_dimensions,
+-    default(box(q(100, <<"m">>), q(100, <<"m">>), q(100, <<"m">>)))).
++    default(box(q(10, <<"m">>), q(10, <<"m">>), q(10, <<"m">>)))).
+ have_attribute(space, owner, space_owner, default_from(space_creator_owner)).
+ have_attribute(space, transform, space_transform, default(transform(0,0,0,0,0,0))).
+ have_attribute(space, exterior, space_exterior, default(solid)).
+ have_attribute(space, interior, space_interior, default(none)).
+ 
+-space_exterior_fits(_, _, create(Inputs)) :-
+-    (member(attribute(exterior, Exterior), Inputs) -> true
+-    ; have_attribute(space, exterior, _, default(Exterior))),
+-    (member(attribute(dimensions, Dimensions), Inputs) -> true
+-    ; have_attribute(space, dimensions, _, default(Dimensions))),
+-    space_exterior_available(Exterior, Dimensions).
+ space_dimensions(infinite).
+ space_dimensions(box(Width, Height, Depth)) :-
+     unique_solution(measure_vocabulary(Ns,Anchor)),
+@@ -86,25 +78,16 @@ space_location(Subject, Location) :-
+       space_transform(Transform), Location = placed(Destination, Transform)).
+ 
+ %% An omitted pose is resolved relative to the acting personal agent, at
+-%% Yan's chosen two metres plus half the new space's depth along negative Z.
+-placement_pose(Destination, Subject, Pose) :-
++%% Yan's chosen two metres plus half the shared marker's depth along negative
++%% Z. The marker stands for the space outside, whatever it measures inside.
++placement_pose(Destination, Pose) :-
+     (nonvar(Pose) -> space_transform(Pose)
+     ; quod:user::personal_agent(Agent, _),
+       Agent = agent_instance_ref(Ns,A,Entity),
+-      space_location(entity_ref(Ns,A,Entity), placed(Destination,At)),
+-      Subject = entity_ref(Store,History,Id),
+-      in_ontology(Store,History,unique_solution(attribute(Id,dimensions,Dimensions))),
+-      space_near_location(placed(Destination,At),Dimensions,placed(Destination,Pose))).
+-space_near_location(unplaced, _, unplaced).
+-space_near_location(placed(Destination, transform(X,Y,Z,RX,RY,RZ)), Dimensions,
+-                   placed(Destination, transform(X,Y,NearZ,RX,RY,RZ))) :-
+-    space_half_depth(Dimensions, HalfDepth), NearZ is Z - 2000 - HalfDepth.
+-space_half_depth(infinite, 0).
+-space_half_depth(box(_, _, q(Value, Unit)), HalfDepth) :-
+-    unique_solution(measure_vocabulary(Ns, Anchor)),
+-    in_ontology(Ns, Anchor, convert(Value, Unit, <<"m">>, Metres)),
+-    (integer(Metres) -> HalfDepth is Metres * 500
+-    ; Metres = N / D, HalfDepth is (N * 500) // D).
++      space_location(entity_ref(Ns,A,Entity), placed(Destination,transform(X,Y,Z,RX,RY,RZ))),
++      unique_solution(scene_vocabulary(Scene,Anchor)),
++      in_ontology(Scene,Anchor,marker_size(Size)),
++      NearZ is Z - 2000 - Size // 2, Pose = transform(X,Y,NearZ,RX,RY,RZ)).
+ 
+ space_subject(entity_ref(Ns, Anchor, Entity), Subject) :-
+     in_ontology(Ns,Anchor,
+@@ -127,7 +110,7 @@ inside(Space, Entity, Pose) :-
+     in_ontology(Ns,A,attribute(Id,transform,Pose)).
+ unplaced(Entity) :- space_assignment(Entity, _, none).
+ action(place(Space, Entity, Pose),
+-       [goal(unplaced(Entity)), placement_pose(Space, Entity, Pose),
++       [goal(unplaced(Entity)), placement_pose(Space, Pose),
+         space_authorized(Entity, space_enter, Space, placement),
+         space_authorized(Space, space_admit, Entity, placement)],
+        inside(Space, Entity, Pose)).
+@@ -186,12 +169,13 @@ space_physical_change(entity_ref(Ns,A,Space),Subject,Change) :-
+ space_represent(Subject,BeforeStyle,BeforePose,BeforeInterior,Style,Pose,Interior) :-
+     term_variables([Subject,BeforeStyle,BeforePose,BeforeInterior,Style,Pose,Interior],[]),
+     Subject = entity_ref(Ns,A,Space),
+-    transaction((space_instance(Subject,space),space_transform(Pose),space_exterior(Style),space_interior(Interior),
++    transaction((space_instance(Subject,space),space_transform(Pose),space_interior(Interior),
++        (Style == BeforeStyle -> true; space_exterior(Style)),
+         space_authorized_representation(Subject,BeforeStyle,BeforePose,BeforeInterior,Style,Pose,Interior),
+         in_ontology(Ns,A,unique_solution((attribute(Space,exterior,BeforeStyle),attribute(Space,transform,BeforePose)))),
+         space_interior_of(Subject,BeforeInterior),
+         in_ontology(Ns,A,attribute(Space,dimensions,Dimensions)),
+-        space_exterior_available(Style,Dimensions),space_exterior_available(Interior,Dimensions),
++        space_interior_available(Interior,Dimensions),
+         (BeforeInterior == Interior -> true
+         ; in_ontology(Ns,A,((BeforeInterior == none -> true; retract(attribute(Space,interior,BeforeInterior))),
+                            (Interior == none -> true; assertz(attribute(Space,interior,Interior)))))),
+@@ -210,7 +194,7 @@ space_interior_of(entity_ref(Ns,A,Space),Interior) :-
+     ; Rows = [Interior] -> true
+     ; fail_with_reason(ambiguous_space_interior(Space))).
+ space_interior_boundary(Space,Recipe) :-
+-    space_interior_of(Space,Interior), Interior \== none, space_exterior_recipe(Interior,Recipe).
++    space_interior_of(Space,Interior), space_interior_recipe(Interior,Recipe).
+ space_representation_changed(Space,Subject) :-
+     Space = entity_ref(Ns,A,Id), in_ontology(Ns,A,space_placement(Id,Subject,Assignment)),
+     space_assignment(Subject,Assignment,Space), space_change_physics(Space,Subject,represented).
+@@ -251,15 +235,6 @@ attribute(space_placement(ontology_ref(Ns,A)), options, Options) :-
+         (space_instance(entity_ref(Ns,A,S),space),in_ontology(Ns,A,attribute(S,name,Label))), Destinations),
+     append([option(near_agent, <<"Near my agent, or unplaced when my agent is unplaced">>),
+             option(unplaced, <<"Unplaced">>)], Destinations, Options).
+-instance_of(quod:gui:selection, space_exterior(Extent)) :- member(Extent,[finite,exact,infinite]).
+-attribute(space_exterior(_), label, <<"Exterior representation">>).
+-attribute(space_exterior(Extent), options,
+-    [option(solid,<<"Small solid cube">>),option(wireframe,<<"Full-size finite wireframe">>),
+-     option(contents,<<"Permitted contents">>)]) :- member(Extent,[finite,exact]).
+-attribute(space_exterior(infinite), options,
+-    [option(solid,<<"Small solid cube">>),option(contents,<<"Permitted contents">>) ]).
+-attribute(space_exterior(Extent), help, <<"Wireframe shows the exact interior dimensions without collision. Contents exposes permitted sources in their authored frames.">>) :- member(Extent,[finite,exact]).
+-attribute(space_exterior(infinite), help, <<"Infinite extent has no finite wireframe. Solid and permitted contents representations are available.">>).
+ attribute(space_length(width), label, <<"Width (X)">>).
+ attribute(space_length(height), label, <<"Height (Y)">>).
+ attribute(space_length(depth), label, <<"Depth (Z)">>).
+@@ -275,10 +250,9 @@ attribute(space_create_submit, label, <<"Create">>).
+ gui_children(space_create(Store,Extent), Children) :-
+     space_form_lengths(Extent,Fields,_),
+     findall(Role,member(field(Role,_),Fields),Lengths),
+-    append([space_name|Lengths], [space_placement(Store),space_exterior(Extent),space_create_submit], Children).
++    append([space_name|Lengths], [space_placement(Store),space_create_submit], Children).
+ gui_initial(space_create(_,_), space_name, Name) :- have_attribute(space,name,binary,default(Name)).
+ gui_initial(space_create(Store,_), space_placement(Store), near_agent).
+-gui_initial(space_create(_,_), space_exterior(_), solid).
+ gui_initial(space_create(_,Extent), space_unit, Unit) :-
+     member(Extent,[finite,exact]),
+     have_attribute(space,dimensions,space_dimensions,default(box(q(_,Unit),q(_,Unit),q(_,Unit)))).
+@@ -295,8 +269,8 @@ gui_form(space_create(Store,Extent), Fields,
+         operation(create(Inputs), [result(space,entity_ref(Ns,A,Space)),result(location,Location),result(owner,Owner)]))) :-
+     Store = ontology_ref(Ns,A),
+     space_form_lengths(Extent,Lengths,Dimensions),
+-    append([field(space_name,Name)|Lengths], [field(space_placement(Store),Placement),field(space_exterior(Extent),Exterior)], Fields),
+-    Inputs = [attribute(name,Name),attribute(dimensions,Dimensions),attribute(exterior,Exterior)].
++    append([field(space_name,Name)|Lengths], [field(space_placement(Store),Placement)], Fields),
++    Inputs = [attribute(name,Name),attribute(dimensions,Dimensions)].
+ %% The form's choice selects the same ordinary placement action as any caller.
+ %% The instance was asserted by the form goal in its selected storing ontology.
+ space_form_placement(Subject, Requested, Location) :-
+@@ -405,7 +379,7 @@ eidolon(Recipe,subject(ontology_ref(Ns,A),instance(Space)),operation(space_show_
+     space_show_recipe(_,Recipe,Interior), space_instance(entity_ref(Ns,A,Space),space),
+     in_ontology(Ns,A,unique_solution((attribute(Space,exterior,Style),attribute(Space,transform,Pose)))),
+     space_interior_of(entity_ref(Ns,A,Space),Before), Before \== Interior,
+-    in_ontology(Ns,A,attribute(Space,dimensions,Dimensions)), space_exterior_available(Interior,Dimensions).
++    in_ontology(Ns,A,attribute(Space,dimensions,Dimensions)), space_interior_available(Interior,Dimensions).
+ instance_of(quod:gui:form,space_show_form(_,_,_,_,_)).
+ instance_of(quod:gui:button,space_show_submit).
+ attribute(space_show_form(_,_,_,_,none),label,<<"No walls inside">>).
+@@ -423,50 +397,59 @@ gui_form(space_show_form(Space,Style,Pose,Before,After),[],
+ 
+ %% Pure space depiction, composed with the space vocabulary and ordinary
+ %% entity Eidolons. Membership and physical bindings stay with their owners.
++%% Seen from outside, a space is its permitted contents or the shared
++%% fixed-size marker; its inner size never changes what stands for it.
+ class_eidolon(space,Mode,contents,recipe(Ns,A,space_contents)) :-
+     member(Mode,[playing,edition]), current_ontology_identity(Ns,A).
+-class_eidolon(space,Mode,Style,recipe(Ns,Anchor,Recipe)) :-
+-    member(Mode,[playing,edition]), space_exterior_recipe(Style,Recipe),
+-    current_ontology_identity(Ns,Anchor).
+-space_exterior_recipe(solid,space).
+-space_exterior_recipe(wireframe,space_wireframe).
+-space_exterior_recipe(matrix,space_matrix).
+-space_interior(none).
+-space_interior(wireframe).
+-space_interior(matrix).
++class_eidolon(space,playing,solid,recipe(Ns,A,marker)) :- scene_vocabulary(Ns,A).
++class_eidolon(space,edition,solid,recipe(Ns,A,space_edition)) :- current_ontology_identity(Ns,A).
+ space_exterior(solid).
+-space_exterior(wireframe).
+ space_exterior(contents).
+-space_exterior_available(solid,_).
+-space_exterior_available(contents,_).
+-space_exterior_available(wireframe,box(_,_,_)).
+-space_exterior_available(wireframe,infinite) :- fail_with_reason(space_exterior_unavailable(wireframe,infinite)).
+-space_exterior_available(none,_).
+-space_exterior_available(matrix,box(_,_,_)).
+-space_exterior_available(matrix,infinite) :- fail_with_reason(space_exterior_unavailable(matrix,infinite)).
+-%% A half-metre exterior depicts even an infinite interior with finite geometry.
+-eidolon(space, subject(ontology_ref(Ns,A),Space),
+-    [part(<<"space">>, box(500,500,500), transform(0,0,0,0,0,0),
+-          surface(<<"#6A90D9">>, 0, 700, 0, 1000, []), Label, depicts_nothing)]) :-
+-    in_ontology(Ns,A,client_subject_label(Space,Label)).
+-eidolon(space_wireframe, subject(ontology_ref(Store,History),Space),
+-    [part(<<"extent">>, wire_box(W,H,D), transform(0,0,0,0,0,0),
+-          surface(<<"#6A90D9">>,0,700,1000,1000,[]),Label,depicts_nothing)]) :-
+-    in_ontology(Store,History,(client_subject_label(Space,Label),attribute(Space,dimensions,box(X,Y,Z)))),
+-    unique_solution(measure_vocabulary(Ns,Anchor)),
+-    space_millimetres(Ns,Anchor,X,W), space_millimetres(Ns,Anchor,Y,H), space_millimetres(Ns,Anchor,Z,D).
+-%% Matrix walls: the exact wire box in emissive green over translucent
+-%% near-black faces, drawn from both sides so they read from in and out.
+-eidolon(space_matrix, subject(ontology_ref(Store,History),Space),
++space_interior(none).
++space_interior(Walls) :- space_interior_recipe(Walls,_).
++space_interior_recipe(wireframe,space_wireframe).
++space_interior_recipe(matrix,space_matrix).
++%% Walls stand at the space's real size, so they need a finite one.
++space_interior_available(none,_).
++space_interior_available(Walls,Dimensions) :-
++    space_interior_recipe(Walls,_),
++    (Dimensions = box(_,_,_) -> true
++    ; fail_with_reason(space_interior_unavailable(Walls,Dimensions))).
++eidolon(space_wireframe, Subject, Walls) :-
++    space_extent(Subject,W,H,D), unique_solution(scene_vocabulary(Ns,A)),
++    in_ontology(Ns,A,eidolon(extent(W,H,D),Subject,Walls)).
++%% Matrix walls: the outline in emissive green over translucent near-black
++%% faces, drawn from both sides so they read from in and out.
++eidolon(space_matrix, Subject,
+     [part(<<"walls">>, box(WI,HI,DI), transform(0,0,0,0,0,0),
+-          surface(<<"#030F08">>,0,900,80,220,[]), unlabelled, depicts_nothing),
+-     part(<<"grid">>, wire_box(W,H,D), transform(0,0,0,0,0,0),
+-          surface(<<"#3CFF7A">>,0,700,1000,1000,[]), Label, depicts_nothing)]) :-
+-    in_ontology(Store,History,(client_subject_label(Space,Label),attribute(Space,dimensions,box(X,Y,Z)))),
+-    unique_solution(measure_vocabulary(Ns,Anchor)),
+-    space_millimetres(Ns,Anchor,X,W), space_millimetres(Ns,Anchor,Y,H), space_millimetres(Ns,Anchor,Z,D),
++          surface(<<"#030F08">>,0,900,80,220,[]), unlabelled, depicts_nothing) | Outline]) :-
++    space_extent(Subject,W,H,D), unique_solution(scene_vocabulary(Ns,A)),
++    in_ontology(Ns,A,eidolon(extent(W,H,D,<<"#3CFF7A">>),Subject,Outline)),
+     space_whole_mm(W,WI), space_whole_mm(H,HI), space_whole_mm(D,DI).
+-space_whole_mm(N/D,Whole) :- !, Whole is max(1,(N + D // 2) // D).
++%% Editing shows the marker with the real size written beneath it, as authored.
++eidolon(space_edition, Subject, Parts) :-
++    Subject = subject(ontology_ref(Store,History),Space),
++    unique_solution(scene_vocabulary(Ns,A)),
++    in_ontology(Ns,A,eidolon(marker,Subject,Marker)), in_ontology(Ns,A,marker_size(Size)),
++    in_ontology(Store,History,attribute(Space,dimensions,Dimensions)),
++    space_size_text(Dimensions,Text), Beneath is -(Size // 2),
++    append(Marker,[part(<<"size">>,group,transform(0,Beneath,0,0,0,0),no_surface,
++                        label(Text,<<"below">>),depicts_nothing)],Parts).
++space_size_text(infinite,<<"Infinite">>).
++space_size_text(box(W,H,D),Text) :-
++    space_length_codes(W,WC), space_length_codes(H,HC), space_length_codes(D,DC),
++    Times = [32,195,151,32],
++    append(HC,Times,H1), append(H1,DC,Tail), append(WC,Times,W1), append(W1,Tail,Codes),
++    binary_codes(Text,Codes).
++space_length_codes(q(Value,Unit),Codes) :-
++    '$quod_program_source'([Value],Source), binary_codes(Source,Written),
++    append(Spaced,[46,10],Written), findall(Code,(member(Code,Spaced),Code =\= 32),Digits),
++    binary_codes(Unit,UnitCodes), append(Digits,[32|UnitCodes],Codes).
++space_extent(subject(ontology_ref(Store,History),Space),W,H,D) :-
++    in_ontology(Store,History,attribute(Space,dimensions,box(X,Y,Z))),
++    unique_solution(measure_vocabulary(Ns,Anchor)),
++    space_millimetres(Ns,Anchor,X,W), space_millimetres(Ns,Anchor,Y,H), space_millimetres(Ns,Anchor,Z,D).
++space_whole_mm(N/D,Whole) :- !, Rounded is (N + D // 2) // D, (Rounded < 1 -> Whole = 1; Whole = Rounded).
+ space_whole_mm(Length,Length).
+ space_millimetres(Ns,Anchor,q(Value,Unit),Length) :-
+     in_ontology(Ns,Anchor,convert(Value,Unit,<<"mm">>,Length)).
+@@ -627,5 +610,6 @@ space_eidolon_status(Text,
+ entity_scene(subject(ontology_ref(Ns,A),Space), Mode,
+         appearance(Space, Style, subject(ontology_ref(Ns,A),Space), Transform, Eidolons)) :-
+     space_instance(entity_ref(Ns,A,Space), space), member(Mode, [playing, edition]),
+-    in_ontology(Ns,A,(attribute(Space,transform,Transform),attribute(Space,exterior,Style),
++    in_ontology(Ns,A,(attribute(Space,transform,Transform),attribute(Space,exterior,Stored),
++                     (Stored == contents -> Style = contents; Style = solid),
+                      entity_eidolons(Space,Mode,Style,Eidolons))).
+diff --git a/test/fixtures/gui-operations.pl b/test/fixtures/gui-operations.pl
+index a031ffb1..128bc9b2 100644
+--- a/test/fixtures/gui-operations.pl
++++ b/test/fixtures/gui-operations.pl
+@@ -24,7 +24,7 @@ attribute(example_name, label, <<"Name">>).
+ attribute(example_name, required, true).
+ attribute(space_extent, label, <<"Interior">>).
+ attribute(space_extent, options, [option(infinite, <<"Infinite">>),
+-    option(box(q(100, <<"m">>), q(100, <<"m">>), q(100, <<"m">>)), <<"100 metres">>)]).
++    option(box(q(10, <<"m">>), q(10, <<"m">>), q(10, <<"m">>)), <<"10 metres">>)]).
+ attribute(create, label, <<"Create">>).
+ gui_children(space_create, [example_name, space_extent, create]).
+ gui_initial(space_create, example_name, Name) :-
+diff --git a/test/quod_gui_menu_tests.erl b/test/quod_gui_menu_tests.erl
+index cffd5bf7..a2aca2f3 100644
+--- a/test/quod_gui_menu_tests.erl
++++ b/test/quod_gui_menu_tests.erl
+@@ -121,12 +121,12 @@ space_pie_overrides_the_default_test_() ->
+         ?assertEqual(true,property(wedge(Owned,5),enabled))
+     end) end}.
+ 
+-interior_boundary_uses_the_exterior_recipes_test_() ->
++interior_walls_use_the_shared_extent_test_() ->
+     {timeout,120,fun() -> with_menus(fun(C=#{namespace:=Ns}) ->
+         A = quod_simplex:genesis_hash(Ns), T = {transform,0,0,0,0,0,0},
+         edit(Ns,conj([{assertz,{account_setup,me,{complete,interior_fixture}}},
+             {assertz,{attribute,room,owner,maps:get(human,C)}},{assertz,{attribute,closed,owner,maps:get(human,C)}},
+-            {assertz,{attribute,room,dimensions,{box,{q,4,<<"m">>},{q,3,<<"m">>},{q,5,<<"m">>}}}},
++            {assertz,{attribute,room,dimensions,{box,{q,{'/',1,3},<<"mm">>},{q,3,<<"m">>},{q,{'/',1001,2},<<"mm">>}}}},
+             {assertz,{attribute,room,exterior,solid}},{assertz,{attribute,room,transform,T}},
+             {assertz,{attribute,closed,dimensions,infinite}},
+             {assertz,{attribute,closed,exterior,solid}},{assertz,{attribute,closed,transform,T}}])),
+@@ -136,23 +136,107 @@ interior_boundary_uses_the_exterior_recipes_test_() ->
+             applied(Ns,fun() -> boundary(C,Ns,A) =/= [] end),
+             {[Root],Parts} = boundary(C,Ns,A),
+             ?assertMatch({mark,_,<<"group">>,[],T,no_surface,_,{depicts,Ns,A,room}},Root),
+-            ?assertMatch([{mark,_,<<"wire_box">>,[{f,<<"width">>,4000},{f,<<"height">>,3000},{f,<<"depth">>,5000}],_,_,_,_}],Parts),
+-            %% One recipe answers both selectors: it is the exterior wireframe.
+-            ?assertMatch([{part,_,{wire_box,4000,3000,5000},_,_,_,_}],
++            %% The walls stand at the exact real size, never rounded.
++            Size = [{f,<<"width">>,{'/',1,3}},{f,<<"height">>,3000},{f,<<"depth">>,{'/',1001,2}}],
++            ?assertMatch([{mark,_,<<"corner_box">>,Size,_,{surfaces,{surface,<<"#C9D2DB">>,_,_,_,_,_},_,_},_,_}],Parts),
++            ?assertMatch([{part,<<"extent">>,{corner_box,{'/',1,3},3000,{'/',1001,2}},_,_,_,_}],
+                 read(C,space({eidolon,space_wireframe,
+                     {subject,{ontology_ref,Ns,A},room},{'Parts'}}))),
+             executed(C,space({space_represent,ref(Ns,room),solid,T,wireframe,solid,T,matrix})),
+             applied(Ns,fun() -> case boundary(C,Ns,A) of {_,P} -> length(P) =:= 2; [] -> false end end),
+             {[_],Matrix} = boundary(C,Ns,A),
+-            ?assertMatch([{mark,_,<<"box">>,_,_,{surface,_,_,_,_,220,[]},_,_},{mark,_,<<"wire_box">>,_,_,_,_,_}],Matrix),
++            ?assertMatch([{mark,_,<<"box">>,[{f,_,1},{f,_,3000},{f,_,501}],_,{surface,_,_,_,_,220,[]},_,_},
++                          {mark,_,<<"corner_box">>,Size,_,{surfaces,{surface,<<"#3CFF7A">>,_,_,_,_,_},_,_},_,_}],Matrix),
+             executed(C,space({space_represent,ref(Ns,room),solid,T,matrix,solid,T,none})),
+             applied(Ns,fun() -> boundary(C,Ns,A) =:= [] end),
+             ?assertEqual([],boundary(C,Ns,A)),
+             fails(Ns,{attribute,room,interior,{'_'}}),
+             %% Infinite extent refuses finite boundaries with the existing reason.
+-            denied(C,space({space_represent,ref(Ns,closed),solid,T,none,solid,T,matrix}),{space_exterior_unavailable,matrix,infinite})
++            denied(C,space({space_represent,ref(Ns,closed),solid,T,none,solid,T,matrix}),{space_interior_unavailable,matrix,infinite})
++        end)
++    end) end}.
++
++%% The shared looks are ordinary recipes of the pinned GUI vocabulary. They
++%% read only the subject's label, and model/2 accepts what they return.
++shared_marker_and_extent_recipes_test_() ->
++    {timeout,90,fun() -> with_menus(fun(C=#{namespace:=Ns}) ->
++        Gui = <<"quod:gui">>, A = quod_simplex:genesis_hash(Ns), At = {transform,0,0,0,0,0,0},
++        Subject = {subject,{ontology_ref,Ns,A},room},
++        Recipe = fun(Name) -> read(C,{'::',Gui,{eidolon,Name,Subject,{'Parts'}}}) end,
++        Line = fun(Colour) -> {surface,Colour,0,700,1000,1000,[]} end,
++        Side = fun(Colour,Opacity) -> {surface,Colour,0,700,0,Opacity,[]} end,
++        Lines = {surfaces,Line(<<"#C9D2DB">>),Line(<<"#F9C80E">>),Line(<<"#F9C80E">>)},
++        edit(Ns,{assertz,{attribute,room,name,<<"Room">>}}),
++        Label = {label,<<"Room">>,<<"above">>},
++        Marker = Recipe(marker),
++        ?assertEqual(
++            [{part,<<"sides">>,{box,500,500,500},At,
++              {surfaces,Side(<<"#848FA5">>,30),Side(<<"#F9C80E">>,40),Side(<<"#F9C80E">>,120)},
++              unlabelled,depicts_nothing},
++             {part,<<"corners">>,{corner_box,500,500,500},At,Lines,Label,depicts_nothing}],Marker),
++        ?assertMatch([{mark,<<"sides">>,<<"box">>,_,At,{surfaces,_,_,_},unlabelled,depicts_nothing},
++                      {mark,<<"corners">>,<<"corner_box">>,
++                       [{f,<<"width">>,500},{f,<<"height">>,500},{f,<<"depth">>,500}],At,Lines,Label,depicts_nothing}],
++                     read(C,{'::',Gui,{model,Marker,{'Marks'}}})),
++        %% The outline keeps exact lengths at any size.
++        Third = {'/',10000,3},
++        Extent = Recipe({extent,Third,100000000,4000}),
++        ?assertEqual([{part,<<"extent">>,{corner_box,Third,100000000,4000},At,Lines,Label,depicts_nothing}],Extent),
++        ?assertMatch([{mark,<<"extent">>,<<"corner_box">>,
++                       [{f,<<"width">>,Third},{f,<<"height">>,100000000},{f,<<"depth">>,4000}],At,Lines,Label,depicts_nothing}],
++                     read(C,{'::',Gui,{model,Extent,{'Marks'}}})),
++        %% An unnamed subject is shown without a label, never with an invented one.
++        edit(Ns,{assertz,{':-',{instance_of,note,plain},true}}),
++        ?assertMatch([_,{part,<<"corners">>,_,_,_,unlabelled,_}],
++            read(C,{'::',Gui,{eidolon,marker,{subject,{ontology_ref,Ns,A},plain},{'Parts'}}}))
++    end) end}.
++
++%% Each shown thing has a mode, display by default. Edition adds the real size
++%% beneath the marker; a class may offer a `selected` Eidolon, and none is required.
++one_thing_is_read_in_another_mode_test_() ->
++    {timeout,120,fun() -> with_menus(fun(C=#{namespace:=Ns}) ->
++        A = quod_simplex:genesis_hash(Ns), T = {transform,100,200,300,0,45,0},
++        Space = <<"quod:space">>, SA = quod_simplex:genesis_hash(Space),
++        Model = <<"creation-modelling">>,
++        edit(Ns,conj([{assertz,{attribute,room,name,<<"Room">>}},{assertz,{attribute,room,transform,T}},
++            {assertz,{attribute,room,exterior,solid}},
++            {assertz,{attribute,room,dimensions,{box,{q,10,<<"m">>},{q,{'/',1,3},<<"mm">>},{q,2,<<"km">>}}}}])),
++        quod_space_creation_tests:with_models(C,fun() ->
++            MA = quod_simplex:genesis_hash(Model),
++            Marker = {recipe,Model,MA,marker},
++            Edition = {eidolon,edition,solid,{recipe,Space,SA,space_edition}},
++            Offered = fun() -> [E || E={eidolon,P,solid,_} <- read(C,{entity_eidolons,room,{'E'}}),
++                                     lists:member(P,[playing,edition,selected])] end,
++            ?assertEqual([Edition,{eidolon,playing,solid,Marker}],lists:sort(Offered())),
++            At = {relative,<<"selected">>,{transform,0,0,0,0,0,0}},
++            Size = [{f,<<"width">>,500},{f,<<"height">>,500},{f,<<"depth">>,500}],
++            Shown = [{mark,<<"selected">>,<<"group">>,[],T,no_surface,unlabelled,{depicts,Ns,A,room}},
++                     {mark,<<"selected/sides">>,<<"box">>,Size,At,{'_'},unlabelled,depicts_nothing},
++                     {mark,<<"selected/corners">>,<<"corner_box">>,Size,At,{'_'},{label,<<"Room">>,<<"above">>},depicts_nothing}],
++            Written = <<"10 m ",195,151," 1/3 mm ",195,151," 2 km">>,
++            {eidolon_scene,{entity_ref,Ns,A,room},Editing,nonphysical,[]} = read(C,{client_eidolon,room,Edition,{'View'}}),
++            ?assert(matches(Shown ++ [{mark,<<"selected/size">>,<<"group">>,[],
++                {relative,<<"selected">>,{transform,0,-250,0,0,0,0}},no_surface,{label,Written,<<"below">>},depicts_nothing}],Editing)),
++            %% Nothing offers a selected Eidolon until a class authors one.
++            Selected = {eidolon,selected,solid,Marker},
++            ?assertError({menu_read_failed,_,_},read(C,{client_eidolon,room,Selected,{'View'}})),
++            edit(Space,{assertz,{class_eidolon,space,selected,solid,Marker}}),
++            ?assertEqual([Edition,{eidolon,playing,solid,Marker},Selected],lists:sort(Offered())),
++            {eidolon_scene,{entity_ref,Ns,A,room},Chosen,nonphysical,[]} = read(C,{client_eidolon,room,Selected,{'View'}}),
++            ?assert(matches(Shown,Chosen)),
++            %% An infinite space says so.
++            edit(Ns,conj([{retract,{attribute,room,dimensions,{'_'}}},{assertz,{attribute,room,dimensions,infinite}}])),
++            {eidolon_scene,_,Endless,nonphysical,[]} = read(C,{client_eidolon,room,Edition,{'View'}}),
++            ?assertMatch({mark,_,<<"group">>,[],_,no_surface,{label,<<"Infinite">>,<<"below">>},_},lists:last(Endless))
+         end)
+     end) end}.
++%% Element-wise equality where {'_'} stands for any value.
++matches(Pattern,Value) when is_list(Pattern), is_list(Value), length(Pattern) =:= length(Value) ->
++    lists:all(fun({P,V}) -> matches(P,V) end,lists:zip(Pattern,Value));
++matches({'_'},_) -> true;
++matches(Pattern,Value) when is_tuple(Pattern), is_tuple(Value), tuple_size(Pattern) =:= tuple_size(Value) ->
++    matches(tuple_to_list(Pattern),tuple_to_list(Value));
++matches(Pattern,Value) -> Pattern =:= Value.
+ 
+ boundary(C,Ns,A) ->
+     Marks = read(C,space({world_view,ref(Ns,room),playing,{'Marks'}})),
+diff --git a/test/quod_gui_operations_tests.erl b/test/quod_gui_operations_tests.erl
+index 00e05344..ccc32308 100644
+--- a/test/quod_gui_operations_tests.erl
++++ b/test/quod_gui_operations_tests.erl
+@@ -302,7 +302,7 @@ class_ref(Ns,Class) -> {class_ref,Ns,quod_simplex:genesis_hash(Ns),Class}.
+ scoped(Ns,Goal) -> {'::',Ns,{',',{current_ontology_identity,Ns,quod_simplex:genesis_hash(Ns)},Goal}}.
+ conj([G]) -> G;
+ conj([G|Rest]) -> {',',G,conj(Rest)}.
+-default_dimensions() -> {box,{q,100,<<"m">>},{q,100,<<"m">>},{q,100,<<"m">>}}.
++default_dimensions() -> {box,{q,10,<<"m">>},{q,10,<<"m">>},{q,10,<<"m">>}}.
+ 
+ withdraw_views(C,Ns,Ref) -> [V || V = {operation_view,withdraw,_,_,_,_,_,_,_,_} <- views(C,Ns,Ref)].
+ 
+diff --git a/test/quod_gui_stage1_tests.erl b/test/quod_gui_stage1_tests.erl
+index d224cf5a..c13276a6 100644
+--- a/test/quod_gui_stage1_tests.erl
++++ b/test/quod_gui_stage1_tests.erl
+@@ -2,27 +2,31 @@
+ -include_lib("eunit/include/eunit.hrl").
+ -export([with_forms/1]).
+ 
+-selected_exterior_uses_exact_shared_scene_test_() ->
++created_spaces_show_the_shared_marker_test_() ->
+     {timeout,90,fun() -> with_forms(fun(C=#{namespace:=Ns}) ->
+         Subject=subject(<<"quod:space">>,class_ref,space), Room=subject(Ns,entity_ref,room),
+         Pose={transform,1000,2000,3000,15,35,75}, Placement={at,Room,Pose},
+         replace_placement_options(Ns,[{option,near_agent,<<"Near agent">>},
+             {option,unplaced,<<"Unplaced">>},{option,Placement,<<"Rotated room">>}]),
+         [Finite,Exact,Infinite]=views(C,Ns,Subject),
+-        Defaults=fields(element(7,Finite),[{placement_field(Ns),Placement},{{space_exterior,finite},wireframe}]),
++        Defaults=fields(element(7,Finite),[{placement_field(Ns),Placement}]),
+         {Reply,Bytes}=submit(C,Ns,Finite,Defaults),{Ref,_}=created(C,Reply,Bytes,space),
+         holds(Ns,{attribute,element(4,Ref),dimensions,default_dimensions()}),
++        holds(Ns,{attribute,element(4,Ref),exterior,solid}),
+         quod_space_creation_tests:with_models(C,fun() ->
+-            Marks=scene(C,Ns,room), assert_wire(Marks,Ref,Pose,[100000,100000,100000]),
++            assert_marker(scene(C,Ns,room),Ref,Pose,{label,<<"Space">>,<<"above">>}),
+             Values=fields(element(7,Exact),[{space_name,<<>>},{space_unit,<<"mm">>},
+                 {{space_length,width},1},{{space_divisor,width},3},
+                 {{space_length,height},1001},{{space_divisor,height},1},
+                 {{space_length,depth},1001},{{space_divisor,depth},2},
+-                {placement_field(Ns),Placement},{{space_exterior,exact},wireframe}]),
++                {placement_field(Ns),Placement}]),
+             {Rational,RationalBytes}=submit(C,Ns,Exact,Values),
+             {RationalRef,_}=created(C,Rational,RationalBytes,space),
+             holds(Ns,{attribute,element(4,RationalRef),name,<<>>}),
+-            assert_wire(scene(C,Ns,room),RationalRef,Pose,[{'/',1,3},1001,{'/',1001,2}]),
++            holds(Ns,{attribute,element(4,RationalRef),dimensions,
++                {box,{q,{'/',1,3},<<"mm">>},{q,{'/',1001,1},<<"mm">>},{q,{'/',1001,2},<<"mm">>}}}),
++            %% The marker keeps one size whatever the space measures inside.
++            assert_marker(scene(C,Ns,room),RationalRef,Pose,unlabelled),
+             %% Explicit unplaced creation succeeds even though an ordinary
+             %% near-agent location read is unavailable, without admission.
+             edit(Ns,{assertz,{space_assignment_state,personal,1,Room}}),
+@@ -31,11 +35,12 @@ selected_exterior_uses_exact_shared_scene_test_() ->
+             {UnplacedRef,_}=created(C,Unplaced,UnplacedBytes,space),
+             ?assertEqual(unplaced,read(C,space({space_location,UnplacedRef,{'Location'}})))
+         end),
+-        {operation_view,create_infinite,_,_,Tree,_,_,_,_,_}=Infinite,
+-        ?assertEqual([{option,solid,<<"Small solid cube">>},{option,contents,<<"Permitted contents">>}],
+-            tree_property(Tree,{space_exterior,infinite},options)),
++        %% No form offers an outside choice, and a direct request for the
++        %% retired full-size one is refused.
++        [?assertEqual(undefined,tree_property(element(5,View),{space_exterior,Extent},options))
++            || {View,Extent} <- [{Finite,finite},{Exact,exact},{Infinite,infinite}]],
+         Before=instances(Ns),
+-        Goal={with_build_plan,[{attribute,dimensions,infinite},{attribute,exterior,wireframe}],{assert,{instance_of,space_class(),{'Space'}}}},
++        Goal={with_build_plan,[{attribute,exterior,wireframe}],{assert,{instance_of,space_class(),{'Space'}}}},
+         {Instruction,_}=quod_personal_agent_tests:instruction(C,Goal),
+         quod_personal_agent_tests:await_runtime_ready(Ns),
+         ?assertMatch({ok,_,{normalized,{failed,_}}},quod_personal_agent_tests:instruct(C,submit,Instruction)),
+@@ -44,17 +49,18 @@ selected_exterior_uses_exact_shared_scene_test_() ->
+ 
+ fields(Values,Changes) ->
+     lists:foldl(fun({Id,Value},Acc)->lists:keyreplace(Id,2,Acc,{field,Id,Value}) end,Values,Changes).
+-default_dimensions() -> {box,{q,100,<<"m">>},{q,100,<<"m">>},{q,100,<<"m">>}}.
++default_dimensions() -> {box,{q,10,<<"m">>},{q,10,<<"m">>},{q,10,<<"m">>}}.
+ instances(Ns) ->
+     {ok,[#{'Rows':=Rows}],_}=quod_prolog:prove_ro(Ns,{findall,{'I'},{instance_of,space_class(),{'I'}},{'Rows'}}),Rows.
+ scene(C,Ns,Space) ->
+     read(C,space({world_view,subject(Ns,entity_ref,Space),playing,{'Marks'}})).
+-assert_wire(Marks,{entity_ref,Ns,Anchor,Id},Pose,[W,H,D]) ->
++assert_marker(Marks,{entity_ref,Ns,Anchor,Id},Pose,Label) ->
+     [Root]=[M||M={mark,_,<<"group">>,[],Pose0,_,_,{depicts,N,A,I}}<-Marks,
+         {N,A,I,Pose0}=:={Ns,Anchor,Id,Pose}],
+-    RootId=element(2,Root),
+-    ?assertMatch([{mark,_,<<"wire_box">>,[{f,<<"width">>,W},{f,<<"height">>,H},{f,<<"depth">>,D}],
+-        {relative,RootId,{transform,0,0,0,0,0,0}},_,_,_}],
++    RootId=element(2,Root), At={relative,RootId,{transform,0,0,0,0,0,0}},
++    Size=[{f,<<"width">>,500},{f,<<"height">>,500},{f,<<"depth">>,500}],
++    ?assertMatch([{mark,_,<<"box">>,Size,At,{surfaces,_,_,_},unlabelled,depicts_nothing},
++                  {mark,_,<<"corner_box">>,Size,At,{surfaces,_,_,_},Label,depicts_nothing}],
+         [M||M={mark,_,_,_,{relative,Parent,_},_,_,_}<-Marks,Parent=:=RootId]).
+ tree_property({component,Id,_,Properties,_},Id,Key) -> proplists:get_value(Key,[{K,V}||{property,K,V}<-Properties]);
+ tree_property({component,_,_,_,Children},Id,Key) ->
+@@ -88,7 +94,7 @@ authored_creation_recovery_test_() ->
+         {Ref,Outcome} = created(C,Reply,Bytes,space),
+         {entity_ref,Ns,_,Id} = Ref,
+         holds(Ns,{attribute,Id,name,<<"Space">>}),
+-        holds(Ns,{attribute,Id,dimensions,{box,{q,100,<<"m">>},{q,100,<<"m">>},{q,100,<<"m">>}}}),
++        holds(Ns,{attribute,Id,dimensions,default_dimensions()}),
+         holds(Ns,{attribute,Id,owner,maps:get(human,C)}),
+         fails(Ns,{gui_pending_question,{'_'},{'_'}}),
+         %% Losing the first result, clearing browser journals and a new device
+diff --git a/test/quod_lifecycle_single_path_tests.erl b/test/quod_lifecycle_single_path_tests.erl
+index 39fc5dfd..6059b8ce 100644
+--- a/test/quod_lifecycle_single_path_tests.erl
++++ b/test/quod_lifecycle_single_path_tests.erl
+@@ -652,8 +652,8 @@ m2_spaces(User=#{reference:=Owner={agent_instance_ref,Ns,Anchor,me}}, Other) ->
+     Create=hd(Offers),
+     {Outcome,Bytes}=m2_create(C,Ns,Create,element(7,Create)),
+     [{result,space,S1={entity_ref,Ns,Anchor,Id}},{result,location,{placed,S0,Near}},{result,owner,Owner}]=m1a_output(Outcome),
+-    %% In front of the agent: 2 m clearance plus half the default 100 m depth.
+-    ?assertEqual({transform,0,0,-52000,0,0,0},Near),
++    %% In front of the agent: 2 m clearance plus half the 0.5 m marker's depth.
++    ?assertEqual({transform,0,0,-2250,0,0,0},Near),
+     ?assertEqual(Owner,m1a_read(User,{attribute,Id,owner,{0}})),
+     ?assertEqual({placed,S0,{transform,0,0,0,0,0,0}},m1a_read(User,m2_space({space_location,m2_entity(User,personal),{0}}))),
+     ?assertEqual({placed,S0,Near},m1a_read(User,m2_space({space_location,m2_entity(User,Id),{0}}))),
+@@ -933,7 +933,10 @@ m2_foreign_policy(Other=#{reference:={agent_instance_ref,Ns,Anchor,me}},Owner,Ac
+             {Owner,{client_menu,Class,{'_'}}},
+             {Owner,{gui_menu_source,{':',<<"quod:space">>,space},{'_'}}},
+             {Actor,{gui_operation,Class,create,{'_'},space_create_submit,{'_'},{'_'}}}]] ++
+-        [{can_invoke,{'_'},Principal,[<<"quod:space">>|{'_'}],Ns} || Principal <- [Owner,Actor]],
++        [{can_invoke,{'_'},Principal,[<<"quod:space">>|{'_'}],Ns} || Principal <- [Owner,Actor]] ++
++        %% The shared marker reads the shown space's name through the GUI vocabulary.
++        [{can_invoke,{',',{current_ontology_identity,Ns,Anchor},{client_subject_label,{'_'},{'_'}}},
++            Owner,[<<"quod:gui">>|{'_'}],Ns}],
+     m2_edit(Other,{transaction,m1a_conj([
+         {assertz,{instance_permission,element(4,PrivateSpace),space_admit,deny}}|
+         [{assertz,G}||G<-Grants]])}).
+diff --git a/test/quod_lobby_tests.erl b/test/quod_lobby_tests.erl
+index b10136e0..07ce6818 100644
+--- a/test/quod_lobby_tests.erl
++++ b/test/quod_lobby_tests.erl
+@@ -1180,10 +1180,11 @@ assert_ontology_choices(Choices, {ontology_ref, TargetNs, TargetAnchor}) ->
+                [{eidolon, Mode, contents,
+                  {recipe, TargetNs, TargetAnchor, ontology_contents}}
+                 || Mode <- [playing, edition]] ++
+-               [{eidolon, Mode, Style,
+-                 {recipe, Space, SpaceAnchor,
+-                  case Style of solid -> space; wireframe -> space_wireframe; matrix -> space_matrix end}}
+-                || Mode <- [playing, edition], Style <- [solid,wireframe,matrix]] ++
++               %% The space class names the shared marker of its pinned scene
++               %% vocabulary, and its own edition recipe built on it.
++               [{eidolon, playing, solid, {recipe, <<"lobby-test-modelling">>,
++                                           quod_simplex:genesis_hash(<<"lobby-test-modelling">>), marker}},
++                {eidolon, edition, solid, {recipe, Space, SpaceAnchor, space_edition}}] ++
+                [{eidolon, menu, default, {recipe, Space, SpaceAnchor, space_menu}} |
+                 [{eidolon, {operation, instance}, Name, {recipe, Space, SpaceAnchor, Recipe}}
+                  || {Name, Recipe} <- [{enter, space_enter}, {leave, space_leave},
+diff --git a/test/quod_rendering_tests.erl b/test/quod_rendering_tests.erl
+index aca59f8f..3eb91ba5 100644
+--- a/test/quod_rendering_tests.erl
++++ b/test/quod_rendering_tests.erl
+@@ -13,7 +13,7 @@
+ kinds_declare_their_fields_in_order_test() ->
+     with_rendering(fun(St) ->
+         Kinds = solutions({'K'}, {mark_kind, {'K'}}, St),
+-        ?assertEqual([<<"box">>, <<"capsule">>, <<"cylinder">>, <<"group">>, <<"mesh">>,
++        ?assertEqual([<<"box">>, <<"capsule">>, <<"corner_box">>, <<"cylinder">>, <<"group">>, <<"mesh">>,
+                       <<"plane">>, <<"sky_sphere">>, <<"sphere">>, <<"terrain">>, <<"torus">>, <<"wire_box">>],
+                      lists:sort(Kinds)),
+         %% Every kind's fields are declared at consecutive positions from 1, so
+@@ -29,22 +29,58 @@ kinds_declare_their_fields_in_order_test() ->
+                      solutions({'F'}, {geometry_field, <<"box">>, {'_'}, {'F'}}, St))
+     end).
+ 
+-exact_edge_box_retains_rational_lengths_test() ->
++exact_edge_boxes_retain_rational_lengths_test() ->
+     with_rendering(fun(St) ->
+         Width = {'/',1,3}, Height = 100001, Depth = {'/',1001,2},
+         Size = [{f,<<"width">>,Width},{f,<<"height">>,Height},{f,<<"depth">>,Depth}],
+-        Mark = sized(<<"wire_box">>,Size),
+-        holds({well_formed_mark,Mark},St),
+-        Expected = {mark,<<"edges">>,<<"wire_box">>,Size,{transform,10,20,30,15,35,75},
+-            {surface,<<"#FFFFFF">>,0,700,0,1000,[]},unlabelled,depicts_nothing},
+-        holds({model,[{part,<<"edges">>,{wire_box,Width,Height,Depth},
+-            {transform,10,20,30,15,35,75},{surface,<<"#FFFFFF">>,0,700,0,1000,[]},
+-            unlabelled,depicts_nothing}],[Expected]},St),
+-        [fails({well_formed_mark,sized(<<"wire_box">>,lists:keyreplace(<<"width">>,2,Size,{f,<<"width">>,Bad}))},St)
+-            || Bad <- [0,-1,0.5,{'/',1,0},{'/',2,6},{'/',1,1},{'/',-1,3}]],
++        lists:foreach(fun({Kind,Shape}) ->
++            Mark = sized(Kind,Size),
++            holds({well_formed_mark,Mark},St),
++            Expected = {mark,<<"edges">>,Kind,Size,{transform,10,20,30,15,35,75},
++                {surface,<<"#FFFFFF">>,0,700,0,1000,[]},unlabelled,depicts_nothing},
++            holds({model,[{part,<<"edges">>,{Shape,Width,Height,Depth},
++                {transform,10,20,30,15,35,75},{surface,<<"#FFFFFF">>,0,700,0,1000,[]},
++                unlabelled,depicts_nothing}],[Expected]},St),
++            [fails({well_formed_mark,sized(Kind,lists:keyreplace(<<"width">>,2,Size,{f,<<"width">>,Bad}))},St)
++                || Bad <- [0,-1,0.5,{'/',1,0},{'/',2,6},{'/',1,1},{'/',-1,3}]]
++        end, [{<<"wire_box">>,wire_box},{<<"corner_box">>,corner_box}]),
+         fails({well_formed_mark,sized(<<"box">>,Size)},St)
+     end).
+ 
++%% A whole-millimetre corner box has faces to align against, like a box; the
++%% edge-only wire box and a rational corner box offer none.
++corner_box_aligns_by_its_faces_test() ->
++    with_rendering(fun(St) ->
++        ?assertEqual([{transform,0,300,0,0,0,0}],
++            solutions({'At'},{align,{box,100,100,100},bottom,{corner_box,500,500,500},top,0,{'At'}},St)),
++        fails({align,{box,100,100,100},bottom,{corner_box,{'/',1,3},500,500},top,0,{'_'}},St),
++        fails({align,{box,100,100,100},bottom,{wire_box,500,500,500},top,0,{'_'}},St)
++    end).
++
++%% The pointed-at and selected looks travel with the mark. A plain surface
++%% stays exactly what it was; the three-surface form needs all three valid.
++a_mark_may_carry_its_pointed_and_selected_surfaces_test() ->
++    with_rendering(fun(St) ->
++        Plain = {surface,<<"#848FA5">>,0,700,0,100,[]},
++        Gold = {surface,<<"#F9C80E">>,0,700,0,80,[]},
++        Part = fun(Material) -> {part,<<"sides">>,{box,500,500,500},{transform,0,0,0,0,0,0},
++                                 Material,unlabelled,depicts_nothing} end,
++        Mark = fun(Material) -> {mark,<<"sides">>,<<"box">>,
++                                 [{f,<<"width">>,500},{f,<<"height">>,500},{f,<<"depth">>,500}],
++                                 {transform,0,0,0,0,0,0},Material,unlabelled,depicts_nothing} end,
++        States = {surfaces,Plain,Gold,Gold},
++        ?assertEqual([[Mark(Plain)]],solutions({'M'},{model,[Part(Plain)],{'M'}},St)),
++        ?assertEqual([[Mark(States)]],solutions({'M'},{model,[Part(States)],{'M'}},St)),
++        lists:foreach(fun(Bad) -> fails({well_formed_mark,Mark(Bad)},St) end,
++            [{surfaces,Plain,Gold},{surfaces,Plain,Gold,Gold,Gold},
++             {surfaces,Plain,Gold,{surface,<<"gold">>,0,700,0,80,[]}},
++             {surfaces,Plain,no_surface,Gold},{surfaces,States,Gold,Gold}]),
++        %% Groups, meshes and terrain keep their own single appearance.
++        fails({well_formed_mark,{mark,<<"g">>,<<"group">>,[],{transform,0,0,0,0,0,0},
++                                 States,unlabelled,depicts_nothing}},St),
++        fails({well_formed_mark,setelement(6,mesh_mark(),States)},St)
++    end).
++
+ a_well_formed_mark_test() ->
+     with_rendering(fun(St) ->
+         holds({well_formed_mark, box(<<"m1">>)}, St),
+@@ -195,7 +231,7 @@ a_scene_needs_distinct_mark_ids_test() ->
+ the_class_view_is_derived_test() ->
+     with_rendering(fun(St) ->
+         holds({isa, mark, thing}, St),
+-        ?assertEqual([<<"box">>, <<"capsule">>, <<"cylinder">>, <<"group">>, <<"mesh">>,
++        ?assertEqual([<<"box">>, <<"capsule">>, <<"corner_box">>, <<"cylinder">>, <<"group">>, <<"mesh">>,
+                       <<"plane">>, <<"sky_sphere">>, <<"sphere">>, <<"terrain">>, <<"torus">>, <<"wire_box">>],
+                      lists:sort(solutions({'K'}, {instance_of, geometry, {'K'}}, St))),
+         ?assertEqual([<<"diameter">>, <<"height">>],
+diff --git a/test/quod_space_creation_tests.erl b/test/quod_space_creation_tests.erl
+index 3ed44c82..ef53badb 100644
+--- a/test/quod_space_creation_tests.erl
++++ b/test/quod_space_creation_tests.erl
+@@ -51,10 +51,13 @@ explicit_and_near_agent_placement_test_() ->
+                                                destination := Dest}) ->
+         Room = ref(Dest, room), Local = ref(Ns, room),
+         signed(C, inside(Room, ref(Ns,personal), {transform,200,300,400,0,45,0})),
++        %% Near the agent is two metres plus half the shared marker's depth,
++        %% read from the scene vocabulary: 400 - 2000 - 250.
++        with_models(C, fun() ->
+         {Bindings, _, _} = create(C, Target, []),
+         [{_, Space = {entity_ref, Target, _, Id}}, _] = Bindings,
+         assignment(C, Target, Id, 1, Room),
+-        holds(Target, {attribute, Id, transform, {transform, 200,300,-51600,0,45,0}}),
++        holds(Target, {attribute, Id, transform, {transform, 200,300,-1850,0,45,0}}),
+         holds(Dest, {space_placement, room, Space, 1}),
+         {Explicit, _, _} = create(C, Target, [], placement(Local)),
+         [{_, ExplicitRef = {entity_ref, Target, _, ExplicitId}}, _] = Explicit,
+@@ -62,18 +65,18 @@ explicit_and_near_agent_placement_test_() ->
+         holds(Ns, {space_placement, room, ExplicitRef, 1}),
+         fails(Dest, {space_placement, room, ExplicitRef, {'_'}}),
+         %% Execute the complete existing scene/recipe/modelling/rendering path.
+-        with_models(C, fun() ->
+-            Marks = read(C, space({world_view,ref(Ns,room),playing,{'Marks'}})),
+-            ?assertMatch([{mark,_,<<"group">>,[],{transform,10,20,30,0,0,0},
+-                          no_surface,unlabelled,{depicts,Target,_,ExplicitId}},
+-                         {mark,_,<<"box">>,[{f,<<"width">>,500},{f,<<"height">>,500},
+-                            {f,<<"depth">>,500}],_,_,_,_}], Marks)
+-        end),
++        Marks = read(C, space({world_view,ref(Ns,room),playing,{'Marks'}})),
++        Size = [{f,<<"width">>,500},{f,<<"height">>,500},{f,<<"depth">>,500}],
++        ?assertMatch([{mark,_,<<"group">>,[],{transform,10,20,30,0,0,0},
++                      no_surface,unlabelled,{depicts,Target,_,ExplicitId}},
++                     {mark,_,<<"box">>,Size,_,{surfaces,_,_,_},unlabelled,_},
++                     {mark,_,<<"corner_box">>,Size,_,{surfaces,_,_,_},{label,<<"Space">>,<<"above">>},_}], Marks),
+         %% Placement is one-time, not a subscription following A.
+         edit(Ns, {retract, {attribute,personal,transform,{'_'}}}),
+-        holds(Target, {attribute, Id, transform, {transform,200,300,-51600,0,45,0}}),
++        holds(Target, {attribute, Id, transform, {transform,200,300,-1850,0,45,0}}),
+         denied_creation(C, Target, []),
+         create(C, Target, [], placement(Local))
++        end)
+     end) end}.
+ 
+ explicit_owner_and_class_defaults_test_() ->
+@@ -219,7 +222,7 @@ placement(Ref) -> {at,Ref,{transform,10,20,30,0,0,0}}.
+ space_class() -> {':',quod,{':',space,space}}.
+ space(Goal) -> {'::',<<"quod:space">>,Goal}.
+ inside(Destination,Entity,Pose) -> space({goal,{inside,Destination,Entity,Pose}}).
+-default_dimensions() -> {box,{q,100,<<"m">>},{q,100,<<"m">>},{q,100,<<"m">>}}.
++default_dimensions() -> {box,{q,10,<<"m">>},{q,10,<<"m">>},{q,10,<<"m">>}}.
+ mixed_dimensions() -> {box,{q,{'/',1,3},<<"ft">>},{q,200,<<"cm">>},{q,3,<<"km">>}}.
+ creation_goal(Inputs,Placement) ->
+     {creation_result,Inputs,Placement,{'Ref'},{'Name'}}.

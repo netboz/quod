@@ -1,0 +1,95 @@
+[
+  {
+    "command": [
+      "openssl",
+      "req",
+      "-x509",
+      "-newkey",
+      "rsa:2048",
+      "-nodes",
+      "-keyout",
+      "/tmp/quod-m1b-tls-final-02-private/key.pem",
+      "-out",
+      "/tmp/quod-m1b-tls-final-02-private/ca.pem",
+      "-days",
+      "1",
+      "-subj",
+      "/CN=localhost",
+      "-addext",
+      "subjectAltName=DNS:localhost"
+    ],
+    "child_exit": 0
+  },
+  {
+    "command": [
+      "openssl",
+      "req",
+      "-x509",
+      "-key",
+      "/tmp/quod-m1b-tls-final-02-private/key.pem",
+      "-out",
+      "/tmp/quod-m1b-tls-final-02-private/expired.pem",
+      "-subj",
+      "/CN=localhost",
+      "-addext",
+      "subjectAltName=DNS:localhost",
+      "-not_before",
+      "20200101000000Z",
+      "-not_after",
+      "20200102000000Z"
+    ],
+    "child_exit": 0
+  },
+  {
+    "case": "trusted",
+    "command": [
+      "/tmp/quod-m1b-client-final-04/source/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m1b-tls-final-02-private/trusted"
+    ],
+    "child_exit": 0,
+    "expected": "accept"
+  },
+  {
+    "case": "untrusted",
+    "command": [
+      "/tmp/quod-m1b-client-final-04/source/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m1b-tls-final-02-private/untrusted"
+    ],
+    "child_exit": 0,
+    "expected": "reject"
+  },
+  {
+    "case": "wrong-host",
+    "command": [
+      "/tmp/quod-m1b-client-final-04/source/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m1b-tls-final-02-private/wrong-host"
+    ],
+    "child_exit": 0,
+    "expected": "reject"
+  },
+  {
+    "case": "expired",
+    "command": [
+      "/tmp/quod-m1b-client-final-04/source/client/godot/dist/quod.x86_64",
+      "--headless",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m1b-tls-final-02-private/expired"
+    ],
+    "child_exit": 0,
+    "expected": "reject"
+  }
+]

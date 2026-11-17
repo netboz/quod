@@ -1,0 +1,63 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Running Common Test suites...
+%%% quod_names_SUITE: 
+
+----------------------------------------------------
+2026-11-04 20:36:40.495
+remote draw from non-hosting node: 49 ms -> <<"Duzdrub">>
+
+
+----------------------------------------------------
+2026-11-04 20:36:42.343
+recognition culture=<<"orc">> elapsed_ms=26 result={ok,
+                                                    [#{'K' => {0},
+                                                       'L' =>
+                                                        [<<"personal">>]}],
+                                                    1}
+
+
+----------------------------------------------------
+2026-11-04 20:36:42.372
+recognition culture=<<"primitive">> elapsed_ms=29 result={ok,
+                                                          [#{'K' => {0},
+                                                             'L' => []}],
+                                                          1}
+
+
+----------------------------------------------------
+2026-11-04 20:36:42.397
+recognition culture=<<"elf">> elapsed_ms=25 result={ok,
+                                                    [#{'K' => {0},'L' => []}],
+                                                    1}
+
+
+----------------------------------------------------
+2026-11-04 20:36:42.416
+recognition culture=<<"landscape">> elapsed_ms=19 result={ok,
+                                                          [#{'K' => {0},
+                                                             'L' => []}],
+                                                          1}
+
+
+%%% quod_names_SUITE ==> remote_draw_from_non_hosting_node: FAILED
+%%% quod_names_SUITE ==> {timeout,
+    {gen_server,call,
+        [<0.627.0>,
+         {call,quod_prolog,prove,
+             [<<"naming-asker">>,
+              {findall,
+                  {'C'},
+                  {'::',
+                      {':',quod,names},
+                      {name,<<"Ugbash">>,{'C'},{'_'},{'_'}}},
+                  {'L'}}]},
+         35000]}}
+
+EXPERIMENTAL: Writing retry specification at /tmp/quod-stage2-final-source-20261104-rcpkvrbd/_build/test/logs/retry.spec
+              call rebar3 ct with '--retry' to re-run failing cases.
+Failed 1 tests. Passed 0 tests. 
+Results written to "/tmp/quod-stage2-final-source-20261104-rcpkvrbd/_build/test/logs/index.html".
+===> Failures occurred running tests: 1

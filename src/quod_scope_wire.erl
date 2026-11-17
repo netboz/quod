@@ -34,15 +34,12 @@ renew the scope lifetime.
               payload_kind/0]).
 
 -define(DOMAIN, <<"quod.scope">>).
--define(VERSION, 13).
+-define(VERSION, 16).
 -define(REQUEST_CHANNEL_TAG, quod_scope).
 -define(RETURN_CHANNEL_TAG, quod_scope_return).
 -define(IDENTITY_DOMAIN, <<"quod.scope.identity">>).
 -define(AUTH_DOMAIN, <<"quod.scope.auth.v5", 0>>).
 
--if(?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES >= ?QUOD_TRANSPORT_MAX_FRAME_BYTES).
--error("scope envelope must stay below the transport frame bound").
--endif.
 
 -type key() :: <<_:?QUOD_SCOPE_WIRE_KEY_BITS>>.
 -type opaque_id() :: <<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>>.
@@ -59,7 +56,7 @@ renew the scope lifetime.
          identity(), identity(), read_write | read_only,
          quod_dtx:principal(), <<_:256>>}.
 -type command_operation() ::
-        {scope_open, authentication(), list()} | scope_close | scope_seal |
+        {scope_open, authentication(), list()} | scope_close | scope_seal | scope_read_set |
         {scope_attest, binary()} | certify_reads |
         {bind_group_effects, term(), <<_:256>>} |
         {bind_operation_effect, binary()} |
@@ -82,7 +79,7 @@ renew the scope lifetime.
         {batch_restore | batch_release, [opaque_id()]} |
         {controller_error, opaque_id(), term()}.
 -type event_operation() ::
-        {scope_opened, non_neg_integer()} | scope_closed |
+        {scope_opened, non_neg_integer()} | scope_closed | {scope_read_set, binary()} |
         {plan_sealed, binary(), 0..3} | plan_not_material |
         {plan_attested, binary()} | {reads_certified, binary()} |
         group_effects_bound | {operation_effect_bound, <<_:256>>} |
@@ -115,7 +112,7 @@ renew the scope lifetime.
          non_neg_integer(), boolean(), event_operation()}.
 -type payload_kind() ::
         goal | answer | failure_reasons | erlog_error | plan | manifest |
-        attestation | read_certificate | foreign_reads | result |
+        attestation | read_certificate | read_set | foreign_reads | result |
         operation_submission.
 -type wire_error() ::
         {error, {too_large, scope_envelope | payload_kind()}} |
@@ -147,7 +144,7 @@ authentication_digest(node) ->
 authentication_digest(
   {signed_goal, RequestBytes, <<_:512>> = Signature, Certificate})
   when is_binary(RequestBytes),
-       byte_size(RequestBytes) =< ?QUOD_CLIENT_GOAL_REQUEST_BYTES ->
+       byte_size(RequestBytes) < (1 bsl 32) ->
     case quod_agent_identity:validate_certificate(Certificate) of
         true ->
             CertificateBytes = term_to_binary(Certificate, [deterministic]),
@@ -176,7 +173,7 @@ encode_identity_response(Response) ->
 encode_identity_frame(Frame, ok) ->
     Encoded = term_to_binary(
                 {?IDENTITY_DOMAIN, ?VERSION, Frame}, [deterministic]),
-    case byte_size(Encoded) =< ?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES of
+    case byte_size(Encoded) =< ?QUOD_LINK_PAYLOAD_CAPACITY of
         true -> {ok, Encoded};
         false -> too_large(scope_envelope)
     end;
@@ -270,16 +267,16 @@ validate_event(_) -> protocol_error(bad_shape).
 
 encode_envelope(Frame) ->
     Encoded = term_to_binary({?DOMAIN, ?VERSION, Frame}, [deterministic]),
-    case byte_size(Encoded) =< ?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES of
+    case byte_size(Encoded) =< ?QUOD_LINK_PAYLOAD_CAPACITY of
         true -> {ok, Encoded};
         false -> too_large(scope_envelope)
     end.
 
 decode_frame(Encoded, Direction)
   when is_binary(Encoded),
-       byte_size(Encoded) =< ?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES ->
+       byte_size(Encoded) =< ?QUOD_LINK_PAYLOAD_CAPACITY ->
     case quod_safe_term:decode(
-           Encoded, ?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES) of
+           Encoded, ?QUOD_LINK_PAYLOAD_CAPACITY) of
         {ok, {Domain, Version, Frame}} ->
             decode_frame_term(Domain, Version, Frame, Direction);
         {ok, _} -> protocol_error(bad_shape);
@@ -341,6 +338,11 @@ checked(_Frame, {error, _} = Error) -> Error.
 %% A plan is a sealed `m:quod_dtx` artifact, not a Prolog term: its codec owns
 %% canonicalization, bounds, and shape validation; only the byte bound is
 %% shared here through `payload_limit/1`.
+encode_payload(read_set, Reads) ->
+    case quod_read_set:encode(Reads) of
+        {ok,_} = Result -> Result;
+        {error,bad_term} -> protocol_error(bad_payload)
+    end;
 encode_payload(plan, Plan) ->
     quod_dtx:encode(Plan);
 encode_payload(manifest, Manifest) ->
@@ -355,7 +357,6 @@ encode_payload(read_certificate, Certificate) ->
 encode_payload(foreign_reads, Certificates) ->
     case quod_transaction:encode_foreign_reads(Certificates) of
         {ok, _} = Result -> Result;
-        {error, too_large} -> too_large(foreign_reads);
         {error, bad_foreign_reads} -> protocol_error(bad_payload)
     end;
 encode_payload(failure_reasons, Reasons) ->
@@ -383,6 +384,15 @@ decode_plan_payload(_Encoded) ->
     protocol_error(bad_payload).
 
 -spec decode_payload(payload_kind(), binary()) -> {ok, term()} | wire_error().
+decode_payload(read_set, Encoded) when is_binary(Encoded) ->
+    case quod_wire_term:decode_canonical(Encoded,byte_size(Encoded)) of
+        {ok,Pairs} ->
+            case quod_read_set:valid_pairs(Pairs) of
+                true -> {ok,maps:from_list(Pairs)};
+                false -> protocol_error(bad_payload)
+            end;
+        _ -> protocol_error(bad_payload)
+    end;
 decode_payload(plan, Encoded) when is_binary(Encoded) ->
     decode_plan_payload(Encoded);
 decode_payload(manifest, Encoded) when is_binary(Encoded) ->
@@ -398,7 +408,6 @@ decode_payload(read_certificate, Encoded) when is_binary(Encoded) ->
 decode_payload(foreign_reads, Encoded) when is_binary(Encoded) ->
     case quod_transaction:decode_foreign_reads(Encoded) of
         {ok, _} = Result -> Result;
-        {error, too_large} -> too_large(foreign_reads);
         {error, bad_foreign_reads} -> protocol_error(bad_payload)
     end;
 decode_payload(failure_reasons, Encoded) ->
@@ -406,7 +415,7 @@ decode_payload(failure_reasons, Encoded) ->
       quod_wire_term:decode_failure_reasons(Encoded));
 decode_payload(Kind, Encoded) when is_binary(Encoded) ->
     case payload_limit(Kind) of
-        {ok, MaxBytes} when byte_size(Encoded) =< MaxBytes ->
+        {ok, MaxBytes} when MaxBytes =:= unlimited; byte_size(Encoded) =< MaxBytes ->
             case quod_safe_term:decode(Encoded, MaxBytes) of
                 {ok, WireTerm} -> decode_wire_payload(Kind, WireTerm);
                 {error, _} -> protocol_error(bad_payload)
@@ -421,7 +430,7 @@ decode_payload(Kind, _) ->
     end.
 
 bounded_encoded_payload(_Kind, MaxBytes, Encoded)
-  when byte_size(Encoded) =< MaxBytes -> {ok, Encoded};
+  when MaxBytes =:= unlimited; byte_size(Encoded) =< MaxBytes -> {ok, Encoded};
 bounded_encoded_payload(Kind, _MaxBytes, _Encoded) -> too_large(Kind).
 
 decode_wire_payload(_Kind, WireTerm) ->
@@ -431,23 +440,16 @@ normalize_payload({ok, _} = Result) -> Result;
 normalize_payload({error, bad_term}) -> protocol_error(bad_payload).
 
 normalize_failure_reason_payload({ok, _} = Result) -> Result;
-normalize_failure_reason_payload({error, too_large}) ->
-    too_large(failure_reasons);
 normalize_failure_reason_payload({error, bad_term}) ->
     protocol_error(bad_payload).
 
-payload_limit(goal) -> {ok, ?QUOD_MAX_NESTED_GOAL_BYTES};
-payload_limit(answer) -> {ok, ?QUOD_MAX_PROOF_ANSWER_BYTES};
-payload_limit(failure_reasons) -> {ok, ?ERLOG_MAX_FAILURE_REASONS_BYTES};
-payload_limit(erlog_error) -> {ok, ?ERLOG_MAX_FAILURE_REASON_BYTES};
-payload_limit(plan) -> {ok, ?QUOD_MAX_PLAN_ENVELOPE_BYTES};
-payload_limit(manifest) -> {ok, ?QUOD_MAX_DTX_BODY_BYTES};
-payload_limit(attestation) -> {ok, ?QUOD_MAX_DTX_BODY_BYTES};
-payload_limit(read_certificate) -> {ok, ?QUOD_MAX_DTX_BODY_BYTES};
-payload_limit(foreign_reads) -> {ok, ?QUOD_MAX_DTX_BODY_BYTES};
-payload_limit(result) -> {ok, ?QUOD_MAX_DURABLE_RESULT_BYTES};
-payload_limit(operation_submission) ->
-    {ok, ?QUOD_MAX_OPERATION_SUBMISSION_BYTES};
+%% Complete envelopes own actual framing capacity. Material allocation is
+%% checked by the proof's pinned Prolog policy, not a second payload quota.
+payload_limit(Kind) when Kind =:= failure_reasons; Kind =:= erlog_error;
+                         Kind =:= goal; Kind =:= answer; Kind =:= plan;
+                         Kind =:= manifest; Kind =:= attestation;
+                         Kind =:= read_certificate; Kind =:= read_set; Kind =:= foreign_reads;
+                         Kind =:= result; Kind =:= operation_submission -> {ok, unlimited};
 payload_limit(_) -> error.
 
 %% ------------------------------------------------------------------
@@ -462,15 +464,16 @@ validate_command_operation({scope_open, Authentication, TraceCarrier}) ->
     end;
 validate_command_operation(scope_close) -> ok;
 validate_command_operation(scope_seal) -> ok;
+validate_command_operation(scope_read_set) -> ok;
 validate_command_operation({scope_attest, ManifestBlob}) ->
-    validate_blob(manifest, ManifestBlob);
+    validate_blob(ManifestBlob);
 validate_command_operation(certify_reads) -> ok;
 validate_command_operation(
   {bind_group_effects, GroupRef, <<_:256>>}) ->
     validate_group_ref(GroupRef);
 validate_command_operation(
   {bind_operation_effect, SubmissionBlob}) ->
-    validate_blob(operation_submission, SubmissionBlob);
+    validate_blob(SubmissionBlob);
 validate_command_operation(
   {submit_plan, PlanBlob, GoalBlob, ResultBlob, ForeignReadsBlob,
    TraceCarrier}) ->
@@ -486,7 +489,7 @@ validate_command_operation(
 validate_command_operation(
   {invoke_open, InvocationId, Selection, Chain, GoalBlob}) ->
     case {valid_id(InvocationId), validate_selection(Selection)} of
-        {true, ok} -> validate_chain_blob(Chain, GoalBlob, goal);
+        {true, ok} -> validate_chain_blob(Chain, GoalBlob);
         {false, _} -> protocol_error(bad_id);
         {_, {error, _} = Error} -> Error
     end;
@@ -500,15 +503,15 @@ validate_command_operation(
   {nested_solution, ControllerId, ProxyId, AnswerSeq, Blob, Independent})
   when is_boolean(Independent) ->
     validate_two_ids_sequence_blob(
-      ControllerId, ProxyId, AnswerSeq, Blob, answer);
+      ControllerId, ProxyId, AnswerSeq, Blob);
 validate_command_operation(
   {nested_complete, ControllerId, ProxyId, AnswerSeq, Blob}) ->
     validate_two_ids_sequence_blob(
-      ControllerId, ProxyId, AnswerSeq, Blob, failure_reasons);
+      ControllerId, ProxyId, AnswerSeq, Blob);
 validate_command_operation(
   {nested_erlog_error, ControllerId, ProxyId, AnswerSeq, Blob}) ->
     validate_two_ids_sequence_blob(
-      ControllerId, ProxyId, AnswerSeq, Blob, erlog_error);
+      ControllerId, ProxyId, AnswerSeq, Blob);
 validate_command_operation({nested_error, ControllerId, Reason}) ->
     validate_id_error(ControllerId, Reason);
 validate_command_operation(
@@ -534,12 +537,12 @@ validate_command_operation({controller_error, ControllerId, Reason}) ->
 validate_command_operation(_) -> protocol_error(bad_shape).
 
 validate_submit_blobs(PlanBlob, GoalBlob, ResultBlob, ForeignReadsBlob) ->
-    case validate_blob(plan, PlanBlob) of
+    case validate_blob(PlanBlob) of
         ok ->
-            case validate_blob(goal, GoalBlob) of
+            case validate_blob(GoalBlob) of
                 ok ->
-                    case validate_blob(result, ResultBlob) of
-                        ok -> validate_blob(foreign_reads, ForeignReadsBlob);
+                    case validate_blob(ResultBlob) of
+                        ok -> validate_blob(ForeignReadsBlob);
                         {error, _} = Error -> Error
                     end;
                 {error, _} = Error -> Error
@@ -553,14 +556,15 @@ validate_event_operation({scope_opened, BaseHeight}) ->
         false -> protocol_error(bad_height)
     end;
 validate_event_operation(scope_closed) -> ok;
+validate_event_operation({scope_read_set, Blob}) -> validate_blob(Blob);
 validate_event_operation({plan_sealed, Blob, Provenance})
   when is_integer(Provenance), Provenance >= 0, Provenance =< 3 ->
-    validate_blob(plan, Blob);
+    validate_blob(Blob);
 validate_event_operation(plan_not_material) -> ok;
 validate_event_operation({plan_attested, Blob}) ->
-    validate_blob(attestation, Blob);
+    validate_blob(Blob);
 validate_event_operation({reads_certified, Blob}) ->
-    validate_blob(read_certificate, Blob);
+    validate_blob(Blob);
 validate_event_operation(group_effects_bound) -> ok;
 validate_event_operation({operation_effect_bound, <<_:256>>}) -> ok;
 validate_event_operation({plan_submitted, {committed, Slot, TxId}}) ->
@@ -590,12 +594,12 @@ validate_event_operation({invocation_opened, InvocationId}) ->
     validate_one_id(InvocationId);
 validate_event_operation({solution, InvocationId, AnswerSeq, Blob, Independent})
   when is_boolean(Independent) ->
-    validate_id_sequence_blob(InvocationId, AnswerSeq, Blob, answer);
+    validate_id_sequence_blob(InvocationId, AnswerSeq, Blob);
 validate_event_operation({complete, InvocationId, AnswerSeq, Blob}) ->
     validate_id_sequence_blob(
-      InvocationId, AnswerSeq, Blob, failure_reasons);
+      InvocationId, AnswerSeq, Blob);
 validate_event_operation({erlog_error, InvocationId, AnswerSeq, Blob}) ->
-    validate_id_sequence_blob(InvocationId, AnswerSeq, Blob, erlog_error);
+    validate_id_sequence_blob(InvocationId, AnswerSeq, Blob);
 validate_event_operation({invocation_error, InvocationId, AnswerSeq, Reason}) ->
     case validate_id_sequence(InvocationId, AnswerSeq) of
         ok -> validate_public_error(Reason);
@@ -606,7 +610,7 @@ validate_event_operation({scope_error, Reason}) ->
 validate_event_operation(
   {nested_open, ControllerId, TargetNs, Chain, GoalBlob, Selection}) ->
     case {valid_namespace(TargetNs), validate_selection(Selection)} of
-        {true, ok} -> validate_id_chain_blob(ControllerId, Chain, GoalBlob, goal);
+        {true, ok} -> validate_id_chain_blob(ControllerId, Chain, GoalBlob);
         {false, _} -> protocol_error(bad_identity);
         {_, {error, _} = Error} -> Error
     end;
@@ -689,17 +693,17 @@ validate_authentication(Authentication) ->
         {error, _} = Error -> Error
     end.
 
-validate_id_chain_blob(Id, Chain, Blob, Kind) ->
-    case {valid_id(Id), validate_chain(Chain), validate_blob(Kind, Blob)} of
+validate_id_chain_blob(Id, Chain, Blob) ->
+    case {valid_id(Id), validate_chain(Chain), validate_blob(Blob)} of
         {true, ok, ok} -> ok;
         {false, _, _} -> protocol_error(bad_id);
         {_, {error, _} = Error, _} -> Error;
         {_, _, {error, _} = Error} -> Error
     end.
 
-validate_chain_blob(Chain, Blob, Kind) ->
+validate_chain_blob(Chain, Blob) ->
     case validate_chain(Chain) of
-        ok -> validate_blob(Kind, Blob);
+        ok -> validate_blob(Blob);
         {error, _} = Error -> Error
     end.
 
@@ -752,8 +756,7 @@ validate_id_id_list(Id, Ids) ->
     end.
 
 validate_id_list(Ids) ->
-    case validate_unique_ids(
-           Ids, ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF, 0, #{}) of
+    case validate_unique_ids(Ids, #{}) of
         ok -> ok;
         error -> protocol_error(bad_id_list)
     end.
@@ -784,8 +787,7 @@ validate_activated(ControllerId, FinalLineage, Activated) ->
     end.
 
 valid_activated_list(Activated) ->
-    Limit = ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF,
-    case bounded_nonempty_list(Activated, Limit) andalso
+    case proper_nonempty_list(Activated) andalso
          lists:all(fun valid_activation_entry/1, Activated) andalso
          unique_activation_fields(Activated) of
         true -> {ok, element(3, lists:last(Activated))};
@@ -805,25 +807,16 @@ unique_ids(Position, Activated) ->
     Ids = [element(Position, Entry) || Entry <- Activated],
     map_size(maps:from_keys(Ids, true)) =:= length(Ids).
 
-validate_unique_ids([], _Limit, Count, _Seen) when Count > 0 -> ok;
-validate_unique_ids([], _Limit, 0, _Seen) -> error;
-validate_unique_ids([Id | Rest], Limit, Count, Seen)
-  when Count < Limit ->
+validate_unique_ids([], Seen) when map_size(Seen) > 0 -> ok;
+validate_unique_ids([Id | Rest], Seen) ->
     case valid_id(Id) andalso not maps:is_key(Id, Seen) of
-        true -> validate_unique_ids(
-                  Rest, Limit, Count + 1, Seen#{Id => true});
+        true -> validate_unique_ids(Rest, Seen#{Id => true});
         false -> error
     end;
-validate_unique_ids(_Ids, _Limit, _Count, _Seen) -> error.
+validate_unique_ids(_, _) -> error.
 
-bounded_nonempty_list([_ | _] = List, Limit) ->
-    bounded_list(List, Limit, 0);
-bounded_nonempty_list(_List, _Limit) -> false.
-
-bounded_list([], _Limit, _Count) -> true;
-bounded_list([_ | Rest], Limit, Count) when Count < Limit ->
-    bounded_list(Rest, Limit, Count + 1);
-bounded_list(_List, _Limit, _Count) -> false.
+proper_nonempty_list(List) when length(List) > 0 -> true;
+proper_nonempty_list(_) -> false.
 
 validate_id_sequence(Id, Sequence) ->
     case {valid_id(Id), valid_sequence(Sequence)} of
@@ -838,15 +831,15 @@ validate_sequence(Sequence) ->
         false -> protocol_error(bad_sequence)
     end.
 
-validate_id_sequence_blob(Id, Sequence, Blob, Kind) ->
+validate_id_sequence_blob(Id, Sequence, Blob) ->
     case validate_id_sequence(Id, Sequence) of
-        ok -> validate_blob(Kind, Blob);
+        ok -> validate_blob(Blob);
         {error, _} = Error -> Error
     end.
 
-validate_two_ids_sequence_blob(First, Second, Sequence, Blob, Kind) ->
+validate_two_ids_sequence_blob(First, Second, Sequence, Blob) ->
     case validate_two_ids(First, Second) of
-        ok -> validate_id_sequence_blob(First, Sequence, Blob, Kind);
+        ok -> validate_id_sequence_blob(First, Sequence, Blob);
         {error, _} = Error -> Error
     end.
 
@@ -857,27 +850,21 @@ validate_id_error(Id, Reason) ->
     end.
 
 validate_chain(Chain) ->
-    case bounded_nonempty_list(Chain, ?QUOD_MAX_ACTIVE_PROOF_DEPTH) andalso
+    case proper_nonempty_list(Chain) andalso
          lists:all(fun valid_identity/1, Chain) of
         true -> ok;
         false -> protocol_error(bad_chain)
     end.
 
-validate_blob(Kind, Blob) when is_binary(Blob) ->
-    {ok, MaxBytes} = payload_limit(Kind),
-    case byte_size(Blob) =< MaxBytes of
-        true -> ok;
-        false -> too_large(Kind)
-    end;
-validate_blob(_Kind, _Blob) -> protocol_error(bad_payload).
+validate_blob(Blob) when is_binary(Blob) -> ok;
+validate_blob(_Blob) -> protocol_error(bad_payload).
 
 valid_identity({Namespace, Anchor}) ->
     valid_namespace(Namespace) andalso valid_key(Anchor);
 valid_identity(_) -> false.
 
 valid_namespace(Namespace) ->
-    is_binary(Namespace) andalso byte_size(Namespace) > 0 andalso
-        byte_size(Namespace) =< ?DIRECTORY_MAX_NAMESPACE_BYTES.
+    is_binary(Namespace) andalso byte_size(Namespace) > 0.
 
 valid_key(Binary) ->
     is_binary(Binary) andalso
@@ -924,15 +911,16 @@ validate_public_error(independent_scope_required) -> ok;
 validate_public_error(read_certificate_unavailable) -> ok;
 validate_public_error(conflict_retry) -> ok;
 validate_public_error({material_limit, Kind, Resource, Actual, Limit})
-  when Kind =:= founding; Kind =:= plan ->
-    case lists:member(Resource, [canonical_bytes, symbols, operations, reads])
+  when Kind =:= founding; Kind =:= plan; Kind =:= proof ->
+    case lists:member(Resource, [canonical_bytes, symbols, operations, reads,
+                                heap_bytes, answer_bytes])
          andalso valid_uint64(Actual) andalso valid_uint64(Limit)
          andalso Actual > Limit of
         true -> ok;
         false -> protocol_error(bad_error_code)
     end;
 validate_public_error({invalid_material_policy, Kind})
-  when Kind =:= founding; Kind =:= plan -> ok;
+  when Kind =:= founding; Kind =:= plan; Kind =:= proof -> ok;
 validate_public_error({effect_custody_limit, prepared_bytes, Actual, Limit}) ->
     case valid_uint64(Actual) andalso valid_uint64(Limit) andalso Actual > Limit of
         true -> ok;
@@ -949,17 +937,10 @@ validate_public_error({Tag, Value} = Reason) ->
     end;
 validate_public_error(_) -> protocol_error(bad_error_code).
 
-validate_public_error_pair({Tag, Max})
-  when Tag =:= proof_depth_exceeded; Tag =:= scope_limit_exceeded;
-       Tag =:= savepoint_limit_exceeded ->
-    case valid_sequence(Max) of
-        true -> ok;
-        false -> protocol_error(bad_error_code)
-    end;
 validate_public_error_pair({too_large, Kind}) ->
     case payload_limit(Kind) of
         {ok, _} -> ok;
-        error when Kind =:= scope_envelope; Kind =:= transcript -> ok;
+        error when Kind =:= scope_envelope -> ok;
         error -> protocol_error(bad_error_code)
     end;
 validate_public_error_pair({non_transactional_dependency, {Name, Arity}})
@@ -1016,7 +997,7 @@ namespaced_error_tag(Tag) ->
         Tag =:= ontology_busy orelse Tag =:= ontology_rebuilding orelse
         Tag =:= network_identity_unavailable orelse
         Tag =:= proof_limit_exceeded orelse
-        Tag =:= scope_expired orelse Tag =:= too_many_answers.
+        Tag =:= scope_expired.
 
 valid_protocol_kind(Kind) ->
     lists:member(

@@ -1,0 +1,50 @@
+{
+  "/data/quod-m4-vr-ca84d4f8-20261029/private/case15-preparation01/unchanged-owners/godot-m4-vive-retest-20261030/native-vive-product15/result.json": {
+    "sha256": "796c358fc7b37688eb829a37b6ddd089ab4213032e363e9a2c09e16c2121fbcb",
+    "bytes": 64581,
+    "mode": 384,
+    "retained_privately_not_snapshot_object": true
+  },
+  "/data/quod-m4-vr-ca84d4f8-20261029/private/case15-preparation01/unchanged-owners/godot-m4-vive-retest-20261030/native-vive-product15/client-result.json": {
+    "sha256": "03e894724a225c13a123203d7d2bd3f22a2b53f50a8e93967786d2b18f4085be",
+    "bytes": 42669,
+    "mode": 384,
+    "retained_privately_not_snapshot_object": true
+  },
+  "/data/quod-m4-vr-ca84d4f8-20261029/private/case15-preparation01/unchanged-owners/godot-m4-vive-physical-20261029/logs/native-vive-product15-run.json": {
+    "sha256": "f8a6b7908a11d25a279348fec07c56791049d29214c10d21a85ecef834b1152e",
+    "bytes": 1533,
+    "mode": 384,
+    "retained_privately_not_snapshot_object": true
+  },
+  "/data/quod-m4-vr-ca84d4f8-20261029/private/case15-preparation01/unchanged-owners/godot-m4-vive-physical-20261029/logs/native-vive-product15-focus-run.json": {
+    "sha256": "d87dcaf540c92f3095e40d3228eadf14465c14ab2338502b9a498cef817d7f19",
+    "bytes": 1289,
+    "mode": 384,
+    "retained_privately_not_snapshot_object": true
+  },
+  "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product15-focus-invocation.json": {
+    "sha256": "3a802ba6fa189edc5c78eb9e3f6c6c5125018f1a740b1a98a5933b2af264e4b9",
+    "bytes": 2904,
+    "mode": 384,
+    "retained_privately_not_snapshot_object": true
+  },
+  "/data/quod-m4-vr-ca84d4f8-20261029/private/case15-preparation01/bindings.json": {
+    "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "bytes": 3,
+    "mode": 384,
+    "retained_privately_not_snapshot_object": true
+  },
+  "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product15/client-result.raw.json": {
+    "sha256": "216cfbe03d9bd585e220c1466b07e8f3909e52eef6a3c9c8031974010b0ef6ea",
+    "bytes": 72190,
+    "mode": 384,
+    "retained_privately_not_snapshot_object": true
+  },
+  "/data/quod-m4-vr-ca84d4f8-20261029/private/case15-preparation01/actual-tool-launch-control-records.json": {
+    "sha256": "fd74423f34b5ec95b899c526c1f480afa513cd21ad66f60901ba637d38100113",
+    "bytes": 36174,
+    "mode": 384,
+    "retained_privately_not_snapshot_object": true
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "command": [
+    "dotnet",
+    "restore",
+    "Quod.csproj",
+    "--locked-mode",
+    "-p:Configuration=Debug",
+    "-p:SelfContained=true",
+    "--source",
+    "/tmp/quod-m4-ca84d4f8/artifacts/quod-m4-client-candidate09/dependency-feed"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 2.2209586090029916
+}

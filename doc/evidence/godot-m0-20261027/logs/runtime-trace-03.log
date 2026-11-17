@@ -1,0 +1,42 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.28s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+module 'quod_material_admission_tests'
+  quod_material_admission_tests: policy_is_authored_and_ambiguous_values_fail_closed_test...[2.049 s] ok
+  quod_material_admission_tests: policy_cannot_write_during_selection_test...[0.011 s] ok
+  quod_material_admission_tests: source_symbol_refusal_precedes_allocation_and_storage_test...[0.184 s] ok
+  quod_material_admission_tests: staged_policy_cannot_authorize_its_own_write_test...[0.762 s] ok
+  quod_material_admission_tests: invalid_policy_updates_are_refused_before_sealing_test...[0.766 s] ok
+  quod_material_admission_tests: proof_budget_is_pinned_and_tracks_helper_changes_test...[0.347 s] ok
+  quod_material_admission_tests: policy_replacement_uses_final_state_and_preserves_zero_allowance_test...[0.141 s] ok
+  quod_material_admission_tests: policy_helper_change_is_checked_through_captured_dependencies_test...[0.098 s] ok
+  quod_material_admission_tests: sealed_plan_carries_policy_reads_and_reuses_exact_result_test...[0.103 s] ok
+  quod_material_admission_tests: canonical_byte_and_count_refusals_name_the_resource_test...[0.252 s] ok
+  quod_material_admission_tests: committed_policy_change_invalidates_the_sealed_plan_test...[0.049 s] ok
+  [done in 6.496 s]
+module 'quod_proof_session_tests'
+  quod_proof_session_tests: resumable_invocation_preserves_solution_order_test...[0.040 s] ok
+  quod_proof_session_tests: independent_intent_belongs_to_an_invocation_not_the_shared_revision_test...[0.018 s] ok
+  quod_proof_session_tests: sealed_scope_records_independent_eligibility_not_selected_lane_test...[0.530 s] ok
+  quod_proof_session_tests: repeated_invocations_share_staged_writes_test...[0.113 s] ok
+  quod_proof_session_tests: failed_invocation_keeps_ordinary_prolog_writes_test...[0.101 s] ok
+  quod_proof_session_tests: failed_branch_write_is_visible_to_its_next_alternative_test...[0.107 s] ok
+  quod_proof_session_tests: stateless_erlog_error_keeps_the_current_revision_test...[0.092 s] ok
+  quod_proof_session_tests: stateful_erlog_error_preserves_its_revision_test...[0.103 s] ok
+  quod_proof_session_tests: transaction_error_adopts_rolled_back_revision_test...[0.212 s] ok
+  quod_proof_session_tests: older_continuation_rebases_to_newer_overlay_test...[0.068 s] ok
+  quod_proof_session_tests: publish_then_refresh_preserves_nested_revision_test...[0.045 s] ok
+  quod_proof_session_tests: run_first_keeps_existing_result_contract_test...[0.012 s] ok
+  quod_proof_session_tests: invocations_retain_distinct_lifetime_ids_test...[0.018 s] ok
+  quod_proof_session_tests: seal_latches_state_and_first_manifest_attestation_test...[0.013 s] ok
+  quod_proof_session_tests: not_material_seal_is_also_terminal_test...[0.012 s] ok
+  quod_proof_session_tests: pending_generation_rejects_open_and_discards_old_invocation_test...[0.049 s] ok
+  quod_proof_session_tests: gate_change_during_step_cannot_expose_solution_test...[0.014 s] ok
+  quod_proof_session_tests: authorization_subproof_retains_the_parent_guard_test...[0.011 s] ok
+  quod_proof_session_tests: committed_authorization_preserves_infrastructure_fences_test...[0.011 s] ok
+  [done in 3.549 s]
+=======================================================
+  All 30 tests passed.

@@ -108,7 +108,7 @@ async function query(who, reference, goal) {
 }
 async function presentation(who) {
   const choices = await readEntityEidolons(who.identity, who.agent, subject)
-  const choice = choices.filter(c => c.style === 'source')
+  const choice = choices.filter(c => c.name === 'source')
   assert.equal(choice.length, 1)
   const view = await readEidolon(who.identity, who.agent, subject, choice[0])
   assert.equal(view.kind, 'workspace')
@@ -118,7 +118,7 @@ async function presentation(who) {
 }
 async function policy(who) {
   const choices = await readEntityEidolons(who.identity, who.agent, subject)
-  const choice = choices.filter(c => c.style === 'policy')
+  const choice = choices.filter(c => c.name === 'policy')
   assert.equal(choice.length, 1)
   const view = await readEidolon(who.identity, who.agent, subject, choice[0])
   assert.equal(view.kind, 'lens')
@@ -153,13 +153,27 @@ try {
   assert.notDeepEqual(owner.identity.provider.publicKey, guest.identity.provider.publicKey)
   const catalogue = await readSystemOntologies(owner.identity)
   assert(!catalogue.some(row => row.namespace === target.namespace))
-  const row = catalogue.find(row => row.namespace === 'quod:prolog')
+  const row = catalogue.find(row => row.namespace === 'quod:gui')
   assert(row)
   tools = { namespace: row.namespace, anchor: fromB64url(row.anchor) }
   workspace = { target, tools }
   assert.equal(await presentation(owner), true)
-  assert.deepEqual(await readEntityEidolons(owner.identity, owner.agent, subject),
-    await readEntityEidolons(owner.identity, owner.agent, ontologySubject(tools)))
+  const ownedChoices = await readEntityEidolons(owner.identity, owner.agent, subject)
+  const toolChoices = await readEntityEidolons(owner.identity, owner.agent, ontologySubject(tools))
+  // The ontology class's own contents Eidolon and its Show as offers are bound
+  // to each ontology; every other choice is the same shared one.
+  const own = choice => choice.name === 'contents' ||
+    (choice.recipe.term.type === 'compound' && choice.recipe.term.functor === 'show' && choice.recipe.term.args[0].value === 'ontology')
+  assert.deepEqual(ownedChoices.filter(choice => !own(choice)), toolChoices.filter(choice => !own(choice)))
+  for (const [choices, reference] of [[ownedChoices, target], [toolChoices, tools]]) {
+    const contents = choices.filter(choice => choice.name === 'contents')
+    assert.deepEqual(contents.map(choice => choice.purpose).sort(), ['edition', 'playing'])
+    for (const choice of contents) {
+      assert.equal(choice.recipe.namespace, reference.namespace)
+      assert.deepEqual(choice.recipe.anchor, reference.anchor)
+      assert.equal(choice.recipe.name, 'ontology_contents')
+    }
+  }
   await assert.rejects(full(guest), error => error instanceof GoalFailure)
   const wrong = { ...workspace, target: { ...target, anchor: new Uint8Array(32) } }
   await assert.rejects(readCodeState(owner.identity, owner.agent, wrong), error => error instanceof GoalFailure)

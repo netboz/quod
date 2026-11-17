@@ -1,0 +1,49 @@
+{
+  "passed": true,
+  "transport": "HTTPS",
+  "certificate_validation": true,
+  "catalogue_count": 6,
+  "source_hashes": [
+    {
+      "namespace": "quod:gui",
+      "sha256": "58c7722fa2252e85a8ec1676c2be9e1057b2e2816daaa97b2b6b7eb7843482b1"
+    },
+    {
+      "namespace": "quod:controllers",
+      "sha256": "d2d76903f9792e08e4421a735d53b8dd446f1cc084a244c7365c0bdd8e25f8a8"
+    },
+    {
+      "namespace": "quod:space",
+      "sha256": "6c8262f1bd87c32334c6ca61592ffeb9fb25241b269caeacbe3a6eebc084868d"
+    }
+  ],
+  "writes": 2,
+  "save": {
+    "bindings": [
+      {
+        "Results": "[result(revision,3)]"
+      }
+    ],
+    "result": "ok",
+    "tx_id": "8c46dfd5a4d4f91bebad0547218c651338fd2163d4be997ff4a93edec1de799e",
+    "anchor": "8f1e7f88909bbd15dd5e1aa6fe94efd232862e9b7db5a9465ab9dfcb391f0273",
+    "operation_id": "REJI5-V-XDtmd4zJ3cbZu7yLjRioTIWnDGkI1MxIpbY",
+    "request_digest": "dYEfY7sWYXS4U22QxunlzIyWmOq2Lr-GmYGs115Bwmg",
+    "ns": "human:tFkH-5GXJdTHqTunmXhNc2qciuxKy7djYjTeHvl9ENU"
+  },
+  "reset": {
+    "bindings": [
+      {
+        "Results": "[result(revision,4)]"
+      }
+    ],
+    "result": "ok",
+    "tx_id": "5b2c1f74bafbd06cb7749de289338edc67f3b226bad5ddaea9f1370bbaedfc0a",
+    "anchor": "8f1e7f88909bbd15dd5e1aa6fe94efd232862e9b7db5a9465ab9dfcb391f0273",
+    "operation_id": "ZGk1MgJbW74MXX5Te9gImkas4-40Dhton0xJOYlY0LU",
+    "request_digest": "iuJ8maludQvFjLn1pcDgolfmb9WJ5hI31Bf4aAFKryY",
+    "ns": "human:tFkH-5GXJdTHqTunmXhNc2qciuxKy7djYjTeHvl9ENU"
+  },
+  "original_results_recovered": 2,
+  "recovery_writes": 0
+}

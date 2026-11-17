@@ -1,0 +1,16 @@
+--- doc/evidence/godot-m4-vive-physical-20261029/extract_api.py
++++ doc/evidence/godot-m4-vive-retest10-20261030/extract_api.py
+@@ -1,6 +1,7 @@
+ """Stream only new completed API dumps; call entries/arguments, never results."""
+ import collections,hashlib,json,re,sys
+ from pathlib import Path
++sys.path.insert(0,str(Path(__file__).resolve().parent.parent/'godot-m4-vive-physical-20261029'))
+ from environment import TASK
+ keep={'xrCreateInstance','xrDestroyInstance','xrCreateSession','xrDestroySession','xrBeginSession','xrRequestExitSession','xrEndSession','xrCreateActionSet','xrDestroyActionSet','xrCreateAction','xrDestroyAction','xrCreateReferenceSpace','xrCreateActionSpace','xrDestroySpace','xrCreateSwapchain','xrDestroySwapchain','xrAcquireSwapchainImage','xrWaitSwapchainImage','xrReleaseSwapchainImage','xrWaitFrame','xrBeginFrame','xrEndFrame'}
+ frequent={'xrAcquireSwapchainImage','xrWaitSwapchainImage','xrReleaseSwapchainImage','xrWaitFrame','xrBeginFrame','xrEndFrame'}
+@@ -20,4 +21,4 @@
+             if m:views[number(m[1])]+=1
+     assert counts['xrEndFrame']>0 and sum(layers.values())==counts['xrEndFrame'],'Missing or malformed frameEndInfo layerCount field/header'
+     result={'raw_path':str(path),'raw_sha256':digest.hexdigest(),'raw_bytes':size,'scope':'Official dump call entries/arguments only; no returned-result, acquired scanout or headset-pixel claim','counts':{n:counts[n] for n in sorted(keep)},'submitted_layer_counts':dict(layers),'projection_view_counts':dict(views),'lifecycle_order':order}
+-    out=Path(__file__).resolve().parent/label/'api-lifecycle.json';assert not out.exists();out.write_text(json.dumps(result,indent=2)+'\n');print(json.dumps({'label':label,**result}))
++    out=Path(__file__).resolve().parent/'api-lifecycle.json';assert not out.exists();out.write_text(json.dumps(result,indent=2)+'\n');print(json.dumps({'label':label,**result}))

@@ -1,0 +1,24 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.10s
+===> Analyzing applications...
+===> Compiling quod
+===> Running Common Test suites...
+%%% quod_ask_SUITE: ..
+%%% quod_ask_SUITE ==> remote_signed_gateway_read_execute_cursor: FAILED
+%%% quod_ask_SUITE ==> {timeout,
+    {gen_server,call,
+        [<0.558.0>,
+         {call,quod_prolog,outcome,
+             [{transaction,<<"animals">>,
+                  <<199,34,6,218,246,220,52,35,219,163,28,155,126,178,147,14,
+                    173,93,250,3,88,5,62,203,118,64,33,159,249,235,254,16>>,
+                  <<18,158,101,59,236,241,20,118,240,216,55,127,198,250,254,
+                    216,183,130,210,17,95,115,179,213,50,139,153,86,45,43,
+                    183,101>>}]},
+         5000]}}
+
+EXPERIMENTAL: Writing retry specification at /tmp/quod-m0-validation-01/_build/test/logs/retry.spec
+              call rebar3 ct with '--retry' to re-run failing cases.
+Failed 1 tests. Passed 2 tests. 
+Results written to "/tmp/quod-m0-validation-01/_build/test/logs/index.html".
+===> Failures occurred running tests: 1

@@ -1,0 +1,8 @@
+{
+  "commit": "59be345db769a89c93d1bdf6ed8316fa6209d8ae",
+  "url": "https://gitlab.freedesktop.org/monado/monado/-/archive/59be345db769a89c93d1bdf6ed8316fa6209d8ae/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae.tar.gz",
+  "path": "/home/yan/.cache/quod-m4-r2-artifacts/runtime/monado-59be345db769a89c93d1bdf6ed8316fa6209d8ae.tar.gz",
+  "sha256": "55bcf466c0f08da73a7d261b9b66a02370c33f4c9168b5ec3ecdd93cbb62d3be",
+  "size": 6107359,
+  "source": "official Monado main pinned at observed current revision; no local patches"
+}

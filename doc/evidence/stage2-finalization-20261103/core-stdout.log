@@ -1,0 +1,21 @@
+PASS browser backup public identity
+PASS unknown encrypted-backup version refuses
+PASS browser exact UTF8 uint64 wire
+PASS browser Ed25519 signature
+PASS browser exact UTF8 uint64 wire
+PASS browser Ed25519 signature
+PASS challenge signature
+PASS wrong backup passphrase
+PASS GCM tamper
+PASS new encrypted backup restores original identity
+PASS functional data term canonical bytes
+PASS functional data term canonical bytes
+PASS functional data term canonical bytes
+PASS functional data term canonical bytes
+PASS functional data term canonical bytes
+PASS functional data term canonical bytes
+PASS malformed functional term
+PASS malformed functional term
+PASS malformed functional term
+PASS malformed functional term
+PASS malformed functional term

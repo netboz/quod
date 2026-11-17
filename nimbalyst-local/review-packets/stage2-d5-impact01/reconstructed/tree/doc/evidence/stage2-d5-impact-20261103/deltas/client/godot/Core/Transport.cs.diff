@@ -1,0 +1,63 @@
+--- stage2-product01/client/godot/Core/Transport.cs
++++ current/client/godot/Core/Transport.cs
+@@ -17,6 +17,16 @@
+ {
+     public static string S(JsonNode? value, string key) => value?[key]?.GetValue<string>() ?? throw new FormatException("Missing " + key);
+     public static ulong U(JsonNode? value, string key) => ulong.Parse(value?[key]?.ToString() ?? throw new FormatException("Missing " + key));
++    public static string Error(JsonNode value)
++    {
++        string code=S(value,"error");
++        if(code!="material_limit")return code;
++        string actual=S(value,"actual"),limit=S(value,"limit");
++        if(!System.Numerics.BigInteger.TryParse(actual,System.Globalization.NumberStyles.None,System.Globalization.CultureInfo.InvariantCulture,out var quantity) ||
++           !System.Numerics.BigInteger.TryParse(limit,System.Globalization.NumberStyles.None,System.Globalization.CultureInfo.InvariantCulture,out var allowance) || quantity<=allowance)
++            throw new FormatException("Invalid resource allowance refusal.");
++        return $"Resource allowance exceeded ({S(value,"kind")}, {S(value,"resource").Replace('_',' ')}): needed {actual}; allowed {limit}.";
++    }
+     public static bool Committed(JsonNode value) =>
+         (value["aggregate"] == null || value["aggregate"]?.ToString() == "all_applied") &&
+         (value["result"]?.ToString() == "ok" || (value["terminal"]?.ToString() == "true" &&
+@@ -80,7 +90,7 @@
+         if (body != null) request.Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
+         using var response = await client.SendAsync(request, cancellation);
+         var value = JsonNode.Parse(await response.Content.ReadAsStringAsync(cancellation)) ?? throw new FormatException("Invalid API response.");
+-        if (!response.IsSuccessStatusCode) throw new ApiError(Json.S(value, "error"), (int)response.StatusCode,
++        if (!response.IsSuccessStatusCode) throw new ApiError(Json.Error(value), (int)response.StatusCode,
+             value["submitted"]?.ToString() == "false" || (int)response.StatusCode is 400 or 401 or 403 or 410 or 413 or 429);
+         return value;
+     }
+@@ -96,6 +106,11 @@
+     public string Network { get; private set; } = "";
+     public string SessionId { get; private set; } = "";
+     public ulong Expires { get; private set; }
++    readonly CancellationTokenSource lifetime=new();
++    bool disposed;
++    public event Action? Expired;
++    public bool IsExpired=>SessionId.Length!=0 && Expires<=Now;
++    public Task Expiration { get; private set; }=Task.CompletedTask;
+     public static ulong Now => checked((ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+     public ulong Deadline => Math.Min(Expires, Now + 300000);
+     public async Task Authenticate(CancellationToken cancellation)
+@@ -114,6 +129,15 @@
+             ["signature"] = Identity.Encode(Key.Sign(bytes.ToArray())) }, timeout.Token);
+         SessionId = Json.S(session, "session_id"); Network = Identity.Encode(network); Expires = Json.U(session, "expires_ms");
+         if (Expires <= Now) throw new FormatException("Expired sign-in.");
++        Expiration=ObserveExpiry();
++    }
++    async Task ObserveExpiry()
++    {
++        try {
++            ulong now=Now;
++            await Task.Delay(TimeSpan.FromMilliseconds(Expires>now ? Expires-now : 0),lifetime.Token);
++            if(!lifetime.IsCancellationRequested)Expired?.Invoke();
++        } catch(OperationCanceledException) when(lifetime.IsCancellationRequested) { }
+     }
+     public (byte[] Bytes, JsonObject Body, ulong Deadline) Sign(Actor actor, string goal, byte mode = 0)
+     {
+@@ -251,5 +275,5 @@
+             }
+         }
+     }
+-    public void Dispose() => Transport.Dispose();
++    public void Dispose() {if(disposed)return;disposed=true;lifetime.Cancel();Expired=null;Transport.Dispose();lifetime.Dispose();}
+ }

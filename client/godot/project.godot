@@ -1,0 +1,24 @@
+[application]
+config/name="Quod"
+run/main_scene="res://main.tscn"
+config/icon="res://assets/quod-icon.png"
+boot_splash/bg_color=Color(0.0431373, 0.223529, 0.329412, 1)
+boot_splash/show_image=true
+boot_splash/image="res://assets/quod-splash.png"
+boot_splash/fullsize=false
+boot_splash/use_filter=true
+config/features=PackedStringArray("4.7", "C#", "Mobile")
+[display]
+window/size/viewport_width=1200
+window/size/viewport_height=800
+window/subwindows/embed_subwindows=false
+[dotnet]
+project/assembly_name="Quod"
+[rendering]
+renderer/rendering_method="mobile"
+environment/defaults/default_clear_color=Color(0, 0, 0, 1)
+[xr]
+openxr/enabled=true
+shaders/enabled=true
+openxr/startup_alert=false
+openxr/default_action_map="res://xr_actions.tres"

@@ -1,0 +1,113 @@
+{
+  "passed": false,
+  "reader_errors": [],
+  "host_input_or_focus_action": false,
+  "software_Control_signals": true,
+  "no_headset_or_runtime": true,
+  "companion_not_distributed": true,
+  "manifest_sha256": "8c4a228f7e70464b2ce4d45c2becf2659f46f1967fa3d17bbd5b6021b446cd3a",
+  "failure": "AssertionError: ",
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-initial-stdout": true,
+    "client-initial-stderr": true,
+    "client-reopen-stdout": true,
+    "client-reopen-stderr": true
+  },
+  "streams": {
+    "server-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-journey02/server-stdout.raw",
+      "sha256": "a05ac6f5c8176adc19e41e6d0aab14665acde41f49171ece57a035f0d1b159cf",
+      "bytes": 129
+    },
+    "client-reopen-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-journey02/client-reopen-stdout.raw",
+      "sha256": "eea236ade486f714d54e03b63b8d8d6686da476d87cf250149f6ed59e44c4c87",
+      "bytes": 29855
+    },
+    "client-initial-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-journey02/client-initial-stdout.raw",
+      "sha256": "5c0da07c34671a9e693c748b48fd5831ff8296390ec68e1c9cfc323632df4d26",
+      "bytes": 151582
+    },
+    "client-reopen-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-journey02/client-reopen-stderr.raw",
+      "sha256": "640543f0a27091262c4ae73ff5791bc724551a26b92c670fb0549adc46af0bae",
+      "bytes": 4649
+    },
+    "server-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-journey02/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "client-initial-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/occurrence-journey02/client-initial-stderr.raw",
+      "sha256": "9faee901efd231152076fcde9be460be08252114e7e7d68aad945d86f14ffc85",
+      "bytes": 137
+    }
+  },
+  "native_input_count": 0,
+  "children": {
+    "server": {
+      "true_exit": 0
+    },
+    "client-initial": {
+      "explicit_completion": true,
+      "completion_monotonic": 215381.294564679,
+      "true_exit": 0,
+      "checks": [
+        "enabled action create-key",
+        "enabled action connect",
+        "ordinary signed Connect uses the fresh fixture trust",
+        "enabled action register",
+        "enabled action prepare",
+        "enabled action setup",
+        "ordinary current interior is reachable before any helper selection or scroll",
+        "fresh ordinary space has no manufactured contents",
+        "authorized same-ontology fixture offers a non-space instance form and two visual occurrences",
+        "exact visible occurrence is reachable before native picking",
+        "one native pick selects the exact occurrence and semantic subject without travel",
+        "offered ontology action form binds to the selected visual and exact subject",
+        "current native target visible and enclosed: control0",
+        "one complete native gesture with no duplicate callback",
+        "actual native pointer focuses the existing editor",
+        "current native target visible and enclosed: form-personal-workspace",
+        "native action enabled: form-personal-workspace",
+        "one complete native gesture with no duplicate callback",
+        "explicit personal placement releases only the occurrence binding",
+        "current native target visible and enclosed: form-near-object",
+        "native action enabled: form-near-object",
+        "one complete native gesture with no duplicate callback",
+        "near and personal preserve the same native editor draft caret selection and semantic revision",
+        "local relocation writes no profile and recreates no scene or signed consumer",
+        "exact visible occurrence is reachable before native picking",
+        "one native pick selects the exact occurrence and semantic subject without travel",
+        "second same-subject visual keeps the same form and does not move the agent",
+        "current ordinary composition raster retained: associated-form",
+        "same form surface sits above the chosen occurrence with native XR disabled",
+        "actual software spatial occurrence raster retained",
+        "selection text editing and placement issue no domain action or replay",
+        "bounded native scrolling reaches the chosen form control",
+        "current native target visible and enclosed: control1",
+        "native action enabled: control1",
+        "one complete native gesture with no duplicate callback",
+        "one explicit offered native submission returns its original committed result",
+        "current native target visible and enclosed: form-personal-workspace",
+        "native action enabled: form-personal-workspace",
+        "one complete native gesture with no duplicate callback",
+        "current native target visible and enclosed: form-near-object",
+        "native action enabled: form-near-object",
+        "one complete native gesture with no duplicate callback",
+        "postcommit relocation retains the original outcome and editor",
+        "explicit Apply adds exactly one personal instruction",
+        "committed original configuration reads back exactly once; reopen draft remains unsubmitted",
+        "enabled action disconnect",
+        "ordinary disconnect retires signed consumers and input resources with XR off"
+      ]
+    },
+    "client-reopen": {
+      "true_exit": 1
+    }
+  }
+}

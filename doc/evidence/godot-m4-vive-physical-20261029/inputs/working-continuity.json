@@ -1,0 +1,63 @@
+{
+  "observed_utc": "2026-10-29T19:27:49.304119+00:00",
+  "scope": "working continuity only; not tracker status or a final qualification/freeze",
+  "worker": "ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f",
+  "actual_model": "openai-codex:gpt-6.1-sol",
+  "launcher_effort": "max",
+  "effective_backend_effort": "unexposed",
+  "pending_interactive_call": {
+    "functions_cell_id": "37",
+    "tool": "PromptForUserInput",
+    "title": "Vive wand tracking",
+    "request": "Lift both powered wands into base-station view with every button released.",
+    "response_received": false,
+    "next": "Keep calling functions.wait for cell37 until actual answer; do not finalize while pending. Result is also stored under functions key wand_readiness_response. Save exact result when it arrives. Host API pendingPrompt:null does not expose this custom call."
+  },
+  "active_qualification": {
+    "exec_session_id": 58944,
+    "label": "native-vive-product05",
+    "wrapper": "physical-product05",
+    "stdin_commands": [
+      "focus",
+      "status",
+      "sample",
+      "gui-check",
+      "close-form",
+      "stop",
+      "restart",
+      "finish"
+    ],
+    "participant_bound_seconds": 1800,
+    "close_watchdog_seconds": 60,
+    "state_at_last_snapshot": "2actual native XRT_DEVICE_VIVE_WAND devices admitted before app launch; both HTC profiles and signed bindings installed; head2158/2158high,0wand poses/edges. Acquisitions2/Decodes1/Instances2/Texture1/Nodes114/Templates1/Leases2. No90-frame sample or physical GUI gesture yet.",
+    "rule": "No identical automatic rerun/soak or bound extension. If actual pose availability arrives, sample uses unchanged90draw confidence/both-source/transform gates. New physical button asks need current readiness and old tool call resolved."
+  },
+  "completed_cases": {
+    "01": "Failed banner-matching preflight; no app.",
+    "02": "Failed new focus helper Lua syntax; diagnostic console-read/cleanup-9 retained, no physical action.",
+    "03": "HMD-only signed preparation/ordinary Stop/owned-window close; client/runtime/server/wrapper0/all6EOF. Driver protocol passed:true is NOT physical acceptance. API80375EndFrame:78686nonempty2views+1689empty;1swapchain lifecycle;8actions create/destroy;2reference spaces;0actionspaces. Raw696611445B SHA598071c133dd98f94583cae0fc7cf22fa271f6bae522a02006972227452ff0fc. Parse02true0; initial badheader parser retained.",
+    "04": "Pre-client inventory5s timeout because banner precedes device discovery; no device-count result or app launch."
+  },
+  "source_and_builds": {
+    "production_changed": false,
+    "main_sha256": "e9c010f71a9c1369fd5b451fe1d7fa275948089b3a96e69fe6d8f21b543fec1e",
+    "tracked_patch_sha256": "c0f9395a9b8fe09abcd71aa13ec9917aae9241bf307a5fc4b0af07e0baa4f998",
+    "physical02_dll": "e95bbb3e297b85c122874b212b740c619f4740fccd8f47d9005c4729044da017",
+    "physical02_pck": "ca8e4de29b0c257213cceeb20242a13fd89fe9f956908db9c1e4033d67c93484",
+    "engine": "02310d903099bada10c86cedc90bbc11ef0bec8254d6e607d1a53f6150ab0268",
+    "inputs_outputs": "2new source-only diagnostic builds,92inputs/91unchanged live/196exports/5commands0 each. One dispatcher override+PhysicalChecks.cs; no compiled app input copied. check_builds.py corrected run02true0; initial schema error retained.",
+    "prior_evidence": "Reuse final03core189 and1432server/M3b gates; no rerun."
+  },
+  "causal_readiness": "Pinned Monado admits only during in_setup; late TrackedDeviceAdded rejected. Case03has4late rejects, no type/time/user action inferred. Case05requires provider discovery-complete event within original absolute30s, then one5s inventory query deriving named wand enum from exact header. No cap/deadline/poll/runtime patch.",
+  "communication": {
+    "material_reports": [
+      "meta-1793299702792-k019a3c",
+      "meta-1793300861872-pelyxfp"
+    ],
+    "queued_is_not_acceptance": true,
+    "stop_notifier": "Invoked0 at initial physical pause; invoke again before ending turn.",
+    "full_findings_batch": "Not yet read at final integration. consume unavailable; full list-only inspection required once before final freeze, never claim consumption."
+  },
+  "remaining_work": "Physical response, real canonical poses/90draw/full transforms, actual mapped GUI/forms/subject/model/movement, real focus/disconnect/reentry/resource/comfort. No fullM4/Quest/Stage2/27/59 credit; original cold-head+2desktop stalls remain open. No close-chain review/Fable/desktop observation1/M5/commit.",
+  "handoff_freeze": "Final physical handoff not yet written/frozen. Preserve prior VR01/02 snapshot ecddd5be...; make new additive boundary under/data with full new bytes, exact manifests/real full source reconstruction using same-data verified previous inodes and actual additions.tar, actual object groups/modes/links. Reuse root39/40 caches/immutable refs, no redundant3GBcopy. Exclude keys/stores/cal/raw secret-bearing logs. New heavy paths only/data. New physical prompt file from coordinator is also a preserved source addition."
+}

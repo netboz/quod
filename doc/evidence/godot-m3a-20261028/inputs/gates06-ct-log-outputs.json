@@ -1,0 +1,1598 @@
+{
+  "campaign": "gates06",
+  "raw_output_root": "/home/yan/src/quod_worktrees/pearl-stone/_build/m3a-gates06/source/_build/test/logs",
+  "raw_outputs_retained_outside_public_snapshot": true,
+  "published_text_outputs": {
+    "all_runs.html": {
+      "raw_sha256": "b6ba2cb92b004d35077b0b64c0eee34a0941e2048ec700927afbace1034dcfab",
+      "sanitized_sha256": "b6ba2cb92b004d35077b0b64c0eee34a0941e2048ec700927afbace1034dcfab",
+      "raw_bytes": 4306,
+      "sanitized_bytes": 4306,
+      "redactions": 0
+    },
+    "ct.latest.log": {
+      "raw_sha256": "1c54e5259651c0a37ed261394c1d19c898338c4dce3cf4b017ecd66f51024e4c",
+      "sanitized_sha256": "1c54e5259651c0a37ed261394c1d19c898338c4dce3cf4b017ecd66f51024e4c",
+      "raw_bytes": 393,
+      "sanitized_bytes": 393,
+      "redactions": 0
+    },
+    "ct_default.css": {
+      "raw_sha256": "81d663ed38c33d005383ea2f14a6d2e73e6a4bb8abd01b03c2d9cc38945093f6",
+      "sanitized_sha256": "81d663ed38c33d005383ea2f14a6d2e73e6a4bb8abd01b03c2d9cc38945093f6",
+      "raw_bytes": 5372,
+      "sanitized_bytes": 5372,
+      "redactions": 0
+    },
+    "index.html": {
+      "raw_sha256": "79aabfcc8d5df5cf5e5550ef1ece6b920f2998431e63b7c66595cf4c8e989048",
+      "sanitized_sha256": "79aabfcc8d5df5cf5e5550ef1ece6b920f2998431e63b7c66595cf4c8e989048",
+      "raw_bytes": 4588,
+      "sanitized_bytes": 4588,
+      "redactions": 0
+    },
+    "jquery-latest.js": {
+      "raw_sha256": "39a546ea9ad97f8bfaf5d3e0e8f8556adb415e470e59007ada9759dce472adaa",
+      "sanitized_sha256": "39a546ea9ad97f8bfaf5d3e0e8f8556adb415e470e59007ada9759dce472adaa",
+      "raw_bytes": 78748,
+      "sanitized_bytes": 78748,
+      "redactions": 0
+    },
+    "jquery-migrate.js": {
+      "raw_sha256": "2f3b0951fd667952c99ceb73e6d8c368dbbfdbe2985f8048eb2b668b89e41105",
+      "sanitized_sha256": "2f3b0951fd667952c99ceb73e6d8c368dbbfdbe2985f8048eb2b668b89e41105",
+      "raw_bytes": 13768,
+      "sanitized_bytes": 13768,
+      "redactions": 0
+    },
+    "jquery.tablesorter.min.js": {
+      "raw_sha256": "130ad62408b7717124293c1615f35618f7f064178246b77afe8762ac30139076",
+      "sanitized_sha256": "130ad62408b7717124293c1615f35618f7f064178246b77afe8762ac30139076",
+      "raw_bytes": 44101,
+      "sanitized_bytes": 44101,
+      "redactions": 0
+    },
+    "suite.log.latest.html": {
+      "raw_sha256": "ec7eac83f0d318c3d73191a11ca0be5c438da0e41d64c9e04ac42967a24f2f90",
+      "sanitized_sha256": "ec7eac83f0d318c3d73191a11ca0be5c438da0e41d64c9e04ac42967a24f2f90",
+      "raw_bytes": 297,
+      "sanitized_bytes": 297,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/ct_default.css": {
+      "raw_sha256": "81d663ed38c33d005383ea2f14a6d2e73e6a4bb8abd01b03c2d9cc38945093f6",
+      "sanitized_sha256": "81d663ed38c33d005383ea2f14a6d2e73e6a4bb8abd01b03c2d9cc38945093f6",
+      "raw_bytes": 5372,
+      "sanitized_bytes": 5372,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/ctlog.html": {
+      "raw_sha256": "3796f4407f2cd203d544bcc27410841ddc7b484821bb3de72094e23ca080ef52",
+      "sanitized_sha256": "3796f4407f2cd203d544bcc27410841ddc7b484821bb3de72094e23ca080ef52",
+      "raw_bytes": 4637,
+      "sanitized_bytes": 4637,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/index.html": {
+      "raw_sha256": "c8a4d310557d4eb7a18d2ce60545d0328fc80aea8883756d57de7f5ee3e9f417",
+      "sanitized_sha256": "c8a4d310557d4eb7a18d2ce60545d0328fc80aea8883756d57de7f5ee3e9f417",
+      "raw_bytes": 4322,
+      "sanitized_bytes": 4322,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/jquery-latest.js": {
+      "raw_sha256": "39a546ea9ad97f8bfaf5d3e0e8f8556adb415e470e59007ada9759dce472adaa",
+      "sanitized_sha256": "39a546ea9ad97f8bfaf5d3e0e8f8556adb415e470e59007ada9759dce472adaa",
+      "raw_bytes": 78748,
+      "sanitized_bytes": 78748,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/jquery-migrate.js": {
+      "raw_sha256": "2f3b0951fd667952c99ceb73e6d8c368dbbfdbe2985f8048eb2b668b89e41105",
+      "sanitized_sha256": "2f3b0951fd667952c99ceb73e6d8c368dbbfdbe2985f8048eb2b668b89e41105",
+      "raw_bytes": 13768,
+      "sanitized_bytes": 13768,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/jquery.tablesorter.min.js": {
+      "raw_sha256": "130ad62408b7717124293c1615f35618f7f064178246b77afe8762ac30139076",
+      "sanitized_sha256": "130ad62408b7717124293c1615f35618f7f064178246b77afe8762ac30139076",
+      "raw_bytes": 44101,
+      "sanitized_bytes": 44101,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/last_test.html": {
+      "raw_sha256": "3f4d9eb71f9fa316a938a3a712b6e14e68cd11ef38c2569802c12c23668ec645",
+      "sanitized_sha256": "3f4d9eb71f9fa316a938a3a712b6e14e68cd11ef38c2569802c12c23668ec645",
+      "raw_bytes": 479,
+      "sanitized_bytes": 479,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/misc_io.log.html": {
+      "raw_sha256": "b04924a9c0148d7598f21670ed1c04a1c19d7469ecec3979346572424b56f86b",
+      "sanitized_sha256": "b04924a9c0148d7598f21670ed1c04a1c19d7469ecec3979346572424b56f86b",
+      "raw_bytes": 1282,
+      "sanitized_bytes": 1282,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/feed_suite.src.html": {
+      "raw_sha256": "cd38d43a28808cb9451460f6bb832f65f4650c20fcb95b9ca4d5050eeb1e856d",
+      "sanitized_sha256": "cd38d43a28808cb9451460f6bb832f65f4650c20fcb95b9ca4d5050eeb1e856d",
+      "raw_bytes": 16596,
+      "sanitized_bytes": 16596,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/growth_suite.src.html": {
+      "raw_sha256": "b9ad1e111af960e6fb37155dcde12b9b2d808982fd0ce8b5d6e64353a69c7222",
+      "sanitized_sha256": "b9ad1e111af960e6fb37155dcde12b9b2d808982fd0ce8b5d6e64353a69c7222",
+      "raw_bytes": 37702,
+      "sanitized_bytes": 37702,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/join_suite.src.html": {
+      "raw_sha256": "91b283b01b703412aff9953739020b8e46624074fd94dd9e55a517c27c853a70",
+      "sanitized_sha256": "91b283b01b703412aff9953739020b8e46624074fd94dd9e55a517c27c853a70",
+      "raw_bytes": 36381,
+      "sanitized_bytes": 36381,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/last_link.html": {
+      "raw_sha256": "43040f4b9b22afb3020eca35d7c3cd26c0a845024e1226326b76955483929f9c",
+      "sanitized_sha256": "43040f4b9b22afb3020eca35d7c3cd26c0a845024e1226326b76955483929f9c",
+      "raw_bytes": 465,
+      "sanitized_bytes": 465,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/quod_agent_failover_suite.src.html": {
+      "raw_sha256": "a5cb37f647211e0155a48a9a4605ce8c7d1a6f148e4d9d9d48b8cee6281d332f",
+      "sanitized_sha256": "a5cb37f647211e0155a48a9a4605ce8c7d1a6f148e4d9d9d48b8cee6281d332f",
+      "raw_bytes": 66220,
+      "sanitized_bytes": 66220,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/quod_ask_suite.src.html": {
+      "raw_sha256": "cdc02614511ab38120ecbc87b523bc4effd539106a9030f686c6167ac2784c44",
+      "sanitized_sha256": "cdc02614511ab38120ecbc87b523bc4effd539106a9030f686c6167ac2784c44",
+      "raw_bytes": 262132,
+      "sanitized_bytes": 262132,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/quod_names_suite.src.html": {
+      "raw_sha256": "f2afd2d3be5b4f9b54d12a0432af20e43c41299a79e966d723fff40d8e039248",
+      "sanitized_sha256": "f2afd2d3be5b4f9b54d12a0432af20e43c41299a79e966d723fff40d8e039248",
+      "raw_bytes": 44934,
+      "sanitized_bytes": 44934,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/quod_ns_suite.src.html": {
+      "raw_sha256": "789b2d1fb70a2cc305d16b90574e09060f5aedd3139f9fcb6f666b2622d2e40a",
+      "sanitized_sha256": "789b2d1fb70a2cc305d16b90574e09060f5aedd3139f9fcb6f666b2622d2e40a",
+      "raw_bytes": 10570,
+      "sanitized_bytes": 10570,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/quod_peer_capacity_suite.src.html": {
+      "raw_sha256": "fa7a58ecd5442afbccdaafc37eec1061123fc433c5d9722ff5c103042f77c4b3",
+      "sanitized_sha256": "fa7a58ecd5442afbccdaafc37eec1061123fc433c5d9722ff5c103042f77c4b3",
+      "raw_bytes": 18914,
+      "sanitized_bytes": 18914,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/quod_peer_observation_suite.src.html": {
+      "raw_sha256": "ff46cb0eddd3f5ea732410cb3b9f24d9a768ba9fae4702c3a036b8158eaec0ac",
+      "sanitized_sha256": "ff46cb0eddd3f5ea732410cb3b9f24d9a768ba9fae4702c3a036b8158eaec0ac",
+      "raw_bytes": 15400,
+      "sanitized_bytes": 15400,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/quod_quic_suite.src.html": {
+      "raw_sha256": "2573310d56ddc9b16ecf552676a091c789aece0b2b89442cd453977785ad769c",
+      "sanitized_sha256": "2573310d56ddc9b16ecf552676a091c789aece0b2b89442cd453977785ad769c",
+      "raw_bytes": 131601,
+      "sanitized_bytes": 131601,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/quod_read_set_suite.src.html": {
+      "raw_sha256": "13134f6618e706bfebc7315390b8a6e6938b6afe1615f17f9267a7dc74923d04",
+      "sanitized_sha256": "13134f6618e706bfebc7315390b8a6e6938b6afe1615f17f9267a7dc74923d04",
+      "raw_bytes": 14226,
+      "sanitized_bytes": 14226,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/quod_simplex_suite.src.html": {
+      "raw_sha256": "fe9c3c1f69c06e680b7a4a4aa3dc531557408f70f9ec910b78b89ea43ef3850e",
+      "sanitized_sha256": "fe9c3c1f69c06e680b7a4a4aa3dc531557408f70f9ec910b78b89ea43ef3850e",
+      "raw_bytes": 29336,
+      "sanitized_bytes": 29336,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/simplex_suite.src.html": {
+      "raw_sha256": "48dab6ec963cadb4a14d0dc008f5c98d788791517e430a14af0f30d9729a0fcf",
+      "sanitized_sha256": "48dab6ec963cadb4a14d0dc008f5c98d788791517e430a14af0f30d9729a0fcf",
+      "raw_bytes": 62066,
+      "sanitized_bytes": 62066,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/cover.html": {
+      "raw_sha256": "4f3275904793dbb913c711c552098e6ff329cb3bdb743cf5092e84297466852d",
+      "sanitized_sha256": "4f3275904793dbb913c711c552098e6ff329cb3bdb743cf5092e84297466852d",
+      "raw_bytes": 729,
+      "sanitized_bytes": 729,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/ct_framework.end_per_suite.1170.html": {
+      "raw_sha256": "23799a7cc330c795b0a53c60ef860957ce6e3e5da71c9931d28f98a4b64fcb90",
+      "sanitized_sha256": "23799a7cc330c795b0a53c60ef860957ce6e3e5da71c9931d28f98a4b64fcb90",
+      "raw_bytes": 2041,
+      "sanitized_bytes": 2041,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/ct_framework.end_per_suite.1474.html": {
+      "raw_sha256": "ec6b7e95e3e23f4f4dcea6532967c2948637d9f2cbf182689d639a40232aa500",
+      "sanitized_sha256": "ec6b7e95e3e23f4f4dcea6532967c2948637d9f2cbf182689d639a40232aa500",
+      "raw_bytes": 2060,
+      "sanitized_bytes": 2060,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/ct_framework.end_per_suite.1698.html": {
+      "raw_sha256": "33d82c861858cf163641f15771ee18afc42420e49b4aee717b58417d5b051197",
+      "sanitized_sha256": "33d82c861858cf163641f15771ee18afc42420e49b4aee717b58417d5b051197",
+      "raw_bytes": 2056,
+      "sanitized_bytes": 2056,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/ct_framework.end_per_suite.html": {
+      "raw_sha256": "75e49432c15844726ec6e4ba3de9e28463bc78472992690d9674583414f91ab1",
+      "sanitized_sha256": "75e49432c15844726ec6e4ba3de9e28463bc78472992690d9674583414f91ab1",
+      "raw_bytes": 2074,
+      "sanitized_bytes": 2074,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/ct_framework.init_per_suite.1074.html": {
+      "raw_sha256": "e51727d003e46edb1c06a1fc2dccbca6fd779bc60229917519c40e613973c60b",
+      "sanitized_sha256": "e51727d003e46edb1c06a1fc2dccbca6fd779bc60229917519c40e613973c60b",
+      "raw_bytes": 2512,
+      "sanitized_bytes": 2512,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/ct_framework.init_per_suite.1442.html": {
+      "raw_sha256": "25bad7f4f36c07d478579fd4554dffb9027cc3946877416b0fc960f4470a21db",
+      "sanitized_sha256": "25bad7f4f36c07d478579fd4554dffb9027cc3946877416b0fc960f4470a21db",
+      "raw_bytes": 2542,
+      "sanitized_bytes": 2542,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/ct_framework.init_per_suite.1490.html": {
+      "raw_sha256": "e13862ddb4a275156f069b320d4320982b42a5a5da6e382bfc8f24eca0b533f4",
+      "sanitized_sha256": "e13862ddb4a275156f069b320d4320982b42a5a5da6e382bfc8f24eca0b533f4",
+      "raw_bytes": 2537,
+      "sanitized_bytes": 2537,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/ct_framework.init_per_suite.html": {
+      "raw_sha256": "f268c5601b3d602099c459b212ca7b586e71c71b78a8a66aa370902999bb6ed5",
+      "sanitized_sha256": "f268c5601b3d602099c459b212ca7b586e71c71b78a8a66aa370902999bb6ed5",
+      "raw_bytes": 2562,
+      "sanitized_bytes": 2562,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/feed_suite.end_per_suite.html": {
+      "raw_sha256": "5babe2d1813856343a15866dad373e4bfe6d65e570b76e43c0d25e2c62c0d530",
+      "sanitized_sha256": "5183e69d29d7f9fc1c678ea50a7c84861c8653dd4b5aa3c396db0dbd72d647d7",
+      "raw_bytes": 2258,
+      "sanitized_bytes": 2153,
+      "redactions": 1
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/feed_suite.follower_follows_live.html": {
+      "raw_sha256": "6273b1d4a432408e3e9eb5ff486e2851ac40390f2be22e8332d4f996e062a646",
+      "sanitized_sha256": "ada8386febb932c46d3ca12df4b771b7bc13dfe8ac546af77f2288f50b38b681",
+      "raw_bytes": 2236,
+      "sanitized_bytes": 2131,
+      "redactions": 1
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/feed_suite.follower_recovers_gap_via_anti_entropy.html": {
+      "raw_sha256": "d57bab8033a9f97feacd5bc5d13b809b37ca2049f2c1d23c257dd92d46099896",
+      "sanitized_sha256": "4139332d1935353c510c918424ae83db56abb8747d26e13a1b76264f9929fce9",
+      "raw_bytes": 8848,
+      "sanitized_bytes": 8743,
+      "redactions": 1
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/feed_suite.init_per_suite.html": {
+      "raw_sha256": "b54c27027082bfbb9de7a71de0032f4f727182e0324e427de90baf99674b2fa7",
+      "sanitized_sha256": "13dccbcc9166c6df83e0e89d912df10cc4eddf491bd8cbdcd58e10d7a6f0d7d8",
+      "raw_bytes": 6065,
+      "sanitized_bytes": 5914,
+      "redactions": 1
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/feed_suite.src.html": {
+      "raw_sha256": "cd38d43a28808cb9451460f6bb832f65f4650c20fcb95b9ca4d5050eeb1e856d",
+      "sanitized_sha256": "cd38d43a28808cb9451460f6bb832f65f4650c20fcb95b9ca4d5050eeb1e856d",
+      "raw_bytes": 16596,
+      "sanitized_bytes": 16596,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/growth_suite.admit_refused_mid_catchup.html": {
+      "raw_sha256": "bd17acd240886f1dcc8efc50e70afa42e8d4b85da0e8e77c2128d00af1fe3608",
+      "sanitized_sha256": "af1a8a2654c043d6a1c4e9e1812b3ab2e37946f7f9b296d4370310122463e8df",
+      "raw_bytes": 12405,
+      "sanitized_bytes": 8485,
+      "redactions": 31
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/growth_suite.byzantine_on_grown_committee.html": {
+      "raw_sha256": "a3e884af54ab24b038bf2eccf4cc7a6249320fe930933fcbf553d5e27b2c10d9",
+      "sanitized_sha256": "4fb9bf25c27deb5f1679dc47427f9eaa17cb5d5dfc9dedf1b5f06f235759118b",
+      "raw_bytes": 9822,
+      "sanitized_bytes": 5569,
+      "redactions": 33
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/growth_suite.dead_member_removed.html": {
+      "raw_sha256": "27a78e3363cef5cc26a5593560d2348a72426031366f5068fa4ebdf5bad7b560",
+      "sanitized_sha256": "637536f86cb0d1deb608639e9dc19a0bfd65d6b4842775247c82c06512cb44c6",
+      "raw_bytes": 13058,
+      "sanitized_bytes": 8805,
+      "redactions": 33
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/growth_suite.demote_to_observer.html": {
+      "raw_sha256": "b124b5bcbb8d6d7e645585ed10debf019f9c8f22d3dd2418ef125753d9bf8e0d",
+      "sanitized_sha256": "93ea3d32f14b26b7f6deb8d912bdde977fa98988bbe0516d3fb408a7f1d165ad",
+      "raw_bytes": 9442,
+      "sanitized_bytes": 5357,
+      "redactions": 32
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/growth_suite.end_per_suite.html": {
+      "raw_sha256": "be6e18c4b18fbd13fe4a59b649bab997c833fed044595ebbe76edb1522dbd783",
+      "sanitized_sha256": "20822b2520c1ec485bd3b4ec983e276286ebbdd49725c5f91a2c99701f3ae056",
+      "raw_bytes": 8824,
+      "sanitized_bytes": 5070,
+      "redactions": 30
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/growth_suite.grow_to_four.html": {
+      "raw_sha256": "e0302c3617824738a73b81b29f4e93ac7d01a1dad86d6b16525b2e43995a7c4a",
+      "sanitized_sha256": "2c41ef90dbef97a9d6b4672a83a285798a1adf7ae98b20bd1a1b8635b4f885d4",
+      "raw_bytes": 13030,
+      "sanitized_bytes": 8777,
+      "redactions": 33
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/growth_suite.grow_to_three.html": {
+      "raw_sha256": "a8da7500e501ed73a6bc525cb345b0d8e3deda5bfc7cf329d1d60257c187c069",
+      "sanitized_sha256": "1c98e44aca06812beb95b2440a76980eed709a7b63ac26bd60988659025cdc37",
+      "raw_bytes": 12694,
+      "sanitized_bytes": 8609,
+      "redactions": 32
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/growth_suite.grow_to_two.html": {
+      "raw_sha256": "4f1ee3bc492ebb5150ef56a2f190afec903557d7aea2c71077a927c4d21dbe76",
+      "sanitized_sha256": "551b94beb074aff08fe0d8a4e9a21ccf600831e059b587addbc9642b3717b483",
+      "raw_bytes": 9077,
+      "sanitized_bytes": 5157,
+      "redactions": 31
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/growth_suite.init_per_suite.html": {
+      "raw_sha256": "63246da0e8a61154ba75dfe1f92f911a04c2389d4c12ea7e144db22e146a8cf3",
+      "sanitized_sha256": "df199106cf761c1f37a13e525b7c1dea339d1cfe71fe17f84872a51aeddbc01f",
+      "raw_bytes": 10643,
+      "sanitized_bytes": 6143,
+      "redactions": 30
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/growth_suite.policy_upgrade_live.html": {
+      "raw_sha256": "4de57c04b9993997b2c062e84bc1690655722c2e9e4d3c430c4479db8fa16da8",
+      "sanitized_sha256": "43bec5cbd58f3b419c767e479d8aece726f703861bb53d29641ee1dc7fc59142",
+      "raw_bytes": 8807,
+      "sanitized_bytes": 5053,
+      "redactions": 30
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/growth_suite.rotation_sweep.html": {
+      "raw_sha256": "d330b6c04afe0a25e2a2eb5e04ab66ac993c71720d64ca80693ee4d569a45222",
+      "sanitized_sha256": "13b5b94aa606e4c42307dca7f0a64c9b1e024197aed71ebc88abcf1c2c92c38b",
+      "raw_bytes": 9766,
+      "sanitized_bytes": 5513,
+      "redactions": 33
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/growth_suite.src.html": {
+      "raw_sha256": "b9ad1e111af960e6fb37155dcde12b9b2d808982fd0ce8b5d6e64353a69c7222",
+      "sanitized_sha256": "b9ad1e111af960e6fb37155dcde12b9b2d808982fd0ce8b5d6e64353a69c7222",
+      "raw_bytes": 37702,
+      "sanitized_bytes": 37702,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/join_suite.end_per_suite.html": {
+      "raw_sha256": "32e58a1fb65df94edf9485a34d07195f5b6f0dc4ca21e1e09f02c464244d2509",
+      "sanitized_sha256": "9843c1704f2891167af27e737b4235d06c753bdd1a438c5eb3ecee5a204af396",
+      "raw_bytes": 3309,
+      "sanitized_bytes": 2639,
+      "redactions": 6
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/join_suite.init_per_suite.html": {
+      "raw_sha256": "8bc79766d34275486b4731a11cd0f924b49e190d3e930033671a200c0a63e833",
+      "sanitized_sha256": "24a1bbea569fd5a38f7ddfb4813fcba946f15ed4f25788500920d73cfbcb98f3",
+      "raw_bytes": 7568,
+      "sanitized_bytes": 6594,
+      "redactions": 6
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/join_suite.joiner_catches_up.html": {
+      "raw_sha256": "938a3b8afafed7abb3caf9aed503b2e0c7e51c0c748cf890d3c4de4b5d509a21",
+      "sanitized_sha256": "de3f454717991597466d3e26747cae199156e9dcae62d3b103f2133391e01b7c",
+      "raw_bytes": 3270,
+      "sanitized_bytes": 2600,
+      "redactions": 6
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/join_suite.joiner_promoted_to_voter.html": {
+      "raw_sha256": "0463c915cb8302d775e589093afaa17bee1e22f809e846de970ac158f0409648",
+      "sanitized_sha256": "617db6c7df47105331f2dc7a599680c5d5c5c8cf24034ab119777eebb15cf840",
+      "raw_bytes": 3366,
+      "sanitized_bytes": 2696,
+      "redactions": 6
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/join_suite.joiner_resumes_after_restart.html": {
+      "raw_sha256": "a3541f352daab5adf35d572e7b7e7f573d55905b8f70cd0eb384ea5cbb372018",
+      "sanitized_sha256": "37844e8f5727fc9db7351479f5713460efc7b35e522211ba6b6104ef0a50802b",
+      "raw_bytes": 6654,
+      "sanitized_bytes": 5984,
+      "redactions": 6
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/join_suite.runtime_join_action_catches_up.html": {
+      "raw_sha256": "858403b5cc14fbacd274300eb6c136515a95691bf467d7439e2e568868d226cc",
+      "sanitized_sha256": "83d4715db2b62d914ca9c0db82e6736b88a2846768d1d197ce95ee148ef432aa",
+      "raw_bytes": 6662,
+      "sanitized_bytes": 5992,
+      "redactions": 6
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/join_suite.self_seeded_joiner_catches_up.html": {
+      "raw_sha256": "11babc6c018943c3f989720b0bd2245e6595ca4a894e997672e594a96cd8455c",
+      "sanitized_sha256": "d8bd4fbf818afaaac4ce6d7a7b156e4e48584768d86ac06012c588722bbc0552",
+      "raw_bytes": 6590,
+      "sanitized_bytes": 5920,
+      "redactions": 6
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/join_suite.src.html": {
+      "raw_sha256": "91b283b01b703412aff9953739020b8e46624074fd94dd9e55a517c27c853a70",
+      "sanitized_sha256": "91b283b01b703412aff9953739020b8e46624074fd94dd9e55a517c27c853a70",
+      "raw_bytes": 36381,
+      "sanitized_bytes": 36381,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_agent_failover_suite.abrupt_host_loss_recovers_state.html": {
+      "raw_sha256": "52d74c32fd5f11c433ebc4672926253ba3b8b39fcd8e7556eb5a84b3f2f46701",
+      "sanitized_sha256": "52d74c32fd5f11c433ebc4672926253ba3b8b39fcd8e7556eb5a84b3f2f46701",
+      "raw_bytes": 17599,
+      "sanitized_bytes": 17599,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_agent_failover_suite.src.html": {
+      "raw_sha256": "a5cb37f647211e0155a48a9a4605ce8c7d1a6f148e4d9d9d48b8cee6281d332f",
+      "sanitized_sha256": "a5cb37f647211e0155a48a9a4605ce8c7d1a6f148e4d9d9d48b8cee6281d332f",
+      "raw_bytes": 66220,
+      "sanitized_bytes": 66220,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_agent_failover_suite.suspended_host_retires_stale_process.html": {
+      "raw_sha256": "5c5a4e75f7ddce94c1d26945543e003d73551017c75bbf350590d957cb194f7b",
+      "sanitized_sha256": "5c5a4e75f7ddce94c1d26945543e003d73551017c75bbf350590d957cb194f7b",
+      "raw_bytes": 3250,
+      "sanitized_bytes": 3250,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_agent_failover_suite.uncertain_claim_recovers_after_quorum_loss.html": {
+      "raw_sha256": "8be0546a3a1671863aff1f843be6e1ee3bc7d69b9d5c68cff327a60dd6e1ab20",
+      "sanitized_sha256": "8be0546a3a1671863aff1f843be6e1ee3bc7d69b9d5c68cff327a60dd6e1ab20",
+      "raw_bytes": 3022,
+      "sanitized_bytes": 3022,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_agent_failover_suite.uncertain_claim_recovers_after_target_restart.html": {
+      "raw_sha256": "54bb0a8964f37f70b5a57638de98dd0f3fb92d05c450f4b8fe760b57582a3de3",
+      "sanitized_sha256": "54bb0a8964f37f70b5a57638de98dd0f3fb92d05c450f4b8fe760b57582a3de3",
+      "raw_bytes": 3033,
+      "sanitized_bytes": 3033,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_agent_failover_suite.validator_host_loss_recovers_state.html": {
+      "raw_sha256": "66988c049b88146ab1548568906fc095e5073b76dcffd6b2b0346cf37e25f444",
+      "sanitized_sha256": "66988c049b88146ab1548568906fc095e5073b76dcffd6b2b0346cf37e25f444",
+      "raw_bytes": 3240,
+      "sanitized_bytes": 3240,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.cut_findall_local_and_cohosted.html": {
+      "raw_sha256": "3cd2c0a712ec37a4a04fd38d39aed95c6fbaba6cfa5306093870f9b9aec307f6",
+      "sanitized_sha256": "353641b7686d09c166b1b092899e101dddf147778baa72c8bda3ecbf08535f3d",
+      "raw_bytes": 5264,
+      "sanitized_bytes": 3523,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.cut_findall_remote_boundaries.html": {
+      "raw_sha256": "895cd837f76c0338a383951d9acf734da4356c041d177ce910918263a7822700",
+      "sanitized_sha256": "7c8e4051223734b87807f3f76748a079cdba4999bc54d653b5c432402aca7443",
+      "raw_bytes": 5260,
+      "sanitized_bytes": 3519,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.cut_findall_signed_multiscope_savepoints.html": {
+      "raw_sha256": "156cd52d87d5d409e7cfb12935dea2a184bff1e3829796305efb2fb3b2120b85",
+      "sanitized_sha256": "aca36b7a7837c63dd9e2893a2bb96436c8b9e45f2812e102b6c267212c00924c",
+      "raw_bytes": 5304,
+      "sanitized_bytes": 3563,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.end_per_suite.html": {
+      "raw_sha256": "0314da61d2605cdbf3b5ddf67bf2883936f298768b9bc5e0af9074774439c869",
+      "sanitized_sha256": "4b3a8998f43659abad3e1b491df1a03d39abcc09c87f1b15ea9b210119925b21",
+      "raw_bytes": 5251,
+      "sanitized_bytes": 3510,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.independent_action_multiscope_rollback.html": {
+      "raw_sha256": "5dcab7f6f0cc6a4e74b331f2893c96e74ed9a09c4f2a7674432e849a0c869ccd",
+      "sanitized_sha256": "c147c4a443c00a31bd2b119a4947a81547886660b6879e579239d53905fdeaf7",
+      "raw_bytes": 5296,
+      "sanitized_bytes": 3555,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.independent_action_remote_errors.html": {
+      "raw_sha256": "c484c9a72ad56b7e39ec70e516cb6f40277b4bfcfdeea8957fcdc8e0375d1de2",
+      "sanitized_sha256": "57e576db3f01e386d3039b47b665ff2a2dd43480b657b1dbf84860d05895571b",
+      "raw_bytes": 5272,
+      "sanitized_bytes": 3531,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.independent_action_remote_prepared_rollback.html": {
+      "raw_sha256": "ad673e5ecda8e1fad82a33e99f3a6ec8a9fd4db02975e007302ba8ba2f12d910",
+      "sanitized_sha256": "08350570dd0cf61b7e0585b5211174e655e6d406d64105e00921e375bcdbf25e",
+      "raw_bytes": 5316,
+      "sanitized_bytes": 3575,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.init_per_suite.html": {
+      "raw_sha256": "48b8afac25fd57611f4c4e3a966d326d33f87c04329bbc6bca055c7bd9b5110e",
+      "sanitized_sha256": "121a89a973f020145abb7773c6631b085b897b31f6f93cc2fd94f9ea488b7506",
+      "raw_bytes": 16591,
+      "sanitized_bytes": 14521,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.local_write_with_foreign_read.html": {
+      "raw_sha256": "750dc7be8af9515f77e76a496f5e7f2d2a34c774bdab667c81412f69ebe080dc",
+      "sanitized_sha256": "bb86ed20a2b46c58beb5169286f63dda549d95154dd7fc2b0f916df54efa86e0",
+      "raw_bytes": 5260,
+      "sanitized_bytes": 3519,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.node_enrollment_remote_custodian.html": {
+      "raw_sha256": "467fc6039ab0c3b3a136763ba8ab07a625ee934d3480c12134202dbe79cebd46",
+      "sanitized_sha256": "f2f0e36c6c6cbc75ceac9dc2fac07d09e6d931f1ace23dd35d5fb03d13a5d6b9",
+      "raw_bytes": 5838,
+      "sanitized_bytes": 4097,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.proof_policy_refusal_local_and_remote.html": {
+      "raw_sha256": "9481ff01d920b72cfa2ea691031e7f1785c39e9f779095670f018805da2caf2f",
+      "sanitized_sha256": "3c86dd61e2140ad5834563ddeeea726344501d95c404f60db9d94fe89b4ddbcd",
+      "raw_bytes": 5292,
+      "sanitized_bytes": 3551,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.read_certificate_stale_rejected.html": {
+      "raw_sha256": "0d7b4d1693d2079328ff4681714a15934ff3ea7cc2afd51ad3d1206309e2b91f",
+      "sanitized_sha256": "312110e9103a63a617248f411d6e597003ee86ec2d0036ceb4c5755cad677524",
+      "raw_bytes": 5268,
+      "sanitized_bytes": 3527,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_bound_effect_recovers_without_activation.html": {
+      "raw_sha256": "8c16011ebc91e9dd1d6a9d335fc139f9f2be05a1b4913b9d3b415d1858ab9a12",
+      "sanitized_sha256": "79709a1e48a47161c83e00b51404442e1fbd2c8ae9ec5b6e6e8cdacf73b7cdee",
+      "raw_bytes": 10516,
+      "sanitized_bytes": 8103,
+      "redactions": 17
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_exact_claim_redelivery.html": {
+      "raw_sha256": "cf45c0aca0b0ae06a04571230fa057181b212c9e5733a9f9a95ff609af6fd687",
+      "sanitized_sha256": "cc818ef3aac0982eb3b404550f59c5095dc396c436c495887cecf024b186f79a",
+      "raw_bytes": 5260,
+      "sanitized_bytes": 3519,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_four_scope_chain_recovers_empty_routes.html": {
+      "raw_sha256": "b60e088174c30b6a6eb54e56a79880d565c70c9e6dad2b23a451b026ae26052f",
+      "sanitized_sha256": "f2b4b1be2010741adae156a29e60bc40a5832e053def9584bb15e3fdeff01fef",
+      "raw_bytes": 5324,
+      "sanitized_bytes": 3583,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_group_recovers_after_origin_crash.html": {
+      "raw_sha256": "2894259256f29206f3a05c7a820e5868e8cd65deeb6ec53b7fc6f27bfe553e16",
+      "sanitized_sha256": "ca4918a5600365449ac64d38b00c4d4f1add939bf9590774e75c76e777eea3bb",
+      "raw_bytes": 6900,
+      "sanitized_bytes": 4931,
+      "redactions": 15
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_gui_opening_observer_receiver.html": {
+      "raw_sha256": "0ecf5367d6489f048f5041e9fe344a471394a365e39a2497137237e98eece908",
+      "sanitized_sha256": "a8b921ef86fff5715ffeaa8e8bee947740e9f0bf9db1eb518e9cd1d0ceb51a35",
+      "raw_bytes": 5288,
+      "sanitized_bytes": 3547,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_independent_branch_provenance.html": {
+      "raw_sha256": "804c34f58cb4d8d9305de7bfca2e4c544dce08a88f21ecb196932d76481848ff",
+      "sanitized_sha256": "67604df3bbdf72fae661ad36c7d822f1aeceb1bfb2cc0562216dd46d9008d424",
+      "raw_bytes": 5288,
+      "sanitized_bytes": 3547,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_independent_cursor_selects_only_accepted_answer.html": {
+      "raw_sha256": "27cdac86cd4b935db97db968317a4524384efafbd94fe6ca3d96d5cc2315796a",
+      "sanitized_sha256": "73a00a8a71b3fa19e8a5bb5ad9788c1c4a61d6b2ff45b63827f74b521d948d32",
+      "raw_bytes": 5360,
+      "sanitized_bytes": 3619,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_independent_nesting_and_auth.html": {
+      "raw_sha256": "bced1f4a049a7f715e56d567603494cdcb102ce3eb4dc580e5a1bf0f89db3a61",
+      "sanitized_sha256": "5ac0b7795b325dcf5706a24194a152d239a74c8125b8e254d932c2f47705cc0f",
+      "raw_bytes": 5284,
+      "sanitized_bytes": 3543,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_independent_partial_outcome.html": {
+      "raw_sha256": "3cd4fd34711251b3937d76290b55a72dcbb07ed3e9a6a7bef14a9da5b255f753",
+      "sanitized_sha256": "8657618a33507799e179451e1c9b92e5e2d320d5c77970d858256a237cd5e287",
+      "raw_bytes": 5280,
+      "sanitized_bytes": 3539,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_independent_root_effect.html": {
+      "raw_sha256": "a697b15afc3b1582aada48224e6d7b31320bf47eaef525c7a0af55e675ec5fa4",
+      "sanitized_sha256": "ac40999d93b6a7be6efa619db8275fd0cc9adf30b815a822660b87631c9e56e2",
+      "raw_bytes": 5264,
+      "sanitized_bytes": 3523,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_independent_routes.html": {
+      "raw_sha256": "8e9413d29b321699791dc1d81497322d9b2578b678fb6056877912ff195f0857",
+      "sanitized_sha256": "02fe80609f617a0c44c2938e7e9cac5d3d5dbe9b83ea4b6c7b9911fa40e035dd",
+      "raw_bytes": 5244,
+      "sanitized_bytes": 3503,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_native_read_uses_selected_observer.html": {
+      "raw_sha256": "8d8f7a2d42361751cf569a84bac4b0cb5401238b74fe56ffe08b588c2236db69",
+      "sanitized_sha256": "e981136e59689c0405e7b06b0ef8d9c46c8fb02adc2bb1b3c7187baca287e377",
+      "raw_bytes": 5308,
+      "sanitized_bytes": 3567,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_plain_read_excludes_live_observer.html": {
+      "raw_sha256": "6f41fa19ba87c59f8e415cba57a9205635d7bf4f77439e2cf49f2accf902bb4c",
+      "sanitized_sha256": "6864938f060f83232959fdfb6bfc2e400873b2cffacd45134e56d2d6323ba7eb",
+      "raw_bytes": 5304,
+      "sanitized_bytes": 3563,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_plain_read_rejects_lying_validator.html": {
+      "raw_sha256": "057d7919df6a9f54f1031b3fd603c2f3fcdf7b12a5ddec709a2e239f6def8d2d",
+      "sanitized_sha256": "6b2d4dc53d44462e58762eadf5f947a16da358d7dd89d586fc91d95e67332ce3",
+      "raw_bytes": 5308,
+      "sanitized_bytes": 3567,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_scope_cancel.html": {
+      "raw_sha256": "1a3641e9f7257ee428ea666e99359b4fb3c299e155fee3492221c73678ff0dbf",
+      "sanitized_sha256": "04b1c6629fbd8248ec6021ce77b5385fdd03468fea9bf7bb3808fb496bc61343",
+      "raw_bytes": 5220,
+      "sanitized_bytes": 3479,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_scope_chain_policy.html": {
+      "raw_sha256": "6f28b36fffb18bd2b73671dc1c41d2bb22f490acab6e4d5f8e2169c963161a5f",
+      "sanitized_sha256": "e3251c7864b535d4e35020e45b42ef38ed0c7b6af3d86ac9a2eb055d2b122551",
+      "raw_bytes": 5244,
+      "sanitized_bytes": 3503,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_scope_deep_failure_reasons.html": {
+      "raw_sha256": "e40548304fac68a6710493f59bb5f819d5585afaaf0c6dde2db474691e3e0cff",
+      "sanitized_sha256": "eb49e0583b0d154724d34f275dec28ed391786a372ced7d18e2329877190bacf",
+      "raw_bytes": 5276,
+      "sanitized_bytes": 3535,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_scope_failure_reasons.html": {
+      "raw_sha256": "84cdea21801ca2cb07f0b8758c035dfec468aeabe771f4ee12c20e9e3c6128a9",
+      "sanitized_sha256": "0df20327170df70235ea91ee9fdc6527ff52eae251c0dbc5f0b4aa85b36bae4e",
+      "raw_bytes": 5256,
+      "sanitized_bytes": 3515,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_scope_nested_failure_reasons.html": {
+      "raw_sha256": "76ac9eeb5778f3f8f0cc81bb30fdbf1ad974cd1825ed102c07003bd8ea01673c",
+      "sanitized_sha256": "4ac6bc6ada30f0896b6fa6848f1b4cd26d40814dccbc51420d76eeb8a565dc1e",
+      "raw_bytes": 5284,
+      "sanitized_bytes": 3543,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_scope_solutions.html": {
+      "raw_sha256": "adacde1b368c55867862afeb34adc7ca615d14631b0ce04269ba720d37401b3a",
+      "sanitized_sha256": "fd1f1128d08cafe8f3ff525582a7947d7b5520a4e917c8e9b7580614ba5c5c22",
+      "raw_bytes": 5232,
+      "sanitized_bytes": 3491,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_scope_structural_reason_truncation.html": {
+      "raw_sha256": "6c185d47c323dd91449261dba79c12d2f902d51aef1bf1bf55e2b6addaaf496c",
+      "sanitized_sha256": "b0b5555d7d7ce3dbd75ddedfe95c6cfaded853419402b3f88cb5791fbec07efc",
+      "raw_bytes": 5308,
+      "sanitized_bytes": 3567,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_scope_symbol_safety.html": {
+      "raw_sha256": "5a722569f5181e115d46126b5477a0a78634b6916a43eb20f57fbfceb0e62529",
+      "sanitized_sha256": "679095110c1b385091790f27ce4dd5e7eb0cab050575ecf36e9c6b7b3c66589b",
+      "raw_bytes": 5248,
+      "sanitized_bytes": 3507,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_scope_trace_parentage.html": {
+      "raw_sha256": "bb32ff94e225e27360676af43875ffec63e5fc2e9e1628a29c670dd760520d86",
+      "sanitized_sha256": "09a370a9eb9d0690e6e85ec9017d23bbb6d65d8ddeaab4ecf39bd65ef3eb0aca",
+      "raw_bytes": 5256,
+      "sanitized_bytes": 3515,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_scope_transport_reuse.html": {
+      "raw_sha256": "4a6caebdad51410f3ecb8b02962ad49a037de48fe9f13c040f7162959448f0d6",
+      "sanitized_sha256": "93badb43860682a9bf3c45a9138d80c1dfab119a93f8312b424a79df0910d55a",
+      "raw_bytes": 5256,
+      "sanitized_bytes": 3515,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_signed_concurrent_gateway_groups.html": {
+      "raw_sha256": "f9fafa092b372a2e5eb2bbd0d024bd6eabc0fae167fd0cf4fe8957a0e3d96ac5",
+      "sanitized_sha256": "74dcbd66feae598c1b990ec1bbb148be15875e51b35f27464346d856cc1f4e2a",
+      "raw_bytes": 5300,
+      "sanitized_bytes": 3559,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_signed_fresh_nested_symbol.html": {
+      "raw_sha256": "26d3be523be2323cbeeb8a4a33c038e2cb839b64589568191de5e18507063374",
+      "sanitized_sha256": "7e9518db5af909ade07e27c3f8d8404bc0eb9c3f55aa367e7ad88e48bd0ad787",
+      "raw_bytes": 5276,
+      "sanitized_bytes": 3535,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_signed_gateway_group.html": {
+      "raw_sha256": "d75995f69da05f19a05132f4aba9e746550f6fa6fce603d7335e1d6ab55e2ee5",
+      "sanitized_sha256": "00e3c50e80a586845db2f1a4c3599c864e69f944667d5d166d7bb3d94681fccc",
+      "raw_bytes": 5252,
+      "sanitized_bytes": 3511,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_signed_gateway_group_with_root_effect.html": {
+      "raw_sha256": "51d4107e341392de6af5fed312b10a28e535b2b1569e4d74753939dedbc979e4",
+      "sanitized_sha256": "83971463d8942c3b53895890ff0781103a4d70f09efa029560b14d4020b34228",
+      "raw_bytes": 5320,
+      "sanitized_bytes": 3579,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_signed_gateway_read_execute_cursor.html": {
+      "raw_sha256": "da96e038e2dbd4368070ecc602a0e10aa7bfcc47d71ccaa0655aea34046795b4",
+      "sanitized_sha256": "846bcab6f0b9d8514def74e82436a6d8cb03d1630874497848b5f7b1a288a3eb",
+      "raw_bytes": 5308,
+      "sanitized_bytes": 3567,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_signed_group_uses_exact_agent_request.html": {
+      "raw_sha256": "e58d5c9804ffee2138eecdd639ae87d4da5d2b5436f4adb968dfb204f1f4d9ba",
+      "sanitized_sha256": "6a31b485a7cfcc25f02be85098514e2b2cca80cc87f46ac235569ac5d6deed80",
+      "raw_bytes": 5320,
+      "sanitized_bytes": 3579,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_signed_origin_read_certificate_stale_rejected.html": {
+      "raw_sha256": "ecfdc44af4e44d8dfdbb9745e4c2228e7282603b08d462ccedfae0d4b288bf69",
+      "sanitized_sha256": "9873edad264f89795841e86e6bfecfe3901dbf13dc904ed806520e08c173a231",
+      "raw_bytes": 5352,
+      "sanitized_bytes": 3611,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_signed_queued_occ_abort.html": {
+      "raw_sha256": "ef5a6d90919c6921dea17fe977e42023d7fd6d3f2be429d3540e33ba95e48afb",
+      "sanitized_sha256": "9ffd01196ecc5aaddffa870a159db54a383cc1e5c3620bffc3f13c4e20df0e9c",
+      "raw_bytes": 5264,
+      "sanitized_bytes": 3523,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_signed_read_certified_write.html": {
+      "raw_sha256": "efe23a3190148b5d2947ef9f71a1855ab8cf0027456e299d0a850eeaf1a5ba15",
+      "sanitized_sha256": "c7802d329e7961d317fce1cadf84f244b8125e5c989721f2ba5c01a8419789fb",
+      "raw_bytes": 5280,
+      "sanitized_bytes": 3539,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_signed_transaction_savepoints.html": {
+      "raw_sha256": "2cf6aa13122e100989ff9bb77eb72d66fb72609445b41c3c66ccfe7814bbc198",
+      "sanitized_sha256": "f505769682c4d750599798094181b7506f1f7f2e0c7c064410a06eeee309c281",
+      "raw_bytes": 5288,
+      "sanitized_bytes": 3547,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.remote_signed_two_gateway_race.html": {
+      "raw_sha256": "8ab0f28cd9922afa7c83509dcfe703b5ed276cb583797e538479247b757c742a",
+      "sanitized_sha256": "afadd3486e55614bde28b20a822779f1b767cbf103b934aec20736498db5e8b4",
+      "raw_bytes": 5264,
+      "sanitized_bytes": 3523,
+      "redactions": 14
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ask_suite.src.html": {
+      "raw_sha256": "cdc02614511ab38120ecbc87b523bc4effd539106a9030f686c6167ac2784c44",
+      "sanitized_sha256": "cdc02614511ab38120ecbc87b523bc4effd539106a9030f686c6167ac2784c44",
+      "raw_bytes": 262132,
+      "sanitized_bytes": 262132,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_names_suite.backtracking_cut_and_savepoint.html": {
+      "raw_sha256": "fa5e0aa41a68964f339b7cba4ceabeec022fa16a403465d537cdf649d4a4b54e",
+      "sanitized_sha256": "0b7924e4f47ae573532e69d30c94aff8e64fa294faf84da505560dac09db6603",
+      "raw_bytes": 3357,
+      "sanitized_bytes": 2779,
+      "redactions": 5
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_names_suite.cohosted_draw_labels_an_agent.html": {
+      "raw_sha256": "16514fabd5f3c9455f34c96914fdb747cb8945e699f951372ed1a7934ff0eded",
+      "sanitized_sha256": "e260bdba6deb1c3fefa0d040e2969e534f30e01c60efc8f309fa230e2a056edd",
+      "raw_bytes": 3353,
+      "sanitized_bytes": 2775,
+      "redactions": 5
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_names_suite.cold_peer_joins_quod_names.html": {
+      "raw_sha256": "2fb756eff006c0e42896d73424d66e6fac4428671e4c8c3cf6cfbd1024251e07",
+      "sanitized_sha256": "8e97751c05207cd58660d79f07da9f7d674bb466b7d279c435e6b7a7e7562587",
+      "raw_bytes": 3341,
+      "sanitized_bytes": 2763,
+      "redactions": 5
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_names_suite.creator_narrows_the_policy.html": {
+      "raw_sha256": "d4dfabaca7b3ec52cf9e45a670a78c65e34c060944fa65ff621b8787691e7554",
+      "sanitized_sha256": "9e981e946eaa1064914521b37a1c3d88e358a49ad568f1f8d2db7c824ac79af0",
+      "raw_bytes": 3341,
+      "sanitized_bytes": 2763,
+      "redactions": 5
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_names_suite.end_per_suite.html": {
+      "raw_sha256": "f726ce521ec5ec9d5bcd91df5e15c3ed54a64af68a80fc75ebecc5f815c61b43",
+      "sanitized_sha256": "5193347f407d7a6f5f63bd56b8bc3d29ed4cca81fedf5242e31847336e480e6b",
+      "raw_bytes": 3344,
+      "sanitized_bytes": 2766,
+      "redactions": 5
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_names_suite.founder_restarts_and_replays.html": {
+      "raw_sha256": "3e336ef2fc51833fa0df2291a9a28beea7099666bd81a3ab0120bf9078d4d516",
+      "sanitized_sha256": "ccf1d90c243cf48c7eed72c814aa5b545633399613b59143320e9cd68a69b8ae",
+      "raw_bytes": 6621,
+      "sanitized_bytes": 6043,
+      "redactions": 5
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_names_suite.init_per_suite.html": {
+      "raw_sha256": "d2713d9cde48dc956375ccba793da3448fb5b079e2b4176cbdcb927416d0ba05",
+      "sanitized_sha256": "4d69b7adf43abe68a7f0a5c35231f2382cbb02dd6986dadfa8c812b70d7cc844",
+      "raw_bytes": 10774,
+      "sanitized_bytes": 9954,
+      "redactions": 5
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_names_suite.public_queries_open_mutation_refused.html": {
+      "raw_sha256": "5dc0302ad0d80efccb3f9628d412d244790822acaacabc9cff6c449de5b2fb1a",
+      "sanitized_sha256": "9efe594aa53fa42c4133734632ccd196194f30e4281f4035952ac097327ab3e3",
+      "raw_bytes": 3381,
+      "sanitized_bytes": 2803,
+      "redactions": 5
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_names_suite.remote_completion_of_deep_proof.html": {
+      "raw_sha256": "6bf4963e2c2d86ce8ced262dd968e9c8d69fa46cd0e174b576f6d7dced4efb42",
+      "sanitized_sha256": "8c02651385b78ea33af1b329c7e3df555158cda65c6a2728344ebf0e0c5ca31e",
+      "raw_bytes": 3361,
+      "sanitized_bytes": 2783,
+      "redactions": 5
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_names_suite.remote_draw_from_non_hosting_node.html": {
+      "raw_sha256": "7f8b02b6bc9d68f164e2c2af7d920d44f252b79041ccc7fe881fcb4c89157e37",
+      "sanitized_sha256": "33fb3dbcb9c28c0fac7e9f5336bd97c842d6a7cc502d579ae0a29f26033d52bc",
+      "raw_bytes": 3779,
+      "sanitized_bytes": 3201,
+      "redactions": 5
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_names_suite.restart_recovery.html": {
+      "raw_sha256": "7413d6d4aea87a07cc3faa73c195fba4d8822699e04d44311db9b5e8cc922dc7",
+      "sanitized_sha256": "5192742d5a7c040ba6c74de817d16304551e459b299913bf9a584c5ff42c50c4",
+      "raw_bytes": 8113,
+      "sanitized_bytes": 6848,
+      "redactions": 8
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_names_suite.src.html": {
+      "raw_sha256": "f2afd2d3be5b4f9b54d12a0432af20e43c41299a79e966d723fff40d8e039248",
+      "sanitized_sha256": "f2afd2d3be5b4f9b54d12a0432af20e43c41299a79e966d723fff40d8e039248",
+      "raw_bytes": 44934,
+      "sanitized_bytes": 44934,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ns_suite.src.html": {
+      "raw_sha256": "789b2d1fb70a2cc305d16b90574e09060f5aedd3139f9fcb6f666b2622d2e40a",
+      "sanitized_sha256": "789b2d1fb70a2cc305d16b90574e09060f5aedd3139f9fcb6f666b2622d2e40a",
+      "raw_bytes": 10570,
+      "sanitized_bytes": 10570,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ns_suite.t_admit_grows_committee.html": {
+      "raw_sha256": "ef7bfc63393bd27b26ab19c771f3c2d6e650ffc3093223f6d18cadc9bf91d073",
+      "sanitized_sha256": "ef7bfc63393bd27b26ab19c771f3c2d6e650ffc3093223f6d18cadc9bf91d073",
+      "raw_bytes": 2055,
+      "sanitized_bytes": 2055,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ns_suite.t_cannot_remove_last.html": {
+      "raw_sha256": "37e8182a81fb9c7c4a486e0f065b2d350d230469f4f02625937522b5641c1362",
+      "sanitized_sha256": "37e8182a81fb9c7c4a486e0f065b2d350d230469f4f02625937522b5641c1362",
+      "raw_bytes": 2043,
+      "sanitized_bytes": 2043,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_ns_suite.t_gate_rejects_raw_wedge.html": {
+      "raw_sha256": "53cd97d9210657ad3f6947f0dd800180a8863b4abdcb9fca8cfb07e53ad862b7",
+      "sanitized_sha256": "53cd97d9210657ad3f6947f0dd800180a8863b4abdcb9fca8cfb07e53ad862b7",
+      "raw_bytes": 2059,
+      "sanitized_bytes": 2059,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_peer_capacity_suite.acquired_contact_is_retained_before_loss_subscription.html": {
+      "raw_sha256": "752716f1fa8f4779177d375d98d1bb51ca0b349722ee8fb2072db925b90c8491",
+      "sanitized_sha256": "61084ca0670f3d1a6bee73afa66b25cfa0f6030301ddba197b51bb2ac3042e12",
+      "raw_bytes": 4926,
+      "sanitized_bytes": 4184,
+      "redactions": 5
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_peer_capacity_suite.dead_queued_acquisition_preserves_capacity_wakeup.html": {
+      "raw_sha256": "21be9a962fd01fbc71dfb8b8ece5e316199de83787a8056a5f5b094061d74eb3",
+      "sanitized_sha256": "1c03c8d2d13be18888a94fa826cf2ec021d21cdacee4089add7c7f1dde56cd87",
+      "raw_bytes": 4910,
+      "sanitized_bytes": 4168,
+      "redactions": 5
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_peer_capacity_suite.end_per_suite.html": {
+      "raw_sha256": "97e9de9a10fd155894efb1071484784ad070ca87eb331b40e03ee6b07dfd3132",
+      "sanitized_sha256": "ed438217411d6f5dccdc1794d1a7498b5daaef1d844ceeb9df9ed71ead380969",
+      "raw_bytes": 4165,
+      "sanitized_bytes": 3739,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_peer_capacity_suite.idle_contact_survives_until_acquisition_pressure.html": {
+      "raw_sha256": "0f0cfb1c838a7b627f705b8e6fad841d2d0e8d797981e09426f5defc3ccc8a78",
+      "sanitized_sha256": "9b80c8a90d6e12ba9999533dfed9231a272b437144ddb19d4317ce6376812def",
+      "raw_bytes": 3932,
+      "sanitized_bytes": 3506,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_peer_capacity_suite.init_per_suite.html": {
+      "raw_sha256": "4ba1af43e88af889ba5e602e2eaa9f9fbc6f6c19b429bf54d0d8cd80fc8171f4",
+      "sanitized_sha256": "fd3ad7605292c292a4665b29e8de5028e4f288e4ab84858b489793f5b2cd8f1a",
+      "raw_bytes": 8648,
+      "sanitized_bytes": 8195,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_peer_capacity_suite.last_consumer_death_releases_capacity.html": {
+      "raw_sha256": "b1a578e83d51423b50197713ecc444eb7741ab607404bdae4f14f709db879530",
+      "sanitized_sha256": "ef9f980ef0ca6ee13f7065660de133f74f709d7014f77a3a011053790d68c7eb",
+      "raw_bytes": 4865,
+      "sanitized_bytes": 4120,
+      "redactions": 5
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_peer_capacity_suite.node_key_rotation_replaces_the_retained_slot.html": {
+      "raw_sha256": "884edc5c2a44daba7bf35a509d992706de7f0eccc9f64b2f34274a1928795bd9",
+      "sanitized_sha256": "aeb12dc1b9aa20fba0ed2c221cbf5b1e809b836605a1c625c41eb6838891a957",
+      "raw_bytes": 4888,
+      "sanitized_bytes": 4148,
+      "redactions": 5
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_peer_capacity_suite.src.html": {
+      "raw_sha256": "fa7a58ecd5442afbccdaafc37eec1061123fc433c5d9722ff5c103042f77c4b3",
+      "sanitized_sha256": "fa7a58ecd5442afbccdaafc37eec1061123fc433c5d9722ff5c103042f77c4b3",
+      "raw_bytes": 18914,
+      "sanitized_bytes": 18914,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_peer_capacity_suite.withdrawn_contact_releases_waiting_observers.html": {
+      "raw_sha256": "ca49954b710e6a2c16103b4b4e04d629011139b1b00200e04b241155b73290f3",
+      "sanitized_sha256": "66f9318649c5c9b9ba76acdc8abe2b2f80b5642ba210dd1ab40db91b8f7dc307",
+      "raw_bytes": 4887,
+      "sanitized_bytes": 4148,
+      "redactions": 5
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_peer_observation_suite.cold_timeout_is_shared_physical_suspicion.html": {
+      "raw_sha256": "2b2bae04a2239419d2a901ec21c9c6a724f27104acb58263aa7cb28b552043df",
+      "sanitized_sha256": "19fa59f96cf7587d58eba634d9d896d94a93fcd415c5e32155613ebdf41e9ef0",
+      "raw_bytes": 3883,
+      "sanitized_bytes": 3457,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_peer_observation_suite.contact_survives_consumer_restart_and_expiry.html": {
+      "raw_sha256": "9bd73044be7fa4a7bcb9900db45fb57d827d946e40ee6066308cbb89e18a6d58",
+      "sanitized_sha256": "b9052e036ff3a472271b5a989b3161668b591d5f0d8c5653f30570e2c59434a8",
+      "raw_bytes": 3893,
+      "sanitized_bytes": 3467,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_peer_observation_suite.end_per_suite.html": {
+      "raw_sha256": "b65e954e43b9d985eb6b78e6405531f92093f6949513efdefed6dff131df3f5d",
+      "sanitized_sha256": "90e8c0ccedfc014af33d02134f9537a188eeaa4b9588a798369b307355ffab9c",
+      "raw_bytes": 4151,
+      "sanitized_bytes": 3725,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_peer_observation_suite.init_per_suite.html": {
+      "raw_sha256": "545956eef1747fa5c2a20fe9fe3fa49069e4210141a85e7968654c3f277a4de4",
+      "sanitized_sha256": "6c5bc42095eda0b49d4906f39df8421acd1d04deed55c8d717bd359242814232",
+      "raw_bytes": 8629,
+      "sanitized_bytes": 8176,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_peer_observation_suite.newer_contact_fences_same_key_history.html": {
+      "raw_sha256": "b83292b51efa9a0b18fcaab50297d0344d82e27ca31bab76ff54197f6095d3cd",
+      "sanitized_sha256": "ae61ac36c254b16e53408878bddf1ff96d4c4fdeb999b9d5916185b21bb6c0d3",
+      "raw_bytes": 7370,
+      "sanitized_bytes": 6944,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_peer_observation_suite.src.html": {
+      "raw_sha256": "ff46cb0eddd3f5ea732410cb3b9f24d9a768ba9fae4702c3a036b8158eaec0ac",
+      "sanitized_sha256": "ff46cb0eddd3f5ea732410cb3b9f24d9a768ba9fae4702c3a036b8158eaec0ac",
+      "raw_bytes": 15400,
+      "sanitized_bytes": 15400,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_peer_observation_suite.withdrawal_fences_pending_physical_completion.html": {
+      "raw_sha256": "f883ea4c070cbb0f0f5172dae274f4c04d0d0e7e2957c333b0b98c3c66b3c94d",
+      "sanitized_sha256": "79d0e2820d674f6e8cc33580dfc7a5a0796e75042a508cf1f09dbe322656e271",
+      "raw_bytes": 3902,
+      "sanitized_bytes": 3476,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.authenticated_coalesced_header_payload_delivered_once.html": {
+      "raw_sha256": "3a277860ca70080e74e2113f1dc9757514f62a29497c113c63124ae3fcef785d",
+      "sanitized_sha256": "8e440347b086e78e3169df8ce893f2030497f7c522f2bc88b9700408fb83cbe7",
+      "raw_bytes": 3869,
+      "sanitized_bytes": 3443,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.authenticated_peer_connections.html": {
+      "raw_sha256": "143f7fe059307b0561335bcdf460d0d656ae5976ae75ab615698cf3c3d5a1e56",
+      "sanitized_sha256": "bc61a64241472bb469b59bc5f7c248917fd9c68ad1afee69427ed0799589dc45",
+      "raw_bytes": 28881,
+      "sanitized_bytes": 26372,
+      "redactions": 17
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.bidirectional_reuse.html": {
+      "raw_sha256": "7d403bf6fa533a3ed13da3d35e81f763aeecbfe9ee08eebe75c963e3f6f81357",
+      "sanitized_sha256": "d89c6faf4acc14c3ea4fcefd16e0e8139909ea0ef2c5543a6eaca981465471c6",
+      "raw_bytes": 3733,
+      "sanitized_bytes": 3307,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.channel_stream_reset_isolated.html": {
+      "raw_sha256": "444aac173f3e1fff3b53cff4a0e5a1dfbdf1f8b67ca7be2925dff06276ffaa2b",
+      "sanitized_sha256": "c70f98ee9aa5e5e1d9539f9ff43629b6d42860aedca6ed5d3182f6308742adcc",
+      "raw_bytes": 3773,
+      "sanitized_bytes": 3347,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.connection_confirmation_without_stream.html": {
+      "raw_sha256": "434654721650cb1a2c67fed4acadfa05e834542c1bfe1cd8807ae503a846e183",
+      "sanitized_sha256": "ffd47a6d02b79c9fb3134d0926b23f767b13b1c8357f75b91f60949fd9f02289",
+      "raw_bytes": 29212,
+      "sanitized_bytes": 26659,
+      "redactions": 17
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.connection_death_resolves_pending_waiters.html": {
+      "raw_sha256": "74806fb8f8f16dbcddb41c4bc8e0179184dc3d6f84f79611d1195ba55ae95ece",
+      "sanitized_sha256": "6151f09dc09b778826224c5c285efafc4d825dfb7755a437a7ed4b00447203fc",
+      "raw_bytes": 3821,
+      "sanitized_bytes": 3395,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.connection_is_owned_by_transport.html": {
+      "raw_sha256": "08a6e73b2f77fcc2485e067b26dd8c6d446ca1aea18976ea4813fad2fe6a3206",
+      "sanitized_sha256": "c38ade5317996ef451a5a0cf404428d97ada2f9c423a877af3386e4c4d39238a",
+      "raw_bytes": 3787,
+      "sanitized_bytes": 3361,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.dialer_presents_cert.html": {
+      "raw_sha256": "ec046323d5f2e3b2eda7147b3bbbf18ef6598764264b99bcb3ccdb27981baaac",
+      "sanitized_sha256": "dbf26096c39ae2de1db19422d14dc71fc7aa6f483696c180a0e63bf9616719c3",
+      "raw_bytes": 3737,
+      "sanitized_bytes": 3311,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.end_per_suite.html": {
+      "raw_sha256": "312c69b64890b20de262ebeb67e239ef5f0b612eb08d848e2141289a9840517f",
+      "sanitized_sha256": "62d8e5ba82c344c7880c52caec8829a15bf4d9ce6ce5bc92a190daadbd639601",
+      "raw_bytes": 4079,
+      "sanitized_bytes": 3653,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.explicit_link_retires_with_last_owner.html": {
+      "raw_sha256": "c891ee17202247451f111d024b4f0d53460cb6142d3464318c1d9d00fe3db842",
+      "sanitized_sha256": "03ae96733aeabf6cba8b58e20603c8e9dba81cf29434ec140e0421da24fabd08",
+      "raw_bytes": 3805,
+      "sanitized_bytes": 3379,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.identified_dial_suppresses_hint_learning.html": {
+      "raw_sha256": "dc0840311ade241e6fff58c02d7880f523745b13893b279a2a98be52da16c365",
+      "sanitized_sha256": "9620793f7440b171e738ec91ebf6df859a7d6d64b5d562d98517754c6b17a6ac",
+      "raw_bytes": 3839,
+      "sanitized_bytes": 3413,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.inbound_channel_reset_is_scoped.html": {
+      "raw_sha256": "7263da5f0eed13ff69d5700737a982c5d9a724f5b152c8eb094ba79b96876eec",
+      "sanitized_sha256": "c38bda8a491a05a4d999c54f8625e4874f43e62bafe2fe3b8e7f391910c52d13",
+      "raw_bytes": 3783,
+      "sanitized_bytes": 3357,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.inbound_owner_death_closes_wire_connection.html": {
+      "raw_sha256": "2f56aed4c1a9a1a7b5e742af59593d3ef1685fd24490e43a0ef1466bea6a37cb",
+      "sanitized_sha256": "95f3281711c2a1b5c4a9095d90242ffbbee1ccd1b068119d766c372c61eda76f",
+      "raw_bytes": 3825,
+      "sanitized_bytes": 3399,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.inconclusive_loss_confirmation_is_reobserved.html": {
+      "raw_sha256": "37128247418460150267711507514b79992316430183a89599387a3e6d0fac66",
+      "sanitized_sha256": "731a1010d27594082070b3b5790f3afa321094738bc70e173e38d3f68e34ef75",
+      "raw_bytes": 4402,
+      "sanitized_bytes": 3805,
+      "redactions": 4
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.init_per_suite.html": {
+      "raw_sha256": "7dc74be5aa1e73c6efa5d2b80c47db96424c98c2be9ec81f3b0e8d66ebcdfd39",
+      "sanitized_sha256": "bdae304ebf9a4d46980b7c2bd6f58c32ab259df9713f5983564ad073d034afd9",
+      "raw_bytes": 8509,
+      "sanitized_bytes": 8056,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.late_released_link_cannot_consume_replacement_waiter.html": {
+      "raw_sha256": "73a8d21a7252b3b4b8c4493b34aedb281aaa6608d176086c7654cb83c1f13ea4",
+      "sanitized_sha256": "7f62c1d6b473563df1c139c7c81813b24ef5c796d21ceb814aae7d0b2d8d9fdb",
+      "raw_bytes": 3867,
+      "sanitized_bytes": 3441,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.message_roundtrip.html": {
+      "raw_sha256": "06b7149a1ce6f16be9d05d947fd75baa2ee366cfe6aea72e99c3d0d3a8bc2747",
+      "sanitized_sha256": "6cf77563287e373dc8eb5f2e996e8b9dc6e40c5eb15dff280de4b3c1d45328c0",
+      "raw_bytes": 3725,
+      "sanitized_bytes": 3299,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.mismatched_header_cannot_poison_cache.html": {
+      "raw_sha256": "cd86c5cff3e0d6b4ca68e72d999f9e5f7bd0ee35c6904ed1da8f600cbcf25b46",
+      "sanitized_sha256": "c8a4eca6eac6331eece9799353879c23f9bde950fb69ddbe22c23a29c33f7d4b",
+      "raw_bytes": 4152,
+      "sanitized_bytes": 3726,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.no_learn_is_monotone_across_streams.html": {
+      "raw_sha256": "6f0a56d30e0e500ad09966ed0a9496adfab45e5d771eb7b9c7d41a388d7b93fa",
+      "sanitized_sha256": "1a2a3a20c8c1840ca224a8d9056173be71e4cb3dff86190b278ca2a91618802e",
+      "raw_bytes": 3797,
+      "sanitized_bytes": 3371,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.non_dialable_node_id.html": {
+      "raw_sha256": "de349dcc759c615efc15dd73f2e3b6fee8b96ff1b07fb1fee591ffeeb6d0513a",
+      "sanitized_sha256": "106f921ac1efadb72a892d288d8b37c39f06ea119026223d27ea89c86dcb648b",
+      "raw_bytes": 3739,
+      "sanitized_bytes": 3313,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.observer_confirmation_deadline_releases_pending.html": {
+      "raw_sha256": "14eba601d689e59dca57bf29be4b14eed640312e970fbb75e453ea354c021691",
+      "sanitized_sha256": "cb7af438a8c63b2deab3a40e1d806621af095e0fbbb8f011e780b63f8e5f8e0c",
+      "raw_bytes": 7345,
+      "sanitized_bytes": 6919,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.ontology_observer_shares_physical_failure.html": {
+      "raw_sha256": "535a0fe8fcf366a50b90054d1e75e49739c19410b2a7f5cb046bf087065580e8",
+      "sanitized_sha256": "54c5805e654b054d3620e236897954b9c247f846ab18e9b31d89204096e4edce",
+      "raw_bytes": 7324,
+      "sanitized_bytes": 6898,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.open_link_succeeds.html": {
+      "raw_sha256": "24247cb846a9a80accbb8b006dfa54f8a589b98eac0e17585983a8dd6ac9c7f1",
+      "sanitized_sha256": "7aaf573e7f16f2ec6d5e98c3e48b5da394032075361fe7fc147edc7dc898cf72",
+      "raw_bytes": 3729,
+      "sanitized_bytes": 3303,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.ordered_send_waits_for_send_ready_fifo.html": {
+      "raw_sha256": "b51f4e1d6e4e17eebd32c6766635ac21393a389196901a7f49eedb4e19fa3cf1",
+      "sanitized_sha256": "5c1c462888ecba27fce527fb133e0a7a347c848f8c0ccbc6e014ab4cbcfb2700",
+      "raw_bytes": 3811,
+      "sanitized_bytes": 3385,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.ordinary_dial_still_learns_hint.html": {
+      "raw_sha256": "87b4f587a44582b6eb7abd50e7996ddbe6f3714c0c00e2c01741233b9a584f32",
+      "sanitized_sha256": "37a7a9ab4d9879f5f85cf3f2fb29a0bf9ddde891248f162d9411f8830b1fde48",
+      "raw_bytes": 3803,
+      "sanitized_bytes": 3377,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.ordinary_pubkey_dial_rejects_wrong_cert.html": {
+      "raw_sha256": "ed7d761e6695712facc2acd410417b5b6a5e8df2ab53be8388fa5ac4560182aa",
+      "sanitized_sha256": "da5d659bd75124f5be0d66ff90569e3ca4d85a5aab53be8a469bfd4015225881",
+      "raw_bytes": 4380,
+      "sanitized_bytes": 3780,
+      "redactions": 4
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.pinned_dial_rejects_wrong_cert.html": {
+      "raw_sha256": "7236d034df987420bf21ae4b4e7650aa553e496757a9dd6a427b027c5c5e9e53",
+      "sanitized_sha256": "5d625c22c338c411200b4d2f507cd681d39fed248d3029d362447bfbefa62518",
+      "raw_bytes": 4334,
+      "sanitized_bytes": 3735,
+      "redactions": 4
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.pinned_dial_suppresses_hint_learning.html": {
+      "raw_sha256": "ba97a8eedf8ab143748d632d35efd6fd4e1db67df143e21be4fcd3283c7b767c",
+      "sanitized_sha256": "172c02380bdd757e69d993704f3e922982ab34a393031da7b7a014e68b3dbc3c",
+      "raw_bytes": 3823,
+      "sanitized_bytes": 3397,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.pinned_lease_release_is_connection_exact.html": {
+      "raw_sha256": "bcbca536eb75f11e8030238a796cfb383cf2e7469e63c8e82d3d1e2e176b856a",
+      "sanitized_sha256": "6571e9026b25dd2649dc29fee9758b2c4caaac1e62f38c87d2a36365cc508100",
+      "raw_bytes": 3817,
+      "sanitized_bytes": 3391,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.pinned_leases_share_link_until_last_release.html": {
+      "raw_sha256": "e102c2b9f2c09c2fbd91fe96c3fb369fc431efa74b317fa0d1fcccd0a0588ed6",
+      "sanitized_sha256": "151b50856c97b33db1ac8006afd39a37495c02ca7e705257cdbbdd6c684d6bc1",
+      "raw_bytes": 3829,
+      "sanitized_bytes": 3403,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.pinned_reverse_stream_suppresses_hint_learning.html": {
+      "raw_sha256": "68773478c99fbd002832e72ee6e25101617d59c4b393120dc7e8ad4fabd09de6",
+      "sanitized_sha256": "905156c3caa44558d7f55a11f10f91394f157a7b1cc289968c5adf80f37bd787",
+      "raw_bytes": 3863,
+      "sanitized_bytes": 3437,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.priority_mixed_traffic.html": {
+      "raw_sha256": "9db18da876a999da070d6ea4a05c6743af8e8cdebe7a7e4ad7e1ea914f4b11af",
+      "sanitized_sha256": "980ab34dea6f4b41d62b8168aafd169af730aa0a3838b08b2d4e30c95d12ab6f",
+      "raw_bytes": 3745,
+      "sanitized_bytes": 3319,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.recovery_round_reconfirms_existing_connection.html": {
+      "raw_sha256": "120af626e86b1cc88640a55044702252c5c0fc80629b0322e545c38cefb32929",
+      "sanitized_sha256": "57e8b5019000450db01a51172a8a82516e8ea7fe3f72f3e3dd13d3461ebcf0a3",
+      "raw_bytes": 10837,
+      "sanitized_bytes": 10411,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.resolve_and_dial_by_pubkey.html": {
+      "raw_sha256": "a27dd4c6b0084bb9e5a87a3be6e75d147f3c5a34bd0604759b0d924867879fb3",
+      "sanitized_sha256": "96c6d393223c09b1064fa9f8bc6fe16f8a773372819bb1c39624c98505e92311",
+      "raw_bytes": 3761,
+      "sanitized_bytes": 3335,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.shared_peer_loss_confirmation.html": {
+      "raw_sha256": "3b7af0f3e3211b0eced3542c5bb12359b1ff591128575c0d5d36ac0d02dd7571",
+      "sanitized_sha256": "826a2146327c9413613ca2c95408836dd9d6c34fea317c84458951f43a9c6323",
+      "raw_bytes": 98091,
+      "sanitized_bytes": 89483,
+      "redactions": 58
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.src.html": {
+      "raw_sha256": "2573310d56ddc9b16ecf552676a091c789aece0b2b89442cd453977785ad769c",
+      "sanitized_sha256": "2573310d56ddc9b16ecf552676a091c789aece0b2b89442cd453977785ad769c",
+      "raw_bytes": 131601,
+      "sanitized_bytes": 131601,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.stream_priorities_survive_reopen.html": {
+      "raw_sha256": "745e6b6a1253ff6f18a0bc83c3de331b102bfd84529f42e7e031e0c4164cd3c1",
+      "sanitized_sha256": "678418836512a96cb68de9c6251b1b24e99a7b177311037459a891d95f0bec28",
+      "raw_bytes": 3785,
+      "sanitized_bytes": 3359,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.tagged_catchup_open_preserves_pools.html": {
+      "raw_sha256": "6529e5cf649beb058080482bdd6d77ea203ad5a621efc8b69e316dacb987a2ec",
+      "sanitized_sha256": "9422eef09e3b01da08191cfa38e6f316a9a5a562399447dc671ae373437543e0",
+      "raw_bytes": 3797,
+      "sanitized_bytes": 3371,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.terminal_confirmation_preserves_observation_time.html": {
+      "raw_sha256": "9de58ec923a8bc91ebc12e825064ab841cc8318b1763669b10345cdab5a29d57",
+      "sanitized_sha256": "ebacf3a838a1457aaf79e9378fdc14311baf9e88a3d6921c0c814a59a2586330",
+      "raw_bytes": 3849,
+      "sanitized_bytes": 3423,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_quic_suite.unacked_stream_no_link_up.html": {
+      "raw_sha256": "7f39b39d17233a1f112529e638b707ed4fa00b6de30d96d0bfafbfa4f2c92ee6",
+      "sanitized_sha256": "36c186b6a952b6ea66f6b7e13b3ac48141d87cd362245065aa880a65909d8c40",
+      "raw_bytes": 3757,
+      "sanitized_bytes": 3331,
+      "redactions": 3
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_read_set_suite.reconnect_missing_route.html": {
+      "raw_sha256": "1c0c331ff9573538658550c8346d9c265f43d5b136680d1a63163a7eb7b1c84b",
+      "sanitized_sha256": "1c0c331ff9573538658550c8346d9c265f43d5b136680d1a63163a7eb7b1c84b",
+      "raw_bytes": 11907,
+      "sanitized_bytes": 11907,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_read_set_suite.reconnect_mixed_symbols.html": {
+      "raw_sha256": "f8830074fbc15daf0713c2455f902bb1905146f238a410aad37ca40d728b59f6",
+      "sanitized_sha256": "f8830074fbc15daf0713c2455f902bb1905146f238a410aad37ca40d728b59f6",
+      "raw_bytes": 11907,
+      "sanitized_bytes": 11907,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_read_set_suite.reconnect_route_recovery.html": {
+      "raw_sha256": "6a3feb36d8f25c9a59a2d446ca817f83c677db11ec16fa797d0e6078a31d238d",
+      "sanitized_sha256": "6a3feb36d8f25c9a59a2d446ca817f83c677db11ec16fa797d0e6078a31d238d",
+      "raw_bytes": 11911,
+      "sanitized_bytes": 11911,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_read_set_suite.src.html": {
+      "raw_sha256": "13134f6618e706bfebc7315390b8a6e6938b6afe1615f17f9267a7dc74923d04",
+      "sanitized_sha256": "13134f6618e706bfebc7315390b8a6e6938b6afe1615f17f9267a7dc74923d04",
+      "raw_bytes": 14226,
+      "sanitized_bytes": 14226,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_simplex_suite.src.html": {
+      "raw_sha256": "fe9c3c1f69c06e680b7a4a4aa3dc531557408f70f9ec910b78b89ea43ef3850e",
+      "sanitized_sha256": "fe9c3c1f69c06e680b7a4a4aa3dc531557408f70f9ec910b78b89ea43ef3850e",
+      "raw_bytes": 29336,
+      "sanitized_bytes": 29336,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_simplex_suite.t_append_commits_and_persists.html": {
+      "raw_sha256": "dcecefc78218b9669901217fca2954277cc692077935d4a6f0567b2f134479d3",
+      "sanitized_sha256": "dcecefc78218b9669901217fca2954277cc692077935d4a6f0567b2f134479d3",
+      "raw_bytes": 2109,
+      "sanitized_bytes": 2109,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_simplex_suite.t_commit_carries_cert.html": {
+      "raw_sha256": "97d3e73139cdac025b8f907e805c1eb9fb19cfb12f49c25d09036beccbb35022",
+      "sanitized_sha256": "97d3e73139cdac025b8f907e805c1eb9fb19cfb12f49c25d09036beccbb35022",
+      "raw_bytes": 2077,
+      "sanitized_bytes": 2077,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_simplex_suite.t_concurrent_appends_batch.html": {
+      "raw_sha256": "7d5a54058f2781f149a14bdb4ae081487b8bcc0b54338d2c55d87b9edf0d45b0",
+      "sanitized_sha256": "7d5a54058f2781f149a14bdb4ae081487b8bcc0b54338d2c55d87b9edf0d45b0",
+      "raw_bytes": 2097,
+      "sanitized_bytes": 2097,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_simplex_suite.t_founder_bootstrap.html": {
+      "raw_sha256": "a70cb08a88f43cd47d2c7a5745bb7e8afc5aacdbbaf9e8e58cd6f1400693d7d9",
+      "sanitized_sha256": "a70cb08a88f43cd47d2c7a5745bb7e8afc5aacdbbaf9e8e58cd6f1400693d7d9",
+      "raw_bytes": 2069,
+      "sanitized_bytes": 2069,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_simplex_suite.t_fresh_foundings_are_distinct.html": {
+      "raw_sha256": "7d156b6de1acae42bc74839860e0fbcb2b00f530dd25aad16ae40f895801ddc3",
+      "sanitized_sha256": "7d156b6de1acae42bc74839860e0fbcb2b00f530dd25aad16ae40f895801ddc3",
+      "raw_bytes": 2113,
+      "sanitized_bytes": 2113,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_simplex_suite.t_genesis_hash_is_lock_free_and_lifetime_bound.html": {
+      "raw_sha256": "1b620d18547850f3983bc1c818cdb33447acae8ad82a396b8bb7157dffb821b1",
+      "sanitized_sha256": "1b620d18547850f3983bc1c818cdb33447acae8ad82a396b8bb7157dffb821b1",
+      "raw_bytes": 2177,
+      "sanitized_bytes": 2177,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_simplex_suite.t_genesis_seeds_content.html": {
+      "raw_sha256": "b0ef5ee4b9a3e277edc9aeb65a707d8fde4e973decb2c05c4b9bb04a748819fe",
+      "sanitized_sha256": "b0ef5ee4b9a3e277edc9aeb65a707d8fde4e973decb2c05c4b9bb04a748819fe",
+      "raw_bytes": 2085,
+      "sanitized_bytes": 2085,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_simplex_suite.t_join_anchor_validation.html": {
+      "raw_sha256": "c1a9fb8b9a95bb470c55a903fec6df212946c26e76523330292283e280b09eec",
+      "sanitized_sha256": "c1a9fb8b9a95bb470c55a903fec6df212946c26e76523330292283e280b09eec",
+      "raw_bytes": 5097,
+      "sanitized_bytes": 5097,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_simplex_suite.t_multi_member_accepted.html": {
+      "raw_sha256": "c15487c4f442e65faee94886b9fc8d1ccf92a33ba471be46f9e91c5283cd9e13",
+      "sanitized_sha256": "2390b8f084a2fef62174505feda86a37e0001dc97c028c3afed7cf2b7037543d",
+      "raw_bytes": 2989,
+      "sanitized_bytes": 2918,
+      "redactions": 1
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_simplex_suite.t_restart_replays.html": {
+      "raw_sha256": "ffa61cd986a2bbf8d953d53cf0ad605ee8d1a7a413d2190a251f6bbca828b4fc",
+      "sanitized_sha256": "ffa61cd986a2bbf8d953d53cf0ad605ee8d1a7a413d2190a251f6bbca828b4fc",
+      "raw_bytes": 2061,
+      "sanitized_bytes": 2061,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_simplex_suite.t_status_stats.html": {
+      "raw_sha256": "289877defb648dafcc3409d241778a87de390e7a4e7cac53d7d9dff5cf329a6d",
+      "sanitized_sha256": "289877defb648dafcc3409d241778a87de390e7a4e7cac53d7d9dff5cf329a6d",
+      "raw_bytes": 2049,
+      "sanitized_bytes": 2049,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/quod_simplex_suite.t_unsigned_history_rejected.html": {
+      "raw_sha256": "5924bf5f16db0b8d2c3150228301319b93869140a593fa60b59c0f3a8a1790da",
+      "sanitized_sha256": "5924bf5f16db0b8d2c3150228301319b93869140a593fa60b59c0f3a8a1790da",
+      "raw_bytes": 6278,
+      "sanitized_bytes": 6278,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/simplex_suite.burst_commits_without_busy.html": {
+      "raw_sha256": "d77353a41bbaf59c42e4675038f934996e1e0588159489ae731b00c6c74f1bab",
+      "sanitized_sha256": "84ef5ba74ef23a0929ee951fb3832a25192c76a4b5e310d98cc7140a3a1bd21d",
+      "raw_bytes": 6986,
+      "sanitized_bytes": 4421,
+      "redactions": 20
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/simplex_suite.byzantine_admit_rejected.html": {
+      "raw_sha256": "8e945ee30148709250e529f88c329b664511914062e717ee156db33258a054ce",
+      "sanitized_sha256": "0af393facea104f02545d0afbb9f62bf0778d2024ca8d21cbf145e008916aa51",
+      "raw_bytes": 6770,
+      "sanitized_bytes": 4205,
+      "redactions": 20
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/simplex_suite.byzantine_retract_rejected.html": {
+      "raw_sha256": "e76c48b8817f272d5933e292813e1115c288eb2679a04a6e958209e5f4d818f1",
+      "sanitized_sha256": "4a7dcfadcae0f430cf12a19dbd1275776ec57d0786a78c4a074bec319d4fc0cd",
+      "raw_bytes": 6778,
+      "sanitized_bytes": 4213,
+      "redactions": 20
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/simplex_suite.commits_across_committee.html": {
+      "raw_sha256": "df8a88288bbd7414f612abe423041d1c22b3e3d6474459f4e7d9eb230aa5ee68",
+      "sanitized_sha256": "06cc7352ab36a46020a242ab732deb15aca4b829e111dc5044c220a830427a83",
+      "raw_bytes": 6759,
+      "sanitized_bytes": 4194,
+      "redactions": 20
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/simplex_suite.consensus_commits_with_ingress_down.html": {
+      "raw_sha256": "ff0b7a3f46097c5416e8846761cde0fdaed7fbb4cbcc272ff4748d1eda53f69f",
+      "sanitized_sha256": "dd4b167f900a37376f1aef9bd6b5abf3c8037477fbe62b362f23389cb40b5555",
+      "raw_bytes": 6803,
+      "sanitized_bytes": 4238,
+      "redactions": 20
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/simplex_suite.end_per_suite.html": {
+      "raw_sha256": "d4f36329e5e2f55aa900e6ee1d2cdc610bab29daa39863d5e7481a3846aecaf3",
+      "sanitized_sha256": "e8b8979a0a31685e469c971b6f070a68f6dee192a8a30a93998938122a697405",
+      "raw_bytes": 6770,
+      "sanitized_bytes": 4205,
+      "redactions": 20
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/simplex_suite.follower_relays.html": {
+      "raw_sha256": "964db46602a1d66b6221b4960a1d6c30262cb702477acb2ddad134004e27ebfb",
+      "sanitized_sha256": "eff51109dde35fe2448c41fe7e7390258516cf7169e78a12b4908ffcb2ad5476",
+      "raw_bytes": 6723,
+      "sanitized_bytes": 4158,
+      "redactions": 20
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/simplex_suite.init_per_suite.html": {
+      "raw_sha256": "2eabe827230c61309044dfe2cf62872fe2cf389a665eeacfc0f19619629f3d79",
+      "sanitized_sha256": "dcffb3dbb3824c5bd6d781b76c47cd4618cfc0b395a59fd887b575c79542c552",
+      "raw_bytes": 21492,
+      "sanitized_bytes": 18487,
+      "redactions": 20
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/simplex_suite.leader_failover.html": {
+      "raw_sha256": "1a5b7000730d744bf7baa1c5f3d3448c7e49b6a5300e9e08defdcf0023f5d9aa",
+      "sanitized_sha256": "d146cf4563d8df363177e766feed2fa410960f95b7941bbe69470df044e3f957",
+      "raw_bytes": 6723,
+      "sanitized_bytes": 4158,
+      "redactions": 20
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/simplex_suite.membership_survives_leader_loss.html": {
+      "raw_sha256": "ee514f6be62ab8b680a0bbc28d9172ec0e8a3ee3880c113800fffeaebbb71ae6",
+      "sanitized_sha256": "52b298c62a003e0586fe9484453f9aa7f140fcc6ee87a0fb3849da494e25f4bd",
+      "raw_bytes": 51097,
+      "sanitized_bytes": 46394,
+      "redactions": 23
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/simplex_suite.over_fault_restart_recovers.html": {
+      "raw_sha256": "88c3105dcf0e478d499328c02d3d9c8c8a44f70c8f0dc989c7637bd7531994ab",
+      "sanitized_sha256": "3781fb01db12d9e706d69a4561b31de2cdf78087b898b2e3fe0b819e4f900f3c",
+      "raw_bytes": 26740,
+      "sanitized_bytes": 24175,
+      "redactions": 20
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/simplex_suite.src.html": {
+      "raw_sha256": "48dab6ec963cadb4a14d0dc008f5c98d788791517e430a14af0f30d9729a0fcf",
+      "sanitized_sha256": "48dab6ec963cadb4a14d0dc008f5c98d788791517e430a14af0f30d9729a0fcf",
+      "raw_bytes": 62066,
+      "sanitized_bytes": 62066,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/suite.log": {
+      "raw_sha256": "999ea6a3ed062c60b3a97fc7557538a40a24926af01754a8a9d866c964350c2d",
+      "sanitized_sha256": "999ea6a3ed062c60b3a97fc7557538a40a24926af01754a8a9d866c964350c2d",
+      "raw_bytes": 43312,
+      "sanitized_bytes": 43312,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/suite.log.html": {
+      "raw_sha256": "49c9e3abe69114066b8bafbb54b65056a0bba6a1c2e984911956042f9111002d",
+      "sanitized_sha256": "49c9e3abe69114066b8bafbb54b65056a0bba6a1c2e984911956042f9111002d",
+      "raw_bytes": 91993,
+      "sanitized_bytes": 91993,
+      "redactions": 0
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/unexpected_io.log.html": {
+      "raw_sha256": "4edc97c6f26520196050ee7fb791b4af791aeb46fffdbfbbbf44b3cdbc572b4a",
+      "sanitized_sha256": "dc47c3d5b11f5d928b760e66a36a9c5ee5d5ce03484853b2974e0e60b0b59fef",
+      "raw_bytes": 51244,
+      "sanitized_bytes": 47083,
+      "redactions": 28
+    }
+  },
+  "excluded_private_subtrees": [
+    "last",
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/log_private"
+  ],
+  "unpublished_generated_metadata": {
+    "ct_log_cache": {
+      "kind": "generated_binary_or_index",
+      "bytes": 141,
+      "sha256": "5559ed7b5560f010794781f160bc1456b74a19393867930df01da46a29b9aab0"
+    },
+    "variables-nonode@nohost": {
+      "kind": "generated_binary_or_index",
+      "bytes": 197,
+      "sha256": "9cba5532910fc08f54d62318281bca55847f265a877b8fdf296ed83a4f133667"
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/last_name": {
+      "kind": "generated_binary_or_index",
+      "bytes": 102,
+      "sha256": "8d61c5ca75e129744e52101af5fd818b9857d0df26899f0b2c510676b415657c"
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/totals.info": {
+      "kind": "generated_binary_or_index",
+      "bytes": 64,
+      "sha256": "716f8fc18989e29d9029459569a359c2ee9234affc81b3e9ed0848cc2a694f9a"
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/last_name": {
+      "kind": "generated_binary_or_index",
+      "bytes": 102,
+      "sha256": "8d61c5ca75e129744e52101af5fd818b9857d0df26899f0b2c510676b415657c"
+    },
+    "ct_run.nonode@nohost.2026-10-28_21.00.50/lib.quod.logs/run.2026-10-28_21.00.50/suite.summary": {
+      "kind": "generated_binary_or_index",
+      "bytes": 33,
+      "sha256": "206126a0849b586fcd6f627d231226632f8d7cf226f606f06965dc0ec07c6156"
+    }
+  },
+  "policy": "Never enumerate/read log_private or follow directory symlinks. Retain complete nonprivate text outputs with the same byte-binary redaction as run.py. Raw text and generated indexes remain in the ignored closed stage."
+}

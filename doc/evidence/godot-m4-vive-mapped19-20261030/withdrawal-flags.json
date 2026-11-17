@@ -1,0 +1,21 @@
+{
+  "location_operations_count": 0,
+  "world_accepted": false,
+  "operation_available": false,
+  "controller_available": false,
+  "operation_status_matches_signin_expired": true,
+  "assignment_revision": null,
+  "current_location_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+  "pending": 0,
+  "busy": false,
+  "source_edge_counts": [
+    {
+      "hand": "left",
+      "edges": 0
+    },
+    {
+      "hand": "right",
+      "edges": 0
+    }
+  ]
+}

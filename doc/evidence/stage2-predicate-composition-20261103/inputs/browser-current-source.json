@@ -1,0 +1,16 @@
+{
+  "source_sha256": {
+    "client/src/world.js": "b0941dcd4ff1962ffcfbcf61371d15e6940d879f41be3ba9ec30704080dc39b2",
+    "client/src/world.d.ts": "388262c78c0a6d3919c243f01ee770e2a1245e7eea6b0036f45731562eadf322",
+    "client/src/prolog-edit.js": "ed820aac74ec1693774109e57921cce05dd628b2aeff95bace6516ae8b7a8804",
+    "ui/src/PrologEditor.tsx": "6e7375d0e15bf30cae3258adb0b39055e6964eea6cf07e7c8b25edcfe68ebc28",
+    "client/test/world.test.js": "8c4902684839a3c5e219a8a9ff7a1b85d2c97da243887262ce074f91ce5b1865",
+    "client/test/prolog-edit.test.js": "ce9bae97b73caf530cca73435b9b3e1b9402391052a042713c0bc0e67c2727cc"
+  },
+  "retained_checks": [
+    "browser-adapters01",
+    "types02"
+  ],
+  "basis": "no subsequent browser source edits after these checks; current hashes also frozen",
+  "whole_tree_acceptance": false
+}

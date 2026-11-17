@@ -1,0 +1,27 @@
+{
+  "command": [
+    "docker",
+    "run",
+    "--rm",
+    "--init",
+    "--name",
+    "quod-m0-31de17b5-acl-observer-compile-03",
+    "--volume",
+    "/tmp/quod-m0-r1-gates-02/tmp:/tmp",
+    "--volume",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m0-20261027:/m0:ro",
+    "--entrypoint",
+    "/usr/bin/env",
+    "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+    "erlc",
+    "-o",
+    "/tmp",
+    "/m0/m0_acl_diagnostic.erl"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-27T17:23:49Z",
+  "elapsed_seconds": 0.872894287109375,
+  "child_exit": 0,
+  "timed_out": false,
+  "error_diagnostics": 0
+}

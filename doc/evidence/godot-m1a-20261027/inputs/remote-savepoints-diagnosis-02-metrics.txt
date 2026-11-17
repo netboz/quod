@@ -1,0 +1,118 @@
+M1a savepoint diagnostic asker: #{requests => #{},errors => [],
+                                  wall_us => 2911884,runtime_ms => 1684}
+  
+ 
+
+ 
+   *** User 2026-10-28 01:29:14.716 ***  🔗 
+M1a savepoint diagnostic target: #{requests =>
+                                       #{allocate =>
+                                             #{count => 5,total_us => 7787,
+                                               max_us => 1861},
+                                         finish =>
+                                             #{count => 2,total_us => 6533,
+                                               max_us => 3505},
+                                         activate =>
+                                             #{count => 2,total_us => 4780,
+                                               max_us => 3353},
+                                         restore =>
+                                             #{count => 2,total_us => 6307,
+                                               max_us => 3179}},
+                                   errors => [],wall_us => 2929952,
+                                   runtime_ms => 1512}
+  
+ 
+
+ 
+   *** User 2026-10-28 01:29:14.728 ***  🔗 
+M1a savepoint diagnostic third: #{requests => #{},errors => [],
+                                  wall_us => 2927448,runtime_ms => 1170}
+  
+ 
+  
+
+
+=== Ended at 2026-10-28 01:29:14
+=== successfully completed test case
+=== === Returned value: ok
+ 
+ 
+   
+ Test run history
+   |   Top level test index
+   |   Latest test result 
+ 
+ Copyright © 2026  Open Telecom Platform  
+Updated:  Wed Oct 28 2026 01:29:11  
+ 
+ 
+ 
+ 
+
+M1a savepoint diagnostic target: #{requests =>
+                                       #{allocate =>
+                                             #{count => 5,total_us => 7787,
+                                               max_us => 1861},
+                                         finish =>
+                                             #{count => 2,total_us => 6533,
+                                               max_us => 3505},
+                                         activate =>
+                                             #{count => 2,total_us => 4780,
+                                               max_us => 3353},
+                                         restore =>
+                                             #{count => 2,total_us => 6307,
+                                               max_us => 3179}},
+                                   errors => [],wall_us => 2929952,
+                                   runtime_ms => 1512}
+  
+ 
+
+ 
+   *** User 2026-10-28 01:29:14.728 ***  🔗 
+M1a savepoint diagnostic third: #{requests => #{},errors => [],
+                                  wall_us => 2927448,runtime_ms => 1170}
+  
+ 
+  
+
+
+=== Ended at 2026-10-28 01:29:14
+=== successfully completed test case
+=== === Returned value: ok
+ 
+ 
+   
+ Test run history
+   |   Top level test index
+   |   Latest test result 
+ 
+ Copyright © 2026  Open Telecom Platform  
+Updated:  Wed Oct 28 2026 01:29:11  
+ 
+ 
+ 
+ 
+
+M1a savepoint diagnostic third: #{requests => #{},errors => [],
+                                  wall_us => 2927448,runtime_ms => 1170}
+  
+ 
+  
+
+
+=== Ended at 2026-10-28 01:29:14
+=== successfully completed test case
+=== === Returned value: ok
+ 
+ 
+   
+ Test run history
+   |   Top level test index
+   |   Latest test result 
+ 
+ Copyright © 2026  Open Telecom Platform  
+Updated:  Wed Oct 28 2026 01:29:11  
+ 
+ 
+ 
+ 

@@ -1,0 +1,24 @@
+{
+  "qualification_image_id": "sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55",
+  "local_image_name": "quod-ci-physics-validation:final06",
+  "repository_digest": null,
+  "rustc": "1.90.0 (1159e78c4 2025-09-14)",
+  "cargo": "1.90.0 (840b83a10 2025-07-30)",
+  "rebar3": "3.26.0",
+  "erlang_otp_release": "28",
+  "erts": "16.4.0.2",
+  "parsetools": "2.7.1",
+  "node": "20.19.2",
+  "platform": "linux-x86_64",
+  "inputs_manifest": "inputs/r1-gates-06-source-manifest.json",
+  "receipt": "logs/ci-toolchain-01.json",
+  "local_cache_limit": "This image has no repository digest; the ID identifies the retained local cache, not an independently pullable tag or a published release. Source/locks/tool versions and actual generated/compiled artifact hashes are retained. No image publication or claim of bit-identical rebuilding from mutable apt repositories.",
+  "http_dependencies": {
+    "cowboy": "2.19.0",
+    "cowlib": "2.21.0",
+    "ranch": "2.3.0"
+  },
+  "http_qualification": "inputs/worker-http-dependency.json",
+  "erlang_otp_version": "28.5.0.2",
+  "exact_otp_receipt": "logs/ci-otp-exact-03.json"
+}

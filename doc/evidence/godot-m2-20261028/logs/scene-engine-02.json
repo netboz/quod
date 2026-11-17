@@ -1,0 +1,25 @@
+{
+  "command": [
+    "env",
+    "M1B_PHASE=scene",
+    "M1B_RESULT=/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m2-20261028/scene-engine-02-result.json",
+    "/home/yan/src/quod_worktrees/pearl-stone/client/_build/godot-clean/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64",
+    "--headless",
+    "--path",
+    "/home/yan/src/quod_worktrees/pearl-stone/client/godot",
+    "--",
+    "--qualification",
+    "--profile",
+    "/home/yan/.cache/quod-m2-artifacts/private/scene-engine-02"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-28T05:51:17Z",
+  "elapsed_seconds": 0.7663192749023438,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m2-artifacts/private/logs/scene-engine-02.log",
+  "raw_sha256": "fb1b0fbcc02b582e080dc85f8cd83b406258f31f8ad782019d363ca2d78a3b40",
+  "sanitized_sha256": "fb1b0fbcc02b582e080dc85f8cd83b406258f31f8ad782019d363ca2d78a3b40",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

@@ -794,7 +794,7 @@ certify_applied_many_with(_OwnerNs, _Requests, _Deadline, _Dependencies) ->
 certify_applied_many_before_deadline(
   OwnerNs, Requests, TimeoutMs, Deadline, Dependencies)
   when is_list(Requests), Requests =/= [],
-       length(Requests) =< ?QUOD_MAX_DTX_PARTICIPANTS,
+       length(Requests) > 0,
        is_integer(TimeoutMs), TimeoutMs > 0,
        TimeoutMs =< ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS ->
     case prepare_applied_many(OwnerNs, Requests, TimeoutMs, []) of
@@ -975,8 +975,7 @@ valid_source(
         is_integer(Slot) andalso Slot > 0 andalso
         is_integer(Applied) andalso Applied >= 0 andalso Applied =< Slot andalso
         is_map(Projection);
-valid_source({remote, Routes}) when is_list(Routes), Routes =/= [],
-                                    length(Routes) =< ?MAX_VALIDATORS ->
+valid_source({remote, Routes}) when is_list(Routes), Routes =/= [] ->
     quod_foreign_log:valid_route_candidates(Routes);
 valid_source(_) ->
     false.
@@ -1032,8 +1031,7 @@ historical_committee_view(
   #{identity := Target, committee := Committee,
     committee_id := <<_:256>> = CommitteeId, routes := RouteMap})
   when is_list(Committee), Committee =/= [],
-       length(Committee) =< ?MAX_VALIDATORS,
-       is_map(RouteMap), map_size(RouteMap) =< ?MAX_VALIDATORS ->
+       is_map(RouteMap) ->
     Routes = lists:keysort(
                1,
                [{Key, [Endpoint]}
@@ -1067,8 +1065,7 @@ valid_identity_current_view(
   when map_size(View) =:= 5,
        is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64,
        is_list(Committee), Committee =/= [],
-       length(Committee) =< ?MAX_VALIDATORS,
-       is_list(Routes), length(Routes) =< ?MAX_VALIDATORS ->
+       is_list(Routes) ->
     case Committee =:= lists:usort(Committee) andalso
          lists:all(fun valid_key/1, Committee) andalso
          valid_routes(Routes, Committee) of

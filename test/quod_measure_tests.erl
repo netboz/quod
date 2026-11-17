@@ -1,13 +1,12 @@
 -module(quod_measure_tests).
 
-%% The `quod:measure` ontology (priv/ontologies/quod_measure.pl): what a unit
+%% The `quod:gui` ontology (priv/ontologies/gui_measure.pl): what a unit
 %% measures, exact conversion between commensurable units, a sum that refuses to
 %% cross dimensions, prefixes parsed rather than enumerated, and the class view
 %% derived from the relations. No result anywhere is a floating point number.
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
--include("quod_vm_limits.hrl").
 
 signature_test() ->
     with_measure(fun(St) ->
@@ -115,7 +114,7 @@ policy_test() ->
     end).
 
 vocabulary_fits_the_genesis_budget_test() ->
-    Terms = quod_committed_projection:read_terms(source()),
+    Terms = quod_ct:gui_terms(),
     quod_ct:assert_material_admissible(Terms),
     %% no float reaches the committed content
     ?assertNot(lists:any(fun has_float/1, Terms)).
@@ -127,7 +126,6 @@ has_float(_) -> false.
 
 %% --- helpers ---------------------------------------------------------------
 
-source() -> filename:join(code:priv_dir(quod), "ontologies/quod_measure.pl").
 
 holds(Goal, St) -> ?assertMatch({succeed, _}, erlog_int:prove_goal(Goal, St)).
 fails(Goal, St) -> ?assertMatch({fail, _}, erlog_int:prove_goal(Goal, St)).
@@ -144,7 +142,7 @@ with_measure(Fun) ->
 
 with_committed_measure(Extra, Fun) ->
     Base = quod_committed_projection:new_est(),
-    Loaded = load_terms(quod_committed_projection:read_terms(source()), Base),
+    Loaded = load_terms(quod_ct:gui_terms(), Base),
     Committed = quod_ct:commit_kb(load_source(Extra, Loaded)),
     St = quod_erlog_db_local_prove:wrap_state(Committed, #{read_set => true}),
     try Fun(Committed, St)

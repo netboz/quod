@@ -1,0 +1,14 @@
+{
+  "command": [
+    "erlc",
+    "-o",
+    "/tmp/quod-m0-diag",
+    "doc/evidence/godot-m0-20261027/m0_boot_diagnostic.erl"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-27T15:23:45Z",
+  "elapsed_seconds": 2.7859907150268555,
+  "child_exit": 0,
+  "timed_out": false,
+  "error_diagnostics": 0
+}

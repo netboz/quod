@@ -1,0 +1,10 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-vr-text-input-20261101/build.py",
+    "keyboard-final12"
+  ],
+  "exit": 0,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 34.46073429900571
+}

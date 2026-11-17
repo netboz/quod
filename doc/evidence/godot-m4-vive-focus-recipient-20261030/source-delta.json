@@ -1,0 +1,17 @@
+{
+  "existing_changed_sources": {
+    "doc/evidence/godot-m4-vive-retest10-20261030/focus_events.py": {
+      "before_sha256": "bb63ff9db8f3aef231f22043e8336c263afcf52b553c908419ff3e0abdd584e2",
+      "after_sha256": "a7b584c8b137b5617b89a98e57f6f42e895d3247278b4c3de52b595ecbea5889",
+      "added_lines": 82,
+      "removed_lines": 19,
+      "mode": 420
+    }
+  },
+  "production_lines_changed": 0,
+  "new_parallel_observer": false,
+  "remaining_budget_class_unchanged": true,
+  "remaining_budget_class_sha256": "11b28cdaec2b31cbcb7abee50da822c4724d44c127593661a23fb0cd3766b08f",
+  "exact_old_executed_source_preserved": "Accepted case12 snapshot and private before-inputs copy",
+  "changed_behavior": "Existing parser invokes one successor classification after event-anchored owned loss; explicit bindings and shared process identity/budget owners, no persistent recipient registry."
+}

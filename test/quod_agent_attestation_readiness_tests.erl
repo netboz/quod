@@ -436,7 +436,7 @@ with_fixture(Fun) ->
 namespace() -> <<"quod:attestation-wait:", (integer_to_binary(erlang:unique_integer([positive])))/binary>>.
 
 gate_table(Ns, Anchor, Pub, Generation, Fences) ->
-    Tab = binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
+    Tab = binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
     Tab = ets:new(Tab, [named_table, protected, set]),
     true = ets:insert(Tab, [{anchor, Anchor},
         {proof_gate, true, Generation, Fences, Pub, [Pub], <<52:256>>, #{}}]),

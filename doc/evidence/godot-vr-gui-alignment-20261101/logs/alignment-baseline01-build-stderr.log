@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-gui-alignment-20261101/build.py", line 48, in <module>
+    run('export',['python3','client/godot-tools/run.py','--export'],godot=True)
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-vr-gui-alignment-20261101/build.py", line 42, in run
+    r=subprocess.run(check,cwd=cwd,env=env);item['true_exit']=r.returncode;assert r.returncode==0,phase
+                                                                                  ^^^^^^^^^^^^^^^
+AssertionError: export

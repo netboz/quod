@@ -122,7 +122,7 @@ setup() ->
                          #{genesis_hash => ?NETWORK}}, brahms => #{}}),
     Ns = <<"signed-target:",
            (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
-    Table = binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
+    Table = binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
     Table = ets:new(Table, [named_table, public, set]),
     true = ets:insert(Table, {anchor, ?ANCHOR}),
     {ok, Engine} = quod_prolog:start_link(

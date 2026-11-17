@@ -1,0 +1,22 @@
+{
+  "client/godot/SpatialGui.cs": {
+    "copy": "doc/evidence/godot-attention-review-20261102/inputs/before/client/godot/SpatialGui.cs",
+    "sha256": "c4545a220e18290848eb51751bc2e81599d117676b4bfe4a0f500b6dd47bcdd1",
+    "mode": 33188
+  },
+  "client/godot/Main.cs": {
+    "copy": "doc/evidence/godot-attention-review-20261102/inputs/before/client/godot/Main.cs",
+    "sha256": "55a25e21385b391c0eeacfffe666c32906a717513a810efb70a1780d6d11081c",
+    "mode": 33188
+  },
+  "client/godot/QuestionHub.cs": {
+    "copy": "doc/evidence/godot-attention-review-20261102/inputs/before/client/godot/QuestionHub.cs",
+    "sha256": "3ba0656747b51e846c5d5dffaea6468447e396cf879bd5292286aed05a981760",
+    "mode": 33188
+  },
+  "client/godot/README.md": {
+    "copy": "doc/evidence/godot-attention-review-20261102/inputs/before/client/godot/README.md",
+    "sha256": "742733395a91af47224d359b18e1bcfcf7504038134624f01ce23a1b57c33878",
+    "mode": 33188
+  }
+}

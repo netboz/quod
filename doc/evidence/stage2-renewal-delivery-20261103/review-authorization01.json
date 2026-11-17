@@ -1,0 +1,9 @@
+{
+  "question": "Claude has not reviewed this renewal correction. Should I request a Fable review before committing? Your AGENTS.md requires an explicit request for Claude consultations.",
+  "answer": "Review first",
+  "respondedBy": "desktop",
+  "respondedAt": 1793732980535,
+  "provider": "claude-code",
+  "model": "claude-code:fable",
+  "toolScope": "read"
+}

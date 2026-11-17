@@ -1,0 +1,11 @@
+{"kind": "snapshot", "monotonic": 29450.596365701, "utc": "2026-10-30T18:20:16.228919+00:00", "owned": true, "ordered_event_barrier": false}
+M4_FOCUS_EVENT_OBSERVER_READY {"owned_snapshot": true, "protocol_acknowledgement": false, "deadline_monotonic": 31200.260644344}
+{"kind": "transition", "monotonic": 29489.433135162, "utc": "2026-10-30T18:20:55.065914+00:00", "owned": true}
+{"kind": "transition", "monotonic": 30240.440744284, "utc": "2026-10-30T18:33:26.073708+00:00", "owned": false}
+{"kind": "successor_recipient", "event_receive_monotonic": 30240.440744284, "event_receive_utc": "2026-10-30T18:33:26.073708+00:00", "role": "unknown", "validity": "unbound", "lookup_attempted": false, "recipient_not_initiator": true, "monotonic": 30240.441300067, "utc": "2026-10-30T18:33:26.073850+00:00"}
+{"kind": "transition", "monotonic": 30280.537582328, "utc": "2026-10-30T18:34:06.170394+00:00", "owned": true}
+{"kind": "transition", "monotonic": 30281.065589908, "utc": "2026-10-30T18:34:06.698382+00:00", "owned": false}
+{"kind": "transition", "monotonic": 30340.827328068, "utc": "2026-10-30T18:35:06.460122+00:00", "owned": true}
+{"kind": "transition", "monotonic": 30341.339545833, "utc": "2026-10-30T18:35:06.973708+00:00", "owned": false}
+{"kind": "local_subscription_close", "monotonic": 30359.544503193, "utc": "2026-10-30T18:35:25.177101+00:00", "incomplete_line": false}
+<restricted private detail; sha256=7929b5b82562ed8b8a2edbecf72843724a402e1f2abfd3a6ff32e10dc6d3ae43>

@@ -1,0 +1,32 @@
+==> Created host volume quod-node-local[0] with ID 058bd8db-fc2a-e182-d425-41ed60e47bff
+==> 2026-11-06T17:40:54+01:00: Monitoring volume "058bd8db"...
+==> 2026-11-06T17:41:00+01:00: Volume "quod-nod" ready
+volume-0 exit=0
+==> Created host volume quod-node-local[1] with ID 6eda4ece-4ebc-9891-5fbf-f67a613ea3d7
+==> 2026-11-06T17:41:00+01:00: Monitoring volume "6eda4ece"...
+==> 2026-11-06T17:41:09+01:00: Volume "quod-nod" ready
+volume-1 exit=0
+==> Created host volume quod-node-local[2] with ID f6790b89-06bf-53a8-71c5-352d4359e8e8
+==> 2026-11-06T17:41:09+01:00: Monitoring volume "f6790b89"...
+==> 2026-11-06T17:41:16+01:00: Volume "quod-nod" ready
+volume-2 exit=0
+==> Created host volume quod-node-local[3] with ID e73e9d62-c5b8-5415-3600-8578c308587e
+==> 2026-11-06T17:41:16+01:00: Monitoring volume "e73e9d62"...
+==> 2026-11-06T17:41:23+01:00: Volume "quod-nod" ready
+volume-3 exit=0
+==> Created host volume quod-node-local[4] with ID 17731ec7-45d8-f966-f1f2-fff35c524137
+==> 2026-11-06T17:41:23+01:00: Monitoring volume "17731ec7"...
+==> 2026-11-06T17:41:33+01:00: Volume "quod-nod" ready
+volume-4 exit=0
+==> Created host volume quod-node-local[5] with ID fdbbbb8b-38b2-d5cf-efd6-71b65309375e
+==> 2026-11-06T17:41:33+01:00: Monitoring volume "fdbbbb8b"...
+==> 2026-11-06T17:41:39+01:00: Volume "quod-nod" ready
+volume-5 exit=0
+==> Created host volume quod-node-local[6] with ID 7a55385b-b378-86f2-5138-1024369ea219
+==> 2026-11-06T17:41:39+01:00: Monitoring volume "7a55385b"...
+==> 2026-11-06T17:41:47+01:00: Volume "quod-nod" ready
+volume-6 exit=0
+==> Created host volume quod-node-local[7] with ID ef834902-06bd-7bb8-a429-e1d1725942df
+==> 2026-11-06T17:41:47+01:00: Monitoring volume "ef834902"...
+==> 2026-11-06T17:41:53+01:00: Volume "quod-nod" ready
+volume-7 exit=0

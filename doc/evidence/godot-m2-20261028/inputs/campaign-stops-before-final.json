@@ -1,0 +1,82 @@
+{
+  "receipts": [
+    {
+      "receipt": "production03-campaign.json",
+      "sha256": "de09634d6c98de0c4a43e7b97cc84a6fb62f3f82575f266f1fb301a578aebb2f",
+      "passed": false,
+      "failure": "Failed production03-m2",
+      "unrun": [
+        "production03-m1"
+      ],
+      "server_child_exit": 0
+    },
+    {
+      "receipt": "production04-campaign.json",
+      "sha256": "639425f8fb12d5316302d038e4dbaffa468343350b6326e62ed6c92afea0f5bb",
+      "passed": false,
+      "failure": "Failed production04-m2",
+      "unrun": [
+        "production04-m1"
+      ],
+      "server_child_exit": 0
+    },
+    {
+      "receipt": "production05-campaign.json",
+      "sha256": "110428d4afa258ea9172bbfee68f1fab8b8e541c9fcf3327fa5641226d40e05a",
+      "passed": false,
+      "failure": "Failed production05-m2",
+      "unrun": [
+        "production05-m1"
+      ],
+      "server_child_exit": 0
+    },
+    {
+      "receipt": "production06-campaign.json",
+      "sha256": "0f5982a6caabc6a5a70e9f00e1f1c937a32b406b439cedb9041447f682e059c7",
+      "passed": false,
+      "failure": "Failed production06-m2",
+      "unrun": [
+        "production06-m1"
+      ],
+      "server_child_exit": 0
+    },
+    {
+      "receipt": "production07-campaign.json",
+      "sha256": "0b0efe1e554f35604dd917bf036bbdf05dc8fa6a2ae725cde074baaf28c2ce36",
+      "passed": false,
+      "failure": "Failed production07-m2",
+      "unrun": [
+        "production07-m1"
+      ],
+      "server_child_exit": 0
+    },
+    {
+      "receipt": "production08-campaign.json",
+      "sha256": "b0b99f82d5e9cf4cac953807568c0ee676d0d2a3ce90c5685131a1658609f5bc",
+      "passed": false,
+      "failure": "Failed production08-m2",
+      "unrun": [
+        "production08-m1"
+      ],
+      "server_child_exit": 0
+    },
+    {
+      "receipt": "production09-campaign.json",
+      "sha256": "bf9796270b34bc6d5d04a8aa9742a08f64d42ec862f30257b96e98d3b8c43470",
+      "passed": true,
+      "failure": null,
+      "unrun": [],
+      "server_child_exit": 0
+    },
+    {
+      "receipt": "production10-campaign.json",
+      "sha256": "d99f1afc271fd318f620c0ed4d9fc6a81dd4bb05b8140997b4714d5da9d9fd99",
+      "passed": true,
+      "failure": null,
+      "unrun": [],
+      "server_child_exit": 0
+    }
+  ],
+  "unknown_lifetimes": "Earlier resumed fixture handles have no true child exit; see resumption-stop.md. They are never inferred zero.",
+  "note": "No failed campaign is resumed or replaced. Later labels qualify explicit corrections."
+}

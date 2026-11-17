@@ -1,0 +1,6 @@
+controller_view(0,<<"\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\">>,mapping(1,[role(navigation,hand(left)),role(menu,hand(right))],[
+    bind(select,any,trigger,press_release,local(select)),
+    bind(menu,menu,pad,radial(240),local(menu)),
+    bind(drive,navigation,pad,axes_while(grip),control(drive)),
+    bind(snap,navigation,pad,sector(horizontal,500,grip),control(snap)),
+    bind(teleport,navigation,pad,sector(forward,500,grip),control(teleport(500)))],[profile(htc_vive_controller,controller([<<"htc-vive">>],[component(trigger,<<"xr-standard-trigger">>,trigger,[press,value]),component(grip,<<"xr-standard-squeeze">>,squeeze,[press]),component(pad,<<"xr-standard-touchpad">>,touchpad,[press,touch,axes2])],[target_ray,grip],tracked_model(grip,asset(<<"bd201855c8114b9b0e9cdd465d6f08413d18604894c839fb78d54d890c2adc94">>,<<"gltf2-static-v1">>,bounds(-59,-70,-117,59,23,106),resources(1114152,665696,17551,17344,37,1,4194304)))))]))

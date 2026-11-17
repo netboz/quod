@@ -1,0 +1,14 @@
+{
+  "command": [
+    "nomad",
+    "alloc",
+    "exec",
+    "-task",
+    "quod",
+    "e9a938d4-300c-a5b2-b225-17e08b92c477",
+    "cat",
+    "/quod/data/client_tls.crt"
+  ],
+  "child_exit": 1,
+  "stderr": "cat: /quod/data/client_tls.crt: No such file or directory\n"
+}

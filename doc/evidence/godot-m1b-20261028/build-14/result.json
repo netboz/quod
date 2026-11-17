@@ -1,0 +1,13 @@
+{
+  "command": [
+    "env",
+    "NUGET_PACKAGES=/tmp/quod-godot-m1b-nuget",
+    "dotnet",
+    "build",
+    "client/godot/Quod.csproj",
+    "--no-restore"
+  ],
+  "exit": 1,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 4.433557101001497
+}

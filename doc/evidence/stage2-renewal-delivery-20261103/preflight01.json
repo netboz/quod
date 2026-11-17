@@ -1,0 +1,18 @@
+{
+  "_build/default/lib/erlog/src/erlog_int.erl": {
+    "before": "3d24510c60da34323a9bc02ed2fea8fbee4bf9e2c1426fd35b8c233069b8ed0c",
+    "after": "bc15ba1b92616bb2ceff70ffae5fa22a8000bd482f422ebb289d2335656e6f33"
+  },
+  "src/quod_committed_projection.erl": {
+    "before": "7bf344a53737254e18753379ed7b263601eea31447b55ad2b0a38df5dc188013",
+    "after": "fa9fc27627799207cb94b559a80b08fa674e4b3059f18ddd0ebacd0ee886dbb7"
+  },
+  "src/quod_erlog_db_local_prove.erl": {
+    "before": "795b5b57960d6584a43fd2858b6e1e99927b8228b4641f4aeba0340f97ee5684",
+    "after": "88141b0b5cf41a4aa2796105a4dd552c1661e8ff04d9a0723d6df1382480ce54"
+  },
+  "test/quod_ask_tests.erl": {
+    "before": "4f47563a5e8981dd957c80a15a5134b95535010bd876ba6b56c0e080496306a8",
+    "after": "745ded56f5d95fef549b4f92173fb8b6fbe6b9e12822ffdad58018b361ee810e"
+  }
+}

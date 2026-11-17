@@ -1,0 +1,12 @@
+--- actual-failed01/freeze_hashes.py
++++ corrected02/freeze_hashes.py
+@@ -17,3 +17,9 @@
+     SOURCES.append((b/name,snapshot['artifacts'][name]['sha256']))
+ SOURCES.append((TASK/'cache/coordinator-focus-recipient-final97-hashes.json',
+     '0065dc5bf54f6ac04dd5d50e8f988189f8a9fec6b15962346976ff0ace1aa8f1'))
++# Failed01 remains unaccepted. These exact producer caches bind only byte
++# custody and actual link-only transitions, independently checked against the
++# unchanged accepted97 source and the actual partial materialization.
++failed=TASK/'artifacts/quod-godot-m4-vive-focus13-handoff-ca84d4f8-20261030-01'
++SOURCES.append((failed/'pre-reconstruction-digests.json','719479ab84e106122693ba687743d0c1ba9d3c6ec0cbe9f0cbb3db3189a662a3'))
++SOURCES.append((failed/'source-link-transition-digests.json','b6ef72546b2b8ba08d7885e5082c8183d27a0c68471d17f81b943bf7dbda6378'))

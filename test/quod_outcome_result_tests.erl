@@ -101,8 +101,8 @@ creation_terms() ->
       "isa(<<\"fixture\">>,<<\"thing\">>). "
       "pool(<<\"fixture\">>,<<\"place\">>,<<\"neutral\">>,listed). "
       "listed(<<\"fixture\">>,<<\"place\">>,<<\"neutral\">>,[<<\"Harbor\">>]). "
-      "constructor(artifact,I,_) :- assertz(initialized(I)), trigger_event(built(I)). "
       "create_result(R) :- assert(instance_of(artifact,I)), "
+      "assertz(initialized(I)), trigger_event(built(I)), "
       "current_ontology_identity(N,A), R = entity_ref(N,A,I), assertz(created(R))."),
     quod_prolog:read_terms(filename:join(code:priv_dir(quod), "ontologies/quod_names.pl")) ++ Terms.
 

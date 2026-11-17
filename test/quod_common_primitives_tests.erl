@@ -6,8 +6,8 @@
 %% and the contexts where it must refuse (no proof, verdict engines).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("retired_remaining_sizes.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
--include("quod_vm_limits.hrl").
 
 -define(NS, <<"test:primitives">>).
 -define(DRAW, '$quod_draw').
@@ -192,6 +192,27 @@ filtered_source_uses_the_same_chunker_and_records_absence_test() ->
         ?assertEqual({source_chunk, done, <<"route_status(live, unavailable).\n">>},
             value({'Chunk'}, {'$quod_source_chunk',
                 {terms, [{route_status, live, unavailable}]}, 4096, {'Chunk'}}, St))
+    end).
+
+shared_framework_source_keeps_local_edit_semantics_test() ->
+    with_authored([], fun(St) ->
+        %% Framework availability does not install an application API or state.
+        ?assertMatch([_], authored({gui_compile, 6}, St)),
+        [BodySchema] = authored({physics_valid_body, 6}, St),
+        ?assertMatch({fail,_},erlog_int:prove_goal({physics_world_position,
+            {':',foreign_geometry,{vector,1,2,3}}},St)),
+        [?assertEqual([], authored(F, St)) || F <-
+            [{ontology_interface, 2}, {gui_question, 6}, {can_invoke, 4},
+             {physics_space, 3}, {physics_body_definition, 6}]],
+        ?assertEqual([], quod_erlog_db_local_prove:get_local_changes(db_ref(St))),
+        %% Source edits use the same local overlay as every common predicate;
+        %% they cannot mutate a different owner or the retained base snapshot.
+        {succeed, Edited} = erlog_int:prove_goal({'$quod_retract_exact', BodySchema}, St),
+        ?assertEqual([], authored({physics_valid_body, 6}, Edited)),
+        ?assertEqual([BodySchema], authored({physics_valid_body, 6}, St)),
+        with_authored([], fun(Other) ->
+            ?assertEqual([BodySchema], authored({physics_valid_body, 6}, Other))
+        end)
     end).
 
 authored_clauses_hide_followers_and_preserve_scope_test() ->
@@ -385,7 +406,7 @@ program_source_does_not_allocate_callable_or_data_atoms_test() ->
 program_source_large_draft_still_allocates_no_atoms_test() ->
     Suffix = integer_to_binary(erlang:unique_integer([positive, monotonic])),
     Names = [<<"quod_edit_budget_", Suffix/binary, "_", (integer_to_binary(N))/binary>>
-             || N <- lists:seq(1, ?QUOD_MAX_NEW_MATERIAL_ATOMS + 1)],
+             || N <- lists:seq(1, ?LEGACY_QUOD_MAX_NEW_MATERIAL_ATOMS + 1)],
     Text = iolist_to_binary([[Name, ".\n"] || Name <- Names]),
     with_authored([], fun(St) ->
         Clauses = value({'Program'}, {'$quod_program_source', {'Program'}, Text}, St),

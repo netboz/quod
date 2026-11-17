@@ -1,0 +1,14 @@
+--- client/godot/tests/ExportChecks.cs before
+
++++ client/godot/tests/ExportChecks.cs
+
+@@ -101,8 +101,6 @@
+
+             if (phase.StartsWith("m2-")) { await SpaceCreation(phase, original); return; }
+             if (phase == "closing") {
+                 await Press("inspect");
+-                var source = app.FindChild("source-tools", true, false) as SourcePanel ?? throw new Exception("Source tools");
+-                source.Inspect(JsonSerializer.Deserialize<Actor>(original["human"]!.ToJsonString())!, true);
+                 await app.CloseApplication();
+                 Check(SignedView.LiveSockets == 0, "normal application close awaits opening consumer disposal");
+                 using var reopened = new LocalStore(profile);

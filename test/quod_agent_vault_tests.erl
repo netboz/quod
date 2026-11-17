@@ -270,9 +270,13 @@ initial_preparation_requires_exact_committed_pure_policy_test() ->
             {<<"agents">>, <<3:256>>}, quod_time:mono_ms() + 5000, Caller, Evidence),
         try
             Goal = {prepare_agent_key_custody, AgentRef, none, 0, NodeRef, {'Key'}},
-            Grant = {can_prepare_agent_key, CallerRef, worker, none, 0, NodeRef},
+            GrantHead = {can_prepare_agent_key, CallerRef, worker, none, 0, NodeRef},
+            GrantBody = {',', {'\\+', {agent_host, worker, {'_'}, {'_'}, {'_'}}},
+                              {'\\+', {agent_key, worker, {'_'}, {'_'}}}},
+            Grant = {':-', GrantHead, GrantBody},
             ?assertEqual(fail, signing_proof([], true, Goal)),
-            ?assertEqual(fail, signing_proof([setelement(2, Grant, NodeRef)], true, Goal)),
+            ?assertEqual(fail, signing_proof(
+                [{':-', setelement(2, GrantHead, NodeRef), GrantBody}], true, Goal)),
             ?assertEqual(fail, signing_proof([Grant], true, setelement(5, Goal, CallerRef))),
             [?assertEqual(fail, signing_proof([Grant, Occupied], true, Goal)) || Occupied <-
                 [{agent_host, worker, NodeRef, 1, <<1:256>>},
@@ -307,6 +311,30 @@ initial_preparation_requires_exact_committed_pure_policy_test() ->
                 [{agent_host, 4}, {agent_key, 3}, {can_prepare_agent_key, 5}]],
             ?assert(lists:member({prepare_agent_key_custody, 5}, Bridges)),
             ?assertEqual({ok, #{'Key' => Key}}, signing_proof([Grant], true, Goal)),
+            #{identity := Executor} = quod_ct:signed_goal_fixture(#{}),
+            Options = #{signer => Executor},
+            ReceiptGoal = erlang:append_element(Goal, {'Receipt'}),
+            {ok, #{'Key' := Key, 'Receipt' := Receipt}} =
+                signing_proof([Grant], true, ReceiptGoal, Options),
+            Verify = {prepared_agent_key_custody,AgentRef,none,0,NodeRef,Key,Receipt},
+            %% The portable receipt is an immutable proof input. Its check
+            %% needs no vault access and records no live-observation bridge.
+            ?assertEqual({{ok,#{}},#{},[]}, signing_proof([], false, Verify,
+                Options#{dependencies => true})),
+            [?assertEqual(fail,signing_proof([],false,Bad,Options)) || Bad <-
+                [setelement(2,Verify,setelement(4,AgentRef,other)),
+                 setelement(3,Verify,NodeRef),setelement(4,Verify,1),
+                 setelement(5,Verify,CallerRef),setelement(6,Verify,<<1:256>>),
+                 setelement(7,Verify,<<0:512>>)]],
+            #{identity := OtherExecutor} = quod_ct:signed_goal_fixture(#{}),
+            ?assertEqual(fail,signing_proof([],false,Verify,#{signer=>OtherExecutor})),
+            ?assertEqual(fail,signing_proof([],false,Verify,
+                Options#{identity=>{<<"foreign">>,<<3:256>>}})),
+            %% Even a lost vault cannot turn verification into request-time
+            %% repair. Assignment policy remains separate from this evidence.
+            ok = gen_server:stop(quod_reg:where({agent_vault,node})),
+            ?assertEqual({ok,#{}},signing_proof([],false,Verify,Options)),
+            {ok,_} = quod_agent_vault:start_link(Config),
             ?assertEqual(fail, signing_proof([], true, Goal)),
             %% Read preparation confers no assignment or active-key facts.
             ?assertEqual(fail, signing_proof([Grant], true, {agent_host, worker, {'_'}, {'_'}, {'_'}})),
@@ -386,7 +414,7 @@ wrong_unlock_and_corrupt_ciphertext_fail_closed_test() ->
         ?assertEqual({error, invalid_vault_key}, sign(Request))
     end).
 
-governed_signing_requires_committed_host_key_and_read_only_session_test() ->
+signing_bridge_preserves_frame_and_encoding_test() ->
     with_vault(fun(_Config, Ref, Request0) ->
         {ok, Pub} = quod_agent_vault:prepare(Ref, 0),
         {ok, AgentRef} = quod_agent_ref:materialize(Ref),
@@ -403,10 +431,11 @@ governed_signing_requires_committed_host_key_and_read_only_session_test() ->
                      maps:get(operation_id, Request), maps:get(not_after_ms, Request),
                      execute, 2, <<"true.">>},
             Goal = {sign_agent_request, Typed, {'Signature'}},
-            Grant = {can_request_agent_signature, NodeRef, worker, Typed},
-            Host = {agent_host, worker, NodeRef, 1, Pub},
-            Key = {agent_key, worker, Pub, active},
-            Facts = [Grant, Host, Key],
+            %% This local class supplies a deliberately simple exact grant;
+            %% hosted-key policy is covered through the real foreign class owner.
+            ClassFacts = [{isa, signing_test, thing}, {instance_of, signing_test, worker}],
+            Grant = {can_sign_agent_request, NodeRef, NodeRef, Typed},
+            Facts = [Grant | ClassFacts],
             {ok, Bindings} = signing_proof(Facts, true, Goal),
             {ok, Bytes} = quod_client_goal:encode(Request),
             ?assert(quod_identity:verify(maps:get('Signature', Bindings), Bytes, Pub)),
@@ -415,7 +444,7 @@ governed_signing_requires_committed_host_key_and_read_only_session_test() ->
             {{ok, #{'Bytes' := Bytes}}, _, []} = signing_proof([], false,
                 {',', {agent_request_bytes, Typed, {'Bytes'}},
                  {assertz, {completion_intent, {'Bytes'}}}}, #{dependencies => true}),
-            ?assertEqual(fail, signing_proof([Host, Key], true, Goal)),
+            ?assertEqual(fail, signing_proof(ClassFacts, true, Goal)),
             %% A foreign ontology's permissive policy cannot release another
             %% ontology's custody, even when it pins the same bridge module.
             ?assertEqual({error, {erlog, {context_violation, sign_agent_request, query, foreign_scope}}},
@@ -428,18 +457,15 @@ governed_signing_requires_committed_host_key_and_read_only_session_test() ->
                 identity => {<<"agents">>, <<4:256>>}})),
             ?assertEqual(fail, signing_proof(Facts, true,
               {sign_agent_request, setelement(10, Typed, <<"assertz(unapproved).">>), {'Signature'}})),
-            ?assertEqual({error, {erlog, invalid_signing_policy}}, signing_proof([], true, Goal,
+            ?assertEqual({error, {erlog, invalid_signing_policy}}, signing_proof(ClassFacts, true, Goal,
               #{source => <<"can_sign_agent_request(_,_,_) :- binary_codes(42,_).">>})),
             ?assertEqual({error, deadline_exceeded},
               quod_agent_vault:sign(Request, quod_time:mono_ms() - 1)),
-            ?assertEqual(fail, signing_proof([Grant, Host, setelement(4, Key, revoked)], true, Goal)),
-            ?assertEqual(fail, signing_proof([Grant, Host, setelement(4, Key, staged)], true, Goal)),
-            ?assertEqual(fail, signing_proof([Grant, setelement(3, Host, other_host), Key], true, Goal)),
             ?assertEqual({error, {erlog, {context_violation, sign_agent_request, query, write_proof}}},
                          signing_proof(Facts, false, Goal)),
             StagedGrant = {',', {assertz, Grant}, {'$quod_state_check', Goal}},
             ?assertEqual({error, {erlog, {context_violation, sign_agent_request, query, write_proof}}},
-                         signing_proof([Host, Key], false, StagedGrant)),
+                         signing_proof(ClassFacts, false, StagedGrant)),
             ?assertMatch({error, {erlog, {domain_error, agent_request, _}}}, signing_proof(Facts, true,
               {sign_agent_request, setelement(4, Typed, <<"different_agent.">>), {'Signature'}})),
             ?assertMatch({error, {erlog, {domain_error, agent_request, <<"arbitrary bytes">>}}}, signing_proof(Facts, true,
@@ -482,13 +508,18 @@ custody_and_signing_through_signed_ingress_and_foreign_scope_test() ->
           quod_ct:signed_agent_facts(Fixture) ++
           [{can_invoke, {'Goal'}, NodeRef, {'Chain'}, NodeNs}]),
         Source = filename:join(code:priv_dir(quod), "ontologies/agent_instance.pl"),
+        ClassOwner = start_engine(<<"quod:agent">>, <<6:256>>, maps:get(identity, Fixture), [],
+          quod_prolog:genesis_diff(filename:join(code:priv_dir(quod), "ontologies/quod_agent.pl")), []),
         Actor = start_engine(<<"agents">>, <<3:256>>, maps:get(identity, Fixture), [quod_agent_predicates],
           quod_prolog:genesis_diff(Source),
-          [{agent_host, worker, NodeRef, 1, Pub}, {agent_key, worker, Pub, active},
+          [{instance_of, {':', quod, {':', agent, agent}}, worker},
+           {agent_host, worker, NodeRef, 1, Pub}, {agent_key, worker, Pub, active},
            {can_request_agent_signature, NodeRef, worker, Typed},
            {initial_agent, setelement(4, AgentRef, first_agent)},
            {custody_destination, NodeRef},
-           {can_prepare_agent_key, NodeRef, first_agent, none, 0, NodeRef},
+           {':-', {can_prepare_agent_key, NodeRef, first_agent, none, 0, NodeRef},
+            {',', {'\\+', {agent_host, first_agent, {'_'}, {'_'}, {'_'}}},
+                  {'\\+', {agent_key, first_agent, {'_'}, {'_'}}}}},
            {signing_request, Typed},
            {can_invoke, {'Goal'}, NodeRef, {'Chain'}, <<"agents">>}]),
         try
@@ -527,7 +558,8 @@ custody_and_signing_through_signed_ingress_and_foreign_scope_test() ->
               quod_client_goal_ingress:submit(maps:get(request_bytes, Fixture),
                                                maps:get(signature, Fixture), NodeKey))
         after
-            stop_engine(Actor), stop_engine(Node), gen_server:stop(Auth), gen_server:stop(Router),
+            stop_engine(Actor), stop_engine(ClassOwner), stop_engine(Node),
+            gen_server:stop(Auth), gen_server:stop(Router),
             case PreviousKey of
                 undefined -> application:unset_env(quod, node_pubkey);
                 {ok, OldKey} -> application:set_env(quod, node_pubkey, OldKey)
@@ -540,7 +572,7 @@ custody_and_signing_through_signed_ingress_and_foreign_scope_test() ->
     end).
 
 start_engine(Ns, Anchor, Identity = #{pubkey := PublicKey}, Modules, Diff, Facts) ->
-    Table = binary_to_atom(<<"quod_simplex_genesis_", Ns/binary>>, utf8),
+    Table = binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
     Table = ets:new(Table, [named_table, set]),
     true = ets:insert(Table, {anchor, Anchor}),
     true = ets:insert(Table, {proof_gate, true, 1, [], PublicKey, [PublicKey], <<9:256>>, #{}}),
@@ -562,7 +594,8 @@ signing_proof(Facts, ReadOnly, Goal) -> signing_proof(Facts, ReadOnly, Goal, #{}
 signing_proof(Facts, ReadOnly, Goal, Options) ->
     {ok, DefaultSource} = file:read_file(filename:join(code:priv_dir(quod), "ontologies/agent_instance.pl")),
     KB = quod_ct:action_kb(maps:get(source, Options, DefaultSource), [quod_agent_predicates], Facts),
-    Session = quod_proof_session:start(KB, #{read_set => true, read_only => ReadOnly}),
+    Session = quod_proof_session:start(KB, #{read_set => true, read_only => ReadOnly,
+                                           signer => maps:get(signer,Options,none)}),
     Id = crypto:strong_rand_bytes(16),
     {Ns, _} = Identity = maps:get(identity, Options, {<<"agents">>, <<3:256>>}),
     Context = case maps:get(kind, Options, proof) of

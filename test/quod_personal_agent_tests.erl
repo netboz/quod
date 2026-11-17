@@ -1,7 +1,148 @@
 -module(quod_personal_agent_tests).
 -include_lib("eunit/include/eunit.hrl").
 -export([with_personal/2, instruction/2, instruct/3, lookup/2, session/1,
-         request/3, await_result/3, await_runtime_ready/1]).
+         request/3, session/2, await_result/3, await_runtime_ready/1, user_terms/0]).
+
+signup_terms_only_test_() ->
+    {timeout, 60, fun() ->
+        Pair = {Key, _} = quod_identity:generate(),
+        quod_agent_hosting_tests:with_host(fun(Ctx = #{node := Node, directory := Dir, identity := Identity}) ->
+            Pins = [{agent_vocabulary, <<"quod:agent">>, <<1:256>>},
+                {gui_vocabulary, <<"quod:gui">>, <<2:256>>},
+                {measure_vocabulary, <<"quod:gui">>, <<2:256>>},
+                {rendering_vocabulary, <<"quod:gui">>, <<2:256>>},
+                {modelling_vocabulary, <<"quod:gui">>, <<2:256>>},
+                {controllers_vocabulary, <<"quod:controllers">>, <<3:256>>},
+                {space_vocabulary, <<"quod:space">>, <<4:256>>}],
+            Source = quod_prolog:read_terms("priv/ontologies/quod_user.pl"),
+            Owner = quod_agent_hosting_tests:start_ontology(<<"quod:user">>, Dir, Identity, [],
+                Source ++ Pins ++ [{signup_host, Node}]),
+            try
+                Anchor = quod_simplex:genesis_hash(<<"quod:user">>),
+                Principal = {agent_instance_ref, <<"quod:user">>, Anchor, {signup, Key}},
+                Applicant = Ctx#{human => Principal, human_pair => Pair},
+                Token = <<0:256>>, Name = <<"human:", (binary:copy(<<"A">>, 43))/binary>>,
+                %% Clause variables are independent across the authored facts.
+                {Policy, _} = lists:mapfoldl(fun(Clause, N) ->
+                    {Copy, _, Next} = erlog_int:term_instance(Clause, N), {Copy, Next}
+                end, 0, [Clause || {account_policy_clause, Clause} <- Source]),
+                Facts = [{user_namespace, Name},
+                    {instance_of, {':',quod,{':',user,human_user}}, me},
+                    {instance_of, {':',quod,{':',user,personal_agent}}, personal},
+                    {agent_key, me, Key, active}] ++ Pins ++
+                    [{account_setup, me, {pending, account}}, {hosting_node, Node},
+                     {signup_origin, <<"quod:user">>, Anchor, Token},
+                     {instance_of, {':',quod,{':',gui,hud}}, my_hud},
+                     {hud_allowance, my_hud, 12}, {gui_pending_allowance, me, 8},
+                     {entity_scene, personal, playing, hidden}, {entity_scene, personal, edition, hidden}],
+                Options = [{terms, Facts ++ Policy}, {external_predicate_modules, [quod_agent_predicates]}],
+                Check = fun(O) -> submit(request(Applicant, read,
+                    {ontology_creation_allowed, Principal, Name, O})) end,
+                ?assertMatch({ok, _, {normalized, {read, _, {answers, _, [_]}}}}, Check(Options)),
+                [First | Rest] = Policy,
+                {':-', {can_invoke, Goal, Actor, Chain, Ns}, Body} = First,
+                Narrowed = {':-', {can_invoke, fixed_goal, Actor, Chain, Ns}, Body},
+                ?assertMatch({_}, Goal),
+                Invalid = [
+                    [{terms, Facts ++ [Narrowed | Rest]}, {external_predicate_modules, [quod_agent_predicates]}],
+                    [{terms, Facts ++ Policy ++ [{can_invoke, {'_'}, {'_'}, {'_'}, {'_'}}]},
+                     {external_predicate_modules, [quod_agent_predicates]}],
+                    [{source_file, <<"user_instance.pl">>} | Options],
+                    [{terms, lists:delete({hud_allowance, my_hud, 12}, Facts) ++ Policy},
+                     {external_predicate_modules, [quod_agent_predicates]}]],
+                [?assertMatch({ok, _, {normalized, {read, _, {failed, _}}}}, Check(O)) || O <- Invalid],
+                %% The same authored clauses must pass the actual creation
+                %% boundary, not only the Prolog policy check above.
+                ?assertMatch({ok, _}, quod_ontology:validate_action({create_ontology, Name, Options}))
+            after quod_agent_hosting_tests:stop_ontology(Owner) end
+        end, [])
+    end}.
+
+class_owner_setup_form_test_() ->
+    {timeout, 90, fun() ->
+        Pair = {HumanKey, _} = quod_identity:generate(),
+        Sources = user_terms(),
+        quod_agent_hosting_tests:with_host(fun(Ctx = #{namespace := Ns, node := Node,
+                directory := Dir, identity := Identity}) ->
+            Owners = [quod_agent_hosting_tests:start_ontology(Owner, Dir, Identity, [], Terms)
+                || {Owner, Terms} <- [
+                    {<<"quod:user">>, quod_prolog:read_terms("priv/ontologies/quod_user.pl")},
+                    {<<"quod:space">>, quod_prolog:read_terms("priv/ontologies/quod_space.pl")},
+                    {<<"quod:names">>, quod_prolog:read_terms("priv/ontologies/quod_names.pl")},
+                    {<<"quod:gui">>, quod_ct:gui_terms()}]],
+            try
+                Anchor = quod_simplex:genesis_hash(Ns),
+                Human = {agent_instance_ref, Ns, Anchor, me},
+                Agent = {agent_instance_ref, Ns, Anchor, personal},
+                Subject = {entity_ref, Ns, Anchor, me},
+                User = Ctx#{human => Human, human_pair => Pair},
+                UA = quod_simplex:genesis_hash(<<"quod:user">>),
+                GA = quod_simplex:genesis_hash(<<"quod:gui">>),
+                SA = quod_simplex:genesis_hash(<<"quod:space">>),
+                AA = quod_simplex:genesis_hash(<<"quod:agent">>),
+                Pins = [{agent_vocabulary, <<"quod:agent">>, AA},
+                    {gui_vocabulary, <<"quod:gui">>, GA}, {measure_vocabulary, <<"quod:gui">>, GA},
+                    {rendering_vocabulary, <<"quod:gui">>, GA}, {modelling_vocabulary, <<"quod:gui">>, GA},
+                    {controllers_vocabulary, <<"quod:controllers">>, <<17:256>>},
+                    {space_vocabulary, <<"quod:space">>, SA}],
+                Token = crypto:strong_rand_bytes(32),
+                ReceiptRow = {enrollment_receipt, HumanKey, Token, Human},
+                [begin {ok, _, _} = quod_prolog:execute(Store, {assertz, Row}) end || {Store, Row} <-
+                    [{Ns, Row} || Row <- Pins ++ [{hosting_node, Node}, {user_namespace, Ns},
+                        {account_setup, me, {pending, account}}, {signup_origin, <<"quod:user">>, UA, Token}]] ++
+                    [{<<"quod:space">>, {measure_vocabulary, <<"quod:gui">>, GA}},
+                     {<<"quod:space">>, {modelling_vocabulary, <<"quod:gui">>, GA}},
+                     {<<"quod:user">>, {gui_vocabulary, <<"quod:gui">>, GA}},
+                     {<<"quod:user">>, ReceiptRow}]],
+                Read = fun(G) ->
+                    case submit(request(User, read, G)) of
+                        {ok, _, {normalized, {read, _, {answers, _, [Answer]}}}} ->
+                            {_, Variables, _} = erlog_int:term_instance(G, 0),
+                            {Index} = orddict:fetch('V', Variables),
+                            Name = <<"V", (integer_to_binary(Index))/binary>>,
+                            {ok, Bindings} = quod_client_result:decode_binding(Answer),
+                            proplists:get_value(Name, Bindings);
+                        {ok, _, {normalized, {read, _, {failed, Encoded}}}} ->
+                            {ok, Reasons} = quod_wire_term:decode_failure_reasons(Encoded),
+                            error({read_failed, G, Reasons});
+                        Other -> error({read_failed, G, Other})
+                    end
+                end,
+                {prepared, {ontology_ref, Ns, Anchor}, Node, {prepared_key, Key, Receipt}} =
+                    Read({'::', <<"quod:user">>, {account_setup_preparation, {'V'}}}),
+                {operation_view, setup, Subject, Revision, _, _, _, Control, _, _} =
+                    Read({gui_operation_view, Subject, setup, {'V'}}),
+                Setup = fun(R) -> {gui_operation, Subject, setup, Revision, Control,
+                    [{field, setup_key, Key}, {field, setup_receipt, R}], {'V'}} end,
+                Unchanged = fun() ->
+                    ?assertEqual({pending, {ontology_ref, Ns, Anchor}},
+                        Read({'::', <<"quod:user">>, {account_setup_state, {'V'}}})),
+                    ?assertEqual([], Read({findall, {'S'},
+                        {instance_of, {':', quod, {':', space, space}}, {'S'}}, {'V'}})),
+                    ?assertEqual([], Read({findall, {'K'}, {agent_key, personal, {'K'}, active}, {'V'}})),
+                    ?assertEqual(unplaced, Read({'::', <<"quod:space">>,
+                        {space_location, {entity_ref, Ns, Anchor, personal}, {'V'}}}))
+                end,
+                ?assertMatch({ok, _, {normalized, {failed, _}}},
+                    submit(request(User, execute, Setup(crypto:strong_rand_bytes(64))))),
+                Unchanged(),
+                {ok, _, _} = quod_prolog:execute(<<"quod:user">>, {retract, ReceiptRow}),
+                ?assertMatch({ok, _, {normalized, {failed, _}}}, submit(request(User, execute, Setup(Receipt)))),
+                Unchanged(),
+                {ok, _, _} = quod_prolog:execute(<<"quod:user">>, {assertz, ReceiptRow}),
+                {ok, Evidence, {normalized, {committed, [Binding], _}}} = submit(request(User, execute, Setup(Receipt))),
+                {ok, [{_, [{result, setup, Result = {account, Human, Agent, Space, _, Key, _}}]}]} =
+                    quod_client_result:decode_binding(Binding),
+                ?assertMatch(#{operation_state := terminal},
+                    quod_ct:await_operation_complete(Ns, quod_client_goal:operation_ref(Evidence), 10000)),
+                ?assertEqual(Result, Read({'::', <<"quod:user">>, {account_setup_state, {'V'}}})),
+                ?assertEqual({navigation, 1, {placed, Space, {transform, 0,0,0,0,0,0}}, [playing, edition]},
+                    Read({'::', <<"quod:user">>, {account_navigation, {'V'}}})),
+                ?assertEqual([], Read({findall, {'T'}, {signup_origin, {'_'}, {'_'}, {'T'}}, {'V'}})),
+                ?assertEqual([], Read({findall, true, {current_predicate, {'/', setup_account, 4}}, {'V'}}))
+            after [quod_agent_hosting_tests:stop_ontology(Sup) || Sup <- lists:reverse(Owners)] end
+        end, Sources ++ [{instance_of, {':', quod, {':', user, human_user}}, me}, {agent_key, me, HumanKey, active}])
+    end}.
 
 immediate_instruction_uses_distinct_actor_test_() ->
     {timeout, 60, fun() -> with_personal(fun exercise/1) end}.
@@ -46,7 +187,7 @@ retained_but_unsubmitted_instruction_is_not_replayed_test_() ->
         %% Interrupt at the custody/dispatch handoff: commit the exact same
         %% association as the actor, without submitting its target request.
         {StoreInstruction, StoreBytes} = instruction(Ctx,
-            {retain_personal_instruction, UBytes, USig, Signature}),
+            {'::', <<"quod:user">>, {retain_personal_instruction, UBytes, USig, Signature}}),
         {_, StoreSig} = admitted(StoreInstruction),
         ?assertMatch({ok, _, {normalized, {committed, _, _}}}, submit({StoreBytes, StoreSig})),
         %% Verified authority fields do not freeze U's grant. A later revocation
@@ -133,7 +274,7 @@ admitted(Instruction) ->
 lookup(Ctx, Bytes) ->
     {ok, #{request := #{operation_id := Id}}} = quod_client_goal:request_identity(Bytes),
     instruct(Ctx, resolve, request(Ctx, read,
-        {personal_instruction_lookup, Id, {'Bytes'}, {'Signature'}})).
+        {'::', <<"quod:user">>, {personal_instruction_lookup, Id, {'Bytes'}, {'Signature'}}})).
 
 unavailable_actor_does_not_dispatch_on_restart_test_() ->
     {timeout, 60, fun() -> with_personal(fun(Ctx = #{namespace := Ns, agent := Agent}) ->
@@ -194,17 +335,17 @@ another_human_cannot_read_or_sign_the_instruction_test_() ->
         {Instruction, Bytes} = instruction(Ctx, {assertz, private_work}),
         ?assertMatch({ok, _, {normalized, {committed, _, _}}}, instruct(Ctx, submit, Instruction)),
         {Key, _} = Pair = quod_identity:generate(), OtherNs = <<"other-human">>,
-        Sources = quod_prolog:read_terms(filename:join([code:priv_dir(quod), "ontologies", "human_user_instance.pl"])),
+        Sources = user_terms(),
         Sup = quod_agent_hosting_tests:start_ontology(OtherNs, Dir, Node, [],
-            Sources ++ [{instance_of, human_user, me}, {agent_key, me, Key, active}]),
+            Sources ++ [{instance_of, {':', quod, {':', user, human_user}}, me}, {agent_key, me, Key, active}]),
         Other = Ctx#{human => {agent_instance_ref, OtherNs, quod_simplex:genesis_hash(OtherNs), me},
                      human_pair => Pair, session => session(Pair)},
         try
             {ok, #{request := #{operation_id := Id}}} = quod_client_goal:request_identity(Bytes),
             [{ok, _, {normalized, {read, _, {failed, _}}}} = submit(request(Other, read, {'::', Ns, Goal}))
-             || Goal <- [{personal_instruction_lookup, Id, {'Bytes'}, {'Signature'}},
+             || Goal <- [{'::', <<"quod:user">>, {personal_instruction_lookup, Id, {'Bytes'}, {'Signature'}}},
                          {personal_instruction_retained, Bytes, {'Retained'}},
-                         {personal_instruction_accept, Bytes, {'Signature'}},
+                         {'::', <<"quod:user">>, {personal_instruction_accept, Bytes, {'Signature'}}},
                          {personal_instruction, {'_'}, Id, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}}]]
         after quod_agent_hosting_tests:stop_ontology(Sup) end
     end) end}.
@@ -237,14 +378,14 @@ endpoint_refusal_preserves_prior_operations_test_() ->
         %% Hold the real acceptance read after signing, then revoke U in a
         %% committed update before the endpoint reaches actor custody.
         Head = {personal_instruction_accept, {'B'}, {'S'}},
-        {ok, _, _} = quod_prolog:execute(Ns, {',',
+        {ok, _, _} = quod_prolog:execute(<<"quod:user">>, {',',
             {retract, {':-', Head, {'Body'}}},
             {assertz, {':-', Head, {',', {'Body'}, test_local_wait}}}}),
         true = quod_reg:reg({host_test, local_proof}), Parent = self(),
         {Caller, Monitor} = spawn_monitor(fun() ->
             Parent ! {endpoint_reply, self(), instruct(Ctx, submit, Instruction)} end),
         try
-            Proof = receive {local_proof_waiting, P} -> P after 5000 -> error(accept_not_paused) end,
+            Proof = receive {local_proof_waiting, P, _} -> P after 5000 -> error(accept_not_paused) end,
             {ok, _, _} = quod_prolog:execute(Ns, {retract, {agent_key, me, Key, active}}),
             await_runtime_ready(Ns), Proof ! release,
             Reply = receive {endpoint_reply, Caller, R} -> R after 5000 -> error(no_endpoint_reply) end,
@@ -347,28 +488,44 @@ with_personal(Fun) -> with_personal(Fun, []).
 
 with_personal(Fun, Additional) ->
     Pair = {HumanKey, _} = quod_identity:generate(),
-    Sources = lists:append([quod_prolog:read_terms(filename:join(
-        [code:priv_dir(quod), "ontologies", File]))
-        || File <- ["human_user_instance.pl", "personal_agent.pl"]]),
-    quod_agent_hosting_tests:with_host(fun(Ctx = #{namespace := Ns, node := Node}) ->
+    Sources = user_terms(),
+    quod_agent_hosting_tests:with_host(fun(Ctx = #{namespace := Ns, node := Node, directory := Dir, identity := Identity}) ->
+        Owners = [quod_agent_hosting_tests:start_ontology(Owner, Dir, Identity,
+            quod_prolog:genesis_diff(filename:join([code:priv_dir(quod), "ontologies", File])), [])
+            || {Owner, File} <- [{<<"quod:user">>, "quod_user.pl"}]],
+        try
         Anchor = quod_simplex:genesis_hash(Ns),
         Human = {agent_instance_ref, Ns, Anchor, me},
         Agent = {agent_instance_ref, Ns, Anchor, personal},
-        {ok, _, _} = quod_prolog:execute(Ns, {assertz, {hosting_node, Node}}),
+        {ok, _, _} = quod_prolog:execute(Ns, {',',{assertz, {hosting_node, Node}},{assertz,{user_namespace,Ns}}}),
         Base = Ctx#{human => Human, human_pair => Pair, agent => Agent},
-        Prep = request(Base, read, {personal_agent_preparation, {'Preparation'}}),
+        Prep = request(Base, read, {'::', <<"quod:user">>, {personal_agent_preparation, {'Preparation'}}}),
         {ok, _, {normalized, {read, _, {answers, _, [Answer]}}}} = submit(Prep),
         {ok, [{<<"V0">>, {prepared, Node, Key}}]} = quod_client_result:decode_binding(Answer),
         begin
             ?assertMatch({ok, _, {normalized, {committed, _, _}}},
-                submit(request(Base, execute, {personal_agent_initialize, Node, Key}))),
+                submit(request(Base, execute, {'::', <<"quod:agent">>, {goal,{agent_hosted,Agent,Node,1,Key}}}))),
             {_, ActorPid} = installed(Agent),
             {ok, _, {normalized, {read, _, {answers, _, [Ready]}}}} = submit(Prep),
             ?assertEqual({ok, [{<<"V0">>, ready}]}, quod_client_result:decode_binding(Ready)),
             Fun(Base#{key => Key, actor_pid => ActorPid, session => session(Pair)})
         end
+        after [quod_agent_hosting_tests:stop_ontology(Sup) || Sup <- lists:reverse(Owners)] end
     end, Sources ++ Additional ++
-        [{instance_of, human_user, me}, {agent_key, me, HumanKey, active}]).
+        [{instance_of, {':', quod, {':', user, human_user}}, me}, {agent_key, me, HumanKey, active}]).
+
+%% Use the same authored ACL/reaction terms that signup installs. Hosting
+%% derivations are already supplied by with_host's storing-ontology fixture.
+user_terms() ->
+    Sources = filename:join(code:priv_dir(quod), "ontologies"),
+    Hosting = quod_prolog:read_terms(filename:join(Sources, "agent_instance.pl")),
+    [Clause || {account_policy_clause, Clause} <-
+        quod_prolog:read_terms(filename:join(Sources, "quod_user.pl")),
+        not lists:member(Clause, Hosting)] ++
+    [{instance_of, {':',quod,{':',user,personal_agent}}, personal},
+     {instance_of, {':',quod,{':',gui,hud}}, my_hud},
+     {hud_allowance, my_hud, 12}, {gui_pending_allowance, me, 8},
+     {entity_scene, personal, playing, hidden}, {entity_scene, personal, edition, hidden}].
 
 exercise(Ctx = #{namespace := Ns, human := Human, agent := Agent}) ->
     %% A source-side target action admits only A, never a U request routed
@@ -389,7 +546,7 @@ exercise(Ctx = #{namespace := Ns, human := Human, agent := Agent}) ->
     ?assertMatch({ok, _}, quod_client_goal:verify(TargetBytes, Signature)),
     %% A fresh authenticated device needs only its account and committed list.
     OtherDevice = Ctx#{session => session(maps:get(human_pair, Ctx))},
-    {ok, LookupText} = quod_client_goal_parser:format({personal_instruction_lookup, Id, {0}, {1}}),
+    {ok, LookupText} = quod_client_goal_parser:format({'::', <<"quod:user">>, {personal_instruction_lookup, Id, {0}, {1}}}),
     NamedLookup = binary:replace(binary:replace(LookupText, <<"V0">>, <<"ZBytes">>),
                                 <<"V1">>, <<"ASignature">>),
     Lookup = request_text(OtherDevice, read, NamedLookup),
@@ -421,7 +578,6 @@ exercise(Ctx = #{namespace := Ns, human := Human, agent := Agent}) ->
     ?assertMatch({ok, _, {operation_outcome, _, #{status := committed}}}, lookup(Ctx, NextBytes)).
 
 foreign_instruction(Ctx = #{namespace := Ns, agent := Agent, directory := Dir, identity := Node}, Lane) ->
-    {ok, Foreign} = quod_foreign_log:start_link(#{cache_dir => filename:join(Dir, "foreign")}),
     Target = <<"personal-target">>,
     Sup = quod_agent_hosting_tests:start_ontology(Target, Dir, Node, [],
         [{':-', {can_invoke, {'_'}, Agent, {'_'}, Target}, allow_personal}, allow_personal]),
@@ -435,7 +591,7 @@ foreign_instruction(Ctx = #{namespace := Ns, agent := Agent, directory := Dir, i
         Live = instruct(Ctx, submit, Instruction),
         ?assertMatch({ok, _, {normalized, {committed, _, _}}}, Live),
         {ok, #{request := #{operation_id := Id}}} = quod_client_goal:request_identity(Bytes),
-        Lookup = request(Ctx, read, {personal_instruction_lookup, Id, {'Bytes'}, {'Signature'}}),
+        Lookup = request(Ctx, read, {'::', <<"quod:user">>, {personal_instruction_lookup, Id, {'Bytes'}, {'Signature'}}}),
         Status = case Lane of foreign -> completed; atomic -> committed end,
         true = quod_reg:subscribe({runtime, Ns}),
         try
@@ -456,7 +612,7 @@ foreign_instruction(Ctx = #{namespace := Ns, agent := Agent, directory := Dir, i
                 {findall, ok, origin_changed, {'Rows'}}));
             foreign -> ok
         end
-    after quod_agent_hosting_tests:stop_ontology(Sup), gen_server:stop(Foreign) end.
+    after quod_agent_hosting_tests:stop_ontology(Sup) end.
 
 await_result(Ctx, Lookup, Deadline) ->
     case instruct(Ctx, resolve, Lookup) of
@@ -470,22 +626,22 @@ instruction(Ctx = #{agent := {agent_instance_ref, Ns, Anchor, Instance}, key := 
     {Canonical, _, _} = erlog_int:term_instance(Goal, 0),
     {ok, Text} = quod_client_goal_parser:format(Canonical),
     {ok, InstanceText} = quod_client_goal_parser:format_clause(Instance),
-    {ok, Bytes} = quod_client_goal:encode(#{network_identity => <<42:256>>,
+    {ok, Bytes} = quod_client_goal:encode(#{network_identity => maps:get(network, Ctx, <<42:256>>),
         agent_namespace => Ns, agent_genesis_anchor => Anchor,
         agent_instance_text => InstanceText, signing_public_key => Key,
         operation_id => crypto:strong_rand_bytes(32),
         not_after_ms => maps:get(target_expiry, Ctx, quod_time:now_ms() + 20000),
         mode => execute, parser_version => 3, goal_text => Text}),
-    {request(Ctx, read, {personal_instruction_accept, Bytes, {'Signature'}}), Bytes}.
+    {request(Ctx, read, {'::', <<"quod:user">>, {personal_instruction_accept, Bytes, {'Signature'}}}), Bytes}.
 
 request(Ctx, Mode, Goal) ->
     {Canonical, _, _} = erlog_int:term_instance(Goal, 0),
     {ok, Text} = quod_client_goal_parser:format(Canonical),
     request_text(Ctx, Mode, Text).
 
-request_text(#{human := {agent_instance_ref, Ns, Anchor, Instance}, human_pair := {Key, _} = Pair}, Mode, Text) ->
+request_text(Ctx = #{human := {agent_instance_ref, Ns, Anchor, Instance}, human_pair := {Key, _} = Pair}, Mode, Text) ->
     {ok, InstanceText} = quod_client_goal_parser:format(Instance),
-    {ok, Bytes} = quod_client_goal:encode(#{network_identity => <<42:256>>,
+    {ok, Bytes} = quod_client_goal:encode(#{network_identity => maps:get(network, Ctx, <<42:256>>),
         agent_namespace => Ns, agent_genesis_anchor => Anchor,
         agent_instance_text => InstanceText, signing_public_key => Key,
         operation_id => crypto:strong_rand_bytes(32), not_after_ms => quod_time:now_ms() + 25000,
@@ -496,11 +652,13 @@ submit({Bytes, Signature}) -> quod_client_goal_ingress:submit(Bytes, Signature).
 instruct(#{session := Session}, Action, {Bytes, Signature}) ->
     quod_client_goal_ingress:instruction(Action, Session, Bytes, Signature, {127,0,0,1}).
 
-session({Key, _} = Pair) ->
+session(Pair) -> session(Pair, <<42:256>>).
+
+session({Key, _} = Pair, Network) ->
     Nonce = crypto:strong_rand_bytes(32),
     {ok, C} = quod_client_auth:issue_challenge(Key, Nonce, {127,0,0,1}),
     Id = maps:get(challenge_id, C),
-    {ok, Bytes} = quod_client_auth:challenge_bytes(<<42:256>>,
+    {ok, Bytes} = quod_client_auth:challenge_bytes(Network,
         application:get_env(quod, node_pubkey, undefined), Id, Key, Nonce,
         maps:get(server_nonce, C), maps:get(expires_ms, C)),
     {ok, Session} = quod_client_auth:complete_challenge(Id,

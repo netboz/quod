@@ -1,0 +1,33 @@
+{
+  "diagnostic_question": "Which actual close await or native cleanup remains at the original no-EOF trigger?",
+  "passed": false,
+  "reader_errors": [],
+  "host_input_or_focus_action": false,
+  "control_signals_are_diagnostic": true,
+  "no_headset_or_runtime": true,
+  "companion_not_distributed": true,
+  "manifest_sha256": "2056f1a3f6623ec4c7d540adc217e9366073521fb249ef036b39a9d0509c2e43",
+  "failure": "RuntimeError: fixture ended before actual readiness",
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true
+  },
+  "streams": {
+    "server-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/shutdown-owner-observation01/server-stdout.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "server-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/shutdown-owner-observation01/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "native_input_count": 0,
+  "children": {
+    "server": {
+      "true_exit": 1
+    }
+  }
+}

@@ -1,0 +1,7 @@
+profile parse_expected prove_us=5763 deref_us=284
+profile parse_draft prove_us=5372 deref_us=374
+profile code_expected prove_us=139954 deref_us=734
+profile code_draft prove_us=160752 deref_us=707
+profile unique prove_us=308697 deref_us=0
+profile body prove_us=1639236 deref_us=5
+profile_result {2334400,ok}

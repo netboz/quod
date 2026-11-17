@@ -1,0 +1,38 @@
+--- client/godot/tests/ControllerChecks.cs before
+
++++ client/godot/tests/ControllerChecks.cs
+
+@@ -153,10 +153,29 @@
+
+         for(int i=0;i<20;i++)Advance();Check(adapter.MenuRedraws==menuDraw && menuDraw>beforeRedraw,"unchanged radial selection does not redraw menu labels or textures");
+         var menu=gui.Surface.FindChild("xr-menu",true,false) as PanelContainer??throw new Exception("Expected native menu");await Frame();
+         var entry=menu.FindChildren("*","Button",true,false).OfType<Button>().Single();ulong entryId=entry.GetInstanceId();
+-        menuEnabled=false;adapter.RefreshMenu();Check(entry.Disabled && entry.GetInstanceId()==entryId && adapter.MenuRedraws==menuDraw,"changed menu availability updates the existing native entry without rebuilding the menu");
+-        menuEnabled=true;adapter.RefreshMenu();Check(!entry.Disabled && adapter.MenuRedraws==menuDraw,"returned menu availability preserves selection and native entry identity");Pose(right,entry.GetGlobalRect().GetCenter());
++        var choice=(Label)menu.FindChild("xr-menu-choice",true,false);
++        Check(entry.ButtonPressed && choice.Text=="Release: "+entry.Text && ((Label)menu.FindChild("xr-menu-direction-1",true,false)).Text=="[1]","pad direction, native pressed state and release caption show the same selection");
++        menuEnabled=false;adapter.RefreshMenu();Check(entry.Disabled && entry.GetInstanceId()==entryId && adapter.MenuRedraws==menuDraw+1 && choice.Text=="Unavailable: "+entry.Text,"changed menu availability updates the existing entry and truthful selection feedback once");
++        int disabledDraw=adapter.MenuRedraws;string disabledResources=System.Text.Json.JsonSerializer.Serialize(resources.Metrics);
++        for(int i=0;i<20;i++)Advance();
++        Check(adapter.MenuRedraws==disabledDraw && System.Text.Json.JsonSerializer.Serialize(resources.Metrics)==disabledResources,"unchanged disabled selection performs no menu redraw acquisition decode or lease work");
++        Held(right,"pad_press",false);Check(menuActivated==0 && adapter.Router.MenuOwner==null,"releasing an unavailable native menu entry cancels without activation");
++        right.SetInput("pad_axes",Vector2.Zero);Advance();menuEnabled=true;
++        right.SetInput("pad_axes",new Vector2(0,1));Held(right,"pad_press",true);
++        right.SetInput("pad_axes",Vector2.Zero);Advance();
++        menu=(PanelContainer)gui.Surface.FindChild("xr-menu",true,false);entry=menu.FindChildren("*","Button",true,false).OfType<Button>().Single();
++        Check(!entry.ButtonPressed && ((Label)menu.FindChild("xr-menu-choice",true,false)).Text.Contains("cancel"),"centre visibly clears the pad choice and describes cancellation");
++        Held(right,"pad_press",false);Check(menuActivated==0 && adapter.Router.MenuOwner==null,"centre release activates no menu callback");
++        Advance();right.SetInput("pad_axes",new Vector2(0,1));Held(right,"pad_press",true);adapter.Router.CancelMenu();Advance();
++        Check(adapter.Router.MenuOwner==null && menuActivated==0,"cancelled held pad cannot reopen without a neutral release");
++        Held(right,"pad_press",false);right.SetInput("pad_axes",Vector2.Zero);Advance();
++        right.SetInput("pad_axes",new Vector2(0,1));Held(right,"pad_press",true);Held(right,"pad_press",false);Advance();
++        Check(menuActivated==1 && adapter.Router.MenuOwner==null,"neutral then a new angular selection commits its native callback exactly once on release");
++        right.SetInput("pad_axes",Vector2.Zero);Advance();right.SetInput("pad_axes",new Vector2(0,1));Held(right,"pad_press",true);await Frame();
++        menu=(PanelContainer)gui.Surface.FindChild("xr-menu",true,false);entry=menu.FindChildren("*","Button",true,false).OfType<Button>().Single();entryId=entry.GetInstanceId();menuDraw=adapter.MenuRedraws;
++        adapter.RefreshMenu();Check(!entry.Disabled && entry.GetInstanceId()==entryId && adapter.MenuRedraws==menuDraw,"unchanged enabled availability retains native entry and selection without redraw");Pose(right,entry.GetGlobalRect().GetCenter());
+         Held(right,"trigger_press",true);Held(right,"trigger_press",false);Held(right,"pad_press",false);
+-        Check(menuActivated==1 && adapter.Router.MenuOwner==null,"trigger menu choice consumes its later pad release exactly once");
++        Check(menuActivated==2 && adapter.Router.MenuOwner==null,"trigger menu choice consumes its later pad release exactly once");
+         right.SetInput("pad_axes",Vector2.Zero);Advance();right.Hand=XRPositionalTracker.TrackerHand.Unknown;Advance();beforeRedraw=adapter.MenuRedraws;Held(right,"pad_press",true);
+         Check(adapter.MenuRedraws==beforeRedraw,"unknown handedness does not receive the default menu role");Held(right,"pad_press",false);
+         left.Profile="unsupported-profile";Advance();Pose(left,button.GetGlobalRect().GetCenter());Held(left,"trigger_press",true);Held(left,"trigger_press",false);

@@ -1,0 +1,52 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-ontology-workbench-20261031/rehearse.py",
+    "workbench-framing-final03-headless",
+    "--manifest",
+    "doc/evidence/godot-ontology-workbench-20261031/inputs/client-workbench-final03-manifest.json",
+    "--wire-qualification",
+    "doc/evidence/godot-space-stage2-20261031/inputs/stage2-owner-final02.json"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 1,
+  "timed_out": false,
+  "driver_inputs": {
+    "build.py": "e1c30071b2c652154762fbdc525b11a7d96183f4669ca9fcb6e8b9c1552b3152",
+    "freeze_small.py": "45f4f1a4478393c3d6f20791b8c04dadfee336250901f26137145023be04fadb",
+    "hashes.py": "0010259f5ed4e4bc6942f90777f962d7eaedadd042bd9f4589d0c58cab331df9",
+    "pure.py": "7bbd325be990d06768906c87b5eb683f5bb97730a11984a5d11c87039179f5b0",
+    "qualify.py": "313ec466027680db7f6493a4cf9bc5a66e351b454d0d1c000947bb845d5badf4",
+    "rehearse.py": "dbec630feb14fd117b97593b340d33120353f26966ad370abe33b94e507a2a1a",
+    "run.py": "20ace533ea6238853b692dde4a651472517e4bf91a4cacdd966f348fc37b1afd",
+    "serve.py": "b74299ffd289ed13adb032cbc31f7a0849f4d54f2b4f1d1e01333abed69ac007",
+    "package.py": "909f502a6b5252313764a63887b3de44fce51a6f9e153886046ba7dcf19aab3e"
+  },
+  "start_utc": "2026-10-31T19:22:46Z",
+  "elapsed_seconds": 34.013962507247925,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/workbench-framing-final03-headless-run/stdout.raw",
+      "sha256": "f7cabebb49313c9152029e20f984d057757a5b524535b92158b78a530f8a9d78",
+      "bytes": 626
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/workbench-framing-final03-headless-run/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-ontology-workbench-20261031/logs/workbench-framing-final03-headless-run-stdout.log",
+      "sha256": "f7cabebb49313c9152029e20f984d057757a5b524535b92158b78a530f8a9d78",
+      "bytes": 626
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-ontology-workbench-20261031/logs/workbench-framing-final03-headless-run-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

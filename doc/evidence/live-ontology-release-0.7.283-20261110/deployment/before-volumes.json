@@ -1,0 +1,51 @@
+[
+  {
+    "id": "112306f5-6c9f-1a58-7cd9-10241973552c",
+    "name": "quod-node-local[5]",
+    "node": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+    "state": "ready"
+  },
+  {
+    "id": "15447655-7fcc-00a5-99b5-36be32fcdceb",
+    "name": "quod-node-local[7]",
+    "node": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+    "state": "ready"
+  },
+  {
+    "id": "22b14bea-b4c2-b89c-1cbe-94caf92ccea1",
+    "name": "quod-node-local[2]",
+    "node": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+    "state": "ready"
+  },
+  {
+    "id": "4710fa1f-c489-664f-c08a-a250fba3e5f7",
+    "name": "quod-node-local[1]",
+    "node": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+    "state": "ready"
+  },
+  {
+    "id": "8bc7685e-13ea-e3b1-7bf8-c996bc9009b4",
+    "name": "quod-node-local[3]",
+    "node": "3e390ebd-5557-a67c-b64e-07b728144297",
+    "state": "ready"
+  },
+  {
+    "id": "ab80c686-60ec-a9d8-8169-9a9c3e85fa13",
+    "name": "quod-node-local[0]",
+    "node": "3e390ebd-5557-a67c-b64e-07b728144297",
+    "state": "ready"
+  },
+  {
+    "id": "adc6edb2-ab12-2ec3-be9a-c8aa0ff72fd3",
+    "name": "quod-node-local[6]",
+    "node": "3e390ebd-5557-a67c-b64e-07b728144297",
+    "state": "ready"
+  },
+  {
+    "id": "da2b0dde-54bc-46e0-100e-d3fc07012148",
+    "name": "quod-node-local[4]",
+    "node": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+    "state": "ready"
+  }
+]
+[]

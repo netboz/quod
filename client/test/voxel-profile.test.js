@@ -63,3 +63,9 @@ test('adjacent negative-coordinate chunks preserve texture phase and vertical wa
     assert.notEqual((a - u) * (d - v) - (c - u) * (b - v), 0)
   }
 })
+
+test('unallocated presentation keeps measured cost and finite authored refusal', () => {
+  assert.deepEqual(decodeVoxel(fixture, palette, [Infinity, Infinity, Infinity, Infinity]).costs,
+    decodeVoxel(fixture, palette, allowed).costs)
+  assert.throws(() => decodeVoxel(fixture, palette, [Infinity, 1, Infinity, Infinity]), /geometry bytes exceeded/)
+})

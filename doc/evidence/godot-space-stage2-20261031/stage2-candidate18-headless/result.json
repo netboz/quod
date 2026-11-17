@@ -1,0 +1,93 @@
+{
+  "label": "stage2-candidate18-headless",
+  "passed": false,
+  "physical": false,
+  "native_runtime_started": false,
+  "hardware_queried": false,
+  "display_or_focus_action": false,
+  "manifest": "doc/evidence/godot-space-stage2-20261031/inputs/client-stage2-candidate18-manifest.json",
+  "manifest_sha256": "6d0e3f9211f47c83ea896ce6879353177095303e7ff5bc14e74d46706e42c3f3",
+  "sources": {
+    "doc/evidence/godot-space-stage2-20261031/rehearse.py": "c2056606046e7ef5341fe3f194e38acc4774d00b9b80991f3121b290407cd791",
+    "doc/evidence/godot-space-stage2-20261031/hashes.py": "a2091e53bcf09a9582888073d064024ae5cd38c60880ea2a048712f9c3c66f68",
+    "doc/evidence/godot-m4-vive-physical-20261029/environment.py": "c3a54c8ce4d8360f8711e027d31f7a98f29cf3b9b4436c43a84984cf2c1f20f9",
+    "doc/evidence/godot-space-stage2-20261031/serve.py": "fb0156bbb53ca07522237a4f9964f90bf58c1ec77bd6373e31166786fae97b44"
+  },
+  "reader_errors": [],
+  "children": {
+    "server": {
+      "command": [
+        "python3",
+        "-B",
+        "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-space-stage2-20261031/serve.py",
+        "stage2-candidate18-headless-server",
+        "--stage",
+        "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/server-runtime-restoration05",
+        "--profile",
+        "prod",
+        "--affected-wire",
+        "doc/evidence/godot-space-stage2-20261031/inputs/stage2-owner-final02.json"
+      ],
+      "true_exit": 0
+    },
+    "client": {
+      "command": [
+        "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-stage2-candidate18/source/client/godot/dist/quod.x86_64",
+        "--headless",
+        "--audio-driver",
+        "Dummy",
+        "--xr-mode",
+        "off",
+        "--rendering-method",
+        "mobile",
+        "--rendering-driver",
+        "vulkan",
+        "--",
+        "--qualification",
+        "--profile",
+        "/data/quod-m4-vr-ca84d4f8-20261029/private/stage2-candidate18-headless/identity",
+        "--node",
+        "https://127.0.0.1:42353",
+        "--ca",
+        "/data/quod-m4-vr-ca84d4f8-20261029/private/quod-m4-live-stage2-candidate18-headless-server/backend-ca.pem"
+      ],
+      "true_exit": 1
+    }
+  },
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-stdout": true,
+    "client-stderr": true
+  },
+  "build_export_digest_reused": true,
+  "fixture_ready": true,
+  "streams": {
+    "server-stdout.raw": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/stage2-candidate18-headless/server-stdout.raw",
+      "sha256": "54c2eec05591b60b602776adfbe9d2bbc249bc77815dd85894bffd1d85fb09f9",
+      "bytes": 129,
+      "public_sha256": "5121b60746516965866e463793e6259659816f1d07646b3fb130250d941619d2"
+    },
+    "client-stdout.raw": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/stage2-candidate18-headless/client-stdout.raw",
+      "sha256": "aefb4a08b1ab7bae81783062ec7578fc262629bf2a5c4792b2479c0dd6bae8b9",
+      "bytes": 390126,
+      "public_sha256": "b0ccdc0158124f86bbf8c7437632b830e9ac2c27c3e5ad3b62f05676d94a6070"
+    },
+    "client-stderr.raw": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/stage2-candidate18-headless/client-stderr.raw",
+      "sha256": "cd8cbdb49779c70e346a7e632802efc1e2f21c89f14f317d7028cc0707d2b5ba",
+      "bytes": 4957,
+      "public_sha256": "69c5624876cb102bdba9ae969d1e05568cdb97094f01ae76aef6d8bad74fdf7b"
+    },
+    "server-stderr.raw": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/stage2-candidate18-headless/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "diagnostics": [],
+  "elapsed_seconds": 39.84660672600148
+}

@@ -20,10 +20,9 @@ its exact historical application. This module owns no state or dispatch.
                     quod_applied_certificate:operation_certificate()}}.
 -export_type([target/0, application_ref/0, receipt_row/0]).
 
--doc "Canonicalize a bounded reference set, rejecting duplicate target identities.".
+-doc "Canonicalize a reference set, rejecting duplicate target identities.".
 -spec references(term()) -> {ok, [application_ref()]} | error.
-references(Refs) when is_list(Refs), length(Refs) > 0,
-                      length(Refs) =< ?QUOD_MAX_DTX_PARTICIPANTS ->
+references(Refs) when is_list(Refs), length(Refs) > 0 ->
     case lists:all(fun valid_ref/1, Refs) of
         true ->
             Sorted = lists:sort(Refs),
@@ -37,8 +36,7 @@ references(_) -> error.
 
 -doc "Canonicalize certified receipt rows without granting certificate authority.".
 -spec receipt(term()) -> {ok, [receipt_row()]} | error.
-receipt(Rows) when is_list(Rows), length(Rows) > 0,
-                   length(Rows) =< ?QUOD_MAX_DTX_PARTICIPANTS ->
+receipt(Rows) when is_list(Rows), length(Rows) > 0 ->
     case receipt_refs(Rows, []) of
         {ok, Refs} ->
             case references(Refs) of

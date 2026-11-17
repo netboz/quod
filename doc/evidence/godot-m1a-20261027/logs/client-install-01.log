@@ -1,0 +1,12 @@
+npm notice run quod-client@0.1.0 postinstall
+npm notice run patch-package --error-on-fail
+patch-package 8.0.1
+Applying patches...
+@babylonjs/core@9.18.1 ✔
+
+added 60 packages, and audited 61 packages in 3s
+
+18 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities

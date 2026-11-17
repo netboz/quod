@@ -1,0 +1,377 @@
+✔ signup retains its receipt through preparation and hands off once to atomic U/A/S0 setup (11.381478ms)
+✔ lost setup reply resolves exact bytes and signature without another creation or preparation (2.602145ms)
+✔ failed local account save retains original signup outcome for recovery (2.160263ms)
+✔ a consumed signup handoff cannot advance twice (1.608949ms)
+✔ definite setup refusal can be explicitly retried while retaining the original U (2.070185ms)
+✔ disconnect during preparation retains committed signup evidence and resolves it before dependent setup (1.272411ms)
+✔ a fresh device with the same account reads complete source state without writes or a journal (0.682309ms)
+✔ setup refuses a result with replacement actor or owner references and retains recovery evidence (1.994257ms)
+✔ agent references are stored and selected independently of the signing key (4.544969ms)
+✔ agent references and active selection are isolated by root network (0.510045ms)
+✔ legacy global references are not loaded into a root network (0.179821ms)
+✔ removing an active reference chooses a replacement from the same network (0.334965ms)
+✔ malformed storage input is rejected before signing (0.209461ms)
+✔ agent-reference namespaces use the shared 255-byte protocol limit (0.183289ms)
+✖ client/test/controlled-navigation.test.js (0.047647ms)
+✖ client/test/controller-input.test.js (0.05092ms)
+✔ tracking status and failed role choices update values without replacing the panel schema (0.635035ms)
+✖ client/test/controller-scene.test.js (0.047605ms)
+✔ Vive description uses the exact packaged model, admitted by the existing GLB validator (18.146048ms)
+(node:47) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ preferences reuse signed-view renewal, ignore old replies and stop at expiry with no write (5.04852ms)
+✔ asymmetric static GLB measures its actual geometry, hierarchy and PNG (0.458288ms)
+✔ each scene node referencing a mesh counts its drawn vertices and triangles (1.429519ms)
+✔ external resources, extensions and dynamic features fail before loading (3.986974ms)
+✔ reused accessors retain their measured costs and bounds (0.558231ms)
+✔ each measured resource is checked against its authorized allowance (1.768384ms)
+✖ client/test/gui-pointer.test.js (0.073387ms)
+✔ HUD uses the authenticated human scope and renews without frame credit or losing its view (6.264128ms)
+✔ question adapter decodes the common form model without world state (2.113805ms)
+✔ HUD expiry discards authorization and late candidates without reconnecting (1.938676ms)
+✔ HUD disconnect discards authorization and late candidates without reconnecting (1.610491ms)
+✔ HUD refusal discards authorization and late candidates without reconnecting (1.423641ms)
+✔ GUI kind mismatch refuses the projection (0.781482ms)
+✔ a HUD cannot select a malformed receiver address (0.754201ms)
+✔ receiver pending retains exact bytes and blocks another selection after reopening (2.347838ms)
+✔ receiver lost response retains exact bytes and blocks another selection after reopening (2.819164ms)
+✔ receiver selection fails closed when its existing operation journal cannot be read (0.891086ms)
+✔ native preparation is hidden, idempotent, retained across refresh and activated only once (3.738018ms)
+✔ signed HUD removal retires activated receipts and reuses capacity without waiting for expiry (7.001384ms)
+✔ native malformed/unsupported preparation is refused: {"descriptor":"unsupported"} (1.514878ms)
+✔ native malformed/unsupported preparation is refused: {"connection":"foreign"} (1.164116ms)
+✔ native malformed/unsupported preparation is refused: {"expires_ms":"0"} (1.350976ms)
+✔ native malformed/unsupported preparation is refused: {"expires_ms":"99999999999999999"} (5.217701ms)
+✔ native malformed/unsupported preparation is refused: {"capacity":0} (1.544703ms)
+✔ native malformed/unsupported preparation is refused: {"question":"question_ref(bad,bad,bad)"} (1.6272ms)
+✔ native support must be explicit (2.081244ms)
+✔ native capacity and disconnect release only local resources (2.839631ms)
+✔ verified browser backup contains the exact active identity (428.866229ms)
+✔ verified browser backup fails when storage silently discards it (203.660572ms)
+✔ encrypted identity carries exact per-network account references (653.087154ms)
+✔ signed motion quantization encodes integer zero, including negative sub-milli values (0.621837ms)
+✔ motion quantization keeps signed truncation and invalid input rejection (0.277617ms)
+✔ landing uses exact canonical millimetres beyond the browser integer range (0.105782ms)
+✔ terrain descriptors bind generated resources to an anchored physical body (1.283764ms)
+✔ multiple ontology mark occurrences retain one exact instance and no body identity (0.478937ms)
+✔ a reply becomes drawable marks (0.325377ms)
+✔ a mark may show nothing and carry no label (0.167162ms)
+✔ several marks may depict one entity (0.24627ms)
+✔ an unreadable descriptor fails closed (0.934984ms)
+✔ capsules and tori keep their neutral dimensions (0.381907ms)
+✔ a sky sphere keeps its renderer-neutral diameter (0.15521ms)
+✔ a binary that did not survive the reply is refused (0.411577ms)
+✔ the reader accepts what the renderer writes and nothing more (0.389411ms)
+✔ the reader enforces the shared structural-depth boundary (0.184418ms)
+✖ the lens is asked by its flat binary name, with the dot the grammar needs (0.87231ms)
+✔ binary identities and UTF-8 text survive lossless signed bindings (0.36457ms)
+✔ texture slots carry digest identity and explicit sampling; invalid bindings fail (0.983331ms)
+✔ mesh marks carry typed digest, local frame, scale and asset surfaces (0.749538ms)
+✔ desktop camera uses familiar movement keys and measured controls (0.12576ms)
+✔ Shift accelerates movement and releasing focus restores walking speed (0.30607ms)
+✔ pointer capture follows the canvas lifecycle and releases cleanly (0.345797ms)
+✔ storage is explicit, the controller retains edits, and success cannot be repeated accidentally (7.381665ms)
+✔ opening another subject preserves known refusal and does not re-resolve history (2.461134ms)
+✔ lost reply blocks creation, preserves the draft, and resolves only the original instruction (3.105675ms)
+✔ another device with a cleared journal recovers committed history without a submit (0.650278ms)
+✔ an unresolved authoritative instruction blocks a fresh device too (0.563997ms)
+✔ interrupted recovery reuses terminal observations in the same controller (0.957281ms)
+✔ busy subject changes report refusal without changing the active draft (1.762404ms)
+✔ changed defaults preserve input; changed definitions require explicit adoption; wrong subjects refuse (3.216366ms)
+✔ unavailable agents refuse before submission; cancellation keeps unsent draft (1.876096ms)
+✔ the binder goal carries the exact subject, schema and only typed fields (0.354468ms)
+✔ human signs one exact instruction; a lost reply is only resolved (1.204564ms)
+✔ a second device discovers the actor and instruction without a browser journal (1.164529ms)
+✔ unavailable actor and cancellation before send do not retain unsent work (1.146994ms)
+✔ cancellation after send retains the original operation and target selection is required (0.71336ms)
+✔ a pending instruction reply is retained and recovered without a second submission (1.234501ms)
+✔ an explicit post-admission refusal retires the definitely unsent instruction (0.713431ms)
+✔ the code adapter only reads exact tools and target references; preparing an edit does not submit it (1.00056ms)
+✔ predicate selection and clause cards remain ordinary source data (0.391081ms)
+✔ a real thirty-clause compiled edit crosses the shared result reader (0.665419ms)
+✔ complete source uses one cursor, preserves split UTF-8, and stops at the explicit final chunk (1.598228ms)
+✔ a lost or exhausted source cursor never publishes a partial ontology (0.864459ms)
+✔ highlights Quod clauses without interpreting or rewriting source (0.693302ms)
+✔ HTML and unfinished quoted drafts remain inert text (0.141693ms)
+✔ canonical stored facts retain fact highlighting (0.115078ms)
+✔ generic terms render ordinary inspectable Prolog text (0.104537ms)
+✔ namespace atoms use the same quoting rule as every other atom (0.058044ms)
+✔ builder text and direct text produce byte-identical signed requests (0.254042ms)
+✔ binary terms use explicit Erlang notation and preserve every byte (0.133365ms)
+✔ builders reject malformed variables, numbers, and structures (0.495493ms)
+✔ console scope construction handles terminators, quoted periods and trailing comments (0.310574ms)
+✔ canonical code terms retain variable sharing within one clause only (0.158295ms)
+✔ canonical partial lists preserve their tail instead of dropping it (0.147919ms)
+✔ code numbers keep float identity and integers beyond JavaScript precision (0.286485ms)
+✔ readable source preserves associativity, controls, cut and scoped goals (0.188829ms)
+✔ quoted code data retains literal dots, comment markers, quotes and bytes (0.166176ms)
+✔ current code source distinguishes numeric negatives from unary expressions (0.095603ms)
+✔ the result reader shares server depth without private list or rendered-text ceilings (3.339705ms)
+✔ both renderers share one local draft and synchronous submission lock (2.048067ms)
+✔ unknown submission survives reopening and resolves through outcomes without replay (1.709856ms)
+✔ definite refusal preserves editing; changed schema locks and preserves the previous draft (1.916419ms)
+✔ changed defaults preserve input until the human explicitly chooses to replace it (1.239186ms)
+✔ a question first read stale can become editable only with its accepted schema (1.688642ms)
+✔ a successful submission can be cancelled only after its completion is certified negative (1.509675ms)
+✔ only a terminal negative answer permits submitted cancellation (0.886121ms)
+✔ unreadable journal cannot authorize a new write (0.623956ms)
+✔ reopened submitted questions observe status on view progress without dispatching completion (1.38534ms)
+✔ an obsolete status read cannot overwrite the latest projection or authorize cancellation (1.156124ms)
+✔ a saved uncertain write suppresses automatic status reads until exact resolution (1.301864ms)
+✔ withdrawn form access does not prevent status-based cancellation of an awaiting question (0.611014ms)
+✔ prepared controller defers its signed view and shares one draft across mounted consumers (0.579177ms)
+✖ client/test/render-model.test.js (0.056591ms)
+✖ client/test/render-resources.test.js (0.051472ms)
+✖ client/test/scene.test.js (0.056461ms)
+✔ signed proofs have five minutes, bounded by the current session (0.375544ms)
+✔ system discovery rejects unavailable or wrong-network catalogues (0.341747ms)
+✔ optional traceparent changes only HTTP metadata, not signed request bytes (0.263993ms)
+✔ traced HTTP transport errors retain uncertainty and do not retry (0.202219ms)
+✔ prepared byte budget reports exact policy pressure without retry or uncertainty (0.208933ms)
+✔ signed goal bytes match the Erlang browser fixture (0.145773ms)
+✔ request encoding and journaling share the full protocol bounds (1.607895ms)
+✔ oversized goal reports the actual byte encoding resource (0.173353ms)
+✔ a lost signed-goal response is marked outcome-unknown (0.468339ms)
+✔ exact persisted requests are resolved, never resubmitted (1.640461ms)
+✔ a returned group reference survives reload and resolves only that submitted attempt (0.624033ms)
+✔ a pending reference for another ontology never replaces the recoverable signed request (0.335806ms)
+✔ a definite execute reply removes the durable browser row (0.276558ms)
+✔ cursor Accept persists the original request before an uncertain reply (0.585403ms)
+✔ cursor Accept retains its exact request after lost response body (0.474376ms)
+✔ cursor Accept retains its exact request after broken JSON (19.065411ms)
+✔ cursor Accept retains its exact request after missing write result (0.558713ms)
+✔ cursor Accept retains its exact request after null response (0.459762ms)
+✔ cursor Accept retains its exact request after unrecognized write result (0.395196ms)
+✔ cursor Accept retains its exact request after empty gateway failure (1.251722ms)
+✔ pending cursor Accept identifies its journal row and resolution never submits another request (0.897594ms)
+✔ retryable cursor refusal clears the journal but keeps the same cursor request (0.42397ms)
+✔ transient control is signed once and never journaled or replayed after response loss (0.243576ms)
+✔ missing durable storage permits reads but sends no possible write (1.959155ms)
+✔ the browser journal has no fixed unresolved-operation population limit (2.351503ms)
+✖ client/test/simulation.test.js (0.068008ms)
+✔ catalogue identities include anchors and instances; duplicate labels are allowed (0.925659ms)
+✔ entry rechecks navigation and reuses an already initialized world without a write (6.770202ms)
+✔ an authored agent term stays in the signed parser grammar rather than the binding reader (0.786454ms)
+✔ closing during preparation prevents initialization and a late navigation callback (1.913032ms)
+✔ a HUD refresh shares current work; a lost initializer is resolved without resubmission (5.861453ms)
+✔ closing while a form request is being signed prevents its journal and network submission (1.707247ms)
+✔ saved form resolution reports failed endpoint and retains its original journal identity (3.044742ms)
+✔ saved form resolution reports nonterminal reply and retains its original journal identity (2.794093ms)
+✔ saved form resolution reports invalid committed form and retains its original journal identity (2.97477ms)
+✔ a returned foreign world or failed catalogue does not enable setup or creation (3.59206ms)
+✔ revoking a listed world before entry prevents initialization (1.216053ms)
+✖ client/test/terrain-delivery.test.js (0.073509ms)
+✔ native surface positions, winding and material survive decoding (4.008072ms)
+✔ complete framing, palette and allocation are mandatory (1.372185ms)
+✔ empty and full chunks can carry an empty surface (0.142868ms)
+✔ adjacent negative-coordinate chunks preserve texture phase and vertical walls have nondegenerate UVs (3.044495ms)
+✖ client/test/world-xr.test.js (0.057748ms)
+✔ ordinary ontology instances and lens recipes preserve exact identity across representations (0.907499ms)
+✔ ontology and ordinary instance selection submit the same signed query shape (0.632065ms)
+✔ question forms preserve accepted revisions and typed defaults across schema changes (2.972535ms)
+✔ a device projection binds the exact selected ontology before reading content (0.206502ms)
+✔ lobby references preserve identity bytes and refuse display abbreviations (0.167939ms)
+✔ the reusable proof form requires each supported semantic role exactly once (0.693902ms)
+✔ forms describe semantic components independently of their workspace name (0.489771ms)
+✔ portable components preserve nested identities, typed options and exact ranges (1.461708ms)
+✔ a partial or ambiguous projection is not a successful view (0.171188ms)
+✔ projection failures preserve explicit access denials without inventing them for other failures (0.32026ms)
+✔ HUD references are exact, ground and unique (0.268167ms)
+✔ draft submission carries fields as data and keeps the accepted revision (0.78788ms)
+✔ status uses signed reads and never turns unknown into cancellation permission (1.280752ms)
+✔ input variants preserve typed drafts and reject malformed selections (1.561546ms)
+✔ composition and display keep the input-only submission contract (0.677228ms)
+✔ tables, images and transient containers stay inside the common descriptor contract (1.333349ms)
+ℹ tests 182
+ℹ suites 0
+ℹ pass 171
+ℹ fail 11
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1630.279313
+
+✖ failing tests:
+
+test at client/test/controlled-navigation.test.js:1:1
+✖ client/test/controlled-navigation.test.js (0.047647ms)
+  Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@babylonjs/core' imported from /home/yan/src/quod_worktrees/pearl-stone/client/test/controlled-navigation.test.js
+      at Object.getPackageJSONURL (node:internal/modules/package_json_reader:343:9)
+      at packageResolve (node:internal/modules/esm/resolve:751:25)
+      at moduleResolve (node:internal/modules/esm/resolve:840:18)
+      at defaultResolve (node:internal/modules/esm/resolve:973:11)
+      at #cachedDefaultResolve (node:internal/modules/esm/loader:708:20)
+      at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:728:38)
+      at ModuleLoader.resolveSync (node:internal/modules/esm/loader:766:56)
+      at #resolve (node:internal/modules/esm/loader:690:17)
+      at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:610:35)
+      at ModuleJob.syncLink (node:internal/modules/esm/module_job:277:33) {
+    code: 'ERR_MODULE_NOT_FOUND'
+  }
+
+test at client/test/controller-input.test.js:1:1
+✖ client/test/controller-input.test.js (0.05092ms)
+  Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@babylonjs/core' imported from /home/yan/src/quod_worktrees/pearl-stone/client/test/controller-input.test.js
+      at Object.getPackageJSONURL (node:internal/modules/package_json_reader:343:9)
+      at packageResolve (node:internal/modules/esm/resolve:751:25)
+      at moduleResolve (node:internal/modules/esm/resolve:840:18)
+      at defaultResolve (node:internal/modules/esm/resolve:973:11)
+      at #cachedDefaultResolve (node:internal/modules/esm/loader:708:20)
+      at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:728:38)
+      at ModuleLoader.resolveSync (node:internal/modules/esm/loader:766:56)
+      at #resolve (node:internal/modules/esm/loader:690:17)
+      at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:610:35)
+      at ModuleJob.syncLink (node:internal/modules/esm/module_job:277:33) {
+    code: 'ERR_MODULE_NOT_FOUND'
+  }
+
+test at client/test/controller-scene.test.js:1:1
+✖ client/test/controller-scene.test.js (0.047605ms)
+  Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@babylonjs/core' imported from /home/yan/src/quod_worktrees/pearl-stone/client/test/controller-scene.test.js
+      at Object.getPackageJSONURL (node:internal/modules/package_json_reader:343:9)
+      at packageResolve (node:internal/modules/esm/resolve:751:25)
+      at moduleResolve (node:internal/modules/esm/resolve:840:18)
+      at defaultResolve (node:internal/modules/esm/resolve:973:11)
+      at #cachedDefaultResolve (node:internal/modules/esm/loader:708:20)
+      at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:728:38)
+      at ModuleLoader.resolveSync (node:internal/modules/esm/loader:766:56)
+      at #resolve (node:internal/modules/esm/loader:690:17)
+      at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:610:35)
+      at ModuleJob.syncLink (node:internal/modules/esm/module_job:277:33) {
+    code: 'ERR_MODULE_NOT_FOUND'
+  }
+
+test at client/test/gui-pointer.test.js:1:1
+✖ client/test/gui-pointer.test.js (0.073387ms)
+  Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@babylonjs/core' imported from /home/yan/src/quod_worktrees/pearl-stone/client/test/gui-pointer.test.js
+      at Object.getPackageJSONURL (node:internal/modules/package_json_reader:343:9)
+      at packageResolve (node:internal/modules/esm/resolve:751:25)
+      at moduleResolve (node:internal/modules/esm/resolve:840:18)
+      at defaultResolve (node:internal/modules/esm/resolve:973:11)
+      at #cachedDefaultResolve (node:internal/modules/esm/loader:708:20)
+      at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:728:38)
+      at ModuleLoader.resolveSync (node:internal/modules/esm/loader:766:56)
+      at #resolve (node:internal/modules/esm/loader:690:17)
+      at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:610:35)
+      at ModuleJob.syncLink (node:internal/modules/esm/module_job:277:33) {
+    code: 'ERR_MODULE_NOT_FOUND'
+  }
+
+test at client/test/marks.test.js:161:1
+✖ the lens is asked by its flat binary name, with the dot the grammar needs (0.87231ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + '<<"quod:gui">> :: (view(<<"work_licences">>,[<<"quod">>],Marks)).'
+  - '<<"quod:lens">> :: (view(<<"work_licences">>,[<<"quod">>],Marks)).'
+  
+      at TestContext.<anonymous> (file:///home/yan/src/quod_worktrees/pearl-stone/client/test/marks.test.js:163:15)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '<<"quod:gui">> :: (view(<<"work_licences">>,[<<"quod">>],Marks)).',
+    expected: '<<"quod:lens">> :: (view(<<"work_licences">>,[<<"quod">>],Marks)).',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at client/test/render-model.test.js:1:1
+✖ client/test/render-model.test.js (0.056591ms)
+  Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@babylonjs/core' imported from /home/yan/src/quod_worktrees/pearl-stone/client/test/render-model.test.js
+      at Object.getPackageJSONURL (node:internal/modules/package_json_reader:343:9)
+      at packageResolve (node:internal/modules/esm/resolve:751:25)
+      at moduleResolve (node:internal/modules/esm/resolve:840:18)
+      at defaultResolve (node:internal/modules/esm/resolve:973:11)
+      at #cachedDefaultResolve (node:internal/modules/esm/loader:708:20)
+      at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:728:38)
+      at ModuleLoader.resolveSync (node:internal/modules/esm/loader:766:56)
+      at #resolve (node:internal/modules/esm/loader:690:17)
+      at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:610:35)
+      at ModuleJob.syncLink (node:internal/modules/esm/module_job:277:33) {
+    code: 'ERR_MODULE_NOT_FOUND'
+  }
+
+test at client/test/render-resources.test.js:1:1
+✖ client/test/render-resources.test.js (0.051472ms)
+  Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@babylonjs/core' imported from /home/yan/src/quod_worktrees/pearl-stone/client/src/render-resources.js
+      at Object.getPackageJSONURL (node:internal/modules/package_json_reader:343:9)
+      at packageResolve (node:internal/modules/esm/resolve:751:25)
+      at moduleResolve (node:internal/modules/esm/resolve:840:18)
+      at defaultResolve (node:internal/modules/esm/resolve:973:11)
+      at #cachedDefaultResolve (node:internal/modules/esm/loader:708:20)
+      at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:728:38)
+      at ModuleLoader.resolveSync (node:internal/modules/esm/loader:766:56)
+      at #resolve (node:internal/modules/esm/loader:690:17)
+      at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:610:35)
+      at ModuleJob.syncLink (node:internal/modules/esm/module_job:277:33) {
+    code: 'ERR_MODULE_NOT_FOUND'
+  }
+
+test at client/test/scene.test.js:1:1
+✖ client/test/scene.test.js (0.056461ms)
+  Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@babylonjs/core' imported from /home/yan/src/quod_worktrees/pearl-stone/client/test/scene.test.js
+      at Object.getPackageJSONURL (node:internal/modules/package_json_reader:343:9)
+      at packageResolve (node:internal/modules/esm/resolve:751:25)
+      at moduleResolve (node:internal/modules/esm/resolve:840:18)
+      at defaultResolve (node:internal/modules/esm/resolve:973:11)
+      at #cachedDefaultResolve (node:internal/modules/esm/loader:708:20)
+      at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:728:38)
+      at ModuleLoader.resolveSync (node:internal/modules/esm/loader:766:56)
+      at #resolve (node:internal/modules/esm/loader:690:17)
+      at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:610:35)
+      at ModuleJob.syncLink (node:internal/modules/esm/module_job:277:33) {
+    code: 'ERR_MODULE_NOT_FOUND'
+  }
+
+test at client/test/simulation.test.js:1:1
+✖ client/test/simulation.test.js (0.068008ms)
+  Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@babylonjs/core' imported from /home/yan/src/quod_worktrees/pearl-stone/client/test/simulation.test.js
+      at Object.getPackageJSONURL (node:internal/modules/package_json_reader:343:9)
+      at packageResolve (node:internal/modules/esm/resolve:751:25)
+      at moduleResolve (node:internal/modules/esm/resolve:840:18)
+      at defaultResolve (node:internal/modules/esm/resolve:973:11)
+      at #cachedDefaultResolve (node:internal/modules/esm/loader:708:20)
+      at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:728:38)
+      at ModuleLoader.resolveSync (node:internal/modules/esm/loader:766:56)
+      at #resolve (node:internal/modules/esm/loader:690:17)
+      at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:610:35)
+      at ModuleJob.syncLink (node:internal/modules/esm/module_job:277:33) {
+    code: 'ERR_MODULE_NOT_FOUND'
+  }
+
+test at client/test/terrain-delivery.test.js:1:1
+✖ client/test/terrain-delivery.test.js (0.073509ms)
+  Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@babylonjs/core' imported from /home/yan/src/quod_worktrees/pearl-stone/client/test/terrain-delivery.test.js
+      at Object.getPackageJSONURL (node:internal/modules/package_json_reader:343:9)
+      at packageResolve (node:internal/modules/esm/resolve:751:25)
+      at moduleResolve (node:internal/modules/esm/resolve:840:18)
+      at defaultResolve (node:internal/modules/esm/resolve:973:11)
+      at #cachedDefaultResolve (node:internal/modules/esm/loader:708:20)
+      at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:728:38)
+      at ModuleLoader.resolveSync (node:internal/modules/esm/loader:766:56)
+      at #resolve (node:internal/modules/esm/loader:690:17)
+      at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:610:35)
+      at ModuleJob.syncLink (node:internal/modules/esm/module_job:277:33) {
+    code: 'ERR_MODULE_NOT_FOUND'
+  }
+
+test at client/test/world-xr.test.js:1:1
+✖ client/test/world-xr.test.js (0.057748ms)
+  Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@babylonjs/core' imported from /home/yan/src/quod_worktrees/pearl-stone/client/test/world-xr.test.js
+      at Object.getPackageJSONURL (node:internal/modules/package_json_reader:343:9)
+      at packageResolve (node:internal/modules/esm/resolve:751:25)
+      at moduleResolve (node:internal/modules/esm/resolve:840:18)
+      at defaultResolve (node:internal/modules/esm/resolve:973:11)
+      at #cachedDefaultResolve (node:internal/modules/esm/loader:708:20)
+      at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:728:38)
+      at ModuleLoader.resolveSync (node:internal/modules/esm/loader:766:56)
+      at #resolve (node:internal/modules/esm/loader:690:17)
+      at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:610:35)
+      at ModuleJob.syncLink (node:internal/modules/esm/module_job:277:33) {
+    code: 'ERR_MODULE_NOT_FOUND'
+  }

@@ -1,0 +1,486 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+======================== EUnit ========================
+module 'quod_receiver_decode_tests'
+  quod_receiver_decode_tests: page_preserves_occurrences_while_authenticating_once_test...[0.086 s] ok
+  quod_receiver_decode_tests: nested_claim_application_completion_share_one_decode_test...[0.103 s] ok
+  quod_receiver_decode_tests: different_pages_do_not_share_authentication_test...[0.003 s] ok
+  quod_receiver_decode_tests: compact_head_selection_authenticates_the_record_not_finality_test...[0.012 s] ok
+  quod_receiver_decode_tests: same_semantic_id_different_envelopes_are_not_reused_test...[0.002 s] ok
+  quod_receiver_decode_tests: changed_signature_cannot_borrow_a_completed_record_test...ok
+  quod_receiver_decode_tests: resigned_outer_envelope_does_not_hide_bad_nested_signature_test...[0.015 s] ok
+  quod_receiver_decode_tests: enclosing_references_are_checked_even_when_nested_record_is_reused_test...[0.012 s] ok
+  quod_receiver_decode_tests: symbol_modes_do_not_share_materialized_records_test...[0.001 s] ok
+  quod_receiver_decode_tests: context_has_no_wire_form_or_public_map_seed_test...ok
+  quod_receiver_decode_tests: failed_page_does_not_publish_or_retain_a_partial_context_test...[0.002 s] ok
+  quod_receiver_decode_tests: noncontiguous_transfer_entry_is_rejected_after_authentication_test...[0.033 s] ok
+  quod_receiver_decode_tests: reused_claim_does_not_cache_request_validity_test...[0.013 s] ok
+  quod_receiver_decode_tests: reused_record_does_not_validate_another_certificate_or_admission_test...[0.069 s] ok
+  [done in 0.393 s]
+module 'quod_remaining_admission_tests'
+  quod_remaining_admission_tests: committee_population_keeps_crypto_and_exact_honest_count_test...[0.022 s] ok
+  quod_remaining_admission_tests: complete_page_above_former_count_and_byte_quotas_test...[0.011 s] ok
+  quod_remaining_admission_tests: callable_population_preserves_opaque_argument_data_test...[0.001 s] ok
+  quod_remaining_admission_tests: single_effect_with_canonical_large_actor_keeps_semantic_singleton_test...ok
+  quod_remaining_admission_tests: complete_diagnostics_and_explicit_finite_callback_test...[0.021 s] ok
+  [done in 0.070 s]
+module 'quod_space_tests'
+  quod_space_tests: -ordinary_travel_atomic_test_/0-fun-3-...[0.915 s] ok
+  quod_space_tests: -space_semantics_and_recovery_test_/0-fun-6-...*failed*
+in function quod_space_tests:'-space_semantics_and_recovery_test_/0-fun-5-'/1 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_space_tests.erl, line 60)
+in call from quod_space_tests:'-with_spaces/2-fun-2-'/3 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_space_tests.erl, line 201)
+in call from quod_agent_hosting_tests:with_host/4 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_agent_hosting_tests.erl, line 1654)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+**error:{assertMatch,[{module,quod_space_tests},
+              {line,60},
+              {expression,"quod_prolog : prove_ro ( A , { findall , { 'S' } , { space_instance , { 'S' } , space } , { 'Spaces' } } )"},
+              {pattern,"{ ok , [ # { 'Spaces' := [ catalogue , closed , gallery ] } ] , _ }"},
+              {value,{ok,[#{'S' => {0},
+                            'Spaces' =>
+                                [catalogue,closed,gallery,
+                                 {ontology_ref,<<...>>,...}]}],
+                         1}}]}
+  output:<<"Failed hosted-agent fixture retained at /tmp/quod_hosted_79C67F0346E4C07B
+">>
+
+  quod_space_tests: -competing_exclusive_admissions_test_/0-fun-12- (gallery)...[0.312 s] ok
+  quod_space_tests: -competing_exclusive_admissions_test_/0-fun-12- (catalogue)...[0.304 s] ok
+  quod_space_tests: -distinct_owner_authorization_test_/0-fun-3- (gallery)...=WARNING REPORT==== 4-Nov-2026::19:36:56.149877 ===
+quod_prolog[host-test-agent]: can_invoke refused a top-level goal at pinned height 9
+[0.876 s] ok
+  quod_space_tests: -distinct_owner_authorization_test_/0-fun-3- (catalogue)...=WARNING REPORT==== 4-Nov-2026::19:36:57.021650 ===
+quod_prolog[host-test-agent]: can_invoke refused a top-level goal at pinned height 9
+[0.874 s] ok
+  quod_space_tests: -ordinary_placement_rollback_and_recovery_test_/0-fun-4-...[0.677 s] ok
+  quod_space_tests: -ordinary_placement_committed_permissions_test_/0-fun-2-...[1.351 s] ok
+  quod_space_tests: -ordinary_placement_policy_conflicts_test_/0-fun-4- (source)...[0.300 s] ok
+  quod_space_tests: -ordinary_placement_policy_conflicts_test_/0-fun-4- (destination)...[0.298 s] ok
+  quod_space_tests: -same_ontology_ordinary_placement_test_/0-fun-1-...[0.454 s] ok
+  quod_space_tests: -ordinary_placement_and_shared_display_projection_test_/0-fun-13-...[1.409 s] ok
+  quod_space_tests: -physical_placement_requires_its_body_pose_test_/0-fun-1-...[0.445 s] ok
+  [done in 8.504 s]
+quod_ontology_acl_acceptance_tests: run (module 'quod_ontology_acl_acceptance_tests')...=ERROR REPORT==== 4-Nov-2026::19:37:03.015099 ===
+Failed to start Ranch listener quod_client_listener in ranch_ssl:listen(#{socket_opts => [{alpn_preferred_protocols,[<<"h2">>,<<"http/1.1">>]},{buffer,512},{port,0},{ip,{127,0,0,1}},{cert,'...'},{key,'...'}],connection_type => supervisor}) for reason eperm (not owner)
+
+=CRASH REPORT==== 4-Nov-2026::19:37:03.015227 ===
+  crasher:
+    initial call: supervisor:ranch_acceptors_sup/1
+    pid: <0.6846.0>
+    registered_name: []
+    process_label: {ranch_acceptors_sup,quod_client_listener}
+    exception exit: {listen_error,quod_client_listener,eperm}
+      in function  ranch_acceptors_sup:listen_error/5 (/tmp/quod-server-stage2-20261104-zckjvoTs/_build/default/lib/ranch/src/ranch_acceptors_sup.erl:95)
+      in call from ranch_acceptors_sup:start_listen_sockets/5 (/tmp/quod-server-stage2-20261104-zckjvoTs/_build/default/lib/ranch/src/ranch_acceptors_sup.erl:55)
+      in call from ranch_acceptors_sup:init/1 (/tmp/quod-server-stage2-20261104-zckjvoTs/_build/default/lib/ranch/src/ranch_acceptors_sup.erl:35)
+      in call from supervisor:init/1 (supervisor.erl:912)
+      in call from gen_server:init_it/2 (gen_server.erl:2276)
+      in call from gen_server:init_it/6 (gen_server.erl:2236)
+    ancestors: [<0.6834.0>,ranch_sup,<0.6826.0>]
+    message_queue_len: 0
+    messages: []
+    links: [<0.6834.0>]
+    dictionary: []
+    trap_exit: true
+    status: running
+    heap_size: 1598
+    stack_size: 29
+    reductions: 29869
+  neighbours:
+
+=SUPERVISOR REPORT==== 4-Nov-2026::19:37:03.018021 ===
+    supervisor: {<0.6834.0>,ranch_listener_sup}
+    errorContext: start_error
+    reason: {listen_error,quod_client_listener,eperm}
+    offender: [{pid,undefined},
+               {id,ranch_acceptors_sup},
+               {mfargs,
+                   {ranch_acceptors_sup,start_link,
+                       [quod_client_listener,ranch_ssl,logger]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,infinity},
+               {child_type,supervisor}]
+
+=ERROR REPORT==== 4-Nov-2026::19:37:03.018280 ===
+quod: client bootstrap failed — listen on 127.0.0.1:0 ({{shutdown,
+                                                         {failed_to_start_child,
+                                                          ranch_acceptors_sup,
+                                                          {listen_error,
+                                                           quod_client_listener,
+                                                           eperm}}},
+                                                        {child,undefined,
+                                                         {ranch_listener_sup,
+                                                          quod_client_listener},
+                                                         {ranch_listener_sup,
+                                                          start_link,
+                                                          [quod_client_listener,
+                                                           ranch_ssl,
+                                                           #{socket_opts =>
+                                                              [{alpn_preferred_protocols,
+                                                                [<<"h2">>,
+                                                                 <<"http/1.1">>]},
+                                                               {buffer,512},
+                                                               {port,0},
+                                                               {ip,
+                                                                {127,0,0,1}},
+                                                               {cert,
+                                                                <<48,130,1,
+                                                                  115,48,130,
+                                                                  1,25,160,3,
+                                                                  2,1,2,2,8,
+                                                                  68,133,220,
+                                                                  187,94,23,
+                                                                  68,171,48,
+                                                                  10,6,8,42,
+                                                                  134,72,206,
+                                                                  61,4,3,2,48,
+                                                                  22,49,20,48,
+                                                                  18,6,3,85,4,
+                                                                  3,12,11,113,
+                                                                  117,111,100,
+                                                                  32,99,108,
+                                                                  105,101,110,
+                                                                  116,48,30,
+                                                                  23,13,50,54,
+                                                                  49,49,48,52,
+                                                                  49,55,51,55,
+                                                                  48,50,90,23,
+                                                                  13,50,55,49,
+                                                                  50,48,54,49,
+                                                                  56,51,55,48,
+                                                                  50,90,48,22,
+                                                                  49,20,48,18,
+                                                                  6,3,85,4,3,
+                                                                  12,11,113,
+                                                                  117,111,100,
+                                                                  32,99,108,
+                                                                  105,101,110,
+                                                                  116,48,89,
+                                                                  48,19,6,7,
+                                                                  42,134,72,
+                                                                  206,61,2,1,
+                                                                  6,8,42,134,
+                                                                  72,206,61,3,
+                                                                  1,7,3,66,0,
+                                                                  4,22,59,113,
+                                                                  221,8,66,
+                                                                  196,105,164,
+                                                                  239,165,220,
+                                                                  158,160,223,
+                                                                  178,235,148,
+                                                                  74,234,82,
+                                                                  176,185,38,
+                                                                  73,227,51,
+                                                                  108,183,152,
+                                                                  173,14,128,
+                                                                  229,167,61,
+                                                                  235,100,13,
+                                                                  47,146,214,
+                                                                  205,158,71,
+                                                                  205,14,80,
+                                                                  75,110,127,
+                                                                  150,240,163,
+                                                                  58,208,18,
+                                                                  67,151,203,
+                                                                  166,236,63,
+                                                                  157,163,81,
+                                                                  48,79,48,12,
+                                                                  6,3,85,29,
+                                                                  19,1,1,255,
+                                                                  4,2,48,0,48,
+                                                                  14,6,3,85,
+                                                                  29,15,1,1,
+                                                                  255,4,4,3,2,
+                                                                  3,136,48,19,
+                                                                  6,3,85,29,
+                                                                  37,4,12,48,
+                                                                  10,6,8,43,6,
+                                                                  1,5,5,7,3,1,
+                                                                  48,26,6,3,
+                                                                  85,29,17,4,
+                                                                  19,48,17,
+                                                                  130,9,108,
+                                                                  111,99,97,
+                                                                  108,104,111,
+                                                                  115,116,135,
+                                                                  4,127,0,0,1,
+                                                                  48,10,6,8,
+                                                                  42,134,72,
+                                                                  206,61,4,3,
+                                                                  2,3,72,0,48,
+                                                                  69,2,33,0,
+                                                                  148,252,121,
+                                                                  107,219,166,
+                                                                  54,218,101,
+                                                                  7,195,138,
+                                                                  199,112,176,
+                                                                  50,243,255,
+                                                                  98,33,56,45,
+                                                                  68,68,6,67,
+                                                                  165,50,85,
+                                                                  60,60,147,2,
+                                                                  32,43,21,
+                                                                  208,226,15,
+                                                                  174,190,105,
+                                                                  234,212,52,
+                                                                  140,31,242,
+                                                                  8,242,132,
+                                                                  21,215,23,
+                                                                  158,215,167,
+                                                                  243,18,224,
+                                                                  16,241,114,
+                                                                  19,196,240>>},
+                                                               {key,
+                                                                {'ECPrivateKey',
+                                                                 <<48,119,2,
+                                                                   1,1,4,32,
+                                                                   38,202,
+                                                                   209,73,
+                                                                   59,55,
+                                                                   165,90,
+                                                                   149,172,
+                                                                   211,181,
+                                                                   99,114,
+                                                                   51,161,
+                                                                   249,12,
+                                                                   222,207,
+                                                                   61,226,
+                                                                   90,74,47,
+                                                                   164,69,
+                                                                   214,18,
+                                                                   140,114,
+                                                                   59,160,
+                                                                   10,6,8,
+                                                                   42,134,
+                                                                   72,206,
+                                                                   61,3,1,7,
+                                                                   161,68,3,
+                                                                   66,0,4,
+                                                                   22,59,
+                                                                   113,221,
+                                                                   8,66,196,
+                                                                   105,164,
+                                                                   239,165,
+                                                                   220,158,
+                                                                   160,223,
+                                                                   178,235,
+                                                                   148,74,
+                                                                   234,82,
+                                                                   176,185,
+                                                                   38,73,
+                                                                   227,51,
+                                                                   108,183,
+                                                                   152,173,
+                                                                   14,128,
+                                                                   229,167,
+                                                                   61,235,
+                                                                   100,13,
+                                                                   47,146,
+                                                                   214,205,
+                                                                   158,71,
+                                                                   205,14,
+                                                                   80,75,
+                                                                   110,127,
+                                                                   150,240,
+                                                                   163,58,
+                                                                   208,18,
+                                                                   67,151,
+                                                                   203,166,
+                                                                   236,63,
+                                                                   157>>}}],
+                                                             connection_type =>
+                                                              supervisor},
+                                                           cowboy_tls,
+                                                           #{env =>
+                                                              #{dispatch =>
+                                                                 [{'_',[],
+                                                                   [{[],[],
+                                                                     cowboy_static,
+                                                                     {priv_file,
+                                                                      quod,
+                                                                      "explorer/world.html"}},
+                                                                    {[<<"assets">>,
+                                                                      '...'],
+                                                                     [],
+                                                                     cowboy_static,
+                                                                     {priv_dir,
+                                                                      quod,
+                                                                      "explorer/assets"}},
+                                                                    {[<<"explorer">>],
+                                                                     [],
+                                                                     quod_client_http,
+                                                                     explorer_index},
+                                                                    {[<<"explorer">>,
+                                                                      <<"favicon.png">>],
+                                                                     [],
+                                                                     cowboy_static,
+                                                                     {priv_file,
+                                                                      quod,
+                                                                      "explorer/favicon.png"}},
+                                                                    {[<<"explorer">>,
+                                                                      <<"assets">>,
+                                                                      '...'],
+                                                                     [],
+                                                                     cowboy_static,
+                                                                     {priv_dir,
+                                                                      quod,
+                                                                      "explorer/assets"}},
+                                                                    {[<<"explorer">>,
+                                                                      <<"ws">>],
+                                                                     [],
+                                                                     quod_explorer_ws,
+                                                                     []},
+                                                                    {[<<"explorer">>,
+                                                                      <<"api">>,
+                                                                      <<"summary">>],
+                                                                     [],
+                                                                     quod_explorer_http,
+                                                                     summary},
+                                                                    {[<<"explorer">>,
+                                                                      <<"api">>,
+                                                                      <<"txs">>],
+                                                                     [],
+                                                                     quod_explorer_http,
+                                                                     txs},
+                                                                    {[<<"explorer">>,
+                                                                      <<"api">>,
+                                                                      <<"tx">>,
+                                                                      ns,id],
+                                                                     [],
+                                                                     quod_explorer_http,
+                                                                     tx},
+                                                                    {[<<"explorer">>,
+                                                                      <<"api">>,
+                                                                      <<"block">>,
+                                                                      ns,slot],
+                                                                     [],
+                                                                     quod_explorer_http,
+                                                                     block},
+                                                                    {[<<"health">>],
+                                                                     [],
+                                                                     quod_client_http,
+                                                                     health},
+                                                                    {[<<"api">>,
+                                                                      <<"ontologies">>,
+                                                                      <<"system">>],
+                                                                     [],
+                                                                     quod_client_http,
+                                                                     system_ontologies},
+                                                                    {[<<"api">>,
+                                                                      <<"auth">>,
+                                                                      <<"challenge">>],
+                                                                     [],
+                                                                     quod_client_http,
+                                                                     auth_challenge},
+                                                                    {[<<"api">>,
+                                                                      <<"auth">>,
+                                                                      <<"complete">>],
+                                                                     [],
+                                                                     quod_client_http,
+                                                                     auth_complete},
+                                                                    {[<<"api">>,
+                                                                      <<"views">>],
+                                                                     [],
+                                                                     quod_client_view,
+                                                                     []},
+                                                                    {[<<"api">>,
+                                                                      <<"goals">>,
+                                                                      <<"read">>],
+                                                                     [],
+                                                                     quod_client_http,
+                                                                     signed_goal_read},
+                                                                    {[<<"api">>,
+                                                                      <<"goals">>,
+                                                                      <<"control">>],
+                                                                     [],
+                                                                     quod_client_http,
+                                                                     signed_goal_control},
+                                                                    {[<<"api">>,
+                                                                      <<"goals">>,
+                                                                      <<"execute">>],
+                                                                     [],
+                                                                     quod_client_http,
+                                                                     signed_goal_execute},
+                                                                    {[<<"api">>,
+                                                                      <<"agents">>,
+                                                                      <<"instructions">>],
+                                                                     [],
+                                                                     quod_client_http,
+                                                                     {signed_instruction,
+                                                                      submit}},
+                                                                    {[<<"api">>,
+                                                                      <<"agents">>,
+                                                                      <<"instructions">>,
+                                                                      <<"outcomes">>],
+                                                                     [],
+                                                                     quod_client_http,
+                                                                     {signed_instruction,
+                                                                      resolve}},
+                                                                    {[<<"api">>,
+                                                                      <<"goals">>,
+                                                                      <<"outcomes">>],
+                                                                     [],
+                                                                     quod_client_http,
+                                                                     signed_goal_outcome},
+                                                                    {[<<"api">>,
+                                                                      <<"goals">>,
+                                                                      <<"cursors">>],
+                                                                     [],
+                                                                     quod_client_http,
+                                                                     signed_goal_cursor},
+                                                                    {[<<"api">>,
+                                                                      <<"goals">>,
+                                                                      <<"cursors">>,
+                                                                      id,
+                                                                      <<"next">>],
+                                                                     [],
+                                                                     quod_client_http,
+                                                                     signed_cursor_next},
+                                                                    {[<<"api">>,
+                                                                      <<"goals">>,
+                                                                      <<"cursors">>,
+                                                                      id,
+                                                                      <<"accept">>],
+                                                                     [],
+                                                                     quod_client_http,
+                                                                     signed_cursor_accept},
+                                                                    {[<<"api">>,
+                                                                      <<"goals">>,
+                                                                      <<"cursors">>,
+                                                                      id],
+                                                                     [],
+                                                                     quod_client_http,
+                                                                     signed_cursor_stop}]}]},
+                                                             stream_handlers =>
+                                                              [quod_http_headers_h,
+                                                               cowboy_stream_h],
+                                                             connection_type =>
+                                                              supervisor,
+                                                             dynamic_buffer =>
+                                                              {512,131072}}]},
+                                                         permanent,false,
+                                                         infinity,supervisor,
+                                                         [ranch_listener_sup]}})
+*failed*
+in function ets:lookup_element/3
+  called as lookup_element(ranch_server,{addr,quod_client_listener},2)
+in call from ranch_server:get_addr/1 (/tmp/quod-server-stage2-20261104-zckjvoTs/_build/default/lib/ranch/src/ranch_server.erl, line 136)
+in call from ranch:get_port/1 (/tmp/quod-server-stage2-20261104-zckjvoTs/_build/default/lib/ranch/src/ranch.erl, line 399)
+in call from quod_ontology_acl_acceptance_tests:serve/5 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_ontology_acl_acceptance_tests.erl, line 86)
+in call from quod_ontology_acl_acceptance_tests:with_fixture/2 (/tmp/quod-server-stage2-20261104-zckjvoTs/test/quod_ontology_acl_acceptance_tests.erl, line 24)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+**error:badarg
+  output:<<"">>
+
+=======================================================
+  Failed: 2.  Skipped: 0.  Passed: 31.
+===> Error running tests

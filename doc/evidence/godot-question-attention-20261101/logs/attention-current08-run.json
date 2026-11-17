@@ -1,0 +1,49 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-question-attention-20261101/signed.py",
+    "attention-current08",
+    "doc/evidence/godot-question-attention-20261101/inputs/client-attention-candidate08-manifest.json",
+    "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source",
+    "attention-full"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 1,
+  "timed_out": false,
+  "driver_inputs": {
+    "browser.py": "8e8f67f3f41065382946c7859fba8ba50c46e9560721e959e9814640ab437e7a",
+    "build.py": "238e6fbc3875947865a4494f79612d260f38b692265716a9c258a72be7aeeeda",
+    "hashes.py": "2df13f387f7d127b47265dec1ead54f38736e42bf874a3b20ecfa1ba5f2be6d7",
+    "isolation.py": "25ec0a0d49a7be340614e575b10e3168240bac2602e88fa6f4d38b13217e44d8",
+    "run.py": "20ace533ea6238853b692dde4a651472517e4bf91a4cacdd966f348fc37b1afd",
+    "signed.py": "8eea2f27093e0ee11d2e04d9aca89ab4362799a502bd7e2aba23d3fec74626b4",
+    "package.py": "e43ddf3de584c3313da081d4bbe3dcf05744af84b97d070e892a1b8d8744f16f"
+  },
+  "start_utc": "2026-11-01T22:26:38Z",
+  "elapsed_seconds": 79.03202104568481,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/attention-current08-run/stdout.raw",
+      "sha256": "111dded72e3a0cd49ad047f4ad4ecad001af569cd6b94f214cc6f810736e0d42",
+      "bytes": 7601
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/attention-current08-run/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-current08-run-stdout.log",
+      "sha256": "111dded72e3a0cd49ad047f4ad4ecad001af569cd6b94f214cc6f810736e0d42",
+      "bytes": 7601
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-question-attention-20261101/logs/attention-current08-run-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

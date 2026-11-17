@@ -1,0 +1,17 @@
+{
+  "command": [
+    "git",
+    "apply",
+    "--check",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/stage2-presentation-boundaries-20261103/proposals-carrier02/carrier-custody.patch"
+  ],
+  "true_exit": 0,
+  "stdout_eof": true,
+  "stderr_eof": true,
+  "stdout": "",
+  "stderr": "",
+  "patch_sha256": "2b095a65037b8ae42535fb7a527dae69cdc02a4a11d00a9f2c266e2613fb804e",
+  "applied": false,
+  "compiled": false,
+  "executed": false
+}

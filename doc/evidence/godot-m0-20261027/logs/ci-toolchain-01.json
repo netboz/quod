@@ -1,0 +1,20 @@
+{
+  "command": [
+    "docker",
+    "run",
+    "--rm",
+    "--network",
+    "none",
+    "--entrypoint",
+    "/bin/sh",
+    "12c1389ee346",
+    "-ec",
+    "rustc -Vv; cargo --version; rebar3 version"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-27T16:34:53Z",
+  "elapsed_seconds": 1.3194432258605957,
+  "child_exit": 0,
+  "timed_out": false,
+  "error_diagnostics": 0
+}

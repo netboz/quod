@@ -1,0 +1,16 @@
+{
+  "passed": true,
+  "checks": [
+    "reject unsafe member /escape",
+    "reject unsafe member ../escape",
+    "reject unsafe member a/../b",
+    "reject unsafe member a//b",
+    "reject an incorrect supplied export-manifest identity",
+    "reject changed actual export bytes",
+    "extra notices cannot replace an export",
+    "launcher preserves cwd independence, literal argument boundaries and true child exit"
+  ],
+  "count": 8,
+  "native_client_or_server_launched": false,
+  "source_sha256": "909f502a6b5252313764a63887b3de44fce51a6f9e153886046ba7dcf19aab3e"
+}

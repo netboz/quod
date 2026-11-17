@@ -1,0 +1,48 @@
+# Prepare a usable coordinated VR test — 271
+
+/planning-implement QUO-65
+
+Same sole implementation session ca84d4f8-ccee-4ff9-9336-9cf3e9040a1f, actual Astra, same coordinator ed9cd520-b2a4-4607-a8f5-ff99d08f3e46 in pearl-stone. Read AGENTS, strict newest numeric progress270, and the full closed269 result. Yan has now explicitly renewed the work: **“so prepare a working testplease”**. This authorizes preparation and ONE separately labelled fresh opportunity after the physical gate below. It supersedes270's no-new-activation disposition, not any recorded failure. No interrupt, competing writer, model/reviewer change or duplicate old task. Old Claude/physical questions are not pending.
+
+## Implementation checklist
+
+- [x] Read the closed269 disposition, accepted270 proof and actual newest271 progress; verify HEAD/branch/empty index and retain the tracker no-match responses.
+- [x] Add payload-free engine/helper pipe ownership observations; selected regression02 passes22 checks/child0/wrapper0, including inherited writers after direct-child exit, genuine EOF after helper completion, and a real pre-exec-to-exec transition. Control and closure behavior are unchanged;269's pipe cause remains unproved. Initial15-check credit is retained separately.
+- [x] Correct the pre-exec observation: pin the process birth first, and pin the helper executable only after it matches. Selected artifacts-ready271-02.json records the completed artifact-only preparation, before any live process or clock started.
+- [x] Receive root's fresh physical confirmation/explicit GO, then supervise the single271 opportunity through its separate BEGIN and closure. The opportunity FAILED the original180s preparation bound: BEGIN was forwarded at166.448s, leaving13.552s. Client0/client-wrapper1, fixture0/fixture-wrapper0, all4EOF/readers[]. No native READY or human task pass. See [result271](godot-steamvr-working-test-result-271.md); no further launch.
+
+## Immediate deliverable: ready-to-launch artifacts, no expiring app yet
+
+Finish the necessary software preparation BEFORE starting any fixture/client/session clock. Reuse the qualified269 companion (same98 production inputs,99 supplied, five phases0) and current14-source fixture, pinned engine, current package and exact-stat caches. No product/package/engine build or export/archive audit is justified merely to bump a label. Keep per-process QT_QPA_PLATFORM=xcb and actual DISPLAY/WAYLAND_DISPLAY, explicit Godot Wayland/Vulkan/mobile and per-app SteamVR manifest. Preserve global runtime/Qt settings and user-owned SteamVR.
+
+Root independently verified269 supervision28/0 and source-only composition in Q/steamvr-coordinated-guards-check-269.json and composition-check-269.json. Root270 small closure proof SHA7abd0a8c683c639ae55638cf474628afbd128b5cfe104dc7bdacf8b2d3fb761c authenticates the actual closed client0/wrapper1/eof false and fixture0/allEOF. Do not redo those checks without an affected change.
+
+Keep a short implementation checklist in this handoff as preparation proceeds. Tracker radar/get currently return no matching QUO-65 in this tool context; preserve that actual error, do not create a duplicate or retry blocked body publication. Existing user authority authorizes this continuation; tracker lookup is not a reason to stop useful work.
+
+## Fix coordination and preserve honest closure
+
+269 expired while root waited for an unanswered wearing widget. Correct the procedure: root will ask for actual contemporaneous wearing/dashboard-closed confirmation only once you report ARTIFACTS_READY_TO_LAUNCH, while NO fixture/client is running. Upon a fresh affirmative root will give one explicit launch/go continuation; then prepare the new fixture/client immediately, report exact current PREPARED identities and remaining lifetime, and await root's one begin. No extra audits, builds or long bookkeeping between confirmation and native admission. If the confirmation is stale or preparation fails, report actual blocker, no repeated blind launch.
+
+Do not run SteamVR, a client, fixture or headset probe during artifact preparation. No generic runtime restart or user focus/dashboard input request. No old question revival or automatic begin.
+
+269 also exposed client0 with both output streams still open. Preserve the whole failure. The same new monitor remained alive with pipe stdio, but original client pipe IDs were NOT recorded, so correspondence/cause remains unproved. Inspect the saved small receipts and current launch/capture owner. If a small causal correction is demonstrated, qualify it through a bounded real-owner regression. Do not lower the EOF guard, close readers to manufacture EOF, signal/kill user-runtime helpers, change application close order/deadlines or chase a green full run. At minimum capture the new direct engine's stdout/stderr pipe identities immediately at Popen and record exact current invocation/helper writer ownership when available, payload-free, so the next observation is attributable. Historical noEOF cause need not be solved before reporting usable launch artifacts; distinguish observation readiness from teardown/release acceptance.
+
+No second executor, shadow domain state, registration fallback, resubmission or silent auth renewal. Existing test markers, stdin and Godot executor remain owners. Removable harness-only changes should avoid a new C# build unless actually necessary. Any changed control/dispatch behavior needs meaningful finite owner checks; reuse unchanged28 obligations by strict source/stat custody.
+
+## Fresh opportunity AFTER root's launch gate
+
+ONE new271 profile/fixture is authorized only after root sends the actual fresh wearing confirmation and explicit launch command. The current user request authorizes the test; this gate obtains necessary physical timing, not routine permission. Both wrappers tty:true. No live session may be left to expire while Yan waits through preparation. Reuse no263 pending1 or historical profile/journal; at most one ordinary Library Create is setup, no Enter/Leave/Preview/Save automation.
+
+Original preparation180, native admission30, participant1800, normal-close60 and outer2100 plus authentic earlier expiry stay absolute for the fresh invocation. Start them at their existing actual invocation points, never extend/reset. Root's one begin must target the actual current mapped PID/start/executable/address under those bounds; repeated/late commands cannot revive/replay. Participant starts only at actual native READY. PREPARED is not READY. If native checks fail, preserve literal state and normally close exact client then fixture once; no further launch.
+
+Native readiness must retain actual stereo frame progress/shouldRender/focus/current supported controllers/tracking/neutral/signed world and operation admission/models. Do not infer wearing from High, UI icons, desktop focus or unsupported presence. After actual READY root gives one simple Library inspection task; no human-task success without Yan's feedback. Correct Qt startup is separate evidence, not proof of XR visibility.
+
+### Prepared artifacts and launch sequence
+
+Exact argv, tty:true, source/stat custody and limits are retained in [selected artifacts-ready271-02.json](../../doc/evidence/godot-steamvr-working-20261101/artifacts-ready271-02.json). New [pipe-owner regression02](../../doc/evidence/godot-steamvr-working-20261101/logs/steamvr271-pipe-owner02.json):22 checks, child0/wrapper0, no Quod/runtime/hardware action. The existing supervision.py is byte-identical to the source/stat-authenticated269 owner; its28 checks are reused. The same269 companion manifest187bea2c60cbd47daffc3568e22662828c56fc1a2c4b12b4009cd1fd01631374 and five successful build phases are reused, with98 production/99 supplied sources. All14 current server resource identities match accepted custody. Initial15-check/first-artifact receipts remain preserved; the corrected observation additionally qualifies the genuine exec transition without polling or accepting a different process birth.
+
+After root's fresh physical confirmation and explicit launch only, execute the fixture command from that receipt with tty:true. On its actual M1B_READY event, execute the client command with tty:true. Report the fresh PREPARED ownership and remaining original bounds immediately; only root's subsequent exact-owned begin proceeds to native admission. No builds or audits intervene after physical confirmation.
+
+The only271 launch-harness addition records direct engine stdout/stderr pipe identities at Popen and reads payload-free descriptor ownership for helpers explicitly named by that invocation. It preserves the existing decision/dispatch owner, reader drain, EOF requirement, normal-close path and all deadlines. The regression demonstrates genuine inherited writers after a harmless direct child exits and genuine EOF after its helper normally completes; it does not retrospectively identify269's unknown retained writer or establish a shutdown fix. All historical targets remain forbidden.
+
+Report ARTIFACTS_READY_TO_LAUNCH promptly with exact commands/reused manifests/current harness changes and any qualified limits, then wait for root's explicit launch. Do not send a final asking for user permission, do not selflaunch or schedule an opportunity. Root is sole human contact. No notifier during a prepared/live opportunity, no seal/audit/package detour. Preserve all failures,31agents,user/main,profiles/private Data and accepted262 package. No global install/trust/cleanup/retirement/deploy/commit-push/cutover/Stage3, uncertain replay or physical/runtime action beyond this explicitly gated test.

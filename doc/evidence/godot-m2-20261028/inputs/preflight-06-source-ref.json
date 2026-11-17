@@ -1,0 +1,6 @@
+{
+  "source_manifest": "doc/evidence/godot-m2-20261028/inputs/preflight-05-source-manifest.json",
+  "sha256": "5da82db221accb56e5767ae9df02be86417cb2bc2bae9997fd7be14678cf285b",
+  "all_live_stage_inputs_match": true,
+  "source_archive": "/home/yan/.cache/quod-m2-artifacts/quod-m2-dev-01/preflight-05-authored-inputs.tar.gz"
+}

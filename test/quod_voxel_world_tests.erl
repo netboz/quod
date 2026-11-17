@@ -3,7 +3,7 @@
 -include_lib("erlog/src/erlog_int.hrl").
 
 composed_gui_world_membership_enumeration_terminates_test() ->
-    with_world(["voxel_world_gui.pl","lobby_worlds.pl"],fun(Store0,Owner) ->
+    with_world(["voxel_world_gui.pl", "lobby_worlds.pl"],fun(Store0,Owner) ->
         Query = {findall,{'W'},{instance_of,voxel_world,{'W'}},{'Worlds'}},
         ?assertEqual([],value({'Worlds'},Query,Store0)),
         Setup = quod_ct:source_assertions([{instance_of,voxel_world,land},
@@ -39,7 +39,7 @@ sparse_chunk_inputs_preserve_absence_neighbors_and_ambiguity_test() ->
     end).
 
 world_library_spawn_candidates_cover_supported_presets_test_() ->
-    {timeout,60,fun() -> with_world(["voxel_world_gui.pl","lobby_worlds.pl"],fun(Store,_) ->
+    {timeout,60,fun() -> with_world(["voxel_world_gui.pl", "lobby_worlds.pl"],fun(Store,_) ->
         lists:foreach(fun({Preset,Spacing,Mode,Hills,Caves}) ->
             Recipe = {recipe,Preset,1947,Spacing,Mode,16,128,Hills,Caves},
             Spec = value({'S'},{voxel_generation_spec,Recipe,{'S'}},Store),
@@ -181,7 +181,7 @@ with_world(ExtraSources,Fun) ->
         quod_ct:signed_goal_fixture(#{target => Target}),
     Terms = lists:append([quod_committed_projection:read_terms(
         filename:join([code:priv_dir(quod),"ontologies",F])) || F <-
-            ["space.pl","quod_physics.pl","voxel_world.pl"] ++ ExtraSources]),
+            ["quod_physics.pl", "voxel_world.pl"] ++ ExtraSources]),
     Facts = [{can_create_voxel_world,land,Owner},{can_edit_voxel_world,land,Owner,{'_'}},
         {can_manage_voxel_world,land,Owner,{'_'}},
         {voxel_allowances,land,limits()},

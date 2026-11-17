@@ -26,7 +26,7 @@ carried in `quod_erlog_db_local_prove`, outside Prolog-visible flags.
          committed_state/1, read_only_state/1, local_changes/1, effects/1,
          prepared_effect/2, sealed_plan/1, effect_reservation/1,
          signer_from_state/1,
-         read_set/1, absorb_read_set/2,
+         read_set/1, absorb_read_set/2, proof_policy_reads/1, admit_answer/2,
          live_bridges/1, transcript/1, signer/1,
          seal/2, attest/2,
          dirty/1,
@@ -46,10 +46,14 @@ carried in `quod_erlog_db_local_prove`, outside Prolog-visible flags.
           scope_id    :: <<_:128>>,
           read_only = false :: boolean(),
           current     :: tuple(),
+          %% Admission reads join a material plan; they do not make an
+          %% otherwise untouched scope a transaction participant.
+          proof_policy_reads = #{} :: map(),
+          proof_limits = none :: none | quod_material_admission:limits(),
           signer = none :: quod_identity:signer() | none,
           invocations = #{} :: #{term() => invocation_state()},
           %% Invocation ids are transcript identities, not reusable worker
-          %% slots. Keep the bounded lifetime set separately from the live
+          %% slots. Keep the lifetime set separately from the live
           %% continuations so cancel/exhaustion cannot reopen an old slot.
           used_invocations = #{} :: #{term() => true},
           savepoints  = #{} :: #{term() => quod_erlog_db_local_prove:revision()},
@@ -70,24 +74,21 @@ carried in `quod_erlog_db_local_prove`, outside Prolog-visible flags.
                     {binary(), <<_:256>>, <<_:256>>, <<_:256>>},
                 target := {binary(), <<_:256>>}},
           overlay_generation = 0 :: non_neg_integer(),
-          %% The bounded canonical invocation transcript (`m:quod_dtx`).
+          %% The canonical invocation transcript (`m:quod_dtx`).
           %% `transcript_rev` holds
           %% `{InvocationId, Chain, RequestedGoalBin, Verdict}` in reverse open
           %% order. RequestedGoalBin is canonical atom-safe wire data, never raw
           %% atom-bearing ETF; `answers` holds each invocation's evolving
-          %% `{Count, ChainedDigest, Tag}`. Recording is off (`transcript_bytes
-          %% = disabled`) for read-only sessions and sessions without a proof
+          %% `{Count, ChainedDigest, Tag}`. Recording is off (`record_transcript
+          %% = false`) for read-only sessions and sessions without a proof
           %% context — they can never seal a plan.
           transcript_rev = [] ::
               [{binary(), list(), binary(), allowed | denied}],
-          transcript_bytes = disabled :: disabled | non_neg_integer(),
+          record_transcript = false :: boolean(),
           answers = #{} :: #{term() => {non_neg_integer(), binary(),
                                         active | complete | error | cancelled}}
          }).
 
-%% Fixed per-invocation transcript overhead charged at open, covering the
-%% final entry's count, chained digest, and completion tag.
--define(TRANSCRIPT_ENTRY_SLACK_BYTES, 96).
 -define(TRANSCRIPT_DIGEST_SEED, <<0:256>>).
 
 -type invocation_state() ::
@@ -100,22 +101,63 @@ start(#est{} = Committed, OverlayOpts) when is_map(OverlayOpts) ->
     Handle = #session_ref{owner = self(), id = make_ref()},
     ScopeId = session_scope_id(OverlayOpts),
     Metadata = maps:get(proof_context, OverlayOpts, undefined),
+    {ProofLimits, PolicyReads} = execution_budget(Metadata, Committed),
     PrivateContext = {session_ref, Handle, Metadata},
     Wrapped = quod_erlog_db_local_prove:wrap_state(
                 Committed, OverlayOpts#{proof_context => PrivateContext}),
-    TranscriptBytes =
-        case Metadata =/= undefined andalso
-             not maps:get(read_only, OverlayOpts, false) of
-            true -> 0;
-            false -> disabled
-        end,
+    RecordTranscript = Metadata =/= undefined andalso
+                       not maps:get(read_only, OverlayOpts, false),
     Signer = maps:get(signer, OverlayOpts, none),
     put_session(Handle, #session_state{scope_id = ScopeId,
                                        read_only = maps:get(read_only, OverlayOpts, false),
                                        current = Wrapped,
+                                       proof_policy_reads = PolicyReads,
+                                       proof_limits = ProofLimits,
                                        signer = Signer,
-                                       transcript_bytes = TranscriptBytes}),
+                                       record_transcript = RecordTranscript}),
     Handle.
+
+%% Only actual proof workers install process limits. Local committed-policy
+%% selectors use the same interpreter without changing their owner's process.
+execution_budget(undefined, _Committed) -> {none, #{}};
+execution_budget(_Metadata, Committed) ->
+    case quod_material_admission:policy(proof, Committed) of
+        {ok, #{heap_bytes := Limit} = Limits, Reads} ->
+            WordBytes = erlang:system_info(wordsize),
+            {total_heap_size, Words} = process_info(self(), total_heap_size),
+            case quod_material_admission:check(proof, #{heap_bytes => Words * WordBytes},
+                                               #{heap_bytes => Limit}) of
+                ok ->
+                    MaxWords = case Limit of unlimited -> 0; _ -> Limit div WordBytes end,
+                    _ = process_flag(max_heap_size,
+                                     #{size => MaxWords, kill => true, error_logger => true}),
+                    {Limits, Reads};
+                {error, Reason} -> throw({quod_ask_error, Reason})
+            end;
+        {error, Reason} -> throw({quod_ask_error, Reason})
+    end.
+
+-doc "Admit a produced or received answer against this proof's pinned policy.".
+-spec admit_answer(session() | tuple(), term()) -> ok | {error, term()}.
+admit_answer(#est{} = St, Answer) ->
+    admit_answer(state_handle(St), Answer);
+admit_answer(Handle, Answer) ->
+    State = get_session(Handle),
+    case check_state_access(State) of
+        ok -> admit_answer_bytes(State#session_state.proof_limits, Answer);
+        {error, _} = Error -> Error
+    end.
+
+%% Internal committed-policy selectors have no proof execution allocation;
+%% recursively selecting their own policy would not have a committed owner.
+admit_answer_bytes(none, _Answer) -> ok;
+admit_answer_bytes(Limits, Answer) ->
+    case quod_wire_term:encode_canonical(Answer) of
+        {ok, Bytes} ->
+            quod_material_admission:check(
+              proof, #{answer_bytes => byte_size(Bytes)}, Limits);
+        {error, bad_term} -> {error, {protocol_error, bad_payload}}
+    end.
 
 -doc "Stop a session and release its one shared read-set table. Idempotent.".
 -spec stop(session()) -> ok.
@@ -158,19 +200,26 @@ open_checked(Handle, InvocationId, RequestedGoal, Verdict,
             {error, {protocol_error, bad_binding}};
         {true, true, true, _} ->
             {error, {protocol_error, bad_binding}};
-        {true, false, true, _} when map_size(UsedInvocations) >=
-                              ?QUOD_MAX_INVOCATIONS_PER_SCOPE ->
-            invocation_limit_error(Context);
         {true, false, true, {ok, ExecutionGoal}} ->
-            case charge_transcript(State, InvocationId, RequestedGoal,
+            case record_invocation(State, InvocationId, RequestedGoal,
                                    Verdict, Context) of
                 {ok, State1} ->
-                    InvocationState = quod_erlog_db_local_prove:set_write_intent(
+                    InvocationState0 = quod_erlog_db_local_prove:set_write_intent(
                                         State1#session_state.current,
                                         quod_transaction_scope:selection_mode(Selection)),
+                    {InvocationState, InvocationContext} =
+                        case quod_transaction_scope:selection_read_mode(Selection) of
+                            committed_read ->
+                                {quod_erlog_db_local_prove:committed_read_state(InvocationState0),
+                                 quod_predicates:operation_guard_context(Context)};
+                            read_only ->
+                                {_, ReadOnly} = quod_erlog_db_local_prove:enter_read_only(InvocationState0),
+                                {ReadOnly, Context};
+                            read_write -> {InvocationState0, Context}
+                        end,
                     Scope = quod_proof_scope:open_invocation(
                               ExecutionGoal, InvocationState,
-                              Context,
+                              InvocationContext,
                               quod_transaction_scope:checkpoint_depth(
                                 Selection)),
                     put_session(
@@ -197,43 +246,26 @@ execution_goal(denied, _RequestedGoal, Context) ->
 execution_goal(_Verdict, _RequestedGoal, _Context) ->
     error.
 
-%% The transcript charge is taken BEFORE the goal runs: an invocation the
-%% transcript cannot afford never executes, so a sealed plan's transcript is
-%% complete by construction — there is no way to run work it does not record.
-charge_transcript(
-  #session_state{transcript_bytes = disabled} = State,
+%% Record the exact invocation before it executes. Working memory is governed
+%% by committed Prolog policy; the complete sealed plan owns encoding bounds.
+record_invocation(
+  #session_state{record_transcript = false} = State,
   _InvocationId, _RequestedGoal, _Verdict, _Context) ->
     {ok, State};
-charge_transcript(
+record_invocation(
   #session_state{transcript_rev = Entries,
-                 transcript_bytes = Bytes,
                  answers = Answers} = State,
   InvocationId, RequestedGoal, Verdict, Context) ->
     Chain = quod_predicates:ctx_chain(Context),
     case quod_wire_term:encode_canonical(RequestedGoal) of
-        {ok, RequestedGoalBin}
-          when byte_size(RequestedGoalBin) =< ?QUOD_MAX_NESTED_GOAL_BYTES ->
+        {ok, RequestedGoalBin} ->
             Entry = {InvocationId, Chain, RequestedGoalBin, Verdict},
-            Cost = erlang:external_size(Entry) + ?TRANSCRIPT_ENTRY_SLACK_BYTES,
-            case Bytes + Cost =< ?QUOD_MAX_SCOPE_TRANSCRIPT_BYTES of
-                true ->
-                    {ok, State#session_state{
-                           transcript_rev = [Entry | Entries],
-                           transcript_bytes = Bytes + Cost,
-                           answers = Answers#{
-                             InvocationId =>
-                                 {0, ?TRANSCRIPT_DIGEST_SEED, active}}}};
-                false ->
-                    {error, {too_large, transcript}}
-            end;
-        _ ->
-            {error, {too_large, transcript}}
-    end.
-
-invocation_limit_error(Context) ->
-    case quod_predicates:ctx_ns(Context) of
-        Ns when is_binary(Ns) -> {error, {proof_limit_exceeded, Ns}};
-        undefined -> {error, {protocol_error, bad_binding}}
+            {ok, State#session_state{
+                   transcript_rev = [Entry | Entries],
+                   answers = Answers#{InvocationId =>
+                       {0, ?TRANSCRIPT_DIGEST_SEED, active}}}};
+        {error, bad_term} ->
+            {error, {protocol_error, bad_payload}}
     end.
 
 -doc "Derive one answer from an invocation, rebased onto the latest staged view.".
@@ -442,6 +474,11 @@ read_set(Handle) ->
     State = get_session(Handle),
     overlay_read_set(State#session_state.current).
 
+-doc "The pinned proof-budget dependencies retained for material sealing.".
+-spec proof_policy_reads(session()) -> map().
+proof_policy_reads(Handle) ->
+    (get_session(Handle))#session_state.proof_policy_reads.
+
 -doc """
 Merge an authorization proof's committed reads into this session's dependencies.
 
@@ -463,7 +500,7 @@ live_bridges(Handle) ->
     overlay_live_bridges(State#session_state.current).
 
 -doc """
-The session's bounded canonical invocation transcript and final overlay
+The session's canonical invocation transcript and final overlay
 generation, in open order: `{InvocationId, Chain, RequestedGoalBin, Verdict,
 AnswerCount, ChainedAnswerDigest, Tag}` per invocation. Empty for a session
 that records none (read-only, or no proof context). `RequestedGoalBin` is the
@@ -490,7 +527,7 @@ transcript(Handle) ->
 dirty(Handle) ->
     local_changes(Handle) =/= [] orelse effects(Handle) =/= [] orelse transient(Handle) =/= none.
 
--doc "Atomically retain one current immutable revision under bounded batch ids.".
+-doc "Atomically retain one current immutable revision under exact batch ids.".
 -spec checkpoint_many(session(), [term()]) ->
           ok | {error, term()}.
 checkpoint_many(Handle, SavepointIds0) when is_list(SavepointIds0) ->
@@ -507,23 +544,11 @@ checkpoint_many_checked(Handle, State, SavepointIds0) ->
     SavepointIds = lists:usort(SavepointIds0),
     NewIds = [Id || Id <- SavepointIds,
                     not maps:is_key(Id, Savepoints)],
-    case map_size(Savepoints) + length(NewIds) =<
-           ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF of
-        true ->
-            Revision = quod_erlog_db_local_prove:revision(
-                         State#session_state.current),
-            Retained = lists:foldl(
-                         fun(Id, Acc) -> Acc#{Id => Revision} end,
-                         Savepoints, NewIds),
-            put_session(
-              Handle,
-              State#session_state{savepoints = Retained}),
-            ok;
-        false ->
-            {error,
-             {savepoint_limit_exceeded,
-              ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF}}
-    end.
+    Revision = quod_erlog_db_local_prove:revision(State#session_state.current),
+    Retained = lists:foldl(fun(Id, Acc) -> Acc#{Id => Revision} end,
+                          Savepoints, NewIds),
+    put_session(Handle, State#session_state{savepoints = Retained}),
+    ok.
 
 -doc "The target-node witness configured by the owning ontology engine.".
 -spec signer(session()) -> quod_identity:signer() | none.
@@ -829,9 +854,16 @@ mark_active(Handle, InvocationId,
         invocations = Invocations#{InvocationId => active}}).
 
 finish_step(Handle, InvocationId, {solution, Solution, Scope}, Selection) ->
-    finish_mutable_step(
-      Handle, InvocationId, Scope, Selection, keep,
-      adopt, {answer, Solution}, {solution, Solution});
+    case admit_answer(Handle, Solution) of
+        ok ->
+            finish_mutable_step(
+              Handle, InvocationId, Scope, Selection, keep,
+              adopt, {answer, Solution}, {solution, Solution});
+        {error, Reason} ->
+            finish_mutable_step(
+              Handle, InvocationId, Scope, Selection, remove,
+              adopt, error, {error, Reason})
+    end;
 finish_step(Handle, InvocationId, {complete, Reasons, Scope}, Selection) ->
     finish_mutable_step(
       Handle, InvocationId, Scope, Selection, remove,
@@ -916,7 +948,7 @@ update_after_step(Handle, InvocationId, Scope, Selection,
 %% O(1) per answer while still binding every answer's exact content and order.
 %% Only the first terminal tag sticks; a cleanup cancel after completion is not
 %% a second outcome.
-note_transcript(#session_state{transcript_bytes = disabled} = State,
+note_transcript(#session_state{record_transcript = false} = State,
                 _InvocationId, _Event) ->
     State;
 note_transcript(#session_state{answers = Answers} = State,

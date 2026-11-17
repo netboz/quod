@@ -1,0 +1,91 @@
+M4_PHYSICAL_STARTUP_WANDS 2
+PASS enabled action create-key
+PASS enabled action connect
+PASS physical fixture authenticates the exact owned network
+PASS enabled action register
+PASS physical fixture retains its original signed human
+PASS enabled action prepare
+PASS enabled action setup
+PASS physical fixture has no unknown original operation
+PASS signed projection selects the pinned admitted Vive appearance
+PASS enabled action start-xr
+M4_VIVE_GUI start-xr
+PASS ordinary signed-in Start OpenXR attaches the real owner
+M4_VIVE_RECORDED ready
+M4_VIVE_PRODUCT_READY
+M4_VIVE_FIRST_DRAW
+M4_VIVE_HEAD True:None
+M4_VIVE_POSE left True:High/True:High
+M4_VIVE_POSE right True:High/True:High
+M4_PHYSICAL_APPLICATION_READY
+M4_VIVE_RECORDED status
+M4_VIVE_HEAD True:High
+M4_VIVE_LOOK_CUE READY frame=4235
+M4_VIVE_LOOK_CUE WAITING frame=4835
+M4_VIVE_LOOK_CUE READY frame=4841
+M4_VIVE_LOOK_CUE WAITING frame=4845
+M4_VIVE_LOOK_CUE READY frame=4849
+M4_VIVE_LOOK_CUE WAITING frame=5269
+M4_VIVE_LOOK_CUE READY frame=5273
+M4_VIVE_LOOK_CUE WAITING frame=5372
+M4_VIVE_EDGE right {"component":"xr-standard-trigger","pressed":true,"frame":5372,"current":true,"axes_x":0,"axes_y":-0}
+M4_VIVE_LOOK_CUE READY frame=5702
+M4_VIVE_EDGE right {"component":"xr-standard-trigger","pressed":false,"frame":5702,"current":true,"axes_x":0,"axes_y":-0}
+M4_VIVE_LOOK_CUE WAITING frame=6092
+M4_VIVE_EDGE right {"component":"xr-standard-trigger","pressed":true,"frame":6092,"current":true,"axes_x":0,"axes_y":-0}
+M4_VIVE_LOOK_CUE READY frame=6093
+M4_VIVE_EDGE right {"component":"xr-standard-trigger","pressed":false,"frame":6093,"current":true,"axes_x":0,"axes_y":-0}
+M4_VIVE_LOOK_CUE WAITING frame=8419
+M4_VIVE_LOOK_CUE READY frame=8420
+M4_VIVE_LOOK_CUE WAITING frame=8421
+M4_VIVE_LOOK_CUE READY frame=8429
+M4_VIVE_LOOK_CUE WAITING frame=8439
+M4_VIVE_LOOK_CUE READY frame=8441
+M4_VIVE_LOOK_CUE WAITING frame=8600
+M4_VIVE_LOOK_CUE READY frame=8607
+M4_VIVE_LOOK_CUE WAITING frame=8615
+M4_VIVE_LOOK_CUE READY frame=8655
+M4_VIVE_LOOK_CUE WAITING frame=9026
+M4_VIVE_LOOK_CUE READY frame=9045
+M4_VIVE_LOOK_CUE WAITING frame=9109
+M4_VIVE_LOOK_CUE READY frame=9304
+M4_VIVE_LOOK_CUE WAITING frame=9555
+M4_VIVE_EDGE right {"component":"xr-standard-trigger","pressed":true,"frame":9555,"current":true,"axes_x":0,"axes_y":-0}
+M4_VIVE_LOOK_CUE READY frame=9589
+M4_VIVE_EDGE right {"component":"xr-standard-trigger","pressed":false,"frame":9589,"current":true,"axes_x":0,"axes_y":-0}
+M4_VIVE_LOOK_CUE WAITING frame=9637
+M4_VIVE_EDGE right {"component":"xr-standard-trigger","pressed":true,"frame":9637,"current":true,"axes_x":0,"axes_y":-0}
+M4_VIVE_LOOK_CUE READY frame=9659
+M4_VIVE_EDGE right {"component":"xr-standard-trigger","pressed":false,"frame":9659,"current":true,"axes_x":0,"axes_y":-0}
+M4_VIVE_HEAD True:Low
+M4_VIVE_LOOK_CUE WAITING frame=9853
+M4_VIVE_POSE left True:Low/True:Low
+M4_VIVE_HEAD True:High
+M4_VIVE_POSE right True:Low/True:Low
+M4_VIVE_POSE right True:High/True:High
+M4_VIVE_POSE right True:Low/True:Low
+M4_VIVE_POSE right True:High/True:High
+M4_VIVE_LOOK_CUE READY frame=10141
+M4_VIVE_POSE left True:High/True:High
+M4_VIVE_LOOK_CUE WAITING frame=10372
+M4_VIVE_POSE left True:Low/True:Low
+M4_VIVE_LOOK_CUE READY frame=10425
+M4_VIVE_POSE left True:High/True:High
+M4_VIVE_LOOK_CUE WAITING frame=10670
+M4_VIVE_POSE left True:Low/True:Low
+M4_VIVE_RECORDED geometry
+M4_VIVE_LOOK_CUE READY frame=16929
+M4_VIVE_POSE left True:High/True:High
+M4_VIVE_LOOK_CUE WAITING frame=17016
+M4_VIVE_LOOK_CUE READY frame=17023
+M4_VIVE_LOOK_CUE WAITING frame=17024
+M4_VIVE_LOOK_CUE READY frame=17025
+M4_VIVE_LOOK_CUE WAITING frame=17026
+PASS enabled action stop-xr
+M4_VIVE_GUI stop-xr
+PASS real adapter stop retires every source subscription and capture
+M4_VIVE_RECORDED stopped
+M4_VIVE_RECORDED finished
+M4_VIVE_PRODUCT_FINISHED
+M4_VIVE_RECORDED observer-retired
+<restricted private detail; sha256=1cad7bae262a86ee48e5c9f915e6ea229e1752dd8bea823b9ac7a523d31a5ad4>

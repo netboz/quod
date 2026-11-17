@@ -1,0 +1,120 @@
+PASS source-only nondistributable diagnostic composition
+PASS exact current93 plus four removable helpers
+PASS actual current product input: client/godot-tests/.gitignore
+PASS actual current product input: client/godot-tests/Program.cs
+PASS actual current product input: client/godot-tests/Quod.Client.Tests.csproj
+PASS actual current product input: client/godot-tests/backup-interop.mjs
+PASS actual current product input: client/godot-tests/desktop_input.py
+PASS actual current product input: client/godot-tests/global.json
+PASS actual current product input: client/godot-tests/journey.py
+PASS actual current product input: client/godot-tests/local.py
+PASS actual current product input: client/godot-tests/packages.lock.json
+PASS actual current product input: client/godot-tests/tls.py
+PASS actual current product input: client/godot-tools/run.py
+PASS actual current product input: client/godot/.gitignore
+PASS actual current product input: client/godot/Core/Accounts.cs
+PASS actual current product input: client/godot/Core/Accounts.cs.uid
+PASS actual current product input: client/godot/Core/Controllers.cs
+PASS actual current product input: client/godot/Core/Controllers.cs.uid
+PASS actual current product input: client/godot/Core/Forms.cs
+PASS actual current product input: client/godot/Core/Forms.cs.uid
+PASS actual current product input: client/godot/Core/Identity.cs
+PASS actual current product input: client/godot/Core/Identity.cs.uid
+PASS actual current product input: client/godot/Core/LocalStore.cs
+PASS actual current product input: client/godot/Core/LocalStore.cs.uid
+PASS actual current product input: client/godot/Core/PhysicsInput.cs
+PASS actual current product input: client/godot/Core/PhysicsInput.cs.uid
+PASS actual current product input: client/godot/Core/Scene.cs
+PASS actual current product input: client/godot/Core/Scene.cs.uid
+PASS actual current product input: client/godot/Core/SignedView.cs
+PASS actual current product input: client/godot/Core/SignedView.cs.uid
+PASS actual current product input: client/godot/Core/StaticGlb.cs
+PASS actual current product input: client/godot/Core/StaticGlb.cs.uid
+PASS actual current product input: client/godot/Core/Term.cs
+PASS actual current product input: client/godot/Core/Term.cs.uid
+PASS actual current product input: client/godot/Core/Transport.cs
+PASS actual current product input: client/godot/Core/Transport.cs.uid
+PASS actual current product input: client/godot/Core/World.cs
+PASS actual current product input: client/godot/Core/World.cs.uid
+PASS actual current product input: client/godot/FormPanel.cs
+PASS actual current product input: client/godot/FormPanel.cs.uid
+PASS actual current product input: client/godot/Main.cs
+PASS actual current product input: client/godot/Main.cs.uid
+PASS actual current product input: client/godot/OpenXRInput.cs
+PASS actual current product input: client/godot/OpenXRInput.cs.uid
+PASS actual current product input: client/godot/OperationsPanel.cs
+PASS actual current product input: client/godot/OperationsPanel.cs.uid
+PASS actual current product input: client/godot/QuestionHub.cs
+PASS actual current product input: client/godot/QuestionHub.cs.uid
+PASS actual current product input: client/godot/Quod.csproj
+PASS actual current product input: client/godot/Quod.sln
+PASS actual current product input: client/godot/README.md
+PASS actual current product input: client/godot/RenderModels.cs
+PASS actual current product input: client/godot/RenderModels.cs.uid
+PASS actual current product input: client/godot/ScenePanel.cs
+PASS actual current product input: client/godot/ScenePanel.cs.uid
+PASS actual current product input: client/godot/SourcePanel.cs
+PASS actual current product input: client/godot/SourcePanel.cs.uid
+PASS actual current product input: client/godot/SpatialGui.cs
+PASS actual current product input: client/godot/SpatialGui.cs.uid
+PASS actual current product input: client/godot/assets/vive-LICENSE.txt
+PASS actual current product input: client/godot/export_presets.cfg
+PASS actual current product input: client/godot/global.json
+PASS actual current product input: client/godot/main.tscn
+PASS actual current product input: client/godot/packages.Debug.linux-x64.lock.json
+PASS actual current product input: client/godot/packages.ExportRelease.linux-x64.lock.json
+PASS actual current product input: client/godot/project.godot
+PASS actual current product input: client/godot/tests/ControllerChecks.cs
+PASS actual current product input: client/godot/tests/ControllerChecks.cs.uid
+PASS actual current product input: client/godot/tests/ControllerLiveChecks.cs
+PASS actual current product input: client/godot/tests/ControllerLiveChecks.cs.uid
+PASS actual current product input: client/godot/tests/ExportChecks.cs
+PASS actual current product input: client/godot/tests/ExportChecks.cs.uid
+PASS actual current product input: client/godot/tests/ExportLifecycle.cs
+PASS actual current product input: client/godot/tests/ExportLifecycle.cs.uid
+PASS actual current product input: client/godot/tests/NavigationChecks.cs
+PASS actual current product input: client/godot/tests/NavigationChecks.cs.uid
+PASS actual current product input: client/godot/tests/OpenXRChecks.cs
+PASS actual current product input: client/godot/tests/OpenXRChecks.cs.uid
+PASS actual current product input: client/godot/tests/PhysicsChecks.cs
+PASS actual current product input: client/godot/tests/PhysicsChecks.cs.uid
+PASS actual current product input: client/godot/tests/SceneChecks.cs
+PASS actual current product input: client/godot/tests/SceneChecks.cs.uid
+PASS actual current product input: client/godot/tests/SpaceChecks.cs
+PASS actual current product input: client/godot/tests/SpaceChecks.cs.uid
+PASS actual current product input: client/godot/xr_actions.tres
+PASS actual current product input: client/native/tools/check.py
+PASS actual current product input: client/src/key-provider.js
+PASS actual current product input: client/test/fixtures/native-contract/contracts.json
+PASS actual current product input: doc/evidence/godot-m0-20261027/inputs/godot-artifacts.json
+PASS actual current product input: doc/evidence/godot-m0-20261027/production-controller-reset-fixtures.json
+PASS actual current product input: doc/evidence/godot-m0-20261027/production-protocol-fixtures.json
+PASS actual current product input: doc/evidence/godot-m4-20261029/inputs/injected-mapping.term
+PASS actual current product input: priv/explorer/assets/models/bd201855c8114b9b0e9cdd465d6f08413d18604894c839fb78d54d890c2adc94.glb
+PASS actual current product input: client/godot/tests/PresentationChecks.cs
+PASS actual current product input: client/godot/tests/WorkspaceChecks.cs
+PASS actual compiled helper: PhysicalChecks.cs
+PASS actual compiled helper: ViveLookCue.cs
+PASS actual compiled helper: MorningJourneyGuide.cs
+PASS actual compiled helper: MorningJourneyChecks.cs
+PASS one explicit human phase and one software-only rehearsal dispatch
+PASS human phase never injects a gesture, Submit or travel
+PASS guidance has no domain/client/input executor
+PASS created-space guidance uses certified results and exact expected parents
+PASS return/reconnect instructions follow installed exact location
+PASS uncertain or in-flight work cannot advance instructions or invite another Submit
+PASS actual native/window/workspace caller gates retained
+PASS actual canonical high/model/authoritative neutral caller bindings retained
+PASS desktop focus remains observational, never a cue veto
+PASS expiry withdraws READY and its marker without renewal
+PASS human frame owner and software label use the SAME pure semantic WAITING compositor
+PASS same instruction header reserves/restores layout without detaching installed owners
+PASS same fixed-height label follows workspace visibility and retires its callback
+PASS frame and instruction subscriptions retire through the existing owner
+PASS superseded one-edge-only instruction is absent from the new selector
+PASS unchanged native cue predicate, no new threshold or sample
+PASS software gestures synchronize with actual mapping and released samples
+PASS actual native popup items are ray-clicked, never selected by emitted test signals
+PASS both object selections use the existing exact returned-subject controls
+PASS explicit reconnect verifies no replay and consumer retirement
+{"passed": true, "checks": 119}

@@ -1,0 +1,13 @@
+{
+  "label": "extract",
+  "command": [
+    "tar",
+    "-xpf",
+    "/home/yan/src/quod_worktrees/pearl-stone/nimbalyst-local/review-packets/stage2-d5-impact01/snapshot.tar",
+    "-C",
+    "/home/yan/src/quod_worktrees/pearl-stone/nimbalyst-local/review-packets/stage2-d5-impact01/reconstructed"
+  ],
+  "child_exit": 0,
+  "stdout_eof": true,
+  "stderr_eof": true
+}

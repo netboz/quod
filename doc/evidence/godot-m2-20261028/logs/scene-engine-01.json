@@ -1,0 +1,24 @@
+{
+  "command": [
+    "env",
+    "M1B_PHASE=scene",
+    "M1B_RESULT=/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m2-20261028/scene-engine-01-result.json",
+    "DOTNET_ROOT=/home/yan/.cache/quod-m2-artifacts/private/no-runtime",
+    "/home/yan/.cache/quod-m2-artifacts/quod-m2-client-development-01/source/client/godot/dist/quod.x86_64",
+    "--headless",
+    "--",
+    "--qualification",
+    "--profile",
+    "/home/yan/.cache/quod-m2-artifacts/private/scene-engine-01"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-28T05:49:52Z",
+  "elapsed_seconds": 0.6655340194702148,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m2-artifacts/private/logs/scene-engine-01.log",
+  "raw_sha256": "6459802c4f7994e434765fe2c8727637d0f4de9f54d3325ea21ffdbfdbec3ff6",
+  "sanitized_sha256": "6459802c4f7994e434765fe2c8727637d0f4de9f54d3325ea21ffdbfdbec3ff6",
+  "redactions": 0,
+  "error_diagnostics": 1
+}

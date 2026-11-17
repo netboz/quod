@@ -1,0 +1,8 @@
+{
+  "worker_session": "1e4ef676-fd66-40cc-82eb-015f0d45eb70",
+  "actual_model_from_session_api": "openai-codex:gpt-6.1-sol",
+  "requested_effort": "xhigh",
+  "effective_effort": "not exposed by installed session summary API",
+  "branch": "worktree/pearl-stone",
+  "HEAD": "d027f9f65bbce2f484f906c92bf07ebaa4669c38"
+}

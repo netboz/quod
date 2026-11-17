@@ -1,0 +1,61 @@
+PASS actual ordinary-offline raster retained
+PASS actual desktop-form raster retained
+PASS opaque bounded native button and editable field in desktop composition
+PASS the actual authored submit has distinct primary-action appearance in desktop composition
+PASS the current authored task title is rendered in desktop composition
+PASS actual spatial-form raster retained
+PASS opaque bounded native button and editable field in spatial composition
+PASS the actual authored submit has distinct primary-action appearance in spatial composition
+PASS the current authored task title is rendered in spatial composition
+PASS original six presentation obligations remain strict
+PASS native control enclosed by every clipping ancestor: desktop-20 control0
+PASS native control enclosed by every clipping ancestor: desktop-20 control1
+PASS native control enclosed by every clipping ancestor: desktop-20 control2
+PASS native control enclosed by every clipping ancestor: desktop-20 control3
+PASS actual desktop-20 raster retained
+PASS native control enclosed by every clipping ancestor: desktop-48 control0
+PASS native control enclosed by every clipping ancestor: desktop-48 control1
+PASS native control enclosed by every clipping ancestor: desktop-48 control2
+PASS native control enclosed by every clipping ancestor: desktop-48 control3
+PASS actual desktop-48 raster retained
+PASS native control enclosed by every clipping ancestor: spatial-26 control0
+PASS native control enclosed by every clipping ancestor: spatial-26 control1
+PASS native control enclosed by every clipping ancestor: spatial-26 control2
+PASS native control enclosed by every clipping ancestor: spatial-26 control3
+PASS actual spatial-26 raster retained
+PASS native control enclosed by every clipping ancestor: spatial-48 control0
+PASS native control enclosed by every clipping ancestor: spatial-48 control1
+PASS native control enclosed by every clipping ancestor: spatial-48 control2
+PASS native control enclosed by every clipping ancestor: spatial-48 control3
+PASS actual spatial-48 raster retained
+PASS finite actual layout obligations remain strict
+PASS hover pressed and keyboard focus have distinct native visual states
+PASS actual hover raster retained
+PASS actual pressed raster retained
+PASS cancelling a held shared pointer does not activate the authored action
+PASS one fresh native press and release activates exactly once
+PASS actual disabled raster retained
+PASS locked controls remain readable and cannot activate or edit
+PASS ordinary pointer focuses the existing editor without changing its draft
+PASS native Tab navigation reaches the next existing field
+PASS one native keyboard activation follows the same authored action owner
+PASS actual native popup is visible and enclosed
+PASS actual native popup keyboard selection changes exactly one local choice
+PASS all appearance and layout changes retain the same controls draft and action count
+PASS unchanged presentation calls retain theme resources and do not cancel again
+PASS actual ordinary-narrow-large raster retained
+PASS narrow large-text shell keeps native button width: workspace-connection
+PASS narrow large-text shell keeps native button width: client-tools
+PASS narrow large-text shell keeps native button width: workspace-settings
+PASS narrow large-text shell keeps native button width: create-key
+PASS narrow large-text shell keeps native button width: import-backup
+PASS narrow large-text shell keeps native button width: connect
+PASS narrow large-text shell keeps native button width: disconnect
+PASS narrow large-text shell keeps native button width: connection-details
+PASS narrow large-text shell keeps native button width: open-gui
+PASS narrow large-text shell keeps native button width: create-operations
+PASS narrow large-text shell keeps native button width: location-operations
+PASS ordinary Tab reveals the next large-text action through the installed scroll owner
+PASS shared presentation obligations:
+GUI_USABILITY_PASS
+{"passed": true, "children": {"client": 0}, "eof": {"client-stdout": true, "client-stderr": true}, "failure": null, "checks": 59}

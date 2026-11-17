@@ -1,0 +1,276 @@
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action create-key
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action connect
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action register
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action prepare
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS enabled action setup
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS ordinary landing is the empty accepted interior before any subject choice or scroll
+PASS current place uses its authorized authored name
+<private fixture/client diagnostic>
+PASS current native raster retained: home-(False, 1200, 26)
+PASS current interior and ordinary tasks enclosed without scrolling at (False, 1200, 26)
+<private fixture/client diagnostic>
+PASS current native raster retained: home-(False, 1200, 48)
+PASS current interior and ordinary tasks enclosed without scrolling at (False, 1200, 48)
+<private fixture/client diagnostic>
+PASS current native raster retained: home-(False, 560, 26)
+PASS current interior and ordinary tasks enclosed without scrolling at (False, 560, 26)
+<private fixture/client diagnostic>
+PASS current native raster retained: home-(True, 1200, 26)
+PASS current interior and ordinary tasks enclosed without scrolling at (True, 1200, 26)
+<private fixture/client diagnostic>
+PASS current native raster retained: home-(True, 1200, 48)
+PASS current interior and ordinary tasks enclosed without scrolling at (True, 1200, 48)
+<private fixture/client diagnostic>
+PASS visible enabled native action: create-operations
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS native gesture releases capture
+PASS one native gesture delivers one callback: create-operations
+PASS actual offered catalogue item exists
+PASS explicit bounded native scrolling reaches operation-storage
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS actual offered catalogue item exists
+PASS explicit bounded native scrolling reaches operation-class
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS explicit bounded native scrolling reaches @Button@74
+PASS visible enabled native action: @Button@74
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS native gesture releases capture
+PASS one native gesture delivers one callback: @Button@74
+PASS explicit bounded native scrolling reaches control0
+PASS native gesture releases capture
+<private fixture/client diagnostic>
+PASS native text edits the single offered local name draft
+PASS explicit bounded native scrolling reaches control7
+PASS visible enabled native action: control7
+<private fixture/client diagnostic>
+PASS native gesture releases capture
+PASS one native gesture delivers one callback: control7
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS one explicit Create has a committed original outcome
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS visible enabled native action: space-home
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS native gesture releases capture
+PASS one native gesture delivers one callback: space-home
+PASS Home exposes current contents without entering the created child
+PASS actual contents retain the authored child label and exactly one creation instruction
+PASS current native raster retained: contents
+PASS existing scene picker resolves the exact anchored child
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS native gesture releases capture
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS native content pick opens selected context without changing current place or scrolling the destination
+PASS selected authored name is distinct from the current place
+PASS current native raster retained: selected-subject
+PASS inspector presentation does not advertise world travel through its read-only preview
+PASS explicit bounded native scrolling reaches @Button@172
+PASS visible enabled native action: @Button@172
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS native gesture releases capture
+PASS one native gesture delivers one callback: @Button@172
+PASS ordinary explicit Enter choice exposes its confirmation without destination scrolling
+PASS visible enabled native action: space-home
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS native gesture releases capture
+PASS one native gesture delivers one callback: space-home
+PASS visible enabled native action: resume-inspector
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS native gesture releases capture
+PASS one native gesture delivers one callback: resume-inspector
+PASS Home and inspector recall retain the same native draft and received original outcome
+PASS explicit bounded native scrolling reaches @Button@172
+PASS visible enabled native action: @Button@172
+<private fixture/client diagnostic>
+PASS native gesture releases capture
+PASS one native gesture delivers one callback: @Button@172
+PASS inspection and action-form choice submit nothing
+PASS visible enabled native action: control0
+<private fixture/client diagnostic>
+PASS native gesture releases capture
+PASS one native gesture delivers one callback: control0
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS navigation updates current context without replacing the deliberate inspector
+PASS visible enabled native action: space-home
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS native gesture releases capture
+PASS one native gesture delivers one callback: space-home
+PASS entered child's ordinary interior stays empty instead of showing its exterior cube
+PASS visible enabled native action: location-operations
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS native gesture releases capture
+PASS one native gesture delivers one callback: location-operations
+PASS explicit bounded native scrolling reaches representation-more
+PASS visible enabled native action: representation-more
+<private fixture/client diagnostic>
+PASS native gesture releases capture
+PASS one native gesture delivers one callback: representation-more
+PASS explicit bounded native scrolling reaches @Button@179
+PASS visible enabled native action: @Button@179
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS native gesture releases capture
+PASS one native gesture delivers one callback: @Button@179
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+PASS explicit bounded native scrolling reaches control2
+PASS native gesture releases capture
+<private fixture/client diagnostic>
+PASS named unchanged history/rebuild/write/sync watcher installed
+PASS visible enabled native action: space-home
+PASS native gesture releases capture
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>
+<private fixture/client diagnostic>

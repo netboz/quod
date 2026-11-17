@@ -1,0 +1,24 @@
+{
+  "status": null,
+  "groups": {
+    "quod-node": {
+      "Complete": 1044,
+      "Failed": 0,
+      "Lost": 2,
+      "Queued": 0,
+      "Running": 0,
+      "Starting": 0,
+      "Unknown": 0
+    },
+    "quod-cloud": {
+      "Complete": 257,
+      "Failed": 2,
+      "Lost": 2,
+      "Queued": 0,
+      "Running": 0,
+      "Starting": 0,
+      "Unknown": 0
+    }
+  },
+  "remaining": []
+}

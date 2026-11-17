@@ -1,0 +1,780 @@
+-module(quod_client_goal_ingress_tests).
+
+-include_lib("eunit/include/eunit.hrl").
+-include("quod_ledger.hrl").
+
+-define(NETWORK, <<16#71:256>>).
+-define(ANCHOR, <<16#72:256>>).
+-define(PEER, {127, 0, 0, 1}).
+
+refused_group_selector_authenticates_its_exact_source_request_test() ->
+    F = quod_ct:signed_atomic_fixture(#{vote => {refused, [vote_deadline]}}),
+    Control = maps:get(vote_control, F), Evidence = maps:get(evidence, F),
+    {ok, Ref} = quod_atomic:source_group_ref(quod_atomic:control_material(Control)),
+    ?assert(quod_client_goal_ingress:group_request_matches(Ref, Evidence, Control)),
+    %% Same operation key with different signed content is not this attempt;
+    %% nor can another agent or a different group borrow its outcome.
+    Changed = quod_ct:signed_goal_fixture(#{target => maps:get(target, F),
+        key_pair => maps:get(key_pair, F), operation_id => maps:get(operation_id, F),
+        goal_text => <<"assertz(saved(other)).">>}),
+    Other = quod_ct:signed_goal_fixture(#{target => maps:get(target, F)}),
+    [?assertNot(quod_client_goal_ingress:group_request_matches(Ref, E, Control))
+      || E <- [maps:get(evidence, Changed), maps:get(evidence, Other)]],
+    [?assertNot(quod_client_goal_ingress:group_request_matches(Bad, Evidence, Control))
+      || Bad <- [setelement(3, Ref, <<98:256>>), setelement(4, Ref, <<98:256>>),
+                 setelement(5, Ref, <<98:256>>), setelement(6, Ref, <<98:256>>)]],
+    [Target] = maps:get(participant_targets, F) -- [maps:get(origin, F)],
+    {ok, ParticipantVote} = quod_atomic:new_vote(maps:get(group, F), Target,
+        lists:keyfind(Target, 1, maps:get(bundles, F)), prepared),
+    {ok, Material} = quod_atomic:admission_material(ParticipantVote),
+    {ok, ParticipantControl} = quod_atomic:sign_control(Target, Material,
+        maps:get(admission, F), 1, 1, maps:get(node_identity, F)),
+    ?assertNot(quod_client_goal_ingress:group_request_matches(Ref, Evidence, ParticipantControl)).
+
+refused_group_reconciles_through_archived_phase_and_prolog_outcome_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    quod_ct:with_network_identity(?NETWORK, fun refused_group_reconciliation/0).
+
+refused_group_reconciliation() ->
+    Ns = unique_symbol(<<"refused-outcome:">>),
+    Protocol = #{identity := Identity = {Ns, Anchor}, genesis := Genesis,
+                 signer := Signer, admission := Admission} = quod_ct:protocol_fixture(Ns),
+    OtherProtocol = #{identity := Other, genesis := OtherGenesis} =
+        quod_ct:protocol_fixture(<<Ns/binary, ":other">>),
+    F = quod_ct:signed_plan_fixture(#{network => ?NETWORK, target => Identity,
+        atomic => true, deadline => 1, node_identity => Signer, admission => Admission}, [Identity, Other]),
+    {ok, Group} = quod_atomic:new_group(maps:get(manifest, F), maps:get(auth, F),
+                                        maps:get(Identity, maps:get(attestations, F))),
+    {ok, Vote} = quod_atomic:new_vote(Group, Identity, none, {refused, [vote_deadline]}),
+    {VoteEntry, VoteRef, VoteControl} = refused_phase(Vote, 2, Genesis, Protocol),
+    {ok, Resolve} = quod_atomic:new_resolve(Group, VoteRef, Identity,
+        {abort, [vote_deadline]}, {refused, VoteRef}, VoteRef, 0),
+    {ok, VoteBlock} = quod_ledger:block_from_entry(VoteEntry),
+    {ResolveEntry, ResolveRef, _} = refused_phase(Resolve, 3, VoteBlock, Protocol),
+    {ok, OtherResolve} = quod_atomic:new_resolve(Group, VoteRef, Other,
+        {abort, [vote_deadline]}, {refused, VoteRef}, none, 0),
+    {_, OtherRef, _} = refused_phase(OtherResolve, 2, OtherGenesis, OtherProtocol),
+    CommitteeId = maps:get(committee_id, maps:get(projection, OtherProtocol)),
+    GroupId = quod_atomic:group_id(Group),
+    {ok, AppliedVote} = quod_applied_certificate:sign_applied_vote(
+        ?NETWORK, Other, CommitteeId, GroupId, OtherRef, 0, abort, Signer),
+    {ok, Applied} = quod_applied_certificate:applied_certificate(
+        {?NETWORK, Other, CommitteeId, GroupId, OtherRef, 0, abort}, [AppliedVote]),
+    {ok, Complete} = quod_atomic:new_complete(Group, abort,
+        lists:sort([{Identity, ResolveRef, 0}, {Other, OtherRef, 0}]), [{Other, Applied}]),
+    {ok, ResolveBlock} = quod_ledger:block_from_entry(ResolveEntry),
+    {CompleteEntry, _, _} = refused_phase(Complete, 4, ResolveBlock, Protocol),
+    Chain = [quod_ledger:entry(1, Genesis, none), VoteEntry, ResolveEntry, CompleteEntry],
+    Dir = filename:join("/tmp", binary_to_list(unique_symbol(<<"quod-refused-outcome-">>))),
+    {Source, SourceMonitor} = start_refused_source(Dir, Protocol, Chain, VoteRef),
+    {ok, Engine} = quod_prolog:start_link(Ns, #{outcome_backend => memory}),
+    {ok, Auth} = quod_client_auth:start_link(
+        #{network_id => ?NETWORK, node_key => <<16#73:256>>, session_ttl_ms => 60000}),
+    try
+        [ok = quod_prolog:apply_entry(Ns, Entry, replay) || Entry <- Chain],
+        ok = quod_prolog:mark_ready(Ns),
+        Session = open_session(maps:get(key_pair, F)),
+        Bytes = maps:get(request_bytes, F), Signature = maps:get(signature, F),
+        {ok, GroupRef} = quod_atomic:source_group_ref(quod_atomic:control_material(VoteControl)),
+        %% Refusal never creates an operation's prepared winning claim.
+        ?assertMatch({error, _}, quod_prolog:outcome(maps:get(operation_ref, F))),
+        ?assertMatch({ok, _, {operation_pending, _}},
+            quod_client_goal_ingress:resolve_operation(
+                maps:get(session_id, Session), Bytes, Signature, ?PEER)),
+        Reply = quod_client_goal_ingress:resolve_operation(
+            maps:get(session_id, Session), Bytes, Signature, ?PEER, GroupRef),
+        ?assertMatch({ok, _, {group_outcome, GroupRef,
+            #{status := aborted, reasons := [vote_deadline]}}}, Reply),
+        ?assertMatch({200, #{result := group_outcome, status := aborted, terminal := true}},
+                     quod_client_http:signed_goal_result(Reply)),
+        Changed = quod_ct:signed_goal_fixture(#{network => ?NETWORK, target => Identity,
+            key_pair => maps:get(key_pair, F), operation_id => maps:get(operation_id, F),
+            deadline => 1, goal_text => <<"assertz(other_action).">>}),
+        ?assertEqual({error, invalid_outcome_ref}, quod_client_goal_ingress:resolve_operation(
+            maps:get(session_id, Session), maps:get(request_bytes, Changed),
+            maps:get(signature, Changed), ?PEER, GroupRef)),
+        ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)),
+        ?assertMatch({error, _}, quod_prolog:outcome(maps:get(operation_ref, F)))
+    after
+        stop_process(Auth), stop_process(Engine),
+        Source ! stop,
+        receive {'DOWN', SourceMonitor, process, Source, normal} -> ok
+        after 2000 -> exit(Source, kill), error(refused_source_stop_timeout)
+        end,
+        _ = file:del_dir_r(Dir)
+    end.
+
+refused_phase(Record, Height, Parent,
+              Protocol = #{identity := Identity, signer := Signer, admission := Admission, era := Era}) ->
+    {ok, Material} = quod_atomic:admission_material(Record),
+    {ok, Control} = quod_atomic:sign_control(Identity, Material, Admission, Height - 1, Height, Signer),
+    ParentRef = case Height of
+        2 -> {Era, 0, element(3, quod_ledger:block_ref(Parent))};
+        _ -> quod_ledger:block_ref(Parent)
+    end,
+    {ok, Block} = quod_ledger:new_block({Era, Height - 1}, ParentRef, Height,
+                                       {batch, [{dtx, Control}]}, Height),
+    Entry = quod_ledger:entry(Height, Block, quod_ct:protocol_certificate(Block, Protocol)),
+    {ok, Ref} = quod_dtx:certified_entry_ref(Identity, Entry, Control),
+    {Entry, Ref, Control}.
+
+%% This fixture supplies only the committed owner capture and discovery reply.
+%% The public ingress still reads and authenticates the actual archived Vote;
+%% the ordinary Prolog materializer produces the final outcome from all phases.
+start_refused_source(Dir, #{identity := Identity = {Ns, Anchor}}, Chain, VoteRef) ->
+    Parent = self(),
+    {Pid, Monitor} = spawn_monitor(fun() ->
+        true = quod_reg:reg({quod_simplex, Ns}),
+        Table = binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
+        Table = ets:new(Table, [named_table, protected, set]),
+        ets:insert(Table, {anchor, Anchor}),
+        {ok, Store0} = quod_ledger_store:open(Ns, Dir),
+        {ok, Store} = quod_ct:append_direct_history(Store0, Chain),
+        {ok, Index} = quod_dtx_phase_index:open(Dir, Ns),
+        Projection = lists:foldl(fun(Entry, P) ->
+            {ok, Next, _} = quod_ct:history_advance(Identity, Entry, P, Index), Next
+        end, quod_simplex:history_projection(Identity), Chain),
+        {ok, Captured} = quod_dtx_phase_index:capture(Index, 4),
+        View = #{owner => self(), identity => Identity, slot => 4, applied => 4,
+            snapshot => quod_ledger_store:snapshot(Store),
+            projection => Projection#{history_index => Captured}},
+        Parent ! {refused_source_ready, self()},
+        refused_source_loop(View, VoteRef),
+        quod_dtx_phase_index:close(Index), quod_ledger_store:close(Store)
+    end),
+    receive
+        {refused_source_ready, Pid} -> {Pid, Monitor};
+        {'DOWN', Monitor, process, Pid, Reason} -> error({refused_source_failed, Reason})
+    after 2000 -> exit(Pid, kill), error(refused_source_start_timeout)
+    end.
+
+refused_source_loop(View = #{identity := Identity}, VoteRef) ->
+    receive
+        {'$gen_call', From, {history_view, Identity, {committed, 2}, Deadline}} ->
+            true = Deadline > quod_time:mono_ms(),
+            gen_statem:reply(From, {ok, View}), refused_source_loop(View, VoteRef);
+        {'$gen_call', From, {dtx_endpoint_local, {phase, Id, _, vote}, [], Timeout, _}} ->
+            true = Timeout > 0,
+            gen_statem:reply(From, {ok, {phase, Id, 0, {committed, VoteRef}}, []}),
+            refused_source_loop(View, VoteRef);
+        {'$gen_cast', _AppliedNotification} -> refused_source_loop(View, VoteRef);
+        stop -> ok
+    end.
+
+signed_local_read_test_() ->
+    {setup, fun setup/0, fun cleanup/1,
+     fun(Ctx) ->
+         [?_test(local_process_uses_signed_ingress_without_a_session(Ctx)),
+          ?_test(local_read_uses_agent_acl_and_returns_named_bindings(Ctx)),
+          ?_test(forged_request_never_materializes_its_functor(Ctx)),
+          ?_test(read_mode_cannot_write_or_open_a_foreign_scope(Ctx)),
+          ?_test(same_ontology_scope_keeps_the_agent_principal(Ctx)),
+          ?_test(opaque_data_binding_renders_as_the_original_symbol(Ctx)),
+          ?_test(anchor_is_checked_at_ingress_and_inside_the_worker(Ctx)),
+          ?_test(session_and_signed_deadline_are_both_bound(Ctx)),
+          ?_test(cursor_commands_reuse_the_session_signing_key(Ctx)),
+          ?_test(signed_idle_cursor_expiry_reaches_a_late_save(Ctx)),
+          ?_test(wrong_network_and_expired_request_stop_at_ingress(Ctx)),
+          ?_test(route_eligible_refusals_advance_to_the_next_validator(Ctx)),
+          ?_test(directory_anchor_conflict_is_not_flattened(Ctx)),
+          ?_test(new_local_target_wakes_on_its_installed_ready_edge(Ctx)),
+          ?_test(missing_target_wait_ends_at_signed_deadline(Ctx)),
+          ?_test(operation_absence_remains_unresolved(Ctx)),
+          ?_test(local_operation_resolution_preserves_evidence_and_expiry(Ctx)),
+          ?_test(operation_resolution_requires_retained_result(Ctx))]
+     end}.
+
+local_process_uses_signed_ingress_without_a_session(
+  #{namespace := Ns, key_pair := KeyPair, session := Session}) ->
+    Previous = application:get_env(quod, node_pubkey),
+    application:set_env(quod, node_pubkey, <<16#73:256>>),
+    try
+        {Bytes, Signature} = signed_read(Ns, ?ANCHOR, KeyPair, Session, <<"lookup(X).">>),
+        ?assertMatch({ok, _, {normalized, {read, _, {answers, 1, [_]}}}},
+                     quod_client_goal_ingress:submit(Bytes, Signature)),
+        ?assertEqual({error, invalid_signature},
+                     quod_client_goal_ingress:submit(Bytes, <<0:512>>)),
+        {Write, WriteSig} = signed_read(Ns, ?ANCHOR, KeyPair, Session,
+                                        <<"assertz(local_process_must_not_write).">>),
+        ?assertMatch({ok, _, {normalized, {read, _, {error, read_only}}}},
+                     quod_client_goal_ingress:submit(Write, WriteSig)),
+        {WrongAnchor, AnchorSig} = signed_read(Ns, <<0:256>>, KeyPair, Session, <<"true.">>),
+        ?assertEqual({error, wrong_target},
+                     quod_client_goal_ingress:submit(WrongAnchor, AnchorSig)),
+        application:unset_env(quod, node_pubkey),
+        ?assertEqual({error, node_identity_unavailable},
+                     quod_client_goal_ingress:submit(Bytes, Signature))
+    after restore_env(node_pubkey, Previous) end.
+
+local_read_uses_agent_acl_and_returns_named_bindings(
+  #{namespace := Ns, key_pair := KeyPair,
+    session := Session}) ->
+    {Bytes, Signature} = signed_read(
+                           Ns, ?ANCHOR, KeyPair, Session,
+                           <<"lookup(X).">>),
+    {ok, #{variables := [{<<"X">>, 0}]},
+     {normalized, {read, _, {answers, 1, [_]}}}} =
+        quod_client_goal_ingress:submit(read,
+          maps:get(session_id, Session), Bytes, Signature, ?PEER).
+
+forged_request_never_materializes_its_functor(
+  #{namespace := Ns, key_pair := KeyPair,
+    session := Session}) ->
+    Functor = unique_symbol(<<"forged_signed_goal_">>),
+    ?assertError(badarg, binary_to_existing_atom(Functor, utf8)),
+    Text = <<Functor/binary, ".">>,
+    {Bytes, _Signature} = signed_read(Ns, ?ANCHOR, KeyPair, Session, Text),
+    ?assertEqual(
+       {error, invalid_signature},
+       quod_client_goal_ingress:submit(read,
+         maps:get(session_id, Session), Bytes, <<0:512>>, ?PEER)),
+    ?assertError(badarg, binary_to_existing_atom(Functor, utf8)).
+
+read_mode_cannot_write_or_open_a_foreign_scope(
+  #{namespace := Ns, key_pair := KeyPair,
+    session := Session}) ->
+    SessionId = maps:get(session_id, Session),
+    {WriteBytes, WriteSignature} = signed_read(
+                                     Ns, ?ANCHOR, KeyPair, Session,
+                                     <<"assertz(should_not_exist).">>),
+    ?assertMatch(
+       {ok, _, {normalized, {read, _, {error, read_only}}}},
+       quod_client_goal_ingress:submit(read,
+         SessionId, WriteBytes, WriteSignature, ?PEER)),
+    {AbsentBytes, AbsentSignature} = signed_read(
+                                       Ns, ?ANCHOR, KeyPair, Session,
+                                       <<"should_not_exist.">>),
+    ?assertMatch(
+       {ok, _, {normalized, {read, _, {failed, _Reasons}}}},
+       quod_client_goal_ingress:submit(read,
+         SessionId, AbsentBytes, AbsentSignature, ?PEER)),
+    {ScopeBytes, ScopeSignature} = signed_read(
+                                     Ns, ?ANCHOR, KeyPair, Session,
+                                     <<"\"foreign\"::true.">>),
+    ?assertMatch(
+       {ok, _, {normalized, {read, _, {error, proof_unavailable}}}},
+       quod_client_goal_ingress:submit(read,
+         SessionId, ScopeBytes, ScopeSignature, ?PEER)).
+
+same_ontology_scope_keeps_the_agent_principal(
+  #{namespace := Ns, key_pair := KeyPair,
+    session := Session}) ->
+    Text = <<$", Ns/binary, "\"::lookup(X).">>,
+    {Bytes, Signature} = signed_read(Ns, ?ANCHOR, KeyPair, Session, Text),
+    ?assertMatch(
+       {ok, _, {normalized, {read, _, {answers, 1, [_]}}}},
+       quod_client_goal_ingress:submit(read,
+         maps:get(session_id, Session), Bytes, Signature, ?PEER)).
+
+opaque_data_binding_renders_as_the_original_symbol(
+  #{namespace := Ns, key_pair := KeyPair,
+    session := Session}) ->
+    Symbol = unique_symbol(<<"signed_data_answer_">>),
+    ?assertError(badarg, binary_to_existing_atom(Symbol, utf8)),
+    Text = <<"X = ", Symbol/binary, ".">>,
+    {Bytes, Signature} = signed_read(Ns, ?ANCHOR, KeyPair, Session, Text),
+    {ok, Evidence, Result} = quod_client_goal_ingress:submit(read,
+                               maps:get(session_id, Session), Bytes,
+                               Signature, ?PEER),
+    ?assertMatch({normalized, {read, _, {answers, 1, [_]}}}, Result),
+    ?assertMatch(
+       {200, #{bindings := [#{<<"X">> := Symbol}]}},
+       quod_client_http:signed_goal_result({ok, Evidence, Result})),
+    ?assertError(badarg, binary_to_existing_atom(Symbol, utf8)).
+
+anchor_is_checked_at_ingress_and_inside_the_worker(
+  #{namespace := Ns, engine := Engine, table := Table,
+    key_pair := KeyPair, session := Session}) ->
+    OtherAnchor = <<16#75:256>>,
+    SessionId = maps:get(session_id, Session),
+    {WrongBytes, WrongSignature} =
+        signed_read(Ns, OtherAnchor, KeyPair, Session, <<"lookup(X).">>),
+    ?assertEqual(
+       {error, wrong_target},
+       quod_client_goal_ingress:submit(
+         read, SessionId, WrongBytes, WrongSignature, ?PEER)),
+    %% Hold the actual public request before processing, then simulate an
+    %% incarnation change. The worker must recheck the carried anchor.
+    Parent = self(), Tag = make_ref(),
+    Observe = fun(State, {in, Message}, _) ->
+                  case is_anchored_public_cast(Message) of
+                      true ->
+                          Parent ! {anchored_request_received, Tag},
+                          receive {release_anchored_request, Tag} -> State end;
+                      false -> State
+                  end;
+                 (State, _, _) -> State
+              end,
+    ok = sys:install(Engine, {Observe, none}),
+    {Bytes, Signature} =
+        signed_read(Ns, ?ANCHOR, KeyPair, Session, <<"lookup(X).">>),
+    Caller = spawn(
+               fun() ->
+                   Parent ! {anchored_proof_result, self(),
+                             quod_client_goal_ingress:submit(
+                               read, SessionId, Bytes, Signature, ?PEER)}
+               end),
+    try
+        receive {anchored_request_received, Tag} -> ok
+        after 1000 -> error(anchored_public_cast_timeout) end,
+        true = ets:insert(Table, {anchor, OtherAnchor}),
+        Engine ! {release_anchored_request, Tag},
+        receive
+            {anchored_proof_result, Caller, Reply} ->
+                ?assertMatch(
+                   {ok, _Evidence,
+                    {normalized, {error, target_unavailable}}}, Reply)
+        after 5000 ->
+            error(anchored_proof_timeout)
+        end
+    after
+        Engine ! {release_anchored_request, Tag},
+        _ = catch sys:remove(Engine, Observe),
+        true = ets:insert(Table, {anchor, ?ANCHOR}),
+        case is_process_alive(Caller) of
+            true -> exit(Caller, kill);
+            false -> ok
+        end
+    end.
+
+session_and_signed_deadline_are_both_bound(
+  #{namespace := Ns, key_pair := KeyPair,
+    session := Session}) ->
+    Request = (request(Ns, ?ANCHOR, KeyPair, Session, <<"true.">>))#{
+                not_after_ms => maps:get(expires_ms, Session) + 1},
+    {ok, Bytes} = quod_client_goal:encode(Request),
+    Signature = quod_identity:sign(
+                  Bytes, quod_identity:key_term(KeyPair)),
+    ?assertEqual(
+       {error, deadline_exceeds_session},
+       quod_client_goal_ingress:submit(read,
+         maps:get(session_id, Session), Bytes, Signature, ?PEER)),
+    ?assertEqual(
+       {error, invalid_session},
+       quod_client_goal_ingress:submit(read,
+         <<0:256>>, Bytes, Signature, ?PEER)).
+
+signed_idle_cursor_expiry_reaches_a_late_save(
+  #{namespace := Ns, key_pair := KeyPair, session := Session, cursor := Owner}) ->
+    Request = (request(Ns, ?ANCHOR, KeyPair, Session, <<"lookup(X).">>))#{
+        mode => cursor, not_after_ms => quod_time:now_ms() + 300},
+    {ok, Bytes} = quod_client_goal:encode(Request),
+    Signature = quod_identity:sign(Bytes, quod_identity:key_term(KeyPair)),
+    SessionId = maps:get(session_id, Session),
+    Trace = trace:session_create(?MODULE, self(), []),
+    1 = trace:process(Trace, Owner, true, ['receive']),
+    try
+        {ok, Evidence, {normalized, {solution, CursorId, _, _}}} =
+            quod_client_goal_ingress:submit(cursor, SessionId, Bytes, Signature, ?PEER),
+        receive
+            {trace, Owner, 'receive', {quod_proof_reply, _, _,
+                                      {fail, [{proof_timeout, Ns}]}}} -> ok
+        after 1500 -> error(signed_cursor_did_not_expire) end,
+        Expected = quod_client_result:normalize(Evidence, {fail, [{proof_timeout, Ns}]}),
+        ?assertEqual({ok, Evidence, {normalized, Expected}},
+            quod_client_goal_ingress:cursor_command(SessionId, CursorId, accept, ?PEER)),
+        ?assertEqual(0, maps:get(proof_workers, quod_prolog:stats(Ns)))
+    after trace:session_destroy(Trace) end.
+
+cursor_commands_reuse_the_session_signing_key(
+  #{namespace := Ns, key_pair := KeyPair, session := Session}) ->
+    Request = (request(Ns, ?ANCHOR, KeyPair, Session, <<"lookup(X).">>))#{
+                mode => cursor},
+    {ok, Bytes} = quod_client_goal:encode(Request),
+    Signature = quod_identity:sign(
+                  Bytes, quod_identity:key_term(KeyPair)),
+    SessionId = maps:get(session_id, Session),
+    {ok, _, {normalized, {solution, CursorId, _, _}}} =
+        quod_client_goal_ingress:submit(
+          cursor, SessionId, Bytes, Signature, ?PEER),
+    ?assertMatch(
+       {ok, _, {normalized, stopped}},
+       quod_client_goal_ingress:cursor_command(
+         SessionId, CursorId, stop, ?PEER)).
+
+wrong_network_and_expired_request_stop_at_ingress(
+  #{namespace := Ns, key_pair := KeyPair, session := Session}) ->
+    SessionId = maps:get(session_id, Session),
+    WrongNetwork = quod_ct:signed_goal_fixture(
+                     #{network => <<16#76:256>>,
+                       target => {Ns, ?ANCHOR}, mode => read,
+                       key_pair => KeyPair,
+                       deadline => quod_time:now_ms() + 30000,
+                       goal_text => <<"lookup(X).">>}),
+    ?assertEqual(
+       {error, wrong_network},
+       quod_client_goal_ingress:submit(
+         read, SessionId, maps:get(request_bytes, WrongNetwork),
+         maps:get(signature, WrongNetwork), ?PEER)),
+    Expired = quod_ct:signed_goal_fixture(
+                #{network => ?NETWORK, target => {Ns, ?ANCHOR}, mode => read,
+                  key_pair => KeyPair, deadline => quod_time:now_ms() - 1,
+                  goal_text => <<"lookup(X).">>}),
+    ?assertEqual(
+       {error, expired},
+       quod_client_goal_ingress:submit(
+         read, SessionId, maps:get(request_bytes, Expired),
+         maps:get(signature, Expired), ?PEER)).
+
+route_eligible_refusals_advance_to_the_next_validator(
+  #{namespace := Ns, key_pair := KeyPair, session := Session}) ->
+    {Bytes, Signature} = signed_read(Ns, ?ANCHOR, KeyPair, Session, <<"true.">>),
+    {ok, Evidence} = quod_client_goal_target:verify_request(Bytes, Signature),
+    First = #{node_key => <<1:256>>, endpoint => {{127, 0, 0, 1}, 5001}},
+    Second = #{node_key => <<2:256>>, endpoint => {{127, 0, 0, 1}, 5002}},
+    lists:foreach(
+      fun(Refusal) ->
+          Parent = self(),
+          Submit =
+              fun(#{node_key := <<1:256>>}, _Owner, _Ev, _Req, _Sig,
+                  _Cursor, _Trace, _Expires, _Timeout) ->
+                      Parent ! {attempt, Refusal, first},
+                      {error, {refused, Refusal}};
+                 (#{node_key := <<2:256>>}, _Owner, Ev, _Req, _Sig,
+                  _Cursor, _Trace, _Expires, _Timeout) ->
+                      Parent ! {attempt, Refusal, second},
+                      {ok, Ev, {normalized, {read, [{Ns,?ANCHOR,1}], fail}}}
+              end,
+          ?assertEqual(
+             {ok, Evidence, {normalized, {read, [{Ns,?ANCHOR,1}], fail}}},
+             quod_client_goal_ingress:test_forward_routes(
+               [First, Second], Evidence, Submit)),
+          receive {attempt, Refusal, first} -> ok
+          after 0 -> error(first_route_not_attempted)
+          end,
+          receive {attempt, Refusal, second} -> ok
+          after 0 -> error(second_route_not_attempted)
+          end
+      end, [not_ready, busy, rate_limited]).
+
+directory_anchor_conflict_is_not_flattened(
+  #{key_pair := KeyPair, session := Session}) ->
+    Ns = <<"signed-conflict:",
+           (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    Expected = crypto:hash(sha256, <<Ns/binary, ":expected">>),
+    Other = crypto:hash(sha256, <<Ns/binary, ":other">>),
+    K1 = <<16#78:256>>,
+    K2 = <<16#79:256>>,
+    stop_directory(),
+    {ok, Directory} = quod_directory:start_link(
+                        #{expire_tick_ms => 60000, ttl_ms => 10000}),
+    try
+        {ok, _} = quod_ct:install_directory_generation(
+                    K1, {"127.0.0.1", 5001},
+                    [{Ns, Expected, validator}], 1, 1),
+        {ok, _} = quod_ct:install_directory_generation(
+                    K2, {"127.0.0.1", 5002},
+                    [{Ns, Other, validator}], 1, 1),
+        {Bytes, Signature} = signed_read(
+                               Ns, Expected, KeyPair, Session, <<"true.">>),
+        ?assertEqual(
+           {error, {anchor_conflict, Ns}},
+           quod_client_goal_ingress:submit(
+             read, maps:get(session_id, Session), Bytes, Signature, ?PEER)),
+        ?assertEqual(
+           {409, #{error => anchor_conflict, namespace => Ns}},
+           quod_client_http:signed_goal_result(
+             {error, {anchor_conflict, Ns}}))
+    after
+        gen_server:stop(Directory)
+    end.
+
+new_local_target_wakes_on_its_installed_ready_edge(
+  #{namespace := Ns, engine := Engine, key_pair := KeyPair,
+    session := Session}) ->
+    stop_directory(),
+    {ok, Directory} = quod_directory:start_link(#{}),
+    1 = erlang:trace(Directory, true, ['receive']),
+    _ = sys:replace_state(Engine, fun(S) ->
+        true = gproc:unreg(quod_reg:name({quod_prolog, Ns})), S
+    end),
+    {Bytes, Signature} = signed_read(Ns, ?ANCHOR, KeyPair, Session, <<"lookup(X).">>),
+    Parent = self(),
+    Caller = spawn(fun() ->
+        Parent ! {route_wait_result, self(), quod_client_goal_ingress:submit(
+            read, maps:get(session_id, Session), Bytes, Signature, ?PEER)}
+    end),
+    try
+        receive
+            {trace, Directory, 'receive',
+             {'$gen_cast', {route_needed, {Ns, ?ANCHOR}}}} -> ok
+        after 1000 -> error(route_wait_not_armed)
+        end,
+        %% A different identity must not release this request.
+        quod_reg:publish({directory_route, {Ns, ?ANCHOR}},
+                         {directory_route_available, {Ns, <<0:256>>}}),
+        ?assert(lists:member(Caller, gproc:lookup_pids(
+                  quod_reg:prop({directory_route, {Ns, ?ANCHOR}})))),
+        _ = sys:replace_state(Engine, fun(S) ->
+            true = quod_reg:reg({quod_prolog, Ns}), S
+        end),
+        quod_reg:publish({runtime, Ns},
+                         {proof_ready, {Ns, ?ANCHOR}, Engine, Engine, 1}),
+        receive
+            {route_wait_result, Caller, Result} ->
+                ?assertMatch({ok, _, {normalized, {read, _, {answers, 1, [_]}}}}, Result)
+        after 2000 -> error(route_wait_did_not_execute_locally)
+        end,
+        ?assertNot(lists:member(Caller, gproc:lookup_pids(
+                     quod_reg:prop({directory_route, {Ns, ?ANCHOR}})))),
+        ?assertNot(lists:member(Caller, gproc:lookup_pids(
+                     quod_reg:prop({runtime, Ns}))))
+    after
+        erlang:trace(Directory, false, ['receive']),
+        exit(Caller, kill),
+        _ = sys:replace_state(Engine, fun(S) ->
+            case quod_reg:where({quod_prolog, Ns}) of
+                undefined -> true = quod_reg:reg({quod_prolog, Ns});
+                Engine -> ok
+            end, S
+        end),
+        gen_server:stop(Directory)
+    end.
+
+missing_target_wait_ends_at_signed_deadline(
+  #{key_pair := KeyPair, session := Session}) ->
+    Ns = unique_symbol(<<"signed-not-started:">>),
+    Request = (request(Ns, ?ANCHOR, KeyPair, Session, <<"true.">>))#{
+        not_after_ms => quod_time:now_ms() + 150},
+    {ok, Bytes} = quod_client_goal:encode(Request),
+    Signature = quod_identity:sign(Bytes, quod_identity:key_term(KeyPair)),
+    ?assertEqual({error, signed_target_unavailable},
+        quod_client_goal_ingress:submit(
+            read, maps:get(session_id, Session), Bytes, Signature, ?PEER)),
+    ?assert(quod_time:now_ms() >= maps:get(not_after_ms, Request)),
+    ?assertNot(lists:member(self(), gproc:lookup_pids(
+                 quod_reg:prop({directory_route, {Ns, ?ANCHOR}})))).
+
+operation_absence_remains_unresolved(
+  #{namespace := Ns, key_pair := KeyPair, session := Session}) ->
+    {Bytes, Signature} = signed_read(
+                           Ns, ?ANCHOR, KeyPair, Session, <<"true.">>),
+    ?assertMatch(
+       {ok, _Evidence, {operation_pending, {operation, Ns, ?ANCHOR, _, _}}},
+       quod_client_goal_ingress:resolve_operation(
+         maps:get(session_id, Session), Bytes, Signature, ?PEER)).
+
+local_operation_resolution_preserves_evidence_and_expiry(
+  #{namespace := Ns, key_pair := KeyPair}) ->
+    Previous = application:get_env(quod, node_pubkey),
+    application:set_env(quod, node_pubkey, <<16#73:256>>),
+    try
+        Fixture = quod_ct:signed_goal_fixture(
+          #{network => ?NETWORK, target => {Ns, ?ANCHOR}, key_pair => KeyPair,
+            deadline => quod_time:now_ms() - 1, goal_text => <<"true.">>}),
+        Bytes = maps:get(request_bytes, Fixture),
+        Signature = maps:get(signature, Fixture),
+        ?assertEqual({error, expired}, quod_client_goal_ingress:submit(Bytes, Signature)),
+        ?assertMatch({ok, _, {operation_pending, {operation, Ns, ?ANCHOR, _, _}}},
+                     quod_client_goal_ingress:resolve_operation(Bytes, Signature)),
+        ?assertEqual({error, invalid_signature},
+                     quod_client_goal_ingress:resolve_operation(Bytes, <<0:512>>)),
+        Wrong = quod_ct:signed_goal_fixture(
+          #{network => <<0:256>>, target => {Ns, ?ANCHOR}, key_pair => KeyPair}),
+        ?assertEqual({error, wrong_network},
+          quod_client_goal_ingress:resolve_operation(
+            maps:get(request_bytes, Wrong), maps:get(signature, Wrong)))
+    after restore_env(node_pubkey, Previous) end.
+
+operation_resolution_requires_retained_result(
+  #{namespace := Ns, key_pair := KeyPair, session := Session}) ->
+    Deadline = min(maps:get(expires_ms, Session),
+                   quod_time:now_ms() + 30000),
+    Fixture = quod_ct:signed_atomic_fixture(
+                #{network => ?NETWORK, target => {Ns, ?ANCHOR},
+                  key_pair => KeyPair,
+                  deadline => Deadline,
+                  submitted_at => 2}),
+    Transaction = maps:get(transaction, Fixture),
+    ok = quod_prolog:apply_entry(
+           Ns, quod_ct:committed_entry(Ns, 2, {batch, [Transaction]}), live),
+    %% This fixture has an applied index but no retained Simplex history.
+    %% A status alone cannot recover the original selected result. Full
+    %% committed resolution is covered through real owners in
+    %% quod_outcome_result_tests, including selector precedence.
+    ?assertMatch({ok, #{outcome := #{status := committed, height := 2}}},
+        quod_prolog:outcome_snapshot(Ns,
+            {transaction, Ns, ?ANCHOR, Transaction#transaction.tx_id}, 1000)),
+    ?assertMatch(
+       {ok, _Evidence, {operation_pending, _}},
+       quod_client_goal_ingress:resolve_operation(
+         maps:get(session_id, Session), maps:get(request_bytes, Fixture),
+         maps:get(signature, Fixture), ?PEER)),
+    %% A concurrently refused submission may have its own returned selector.
+    %% That attempt must not replace this exact request's prepared winner.
+    Duplicate = quod_ct:signed_atomic_fixture(#{network => ?NETWORK,
+        target => {Ns, ?ANCHOR}, key_pair => KeyPair, deadline => Deadline,
+        operation_id => maps:get(operation_id, Fixture), vote => {refused, [duplicate_operation]}}),
+    ?assertEqual(maps:get(request_bytes, Fixture), maps:get(request_bytes, Duplicate)),
+    {ok, DuplicateRef} = quod_atomic:source_group_ref(
+        quod_atomic:control_material(maps:get(vote_control, Duplicate))),
+    ?assertMatch({ok, _, {operation_pending, _}},
+        quod_client_goal_ingress:resolve_operation(maps:get(session_id, Session),
+            maps:get(request_bytes, Duplicate), maps:get(signature, Duplicate), ?PEER, DuplicateRef)),
+    Previous = application:get_env(quod, node_pubkey),
+    application:set_env(quod, node_pubkey, <<16#73:256>>),
+    try
+        ?assertMatch({ok, _, {operation_pending, _}},
+          quod_client_goal_ingress:resolve_operation(
+            maps:get(request_bytes, Fixture), maps:get(signature, Fixture)))
+    after restore_env(node_pubkey, Previous) end,
+    Other = quod_ct:signed_goal_fixture(
+              #{network => ?NETWORK, target => {Ns, ?ANCHOR},
+                key_pair => KeyPair,
+                operation_id => maps:get(operation_id, Fixture),
+                deadline => Deadline,
+                goal_text => <<"assertz(saved(other)).">>}),
+    ?assertEqual(
+       {error, operation_conflict},
+       quod_client_goal_ingress:resolve_operation(
+         maps:get(session_id, Session), maps:get(request_bytes, Other),
+         maps:get(signature, Other), ?PEER)),
+    Waiting = quod_ct:remote_operation_fixture(#{network => ?NETWORK,
+        target => {Ns, ?ANCHOR}, key_pair => KeyPair, deadline => Deadline,
+        operation_id => <<16#ff:256>>}),
+    ok = quod_prolog:apply_entry(Ns,
+        quod_ct:committed_entry(Ns, 3, {batch, [maps:get(claim, Waiting)]}), live),
+    ?assertMatch({ok, #{status := claimed}},
+                 quod_prolog:outcome(maps:get(operation_ref, Waiting))),
+    ?assertMatch({ok, _, {operation_pending, _}},
+        quod_client_goal_ingress:resolve_operation(maps:get(session_id, Session),
+            maps:get(request_bytes, Waiting), maps:get(signature, Waiting), ?PEER, DuplicateRef)).
+
+%% ===================================================================
+%% fixture
+%% ===================================================================
+
+setup() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    stop_auth(),
+    stop_cursor(),
+    PreviousDesired = application:get_env(quod, namespace_desired),
+    application:set_env(
+      quod, namespace_desired,
+      #{content => #{quod_ontology:root_ns() =>
+                         #{genesis_hash => ?NETWORK}},
+        brahms => #{}}),
+    Ns = <<"signed-read:",
+           (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    Table = binary_to_atom(quod_simplex:genesis_table_name(Ns), utf8),
+    %% Public only inside this fixture: the anchor-race test must mutate the
+    %% fake Simplex identity from its EUnit worker process.
+    Table = ets:new(Table, [named_table, public, set]),
+    true = ets:insert(Table, {anchor, ?ANCHOR}),
+    {ok, Pid} = quod_prolog:start_link(
+                  Ns, #{node_id => {"127.0.0.1", 5000},
+                        outcome_backend => memory}),
+    KeyPair = quod_identity:generate(),
+    {PublicKey, _} = KeyPair,
+    Instance = {human_user, test_agent},
+    AgentRef = {agent_instance_ref, Ns, ?ANCHOR, Instance},
+    Policy = {can_invoke, {'Goal'}, AgentRef, {'Chain'}, Ns},
+    GenesisAuthor = <<16#76:256>>,
+    GenesisDiff =
+        quod_ct:diff_for({lookup, bob}) ++
+        quod_ct:diff_for({agent_key, Instance, PublicKey, active}) ++
+        quod_ct:diff_for(Policy),
+    Genesis = quod_simplex:test_genesis_tx(
+                #{mode => create, node_id => GenesisAuthor,
+                  committee => [], genesis_diff => GenesisDiff},
+                Ns, GenesisAuthor, <<16#77:256>>),
+    ok = quod_prolog:apply_entry(
+           Ns, quod_ct:committed_entry(Ns, 1, {batch, [Genesis]}), live),
+    ok = quod_prolog:mark_ready(Ns),
+    1 = quod_prolog:applied(Ns),
+    {ok, AuthPid} = quod_client_auth:start_link(
+                      #{network_id => ?NETWORK, node_key => <<16#73:256>>,
+                        session_ttl_ms => 60000}),
+    {ok, CursorPid} = quod_client_cursor:start_link(),
+    Session = open_session(KeyPair),
+    #{namespace => Ns, engine => Pid, auth => AuthPid, cursor => CursorPid,
+      table => Table, key_pair => KeyPair, session => Session,
+      previous_desired => PreviousDesired}.
+
+cleanup(#{engine := Engine, auth := Auth, cursor := Cursor, table := Table,
+          previous_desired := PreviousDesired}) ->
+    stop_process(Cursor),
+    stop_process(Auth),
+    case is_process_alive(Engine) of
+        true -> gen_server:stop(Engine);
+        false -> ok
+    end,
+    ets:delete(Table),
+    restore_env(namespace_desired, PreviousDesired).
+
+open_session(KeyPair) ->
+    {PublicKey, _} = KeyPair,
+    ClientNonce = <<16#74:256>>,
+    {ok, Challenge} = quod_client_auth:issue_challenge(
+                        PublicKey, ClientNonce, ?PEER),
+    ChallengeId = maps:get(challenge_id, Challenge),
+    {ok, ChallengeBytes} = quod_client_auth:challenge_bytes(
+                             ?NETWORK, <<16#73:256>>, ChallengeId,
+                             PublicKey, ClientNonce,
+                             maps:get(server_nonce, Challenge),
+                             maps:get(expires_ms, Challenge)),
+    ChallengeSignature = quod_identity:sign(
+                           ChallengeBytes,
+                           quod_identity:key_term(KeyPair)),
+    {ok, Session} = quod_client_auth:complete_challenge(
+                      ChallengeId, ChallengeSignature),
+    Session.
+
+signed_read(Ns, Anchor, KeyPair, Session, Text) ->
+    Request = request(Ns, Anchor, KeyPair, Session, Text),
+    {ok, Bytes} = quod_client_goal:encode(Request),
+    {Bytes, quod_identity:sign(Bytes, quod_identity:key_term(KeyPair))}.
+
+request(Ns, Anchor, {PublicKey, _}, Session, Text) ->
+    #{network_identity => ?NETWORK,
+      signing_public_key => PublicKey,
+      operation_id => crypto:strong_rand_bytes(32),
+      agent_namespace => Ns,
+      agent_genesis_anchor => Anchor,
+      agent_instance_text => <<"human_user(test_agent).">>,
+      mode => read,
+      parser_version => 1,
+      not_after_ms => min(maps:get(expires_ms, Session),
+                          quod_time:now_ms() + 30000),
+      goal_text => Text}.
+
+unique_symbol(Prefix) ->
+    <<Prefix/binary,
+      (integer_to_binary(erlang:unique_integer([positive])))/binary>>.
+
+is_anchored_public_cast(
+  {'$gen_cast', {public_proof, _Caller, _CallRef, prove_ro, _Goal,
+                 {proof_request, _TraceCtx, {agent, _AgentRef},
+                  ?ANCHOR, _RequestAuth, _Deadline, _StartedNative}}}) ->
+    true;
+is_anchored_public_cast(_) ->
+    false.
+
+stop_auth() ->
+    case whereis(quod_client_auth) of
+        undefined -> ok;
+        Pid -> stop_process(Pid)
+    end.
+
+stop_cursor() ->
+    case whereis(quod_client_cursor) of
+        undefined -> ok;
+        Pid -> stop_process(Pid)
+    end.
+
+stop_directory() ->
+    case quod_reg:where({directory, node}) of
+        undefined -> ok;
+        Pid -> stop_process(Pid)
+    end.
+
+stop_process(Pid) ->
+    unlink(Pid),
+    MRef = monitor(process, Pid),
+    exit(Pid, shutdown),
+    receive {'DOWN', MRef, process, Pid, _} -> ok
+    after 5000 -> error(process_stop_timeout)
+    end.
+
+restore_env(Key, undefined) -> application:unset_env(quod, Key);
+restore_env(Key, {ok, Value}) -> application:set_env(quod, Key, Value).

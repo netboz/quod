@@ -1,0 +1,48 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+=WARNING REPORT==== 9-Nov-2026::20:01:46.015364 ===
+quod_prolog[quod:node]: can_invoke refused a top-level goal at pinned height 1
+=WARNING REPORT==== 9-Nov-2026::20:01:46.021131 ===
+quod_prolog[quod:node]: can_invoke refused a top-level goal at pinned height 1
+[0;31mF[0m
+Failures:
+
+  1) quod_lifecycle_single_path_tests:-m1a_signup_terms_test_/0-fun-7-/0
+[0;31m     Failure/Error: {error,
+                        {enrollment_timeout,
+                            #{node_enrollment => refused,route_waits => 1,
+                              desired_hosts =>
+                                  #{private => 0,discoverable => 1},
+                              hosting_revision => 1,private_contacts => 0}},
+                        [{quod_lifecycle_single_path_tests,
+                             await_enrollment_completion_event,1,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_lifecycle_single_path_tests.erl"},
+                              {line,1636}]},
+                         {quod_lifecycle_single_path_tests,m1a_foundations,1,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_lifecycle_single_path_tests.erl"},
+                              {line,588}]},
+                         {quod_lifecycle_single_path_tests,
+                             '-m1a_signup_terms_test_/0-fun-7-',0,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_lifecycle_single_path_tests.erl"},
+                              {line,513}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]},
+                         {eunit_proc,with_timeout,3,
+                             [{file,"eunit_proc.erl"},{line,379}]},
+                         {eunit_proc,handle_test,2,
+                             [{file,"eunit_proc.erl"},{line,537}]},
+                         {eunit_proc,tests_inorder,3,
+                             [{file,"eunit_proc.erl"},{line,479}]}]}
+[0m[0;36m     Output: [0m
+
+Finished in 30.362 seconds
+[0;31m1 tests, 1 failures
+[0m===> Error running tests

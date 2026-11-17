@@ -1,0 +1,118 @@
+{
+  "scope": "Case17 runtime-focus diagnostic preparation/retirement and sampled cue withdrawal; no human visibility result received.",
+  "protocol_retirement_passed": true,
+  "physical_model_visibility": "UNRUN/unqualified: no actual human result reached worker at receipt binding",
+  "manual_instructions": [
+    "status",
+    "status",
+    "stop",
+    "finish"
+  ],
+  "original_bounds": {
+    "startup": 30,
+    "single_inventory": 5,
+    "participant": 1800,
+    "close": 60,
+    "wrapper": 2100
+  },
+  "client_runtime_server_driver_wrapper_exits": [
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "case_eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "runtime-stdout": true,
+    "runtime-stderr": true,
+    "client-stdout": true,
+    "client-stderr": true
+  },
+  "wrapper_eof": {
+    "stdout": true,
+    "stderr": true
+  },
+  "reader_errors": [],
+  "case_elapsed_seconds": 1005.6276371479034,
+  "timeout_or_stack": false,
+  "target_diagnostics": [],
+  "ordinary_launch_focus_dispatches": 1,
+  "extra_focus_dispatches": 0,
+  "ordinary_owned_close_dispatches": 1,
+  "focus_listener_started": false,
+  "actual_frame_cue_markers": [
+    "M4_VIVE_LOOK_CUE READY frame=2",
+    "M4_VIVE_LOOK_CUE WAITING frame=52712"
+  ],
+  "ready_snapshot_utc": "2026-10-30T19:49:42.0992630+00:00",
+  "ready_native_head_both_hands_high_models_visible": true,
+  "ready_window_has_focus_literal": false,
+  "later_waiting_snapshot_utc": "2026-10-30T20:05:00.2677543+00:00",
+  "later_native_head_hands_high_models_hidden": true,
+  "later_world_accepted": false,
+  "later_operation_available": false,
+  "later_controller_available": false,
+  "later_operation_status_contains_expired": true,
+  "specific_withdrawal_cause": "Not independently attributed; no desktop-focus, hardware or historical-stall cause inferred.",
+  "human_interval": "No human look time or result supplied; marker/snapshots are distinct instants, not pixel/continuous-interval proof.",
+  "no_90sample_gui_button_gesture_movement": true,
+  "final_metrics": {
+    "Running": false,
+    "Subscriptions": 0,
+    "sources": 0,
+    "appearances": 0,
+    "MenuRedraws": 0,
+    "LateCallbacks": 0,
+    "captures": 0,
+    "DriveRequests": 0,
+    "StopRequests": 0,
+    "SnapRequests": 0,
+    "TeleportRequests": 0,
+    "resources": {
+      "Acquisitions": 2,
+      "Releases": 2,
+      "Decodes": 1,
+      "InstancesCreated": 2,
+      "InstancesReleased": 2,
+      "NodesBuilt": 114,
+      "TexturesDecoded": 1,
+      "LiveTemplates": 0,
+      "LiveLeases": 0
+    }
+  },
+  "owned_client_incarnation_retired": true,
+  "runtime_processes_after_reported": [],
+  "calibration_unchanged_reported": true,
+  "hdmi_restored_disabled": true,
+  "fresh_closure_other_displays_and_current_configs_unchanged": true,
+  "current_config_files": 76,
+  "payload_manifest_sha256": "9073b314599bd64531792acd63cbcd2e21ef54b73a41b25cd041260a4433fb08",
+  "supplied_inputs": 94,
+  "export_files": 196,
+  "diagnostic_nondistributable": true,
+  "production_source_policy_changes": 0,
+  "driver_delta": "Only digest h delegates to the existing exact-stat accepted cache owner. Control, guards and deadlines byte-identical.",
+  "builds_or_unchanged_suite_recounts": 0,
+  "api_private_reference": {
+    "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product17/api-dump.raw",
+    "bytes": 820472126,
+    "driver_recorded_sha256": "b3264e64c5eeb00304b4ff001ea2dcd1d20a4fd2b49712b4144f358aefa86c97",
+    "stat_key": [
+      2050,
+      3279425,
+      820472126,
+      1793390732162496506,
+      1793390733555522899
+    ],
+    "parsed": false,
+    "hashed_again": false,
+    "scope": "Original completed-driver digest plus post-exit stat identity only; no entry counts, returned-status or pixels."
+  },
+  "full_M4_accepted": false,
+  "remaining": [
+    "No case18 authorization; no new run or reauthentication performed.",
+    "Startup complaint, original desktop/cold-head failures, model transform/gestures/comfort/full M4 remain open."
+  ]
+}

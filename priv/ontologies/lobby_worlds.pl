@@ -5,31 +5,32 @@ lobby_terrain_world(W) :-
 world_arrival(_,_) :- fail.
 world_library_allowance(16).
 world_spawn_allowance(-16000,160000,sampling_limits(4000,40000,120000,12000)).
-instance_of(agent,world_responder).
+instance_of(quod:agent:agent,world_responder).
 lobby_hosted_actor(world_responder).
 gui_pending_allowance(world_responder,8).
 gui_completion_allowance(world_responder,30000).
 
 world_library_workspace(View) :-
     current_principal(Human),lobby_owner(Human),gui_vocabulary(Ns,A),
-    Ns::(current_ontology_identity(Ns,A),gui_view(space_library,View)).
+    in_ontology(Ns,A,gui_view(space_library,View)).
 world_library_status(Status) :-
     current_principal(Human),lobby_owner(Human),
     (agent_hosted(world_responder,_,_,_) -> Status = configured ; Status = setup_required).
 world_library_preparation(State) :-
     world_library_status(Status),
     (Status = configured -> State = ready
-    ; agent_preparation_assignment(world_responder,none,0),
+    ; current_ontology_identity(Ns,A),
+      quod:agent::agent_preparation_assignment(agent_instance_ref(Ns,A,world_responder),none,0),
       findall(N,physics_initial_host(personal_lobby,N),[Node]),
-      current_ontology_identity(Ns,A),
       prepare_agent_key_custody(agent_instance_ref(Ns,A,world_responder),none,0,Node,Key),
       State = prepared(Node,Key)).
 world_library_initialize(Node,Key) :-
     term_variables([Node,Key],[]),
     transaction((current_principal(Human),lobby_owner(Human),
         findall(N,physics_initial_host(personal_lobby,N),[Node]),
-        agent_preparation_assignment(world_responder,none,0),
-        goal(agent_hosted(world_responder,Node,1,Key)))).
+        current_ontology_identity(Ns,A),
+        quod:agent::agent_preparation_assignment(agent_instance_ref(Ns,A,world_responder),none,0),
+        quod:agent::goal(agent_hosted(agent_instance_ref(Ns,A,world_responder),Node,1,Key)))).
 
 world_library(Rows) :-
     current_principal(Human),lobby_owner(Human),current_ontology_identity(Ns,A),
@@ -46,7 +47,8 @@ world_library_form(settings(W),voxel_view_settings(W)) :- lobby_terrain_world(W)
 world_library_form(edit(W),voxel_excavation(W)) :- lobby_terrain_world(W).
 world_library_open(Action,Reference) :-
     current_principal(Human),lobby_owner(Human),
-    world_library_form(Action,Form),gui_open(Form,Reference).
+    world_library_form(Action,Form),current_ontology_identity(Ns,A),
+    <<"quod:gui">>::gui_open(form_ref(Ns,A,Form),Reference).
 
 gui_question_policy(Form,Human,agent_instance_ref(Ns,A,world_responder)) :-
     lobby_owner(Human),current_ontology_identity(Ns,A),world_library_form(_,Form).
@@ -80,8 +82,8 @@ world_creation_entered(EnteredName,Recipe) :-
     transaction((current_principal(Actor),
         gui_question_policy(world_creation,Human,Actor),
         findall(Q,gui_application_active(Q),[Reference]),
-        Reference = question_ref(Ns,A,Q),current_ontology_identity(Ns,A),
-        gui_answer(Q,form_ref(Ns,A,world_creation),Human,_,create_world,_),
+        Reference = question_ref(Ns,A,_),current_ontology_identity(Ns,A),
+        <<"quod:gui">>::gui_answer(Reference,form_ref(Ns,A,world_creation),Human,_,create_world,_),
         term_digest(world(Reference),Id),W = world(Id),
         world_library_count(Count),findall(L,world_library_allowance(L),[Limit]),
         (Count < Limit -> true ; fail_with_reason(world_library_allowance(Count,Limit))),
@@ -111,7 +113,7 @@ world_creation_name(Entered,Occurrence,Name) :-
     binary_codes(Entered,Codes),
     (Codes = [] ->
         findall(ontology_ref(N,A),names_vocabulary(N,A),[ontology_ref(Ns,Anchor)]),
-        Ns::(current_ontology_identity(Ns,Anchor),
+        in_ontology(Ns,Anchor,
              draw(<<"landscape">>,<<"world">>,<<"neutral">>,Occurrence,Name))
     ; Name = Entered).
 
@@ -133,21 +135,13 @@ world_highest_solid([D|Ds],N,I,Before,Highest) :-
     J is I+1,world_highest_solid(Ds,N,J,Next,Highest).
 
 world_palette(Palette) :-
-    lobby_vocabulary(Ns,A),Ns::(current_ontology_identity(Ns,A),world_palette(Palette)).
+    lobby_vocabulary(Ns,A),in_ontology(Ns,A,world_palette(Palette)).
 space_member(W,entity_ref(Ns,A,world_sky(W))) :-
     lobby_terrain_world(W),current_ontology_identity(Ns,A).
 
-%% Allocate within the selected renderer's authored policy. The proof retains
-%% these dependencies; a larger physical-world allowance is not a view budget.
-world_render_resources(resources(Transfer,Geometry,Vertices,Triangles,Chunks)) :-
-    world_render_limit(<<"mesh_transfer_bytes">>,Transfer),
-    world_render_limit(<<"mesh_geometry_bytes">>,Geometry),
-    world_render_limit(<<"mesh_vertices">>,Vertices),
-    world_render_limit(<<"mesh_triangles">>,Triangles),
-    world_render_limit(<<"mesh_nodes">>,Chunks).
-world_render_limit(Resource,Limit) :-
-    findall(ontology_ref(N,A),rendering_vocabulary(N,A),[ontology_ref(Ns,Anchor)]),
-    Ns::(current_ontology_identity(Ns,Anchor),limit(Resource,Limit)).
+%% Visual demand uses the existing finite viewing window and physical resource
+%% admission. No independent default presentation quota is imposed on it.
+world_render_resources(resources(unlimited,unlimited,unlimited,unlimited,unlimited)).
 
 %% Viewing policy scales with ground detail: the initial window spans the same
 %% number of chunks, including its prefetch and retained border.
@@ -156,8 +150,8 @@ world_initial_view(Spec,view_distance(Distance,Prefetch,Retention)) :-
     Distance is 16*Spacing,Prefetch is 4*Spacing,Retention is 8*Spacing.
 
 lobby_physical_space(W,world_authority(W),world_pilot(W)) :- lobby_terrain_world(W).
-instance_of(agent,world_authority(W)) :- lobby_terrain_world(W).
-instance_of(agent,world_pilot(W)) :- lobby_terrain_world(W).
+instance_of(quod:agent:agent,world_authority(W)) :- lobby_terrain_world(W).
+instance_of(quod:agent:agent,world_pilot(W)) :- lobby_terrain_world(W).
 physics_space(W,enabled,world_authority(W)) :- lobby_terrain_world(W).
 physics_initial_host(W,Node) :- lobby_terrain_world(W),physics_initial_host(personal_lobby,Node).
 physics_initial_control(W,world_pilot(W),eye) :- lobby_terrain_world(W).

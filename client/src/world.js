@@ -57,11 +57,11 @@ export async function readSpaceNavigation(identity, agent, reference = null, opt
   const reply = await signedGoal(identity, {
     mode: 'read', agent, goal: reference
       ? anchoredGoal(reference, compound('space_navigation', [reference.instance, variable('Modes')]))
-      : 'lobby_navigation(Lobby,Modes).',
+      : 'account_navigation(Space,Modes).',
   }, options)
   if (reply.result === 'fail') return null
   if (!reference) {
-    const [ns, anchor, instance] = args(readTerm(singleBinding(reply, 'Lobby')), 'entity_ref', 3)
+    const [ns, anchor, instance] = args(readTerm(singleBinding(reply, 'Space')), 'entity_ref', 3)
     reference = { namespace: textValue(ns), anchor: anchor.value, instance }
   }
   anchoredGoal(reference, reference.instance)
@@ -112,9 +112,9 @@ export function readGuiView(binding) {
   requireProjection(root)
   const roles = new Set()
   const contracts = {
-    container: ['layout'], display: [], button: ['image'],
+    container: ['layout', 'appearance'], display: [], button: ['image'],
     text: ['required', 'readonly', 'max_bytes'], number: ['required', 'readonly', 'range', 'unit'],
-    boolean: ['required', 'readonly'], choice: ['required', 'readonly', 'options'],
+    boolean: ['required', 'readonly'], choice: ['required', 'readonly', 'options'], view: ['required', 'readonly'],
     editor: ['readonly'], bindings: [], catalogue_selection: ['readonly'],
   }
   const integer = term => {
@@ -135,9 +135,14 @@ export function readGuiView(binding) {
     for (const property of properties.items) {
       const [key, value] = args(property, 'property', 2)
       if (key.type !== 'atom' || seen.has(key.value)) throw new Error('invalid component property')
-      if (!['label', 'help', 'enabled', ...contracts[family ?? field.kind], ...({ selectable_list: ['multiple'], table: ['multiple', 'headings'], image: ['image'], grid: ['columns'], scroll: ['visible_rows'], progress: ['percent'] }[field.kind] ?? [])].includes(key.value)) throw new Error('unsupported GUI property for component kind')
+      if (!['label', 'help', 'enabled', ...contracts[family ?? field.kind], ...({ selectable_list: ['multiple'], table: ['multiple', 'headings'], image: ['image'], form: ['image'], grid: ['columns'], scroll: ['visible_rows'], progress: ['percent'] }[field.kind] ?? [])].includes(key.value)) throw new Error('unsupported GUI property for component kind')
       seen.add(key.value)
       switch (key.value) {
+        case 'appearance':
+          // The browser retains its existing adapter defaults. An authored
+          // appearance needs a capable adapter; never silently drop its data.
+          if (value.type !== 'atom' || value.value !== 'inherit') throw new Error('authored GUI appearance requires a supporting renderer')
+          break
         case 'image':
           if (!(value.type === 'atom' && value.value === 'none')) field.image = readImageAsset(value)
           break
@@ -269,6 +274,9 @@ export function guiDraftFields(view, draft) {
     } else if (guiValueKind(field.kind) === 'boolean') {
       if (!['true', 'false'].includes(value) || (field.required && value !== 'true')) throw new Error('Confirm this field.')
       parsed = atom(value)
+    } else if (guiValueKind(field.kind) === 'view') {
+      if (value !== 'none') throw new Error('This device has no viewer pose.')
+      parsed = atom('none')
     } else throw new Error('Unsupported form field.')
     return compound('field', [readTerm(field.role), parsed])
   })
@@ -335,6 +343,9 @@ export function readGuiForm(tree, fields, control) {
     } else if (guiValueKind(field.kind) === 'boolean') {
       if (value.type !== 'atom' || !['true', 'false'].includes(value.value)) throw new Error('invalid form boolean')
       values[role] = value.value
+    } else if (guiValueKind(field.kind) === 'view') {
+      if (value.type !== 'atom' || value.value !== 'none') throw new Error('invalid initial viewer pose')
+      values[role] = 'none'
     } else {
       if (value.type !== 'number' || value.literal || !Number.isSafeInteger(value.value)) throw new Error('unsupported GUI integer')
       values[role] = String(value.value)
@@ -382,12 +393,14 @@ export async function readEntityEidolons(identity, agent, subject, options = {})
   const choices = readTerm(singleBinding(reply, 'Choices'))
   if (choices.type !== 'list' || choices.tail !== null) throw new Error('invalid eidolon choices')
   return choices.items.map(choice => {
-    const [purpose, style, recipe] = args(choice, 'eidolon', 3)
-    const [ns, anchor, name] = args(recipe, 'recipe', 3)
-    if (!(purpose.type === 'atom' || (purpose.type === 'compound' && purpose.functor === 'operation' && purpose.args.length === 1 && ['class', 'instance'].includes(purpose.args[0].value))) || style.type !== 'atom' || name.type !== 'atom' ||
+    // An Eidolon's name and its recipe's name are terms, such as show(interior,matrix).
+    const [purpose, name, recipe] = args(choice, 'eidolon', 3)
+    const [ns, anchor, recipeName] = args(recipe, 'recipe', 3)
+    const named = term => term.type === 'atom' || term.type === 'compound'
+    if (!(purpose.type === 'atom' || (purpose.type === 'compound' && purpose.functor === 'operation' && purpose.args.length === 1 && ['class', 'instance'].includes(purpose.args[0].value))) || !named(name) || !named(recipeName) ||
         anchor.type !== 'binary' || anchor.value.length !== 32) throw new Error('invalid eidolon recipe')
-    return { purpose: renderTerm(purpose), style: style.value,
-      recipe: { namespace: textValue(ns), anchor: anchor.value, name: name.value } }
+    return { purpose: renderTerm(purpose), name: renderTerm(name),
+      recipe: { namespace: textValue(ns), anchor: anchor.value, name: renderTerm(recipeName), term: recipeName } }
   })
 }
 
@@ -395,7 +408,7 @@ export async function readEidolon(identity, agent, subject, choice, options = {}
   const target = ontologyTerm({ namespace: subject.ontology, anchor: subject.anchor })
   const reply = await signedGoal(identity, {
     mode: 'read', agent, goal: anchoredGoal(choice.recipe,
-      compound('eidolon', [atom(choice.recipe.name), compound('subject', [target, subject.entity]), variable('Representation')])),
+      compound('eidolon', [choice.recipe.term, compound('subject', [target, subject.entity]), variable('Representation')])),
   }, options)
   return readEidolonRepresentation(singleBinding(reply, 'Representation'), subject)
 }
@@ -406,12 +419,17 @@ export function readEidolonRepresentation(binding, subject) {
   const lens = result.functor === 'lens_view'
   const [controller, ...content] = lens ? [null, ...args(result, 'lens_view', 5)] : args(result, 'workspace', 5)
   const [ref, entity, tools, view, parameters] = content
-  if (!lens && (controller.type !== 'atom' || !['prolog_editor', 'proof_console', 'space_library'].includes(controller.value))) throw new Error('unsupported workspace controller')
+  const editor = !lens && controller.type === 'compound' && controller.functor === 'prolog_editor'
+  const selection = editor ? args(controller, 'prolog_editor', 1)[0] : null
+  if (!lens && !editor && (controller.type !== 'atom' || !['proof_console', 'space_library'].includes(controller.value))) throw new Error('unsupported workspace controller')
+  if (selection && !(selection.type === 'atom' && selection.value === 'all') &&
+      !(selection.type === 'compound' && selection.functor === '/' && selection.args.length === 2 &&
+        selection.args[0].type === 'atom' && selection.args[1].type === 'number' && Number.isSafeInteger(selection.args[1].value) && selection.args[1].value >= 0)) throw new Error('invalid source selection')
   const reference = readReference(renderTerm(ref))
   if (reference.namespace !== subject.ontology || b64url(reference.anchor) !== b64url(subject.anchor) ||
       renderTerm(entity) !== renderTerm(subject.entity)) throw new Error('representation target changed')
   const owner = readReference(renderTerm(tools))
-  if (!lens) return { kind: 'workspace', controller: controller.value, workspace: { target: reference, tools: owner, view: readGuiView(renderTerm(view)) } }
+  if (!lens) return { kind: 'workspace', controller: editor ? 'prolog_editor' : controller.value, workspace: { target: reference, tools: owner, selection, view: readGuiView(renderTerm(view)) } }
   if (view.type !== 'binary' || parameters.type !== 'list' || parameters.items.length !== 1 ||
       renderTerm(parameters.items[0]) !== renderTerm(ref)) throw new Error('invalid target lens')
   return { kind: 'lens', target: reference, lens: owner, view: textValue(view), parameters }

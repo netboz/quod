@@ -1,0 +1,57 @@
+{
+  "passed": true,
+  "previous_snapshot_sha256": "d3bf0febef580e1074017fdfdb249b2bc0c4183755fa38b695f0d4fe7d945625",
+  "prior_source_paths_checked": 25890,
+  "prior_file_exact_stat_cache_hits": 25890,
+  "bulk_prior_source_rehash": false,
+  "root_actual_complete_source": "/data/quod-m4-vr-ca84d4f8-20261029/builds/coordinator-focus12-source-reconstruction-92",
+  "preserved_before_inputs": {
+    "doc/evidence/godot-m4-vive-retest10-20261030/focus_events.py": {
+      "sha256": "bb63ff9db8f3aef231f22043e8336c263afcf52b553c908419ff3e0abdd584e2",
+      "mode": 420,
+      "bytes": 8595,
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/metadata-inputs/focus-recipient-base01/focus_events.py"
+    },
+    "doc/evidence/godot-m4-vive-retest10-20261030/focus_checks.py": {
+      "sha256": "b36a2136611930d8ba8ddc4a08574cb953bffd0e4babbf2b9700f310f6b92738",
+      "mode": 420,
+      "bytes": 3787,
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/metadata-inputs/focus-recipient-base01/focus_checks.py"
+    },
+    "doc/evidence/godot-m4-vive-retest10-20261030/focus-fixtures.json": {
+      "sha256": "9a7381c85625a875726e9f229b0ce8b67b8695bb9dd41391679febf5f8f2a76a",
+      "mode": 420,
+      "bytes": 388,
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/metadata-inputs/focus-recipient-base01/focus-fixtures.json"
+    },
+    "nimbalyst-local/handoffs/godot-m4-vive-focus-recipient-offline-93.md": {
+      "sha256": "053b545039064c219d8b90e7cf48f2b657c78af8cfd5848a2ee1c5eb8153f1ff",
+      "mode": 420,
+      "bytes": 7711,
+      "copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/metadata-inputs/focus-recipient-base01/godot-m4-vive-focus-recipient-offline-93.md"
+    }
+  },
+  "independent_prerequisites": {
+    "focus12-final-verification-92.json": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/_build/godot-m4-r2-coordinator-20261029/focus12-final-verification-92.json",
+      "sha256": "9348146f03a29c00bdabb7dee3984f64942f815da4eef1d47f23e4118d444a78"
+    },
+    "fable-focus-report-92.md": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/_build/godot-m4-r2-coordinator-20261029/fable-focus-report-92.md",
+      "sha256": "4de25adae3a9bbb0c50648a3a331ba89e271787008e45b9686111c164071dbea"
+    },
+    "fable-focus-disposition-92.json": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/_build/godot-m4-r2-coordinator-20261029/fable-focus-disposition-92.json",
+      "sha256": "3b1df667853af60aa87dc5bea0dcb5ef7106f715236e7e0fe88a0e0909bef9a7"
+    },
+    "focus-diagnostic-mapping-check-92.json": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/_build/godot-m4-r2-coordinator-20261029/focus-diagnostic-mapping-check-92.json",
+      "sha256": "4f5127a03de9f8871efde30f06128b74af0397ce8887a25270790a8db4802f0c"
+    }
+  },
+  "capacity_free_bytes": 806353580032,
+  "new_application_build_runtime_fixture_device_display_or_socket_actions": false,
+  "earlier_inspection_failure": "rg exit2: guessed inputs/model-session.json absent; actual existing inputs/launcher-metadata.json read. Inspection-only; no product action/failure.",
+  "tracker": "OwnUUID explicit-project work_radar0/nestedisErrorfalse/0threads/0signals; no mutation/publication.",
+  "model": "Actual own session summary openai-codex:gpt-6.1-sol; retained launcher metadata requested/returnedmax; effective backend effort unexposed."
+}

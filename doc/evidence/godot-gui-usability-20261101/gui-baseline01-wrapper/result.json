@@ -1,0 +1,14 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-gui-usability-20261101/run.py",
+    "gui-baseline01-render",
+    "--manifest",
+    "doc/evidence/godot-gui-usability-20261101/inputs/client-gui-usability-baseline01-manifest.json",
+    "--headed"
+  ],
+  "exit": 1,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 4.666174883983331
+}

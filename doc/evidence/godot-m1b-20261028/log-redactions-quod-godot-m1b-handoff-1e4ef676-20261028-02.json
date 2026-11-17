@@ -1,0 +1,12 @@
+{
+  "private_originals": "/home/yan/.cache/quod-m1b-artifacts/quod-godot-m1b-handoff-1e4ef676-20261028-02-private-logs",
+  "files": [
+    {
+      "file": "doc/evidence/godot-m1b-20261028/logs/gates-01-eunit.log",
+      "raw_sha256": "af2671be8b892ed4470818610b4a4ebf46a346e7520e0060c9fb08b21706beec",
+      "redacted_sha256": "131950244590de36a7105d25030a2d72166008429e4c49adc4c5f612398c72f9",
+      "replacements": 685
+    }
+  ],
+  "rule": "All numeric Erlang binaries of exactly 32 or 64 bytes, including public identifiers; complete raw logs remain private outside this snapshot."
+}

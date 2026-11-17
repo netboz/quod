@@ -1,0 +1,643 @@
+{
+  "diagnostic_question": "Which close await, native engine or owned pipe lifetime remains at the original cutoff?",
+  "passed": true,
+  "reader_errors": [],
+  "host_input_or_focus_action": false,
+  "software_Control_signals": true,
+  "no_headset_or_runtime": true,
+  "companion_not_distributed": true,
+  "manifest_sha256": "881ea4ab6bf9200c1bc235a6c9858525a5a250c8535a47e81b0b4768fccabc12",
+  "eof": {
+    "server-stdout": true,
+    "server-stderr": true,
+    "client-initial-stdout": true,
+    "client-initial-stderr": true,
+    "client-reopen-stdout": true,
+    "client-reopen-stderr": true
+  },
+  "streams": {
+    "server-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/retirement-observation01/server-stdout.raw",
+      "sha256": "cd858e5ccde3405a91414ea0102faac140a758ec57d8dcf363447a2d8e623940",
+      "bytes": 129
+    },
+    "client-reopen-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/retirement-observation01/client-reopen-stdout.raw",
+      "sha256": "b88b98c3037b3566e49734c7d798b2ce2b41b131ade7e12ebf9c8509e30c5ffa",
+      "bytes": 116714
+    },
+    "client-initial-stdout.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/retirement-observation01/client-initial-stdout.raw",
+      "sha256": "d83d358f0a696d7b0d9692a9f8920d0a9cc1c42b0a3f739399126069cf541b92",
+      "bytes": 362565
+    },
+    "client-reopen-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/retirement-observation01/client-reopen-stderr.raw",
+      "sha256": "ba8d8e9b2bd0facdc3bcf33a6e6b5b936af0e44694d437549a6f1e62d52cc439",
+      "bytes": 4557
+    },
+    "server-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/retirement-observation01/server-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "client-initial-stderr.raw": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/retirement-observation01/client-initial-stderr.raw",
+      "sha256": "ec5cb380cdff87b8ef3586c9673d4ef58f79d6303659f4ae46f1b4df8111b930",
+      "bytes": 4557
+    }
+  },
+  "native_input_count": 0,
+  "children": {
+    "server": {
+      "true_exit": 0
+    },
+    "client-initial": {
+      "explicit_completion": true,
+      "completion_monotonic": 186552.421954289,
+      "close_stages": [
+        {
+          "stage": "close.enter",
+          "monotonic": 186552422878989,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "session.close.begin",
+          "monotonic": 186552423788391,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "session.close.returned",
+          "monotonic": 186552425730345,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "views.observed",
+          "monotonic": 186552426073994,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": "RanToCompletion"
+        },
+        {
+          "stage": "views.completed",
+          "monotonic": 186552426361444,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": "RanToCompletion"
+        },
+        {
+          "stage": "action.observed",
+          "monotonic": 186552426374579,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": "RanToCompletion"
+        },
+        {
+          "stage": "action.completed",
+          "monotonic": 186552426376000,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": "RanToCompletion"
+        },
+        {
+          "stage": "backup.observed",
+          "monotonic": 186552426377380,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": "RanToCompletion"
+        },
+        {
+          "stage": "backup.completed",
+          "monotonic": 186552426378303,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": "RanToCompletion"
+        },
+        {
+          "stage": "xr.completion.observed",
+          "monotonic": 186552426379726,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": "RanToCompletion"
+        },
+        {
+          "stage": "xr.completion.completed",
+          "monotonic": 186552426381765,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": "RanToCompletion"
+        },
+        {
+          "stage": "owners.await",
+          "monotonic": 186552426382860,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "owners.await.returned",
+          "monotonic": 186552426492241,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "models.dispose.begin",
+          "monotonic": 186552426496660,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "models.dispose.returned",
+          "monotonic": 186552426703904,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "models.observed",
+          "monotonic": 186552426878191,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": "RanToCompletion"
+        },
+        {
+          "stage": "models.completed",
+          "monotonic": 186552426883480,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": "RanToCompletion"
+        },
+        {
+          "stage": "models.await.returned",
+          "monotonic": 186552426894638,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "xr.shutdown.begin",
+          "monotonic": 186552426896171,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "xr.shutdown.returned",
+          "monotonic": 186552429535264,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "identity.release.begin",
+          "monotonic": 186552429542986,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "identity.release.returned",
+          "monotonic": 186552429630859,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "tree.quit.begin",
+          "monotonic": 186552429635397,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "tree.quit.returned",
+          "monotonic": 186552429667339,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "tree.exit.entered",
+          "monotonic": 186552445557628,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "tree.exit.returned",
+          "monotonic": 186552445598923,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        }
+      ],
+      "true_exit": 0,
+      "checks": [
+        "enabled ordinary action create-key",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software activation requires the visible enabled native button: create-key",
+        "one software Control signal reaches the existing button owner",
+        "enabled ordinary action connect",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software activation requires the visible enabled native button: connect",
+        "one software Control signal reaches the existing button owner",
+        "real signed authentication uses the fresh fixture network",
+        "enabled ordinary action register",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software activation requires the visible enabled native button: register",
+        "one software Control signal reaches the existing button owner",
+        "enabled ordinary action prepare",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software activation requires the visible enabled native button: prepare",
+        "one software Control signal reaches the existing button owner",
+        "enabled ordinary action setup",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software activation requires the visible enabled native button: setup",
+        "one software Control signal reaches the existing button owner",
+        "enabled ordinary action location-operations",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software activation requires the visible enabled native button: location-operations",
+        "one software Control signal reaches the existing button owner",
+        "ordinary Current space presents the accepted navigation context",
+        "enabled ordinary action create-operations",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software activation requires the visible enabled native button: create-operations",
+        "one software Control signal reaches the existing button owner",
+        "native action is visible inside the current ordinary desktop viewport",
+        "existing authored choice is present",
+        "software selection reaches the existing authored-choice owner",
+        "native action is visible inside the current ordinary desktop viewport",
+        "existing authored choice is present",
+        "software selection reaches the existing authored-choice owner",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software activation requires the visible enabled native button: @Button@363",
+        "one software Control signal reaches the existing button owner",
+        "offered create keeps the explicitly chosen existing storage and anchored class",
+        "current signed offered Submit is enabled",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software activation requires the visible enabled native button: control7",
+        "one software Control signal reaches the existing button owner",
+        "software Control Submit leaves no GUI pointer capture",
+        "one software Control Submit commits the governed creation through U to A",
+        "creation retains A in the original space until explicit Enter",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software activation requires the visible enabled native button: open-returned-subject",
+        "one software Control signal reaches the existing button owner",
+        "View result keeps the original location; inspection is not Enter",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software activation requires the visible enabled native button: @Button@458",
+        "one software Control signal reaches the existing button owner",
+        "returned-subject native action opens the exact created-space Enter offer",
+        "current signed offered Submit is enabled",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software activation requires the visible enabled native button: control0",
+        "one software Control signal reaches the existing button owner",
+        "software Control Submit leaves no GUI pointer capture",
+        "explicit native Enter commits using the same signed form owner",
+        "creation and Enter each add one original instruction with no pending work",
+        "enabled ordinary action location-operations",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software activation requires the visible enabled native button: location-operations",
+        "one software Control signal reaches the existing button owner",
+        "enabled ordinary action inspect-subject-storage",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software activation requires the visible enabled native button: inspect-subject-storage",
+        "one software Control signal reaches the existing button owner",
+        "ordinary Source / inspection keeps the exact current owned ontology",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software activation requires the visible enabled native button: @Button@494",
+        "one software Control signal reaches the existing button owner",
+        "named unchanged-work observation is installed before renewal",
+        "unchanged accepted renewal has zero watched history/rebuild/write/sync calls",
+        "unchanged renewal retains native graph/scene/source and private profile bytes",
+        "workbench starts with inspection rather than unrequested preparation fields",
+        "native action is visible inside the current ordinary desktop viewport",
+        "actual current desktop raster retained: workbench-inspection",
+        "software activation requires the visible enabled native button: control2",
+        "one software Control signal reaches the existing button owner",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software text signal preserves the exact offered draft value",
+        "existing Control text signal edits the single offered local form draft",
+        "native action is visible inside the current ordinary desktop viewport",
+        "existing authored choice is present",
+        "software selection reaches the existing authored-choice owner",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software activation requires the visible enabled native button: control11",
+        "one software Control signal reaches the existing button owner",
+        "native Prepare creates only the guarded local source draft",
+        "actual current desktop raster retained: local-source-draft",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software activation requires the visible enabled native button: control4",
+        "one software Control signal reaches the existing button owner",
+        "existing signed Preview enables explicit Save",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software activation requires the visible enabled native button: control5",
+        "one software Control signal reaches the existing button owner",
+        "one explicit native Save has committed graphical/text readback and no pending work",
+        "ontology editing preserves the same current space and agent assignment",
+        "actual current desktop raster retained: committed-workbench",
+        "one ordinary authorized fixture transaction authors the non-space appearance example",
+        "native action is visible inside the current ordinary desktop viewport",
+        "actual current desktop raster retained: authored-appearance",
+        "the exact signed non-space subject renders its authored cyan primary action",
+        "ordinary desktop accessibility keeps the authored panel and foreground opaque",
+        "appearance inspection retains the received original outcome and sends no Apply or replay instruction",
+        "software activation requires the visible enabled native button: workspace-connection",
+        "one software Control signal reaches the existing button owner",
+        "enabled ordinary action disconnect",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software activation requires the visible enabled native button: disconnect",
+        "one software Control signal reaches the existing button owner",
+        "normal disconnect retires all signed view consumers",
+        "desktop journey ends without capture or native XR"
+      ]
+    },
+    "client-reopen": {
+      "explicit_completion": true,
+      "completion_monotonic": 186577.148127536,
+      "close_stages": [
+        {
+          "stage": "close.enter",
+          "monotonic": 186577149203365,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "session.close.begin",
+          "monotonic": 186577150276747,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "session.close.returned",
+          "monotonic": 186577152699054,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "views.observed",
+          "monotonic": 186577153148756,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": "RanToCompletion"
+        },
+        {
+          "stage": "views.completed",
+          "monotonic": 186577153541426,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": "RanToCompletion"
+        },
+        {
+          "stage": "action.observed",
+          "monotonic": 186577153574805,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": "RanToCompletion"
+        },
+        {
+          "stage": "action.completed",
+          "monotonic": 186577153580312,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": "RanToCompletion"
+        },
+        {
+          "stage": "backup.observed",
+          "monotonic": 186577153584462,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": "RanToCompletion"
+        },
+        {
+          "stage": "backup.completed",
+          "monotonic": 186577153586150,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": "RanToCompletion"
+        },
+        {
+          "stage": "xr.completion.observed",
+          "monotonic": 186577153588991,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": "RanToCompletion"
+        },
+        {
+          "stage": "xr.completion.completed",
+          "monotonic": 186577153590590,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": "RanToCompletion"
+        },
+        {
+          "stage": "owners.await",
+          "monotonic": 186577153592090,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "owners.await.returned",
+          "monotonic": 186577153722772,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "models.dispose.begin",
+          "monotonic": 186577153730690,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "models.dispose.returned",
+          "monotonic": 186577153917511,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "models.observed",
+          "monotonic": 186577154133264,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": "RanToCompletion"
+        },
+        {
+          "stage": "models.completed",
+          "monotonic": 186577154142286,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": "RanToCompletion"
+        },
+        {
+          "stage": "models.await.returned",
+          "monotonic": 186577154156997,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "xr.shutdown.begin",
+          "monotonic": 186577154159756,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "xr.shutdown.returned",
+          "monotonic": 186577157322509,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "identity.release.begin",
+          "monotonic": 186577157348862,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "identity.release.returned",
+          "monotonic": 186577157468389,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "tree.quit.begin",
+          "monotonic": 186577157478906,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "tree.quit.returned",
+          "monotonic": 186577157519957,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "tree.exit.entered",
+          "monotonic": 186577171711181,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        },
+        {
+          "stage": "tree.exit.returned",
+          "monotonic": 186577171761924,
+          "frequency": 1000000000,
+          "thread": 1,
+          "context": "Godot.GodotSynchronizationContext",
+          "status": null
+        }
+      ],
+      "true_exit": 0,
+      "checks": [
+        "separate installed process unlocks its original private active profile",
+        "enabled ordinary action connect",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software activation requires the visible enabled native button: connect",
+        "one software Control signal reaches the existing button owner",
+        "real signed authentication uses the fresh fixture network",
+        "enabled ordinary action location-operations",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software activation requires the visible enabled native button: location-operations",
+        "one software Control signal reaches the existing button owner",
+        "ordinary Current space presents the accepted navigation context",
+        "ordinary reconnect recovers exactly the original U A S0 identities and keys",
+        "separate process reopens the same committed created space",
+        "ordinary original-result recovery issues no new personal instruction or replay",
+        "reopen exposes the original certified creation and entry results",
+        "enabled ordinary action location-operations",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software activation requires the visible enabled native button: location-operations",
+        "one software Control signal reaches the existing button owner",
+        "enabled ordinary action inspect-subject-storage",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software activation requires the visible enabled native button: inspect-subject-storage",
+        "one software Control signal reaches the existing button owner",
+        "ordinary Source / inspection keeps the exact current owned ontology",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software activation requires the visible enabled native button: @Button@358",
+        "one software Control signal reaches the existing button owner",
+        "reopened ordinary consumer sees the exact committed graphical and textual fact",
+        "software activation requires the visible enabled native button: workspace-connection",
+        "one software Control signal reaches the existing button owner",
+        "enabled ordinary action disconnect",
+        "native action is visible inside the current ordinary desktop viewport",
+        "software activation requires the visible enabled native button: disconnect",
+        "one software Control signal reaches the existing button owner",
+        "normal disconnect retires all signed view consumers",
+        "desktop journey ends without capture or native XR"
+      ]
+    }
+  }
+}

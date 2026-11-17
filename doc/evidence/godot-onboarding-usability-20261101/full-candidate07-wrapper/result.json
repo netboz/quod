@@ -1,0 +1,14 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-onboarding-usability-20261101/signed.py",
+    "onboarding-full-candidate07",
+    "doc/evidence/godot-onboarding-usability-20261101/inputs/client-onboarding-candidate07-manifest.json",
+    "/data/quod-m4-vr-ca84d4f8-20261029/builds/answer-policy-clean-focused06/source",
+    "onboarding-full"
+  ],
+  "exit": 1,
+  "diagnostic_failure": false,
+  "elapsed_seconds": 208.8345462270081
+}

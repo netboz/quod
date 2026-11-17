@@ -1,0 +1,21 @@
+[
+  {
+    "phase": "fresh",
+    "command": [
+      "/tmp/quod-m1b-export-05/quod.x86_64",
+      "--headless",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m1b-journey-04-private/identity",
+      "--node",
+      "https://127.0.0.1:45519",
+      "--ca",
+      "/tmp/quod-m1b-journey-04-private/proxy-ca.pem"
+    ],
+    "child_exit": -9,
+    "passed": false,
+    "watchdog_progress_missing": true,
+    "elapsed_seconds": 63.410607196001365
+  }
+]

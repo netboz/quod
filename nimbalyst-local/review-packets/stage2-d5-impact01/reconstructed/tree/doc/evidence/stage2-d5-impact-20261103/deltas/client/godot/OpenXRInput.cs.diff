@@ -1,0 +1,247 @@
+--- stage2-product01/client/godot/OpenXRInput.cs
++++ current/client/godot/OpenXRInput.cs
+@@ -79,13 +79,16 @@
+     Label? menuChoice;
+     Func<bool>[] menuEnabled=[];
+     int selection=-1;
+-    bool attached,active,lifecycleSubscribed,shuttingDown,visible=true,disposed,pointingGui;
++    bool attached,presentationSubscribed,active,lifecycleSubscribed,shuttingDown,visible=true,disposed,pointingGui;
+     bool workspaceShown=true,placeRequested,movingWorkspace;
+     float workspaceDistance=2;
+     Transform3D? calibration;
+     Vector2I panelPixels;
+-    string? controlIdentity;
+-    Term? pressedSubject;
++    string? controlIdentity,mappingIdentity;
++    ScenePanel.Selection? pressedSubject;
++    ScenePanel.Selection? occurrence;
++    Transform3D personalPose;
++    Basis occurrenceBasis;
+     IControllerSource? pointerSource;
+     public ControllerInput Router { get; private set; }=null!;
+     public bool Running=>active;
+@@ -103,8 +106,9 @@
+     public Task Completion=>Task.WhenAll(loading);
+     public object Metrics=>new { Running,Subscriptions,sources=sources.Count,appearances=visuals.Count,MenuRedraws,LateCallbacks,captures=gui.Captures,DriveRequests,StopRequests,SnapRequests,TeleportRequests,resources=models.Metrics };
+     internal MeshInstance3D GuiSurface=>panel;
++    internal ScenePanel.Selection? BoundOccurrence=>occurrence;
+     internal Source[] Sources=>sources.Values.ToArray();
+-    public bool Blocked=>blocked();
++    public bool Blocked=>blocked() || gui.TextEntryActive;
+     public void Configure(ScenePanel scene,SpatialGui gui,RenderModels models,Func<PhysicsInput?> controls,Func<bool> blocked,Func<(string,Func<bool>,Action)[]> menuEntries)
+     {
+         this.scene=scene;this.gui=gui;this.models=models;this.controls=controls;this.blocked=blocked;this.menuEntries=menuEntries;
+@@ -132,8 +136,7 @@
+     {
+         if(attached || disposed)return;attached=true;
+         XRServer.Singleton.TrackerAdded+=TrackerAdded;XRServer.Singleton.TrackerRemoved+=TrackerRemoved;XRServer.Singleton.TrackerUpdated+=TrackerUpdated;Subscriptions+=3;
+-        gui.Surface.SizeChanged+=ResizePanel;Subscriptions++;ResizePanel();
+-        gui.LayoutChanging+=CancelPresentation;Subscriptions++;
++        ObservePresentation(true);ResizePanel();
+         foreach(var name in XRServer.GetTrackers((int)XRServer.TrackerType.Controller).Keys)ReconcileSource(name.AsStringName());
+     }
+     void ReconcileSource(StringName name)
+@@ -159,30 +162,76 @@
+         Subscriptions--;Router.Remove(source);
+     }
+     void Focused() { Status="OpenXR focused; release controls before use.";Changed?.Invoke(); }
+-    void Unfocused() { CancelPresentation();StopMovingWorkspace();HideVisuals();Status="OpenXR input paused: session has no focus.";Changed?.Invoke(); }
++    void Unfocused() { gui.EndTextInput();CancelPresentation();StopMovingWorkspace();HideVisuals();Status="OpenXR input paused: session has no focus.";Changed?.Invoke(); }
+     void Stopping() { Unfocused();Status="OpenXR runtime stopped this session.";Changed?.Invoke(); }
+     void Recentered() { Router.Cancel();calibration=null; }
+     void CancelPresentation() { Router.Cancel();gui.Cancel(); }
+     bool StopMovingWorkspace() { if(!movingWorkspace)return false;movingWorkspace=false;placeRequested=false;return true; }
+-    public void DesktopFocusLost() { CancelPresentation();if(StopMovingWorkspace())Changed?.Invoke(); }
+-    public void Visibility(bool next) { visible=next;if(!next){CancelPresentation();if(StopMovingWorkspace())Changed?.Invoke();HideVisuals();} }
+-    public void Install(ControllerMapping? mapping)=>Router.Install(mapping);
++    public void DesktopFocusLost() { gui.EndTextInput();CancelPresentation();if(StopMovingWorkspace())Changed?.Invoke(); }
++    public void Visibility(bool next) { visible=next;if(!next){gui.EndTextInput();CancelPresentation();if(StopMovingWorkspace())Changed?.Invoke();HideVisuals();} }
++    public void Install(ControllerMapping? mapping)
++    {if(mappingIdentity!=mapping?.Digest){gui.EndTextInput();mappingIdentity=mapping?.Digest;}Router.Install(mapping);}
+     void ControlChanged() { if(controlIdentity!=scene.ControlIdentity) { InvalidateWorld();controlIdentity=scene.ControlIdentity; } }
+     public void ContextChanged() { ControlChanged();Router.ContextChanged(); }
+-    public void InvalidateWorld() { Router.Cancel();calibration=null;pressedSubject=null; }
++    public void InvalidateWorld() { gui.EndTextInput();Router.Cancel();calibration=null;pressedSubject=null; }
+     internal void PresentWorkspace(bool spatial)
+     {
++        ObservePresentation(spatial||attached);
+         gui.PresentSpatial(spatial);workspaceShown=true;movingWorkspace=false;placeRequested=spatial;panel.Visible=false;
+-        Changed?.Invoke();
++        ResizePanel();RefreshOccurrence();Changed?.Invoke();
++    }
++    void ObservePresentation(bool enabled)
++    {
++        if(presentationSubscribed==enabled)return;presentationSubscribed=enabled;
++        if(enabled){gui.Surface.SizeChanged+=ResizePanel;gui.FormSurface.SizeChanged+=ResizePanel;gui.LayoutChanging+=CancelPresentation;Subscriptions+=3;}
++        else {gui.Surface.SizeChanged-=ResizePanel;gui.FormSurface.SizeChanged-=ResizePanel;gui.LayoutChanging-=CancelPresentation;Subscriptions-=3;}
++    }
++    internal void BindOccurrence(ScenePanel.Selection? selected)
++    {
++        if(occurrence==selected)return;
++        CancelPresentation();
++        if(occurrence!=null){occurrence.Owner.PresentationChanged-=RefreshOccurrence;occurrence.Owner.HideForm();}
++        if(occurrence==null&&selected!=null)personalPose=panel.GlobalTransform;
++        occurrence=selected;
++        if(selected==null){panel.GlobalTransform=personalPose;placeRequested=true;}
++        else {occurrenceBasis=selected.Owner.CameraPose.Basis;selected.Owner.PresentationChanged+=RefreshOccurrence;
++            if(!ReferenceEquals(selected.Owner,scene)){panel.GlobalTransform=personalPose;placeRequested=true;}}
++        RefreshOccurrence();
++    }
++    internal void PresentForm(bool form)
++    {
++        if(gui.FormOnly==form)return;CancelPresentation();gui.FormOnly=form;
++        ((StandardMaterial3D)panel.MaterialOverride).AlbedoTexture=gui.PresentationSurface.GetTexture();ResizePanel();RefreshOccurrence();
++    }
++    void RefreshOccurrence()
++    {
++        if(occurrence==null)return;
++        if(occurrence.Pose is not Transform3D pose){gui.EndTextInput();CancelPresentation();occurrence.Owner.HideForm();panel.Visible=false;return;}
++        // Keep the selected view's stable orientation, but clear the solid's
++        // full extent in that basis. Centre depth can put the form behind its
++        // near face, especially the lower controls and adjacent keyboard.
++        var corners=occurrence.Corners.Select(p=>occurrenceBasis.Inverse()*(p-pose.Origin)).ToArray();
++        float top=corners.Length==0 ? 0 : corners.Max(p=>p.Y),front=corners.Length==0 ? 0 : corners.Max(p=>p.Z);
++        var pixels=gui.FormSurface.Size;float width=1.5f*workspaceDistance/2;var size=new Vector2(width,width*pixels.Y/pixels.X);
++        float height=size.Y*gui.FormSize.Y/pixels.Y;
++        var next=new Transform3D(occurrenceBasis,pose.Origin+occurrenceBasis*new Vector3(0,top+.15f+height/2,front+.15f));
++        if(!ReferenceEquals(occurrence.Owner,scene)) {
++            if(gui.Spatial&&workspaceShown){if(occurrence.Owner.PresentForm(gui.FormSurface.GetTexture(),size,pixels,new(0,-(size.Y-height)/2,0),next))CancelPresentation();panel.Visible=true;}
++            else occurrence.Owner.HideForm();
++            return;
++        }
++        if(panel.GlobalTransform!=next){CancelPresentation();panel.GlobalTransform=next;}
++        panel.Visible=gui.Spatial&&workspaceShown;
+     }
+     public void ShowWorkspace() { CancelPresentation();StopMovingWorkspace();workspaceShown=true;placeRequested=true;Changed?.Invoke(); }
+-    public void HideWorkspace() { CancelPresentation();CancelMenu();workspaceShown=false;movingWorkspace=false;placeRequested=false;panel.Visible=false;Changed?.Invoke(); }
++    public void HideWorkspace() { gui.EndTextInput();CancelPresentation();CancelMenu();workspaceShown=false;movingWorkspace=false;placeRequested=false;panel.Visible=false;Changed?.Invoke(); }
+     public void MoveWorkspace() { CancelPresentation();workspaceShown=true;movingWorkspace=!movingWorkspace;placeRequested=movingWorkspace;Changed?.Invoke(); }
+     public void WorkspaceDistance(float change)
+     { float next=Math.Clamp(workspaceDistance+change,.6f,4);if(next==workspaceDistance)return;workspaceDistance=next;ResizePanel();ShowWorkspace(); }
+     void PlaceWorkspace(bool interactive)
+     {
+         if(!interactive) { if(StopMovingWorkspace())Changed?.Invoke();return; }
++        if(occurrence!=null&&ReferenceEquals(occurrence.Owner,scene)&&menuPanel==null)return;
+         if(!gui.Spatial || (!placeRequested && !movingWorkspace))return;
+         var head=XRServer.GetTracker("head") as XRPositionalTracker;
+         if(head?.HasPose("default")!=true)return;
+@@ -198,14 +247,20 @@
+     }
+     void ResizePanel()
+     {
+-        var mesh=(QuadMesh)panel.Mesh;var pixels=gui.Surface.Size;
++        var mesh=(QuadMesh)panel.Mesh;var pixels=gui.PresentationSurface.Size;
+         // Explicit depth changes preserve angular workspace/text/target scale.
+         // Placement remains world-stable; no ordinary frame resizes it.
+-        float height=workspaceDistance/2;
+-        var size=new Vector2(height*pixels.X/pixels.Y,height);
+-        if(pixels==panelPixels && mesh.Size==size)return;
+-        CancelPresentation();panelPixels=pixels;
++        float density=workspaceDistance/(2*gui.WorkspaceSize.Y);
++        var size=new Vector2(density*pixels.X,density*pixels.Y);
++        if(pixels==panelPixels && mesh.Size==size){RefreshOccurrence();return;}
++        // A keyboard extension changes only the lower edge. The workspace's
++        // pixel/world coordinates stay fixed; retain a press entering another
++        // control. Hidden key captures cancel through native visibility.
++        if(!gui.Spatial || pixels.X!=panelPixels.X || mesh.Size.X!=size.X)CancelPresentation();
++        panelPixels=pixels;
+         if(mesh.Size!=size)mesh.Size=size;
++        mesh.CenterOffset=new(0,-density*(pixels.Y-gui.WorkspaceSize.Y)/2,0);
++        RefreshOccurrence();
+     }
+     public override void _Process(double delta)
+     {
+@@ -227,6 +282,7 @@
+         ControlChanged();
+         origin.Transform=scene.CameraPose*(calibration??Transform3D.Identity);
+         bool interactive=focused && running && tracked && visible;
++        if(!interactive)gui.EndTextInput();
+         foreach(var source in sources.Values)source.UpdatePose();
+         PlaceWorkspace(interactive);
+         Router.Frame(frame,interactive);
+@@ -267,22 +323,22 @@
+         var ray=Ray(source);var inverse=panel.GlobalTransform.AffineInverse();var start=inverse*ray.Origin;var direction=inverse.Basis*ray.Direction;
+         if(!panel.Visible || Math.Abs(direction.Z)<0.000001f)return null;float distance=-start.Z/direction.Z;if(distance<0)return null;
+         var size=((QuadMesh)panel.Mesh).Size;
+-        var point=start+direction*distance;if(Math.Abs(point.X)>size.X/2 || Math.Abs(point.Y)>size.Y/2)return null;
+-        return(new Vector2((point.X/size.X+0.5f)*gui.Surface.Size.X,(0.5f-point.Y/size.Y)*gui.Surface.Size.Y),distance);
++        var point=start+direction*distance-((QuadMesh)panel.Mesh).CenterOffset;if(Math.Abs(point.X)>size.X/2 || Math.Abs(point.Y)>size.Y/2)return null;
++        return(new Vector2((point.X/size.X+0.5f)*gui.PresentationSurface.Size.X,(0.5f-point.Y/size.Y)*gui.PresentationSurface.Size.Y),distance);
+     }
+     public void Hover(IControllerSource input,string context)
+     {
+         if(pointerSource!=null && pointerSource!=input)return;
+         ((Source)input).Pointer.Visible=true;
+         var source=(Source)input;var hit=GuiHit(input);source.Pointer.Scale=new(1,1,(hit?.Distance??2)/2);
+-        if(hit is {} at)gui.Move(at.Point);else if(pointerSource==input && pointingGui)gui.Move(new(-10000,-10000));else gui.Leave();
++        if(hit is {} at)gui.Move(at.Point,gui.PresentationSurface);else if(pointerSource==input && pointingGui)gui.Move(new(-10000,-10000),gui.PresentationSurface);else gui.Leave();
+     }
+     public void Hide(IControllerSource input)=>((Source)input).Pointer.Visible=false;
+     public void Press(IControllerSource input)
+     {
+         if(gui.NativePressed)return;
+         pointerSource=input;pressedSubject=null;
+-        if(GuiHit(input) is {} hit) { pointingGui=true;gui.Move(hit.Point);gui.Press(); }
++        if(GuiHit(input) is {} hit) { pointingGui=true;gui.Move(hit.Point,gui.PresentationSurface);gui.Press(); }
+         else { pointingGui=false;if(!Blocked && Router.MenuOwner==null){var ray=Ray(input);pressedSubject=scene.PickRay(ray.Origin,ray.Direction);} }
+     }
+     public void Release(IControllerSource input)
+@@ -290,19 +346,20 @@
+         if(pointerSource!=input)return;pointerSource=null;
+         if(pointingGui) { gui.Release();return; }
+         var before=pressedSubject;pressedSubject=null;
+-        if(before!=null && !Blocked && Router.MenuOwner==null) { var ray=Ray(input);if(scene.PickRay(ray.Origin,ray.Direction)?.ToString()==before.ToString())scene.Select(before); }
++        if(before!=null && !Blocked && Router.MenuOwner==null) { var ray=Ray(input);if(scene.PickRay(ray.Origin,ray.Direction)==before)scene.Select(before); }
+     }
+     public void Cancel(IControllerSource input)
+     { if(pointerSource!=input)return;pointerSource=null;pressedSubject=null;gui.Cancel(); }
+-    bool MenuObscured=>gui.NativePressed || gui.Surface.GetEmbeddedSubwindows().Any(w=>w.Visible) ||
++    bool MenuObscured=>gui.NativePressed || gui.Surface.GetEmbeddedSubwindows().Concat(gui.FormSurface.GetEmbeddedSubwindows()).Any(w=>w.Visible) ||
+         GetWindow().FindChildren("*","Window",true,false).OfType<Window>().Any(w=>w.Visible && w.Exclusive);
+     public bool OpenMenu(IControllerSource input,NumericsVector2 axes,float threshold)
+     {
+         if(menuPanel!=null || MenuObscured)return false;
+         var entries=menuEntries();if(entries.Length==0)return false;
++        gui.EndTextInput();
+         menuEnabled=entries.Select(e=>e.Enabled).ToArray();
+-        var pixels=(Vector2)gui.Surface.Size;var size=new Vector2(Math.Clamp(pixels.X-32,1,1168),Math.Clamp(pixels.Y-32,1,768));
+-        menuPanel=new() { Name="xr-menu",Position=(pixels-size)/2,Size=size,Theme=gui.Appearance };gui.Surface.AddChild(menuPanel);
++        var pixels=(Vector2)gui.WorkspaceSize;var size=new Vector2(Math.Clamp(pixels.X-32,1,1168),Math.Clamp(pixels.Y-32,1,768));
++        menuPanel=new() { Name="xr-menu",Position=(pixels-size)/2,Size=size,Theme=gui.Appearance };gui.PresentationSurface.AddChild(menuPanel);
+         if(gui.Spatial)placeRequested=true;
+         var layout=new VBoxContainer();menuPanel.AddChild(layout);
+         layout.AddChild(new Label { Name="xr-menu-instruction",Text="Hold pad · slide thumb · release",AutowrapMode=TextServer.AutowrapMode.WordSmart });
+@@ -332,7 +389,7 @@
+         if(next==selection)return;selection=next;MenuRedraws++;
+         PresentMenuSelection();
+         if(selection>=0) { menuButtons[selection].GrabFocus();menuScroll?.EnsureControlVisible(menuButtons[selection]); }
+-        else gui.Surface.GuiReleaseFocus();
++        else menuPanel.GetViewport().GuiReleaseFocus();
+     }
+     void PresentMenuSelection()
+     {
+@@ -354,7 +411,7 @@
+         if(changed){MenuRedraws++;PresentMenuSelection();}
+     }
+     public void CancelMenu()
+-    { if(menuPanel==null)return;menuPanel.GetParent()?.RemoveChild(menuPanel);menuPanel.QueueFree();menuPanel=null;menuScroll=null;menuChoice=null;menuButtons=[];menuDirections=[];menuEnabled=[];selection=-1;if(!workspaceShown)panel.Visible=false; }
++    { if(menuPanel==null)return;menuPanel.GetParent()?.RemoveChild(menuPanel);menuPanel.QueueFree();menuPanel=null;menuScroll=null;menuChoice=null;menuButtons=[];menuDirections=[];menuEnabled=[];selection=-1;if(!workspaceShown)panel.Visible=false;RefreshOccurrence(); }
+     public void Drive(IControllerSource source,NumericsVector2 axes)
+     {
+         DriveRequests++;
+@@ -370,8 +427,6 @@
+         if(disposed)return;active=false;Router.Cancel();gui.Cancel();CancelMenu();
+         if(attached) {
+             attached=false;XRServer.Singleton.TrackerAdded-=TrackerAdded;XRServer.Singleton.TrackerRemoved-=TrackerRemoved;XRServer.Singleton.TrackerUpdated-=TrackerUpdated;Subscriptions-=3;
+-            gui.Surface.SizeChanged-=ResizePanel;Subscriptions--;
+-            gui.LayoutChanging-=CancelPresentation;Subscriptions--;
+             foreach(var name in sources.Keys.ToArray())RetireSource(name);
+         }
+         if(xr!=null && lifecycleSubscribed) {
+@@ -418,5 +473,5 @@
+         } catch(Exception error) { Status="OpenXR shutdown unavailable: "+error.Message;GD.PushError(Status);Changed?.Invoke();return false; }
+     }
+     public override void _ExitTree()
+-    { StopSession();disposed=true;Router?.Dispose();models?.Dispose();Changed=null;api.Dispose(); }
++    { StopSession();BindOccurrence(null);disposed=true;Router?.Dispose();models?.Dispose();Changed=null;api.Dispose(); }
+ }

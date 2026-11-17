@@ -1,0 +1,20 @@
+{
+  "campaign": "r1-gates-03",
+  "inputs": [
+    {
+      "path": "gate-campaign.py",
+      "sha256": "e35b4bcca4a1ec8010884d1ae2a791c8b9a88c987d73d89b1b52111b82c6cd17",
+      "bytes": 4255,
+      "retained_source": "inputs/gate-campaign-r1-gates-03.py"
+    },
+    {
+      "path": "m0_fetch_diagnostic.cjs",
+      "sha256": "04e59106bad50520fb23e6238b387048b807e183f723aae2a60e41eb95ecc7a8",
+      "bytes": 2742,
+      "retained_source": "m0_fetch_diagnostic.cjs"
+    }
+  ],
+  "scope": "Only the Node HTTPS ACL fixture; fixed endpoint path/method/status/timing/socket counters. No headers, signatures, request/response bodies or keys. No fault injection in this full campaign. At most2048 in-memory records, one private diagnostic write at Node exit. No changes to production/test inputs or deadlines.",
+  "retained_failure": "r1-gates-02",
+  "new_campaign_reason": "One retained full EUnit HTTPS socket closure; focused unchanged fixture and observed fixture pass, a5.1s client event-loop fault injection also passes. Cause not established; instrumentation captures any recurrence without retry or policy changes."
+}

@@ -1,0 +1,15 @@
+{
+  "command": [
+    "node",
+    "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/stage2-presentation-limits-20261103/parent-recovery-baseline.mjs"
+  ],
+  "exit": 1,
+  "stdout_eof": true,
+  "stderr_eof": true,
+  "inputs": {
+    "client/src/signed-client.js": "99ae6a09009e00afa2440171814c3cb5d3cee92a98cbcb4f08350581286ea3dd",
+    "client/src/operation-journal.js": "01b3e7635c3ec7a1e2ece811cda17696112587df001c382bb7d101f9f7dd468a",
+    "doc/evidence/stage2-presentation-limits-20261103/parent-recovery-baseline.mjs": "9d584ea4043b1deab00372aa3a27e92f56562b961bd4ddb15178217f9a3ca0fd"
+  },
+  "scope": "Production browser signing/HTTP/journal owners with injected HTTP413 result_too_large; no server commit performed."
+}

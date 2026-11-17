@@ -44,20 +44,16 @@ checkpoint_is_first_writer_wins_test() ->
         quod_proof_session:stop(Session)
     end.
 
-savepoint_limit_is_checked_before_mutation_test() ->
+savepoint_population_preserves_generation_test() ->
     Session = quod_proof_session:start(committed([]), #{}),
     try
         lists:foreach(
           fun(Id) ->
               ok = quod_proof_session:checkpoint_many(Session, [Id])
           end,
-          lists:seq(1, ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF)),
+          lists:seq(1, 1025)),
         Generation = quod_proof_session:overlay_generation(Session),
-        ?assertEqual(
-           {error,
-            {savepoint_limit_exceeded,
-             ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF}},
-           quod_proof_session:checkpoint_many(Session, [overflow])),
+        ?assertEqual(ok, quod_proof_session:checkpoint_many(Session, [additional])),
         ?assertEqual(
            Generation, quod_proof_session:overlay_generation(Session)),
         ok = quod_proof_session:release_many(Session, [1]),
@@ -137,6 +133,59 @@ exact_selection_materializes_only_live_batches_test() ->
         PidC ! stop
     end.
 
+local_checkpoints_reuse_controller_authority_until_foreign_work_test() ->
+    Handle = start_context(crypto:strong_rand_bytes(32)),
+    SessionA = quod_proof_session:start(committed([]), #{}),
+    SessionB = quod_proof_session:start(committed([]), #{}),
+    PidB = spawn(fun wait/0),
+    try
+        ScopeA = register_local_scope(<<"a">>, 1, self(), SessionA),
+        ScopeB = register_local_scope(<<"b">>, 2, PidB, SessionB),
+        ActorA = actor(ScopeA), ActorB = actor(ScopeB),
+        ok = quod_proof_context:register_invocation(ActorA, empty_selection()),
+        Frame = opaque_id(),
+        {ok, Lineage, _} = quod_proof_context:tx_request(ActorA, {activate, none, [Frame]}),
+        ok = quod_proof_context:register_invocation(ActorB, selection(Lineage, [])),
+        {ok, _} = quod_transaction_scope:with_invocation(
+          ActorA, selection(Lineage, []), {origin, Handle}, fun() ->
+            [{batch, First}] = Token = quod_transaction_scope:checkpoint_token(),
+            MFA = {quod_proof_context, tx_request, 2},
+            1 = erlang:trace_pattern(MFA, true, [call_count]),
+            try
+                lists:foreach(fun(_) ->
+                    ?assertEqual(Token, quod_transaction_scope:checkpoint_token()),
+                    ?assertEqual(ok, quod_transaction_scope:restore_token(Token))
+                end, lists:seq(1, 3 * 1025)),
+                ?assertEqual({call_count, 0}, erlang:trace_info(MFA, call_count))
+            after erlang:trace_pattern(MFA, false, [call_count]) end,
+
+            %% A published selection may materialize the former local token.
+            _ = quod_transaction_scope:current_selection(committed([])),
+            ok = quod_proof_context:materialize(selection(Lineage, [First]), ActorB),
+            [{batch, Second}] = quod_transaction_scope:checkpoint_token(),
+            ?assertNotEqual(First, Second),
+            prove_write(SessionB, {after_checkpoint, removed}),
+            ok = quod_transaction_scope:restore_token(Token),
+            ?assertNot(has_assert({after_checkpoint, removed},
+                                 quod_proof_session:local_changes(SessionB))),
+
+            %% Reentrant work can materialize a suspended invocation's token.
+            [{batch, BeforeReentry}] = quod_transaction_scope:checkpoint_token(),
+            {ok, _} = quod_transaction_scope:with_invocation(
+              ActorB, selection(Lineage, [BeforeReentry]), {origin, Handle}, fun() ->
+                ok = quod_proof_context:materialize(
+                       selection(Lineage, [BeforeReentry]), ActorB)
+              end),
+            [{batch, AfterReentry}] = quod_transaction_scope:checkpoint_token(),
+            ?assertNotEqual(BeforeReentry, AfterReentry),
+            ok
+          end)
+    after
+        quod_proof_context:stop(fun(_Scope) -> ok end, fun(_Proxy) -> ok end),
+        quod_proof_session:stop(SessionA), quod_proof_session:stop(SessionB),
+        PidB ! stop
+    end.
+
 unmaterialized_batches_reuse_only_exact_actor_and_lineage_test() ->
     _ = start_context(crypto:strong_rand_bytes(32)),
     SessionA = quod_proof_session:start(committed([]), #{}),
@@ -156,7 +205,7 @@ unmaterialized_batches_reuse_only_exact_actor_and_lineage_test() ->
         lists:foreach(fun(_) ->
             ?assertEqual({ok, First},
                 quod_proof_context:tx_request(ActorA, {allocate, Lineage}))
-        end, lists:seq(1, 3 * ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF)),
+        end, lists:seq(1, 3 * 1025)),
         ?assertEqual({error, not_allowed},
             quod_proof_context:tx_request(actor(ScopeA), {allocate, Lineage})),
         %% A cut can remove every live holder while the unused batch remains.
@@ -255,7 +304,7 @@ invalid_selection_is_atomic_test() ->
         ok
     end.
 
-controller_transaction_and_lineage_caps_share_public_error_test() ->
+controller_activates_many_owned_transaction_frames_test() ->
     _ = start_context(crypto:strong_rand_bytes(32)),
     Session = quod_proof_session:start(committed([]), #{}),
     try
@@ -263,14 +312,10 @@ controller_transaction_and_lineage_caps_share_public_error_test() ->
         Actor = actor(ScopeId),
         ok = quod_proof_context:register_invocation(
                Actor, empty_selection()),
-        Frames = unique_ids(?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF),
+        Frames = unique_ids(1025),
         {ok, Lineage, _} = quod_proof_context:tx_request(
                              Actor, {activate, none, Frames}),
-        ?assertEqual(
-           {error,
-            {savepoint_limit_exceeded,
-             ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF}},
-           quod_proof_context:tx_request(
+        ?assertMatch({ok, _, _}, quod_proof_context:tx_request(
              Actor, {activate, Lineage, [opaque_id()]}))
     after
         quod_proof_context:stop(fun(_Scope) -> ok end,
@@ -278,7 +323,7 @@ controller_transaction_and_lineage_caps_share_public_error_test() ->
         quod_proof_session:stop(Session)
     end.
 
-controller_batch_cap_uses_same_public_error_test() ->
+controller_materializes_many_owned_batches_test() ->
     _ = start_context(crypto:strong_rand_bytes(32)),
     Session = quod_proof_session:start(committed([]), #{}),
     Foreign = quod_proof_session:start(committed([]), #{}),
@@ -298,12 +343,8 @@ controller_batch_cap_uses_same_public_error_test() ->
               {ok, Batch} = quod_proof_context:tx_request(Actor, {allocate, Lineage}),
               ok = quod_proof_context:materialize(selection(Lineage, [Batch]), Target)
           end,
-          lists:seq(2, ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF)),
-        ?assertEqual(
-           {error,
-            {savepoint_limit_exceeded,
-             ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF}},
-           quod_proof_context:tx_request(Actor, {allocate, Lineage}))
+          lists:seq(2, 1025)),
+        ?assertMatch({ok, _}, quod_proof_context:tx_request(Actor, {allocate, Lineage}))
     after
         quod_proof_context:stop(fun(_Scope) -> ok end,
                                 fun(_Proxy) -> ok end),
@@ -322,7 +363,7 @@ malformed_controller_lists_fail_before_mutation_test() ->
         Frame = opaque_id(),
         ?assertNot(
            quod_transaction_scope:valid_selection(
-             {tx_selection, none, [opaque_id() | improper], ordinary})),
+             {tx_selection, none, [opaque_id() | improper], ordinary, read_write})),
         ?assertEqual(
            {error, bad_request},
            quod_proof_context:tx_request(
@@ -340,7 +381,7 @@ malformed_controller_lists_fail_before_mutation_test() ->
         ?assertEqual(
            {error, bad_request},
            quod_proof_context:materialize(
-             {tx_selection, Lineage, [Baseline | improper], ordinary}, Actor)),
+             {tx_selection, Lineage, [Baseline | improper], ordinary, read_write}, Actor)),
         {ok, none} = quod_proof_context:tx_request(
                        Actor, {finish, Lineage, TxId})
     after
@@ -361,7 +402,7 @@ prove_goal(Session, Goal) ->
 empty_selection() -> quod_transaction_scope:empty_selection().
 
 selection(Lineage, BatchIds) ->
-    {tx_selection, Lineage, lists:usort(BatchIds), ordinary}.
+    {tx_selection, Lineage, lists:usort(BatchIds), ordinary, read_write}.
 
 actor(ScopeId) -> {ScopeId, opaque_id()}.
 

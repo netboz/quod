@@ -1,0 +1,42 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "doc/evidence/godot-m4-vive-mapped21-20261031/prepare.py"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "child_exit": 0,
+  "timed_out": false,
+  "driver_inputs": {
+    "capture.py": "e55779ff64cc97af3cb0a13e11acb9412dcd7e274d3fd6e489012e26918b8fd0",
+    "case_hashes.py": "c91e87803680df185e8f9dc1d9b2db36c9377c2e055ed7e34a5587f2c3ca3140",
+    "prepare.py": "e091307dfa934db52e849d1196d8cd1edec43f109e07c1ed538ce728103c2a41",
+    "run.py": "bb083951b41f9578d6ec35bd5fc6e51eb645475936642f1b9e2b725e138a4479"
+  },
+  "start_utc": "2026-10-31T00:27:11Z",
+  "elapsed_seconds": 1.3667478561401367,
+  "private_streams": {
+    "stdout": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/mapped21-preparation01/stdout.raw",
+      "sha256": "49c236262bcee113884b50de9238c7f4a5a27f48791f58083265bc0509a855ad",
+      "bytes": 157
+    },
+    "stderr": {
+      "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/runs/mapped21-preparation01/stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "sanitized_streams": {
+    "stdout": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-mapped21-20261031/logs/mapped21-preparation01-stdout.log",
+      "sha256": "49c236262bcee113884b50de9238c7f4a5a27f48791f58083265bc0509a855ad",
+      "bytes": 157
+    },
+    "stderr": {
+      "path": "/home/yan/src/quod_worktrees/pearl-stone/doc/evidence/godot-m4-vive-mapped21-20261031/logs/mapped21-preparation01-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

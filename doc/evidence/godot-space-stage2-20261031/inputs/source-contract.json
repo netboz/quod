@@ -1,0 +1,25 @@
+{
+  "base_manifest": "doc/evidence/godot-m4-menu-20261031/inputs/client-menu-final02-manifest.json",
+  "sha256": "5f8bafc8ad6e1c149ff4f52927594ab52606614d545494b3c07f1dbc22f92e85",
+  "added_product_sources": [
+    "client/godot/Core/Eidolons.cs",
+    "client/godot/EidolonPanel.cs"
+  ],
+  "overrides": [
+    "client/godot/Main.cs",
+    "client/godot/OperationsPanel.cs",
+    "client/godot/SourcePanel.cs",
+    "client/godot/FormPanel.cs",
+    "client/godot/Core/Forms.cs",
+    "client/godot/Core/Transport.cs",
+    "client/godot/Core/LocalStore.cs",
+    "client/godot/tests/ExportChecks.cs",
+    "client/godot/tests/ExportLifecycle.cs",
+    "client/godot/OpenXRInput.cs",
+    "client/godot/README.md",
+    "client/godot/SpatialGui.cs",
+    "client/godot/Core/Accounts.cs",
+    "client/godot/ScenePanel.cs",
+    "client/godot/Core/Scene.cs"
+  ]
+}

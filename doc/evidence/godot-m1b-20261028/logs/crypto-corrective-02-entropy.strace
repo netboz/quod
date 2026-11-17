@@ -1,0 +1,63 @@
+491776 getrandom(0x7ffc9affca59, 0x10, 0x1) = 0x10
+491776 getrandom(0x7f96d84201c0, 0x8, 0x1) = 0x8
+491776 getrandom(0x7f96d843df60, 0x20, 0) = 0x20
+491789 getrandom(0x7ffdad300d89, 0x10, 0x1) = 0x10
+491789 getrandom(0x7ff618c201c0, 0x8, 0x1) = 0x8
+491798 getrandom(0x7fffbea657f9, 0x10, 0x1) = 0x10
+491798 getrandom(0x7fa2148201c0, 0x8, 0x1) = 0x8
+491798 +++ exited with 0 +++
+491789 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=491798, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+491789 +++ exited with 0 +++
+491776 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=491789, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+491776 getrandom(0x7ffc9affb610, 0x80, 0) = 0x80
+491776 getrandom(0x7ffc9affb610, 0x80, 0) = 0x80
+491966 getrandom(0x7f96d843dea0, 0x20, 0) = 0x20
+492007 +++ exited with 0 +++
+491776 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=492007, si_uid=1000, si_status=0, si_utime=2 /* 0.02 s */, si_stime=8 /* 0.08 s */} ---
+492021 +++ exited with 0 +++
+491776 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=492021, si_uid=1000, si_status=0, si_utime=9 /* 0.09 s */, si_stime=13 /* 0.13 s */} ---
+492025 +++ exited with 0 +++
+491776 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=492025, si_uid=1000, si_status=0, si_utime=3 /* 0.03 s */, si_stime=6 /* 0.06 s */} ---
+492041 +++ exited with 0 +++
+491776 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=492041, si_uid=1000, si_status=0, si_utime=1 /* 0.01 s */, si_stime=6 /* 0.06 s */} ---
+492055 getrandom(0x7f96d843dde0, 0x20, 0) = 0x20
+492056 +++ exited with 0 +++
+491776 getrandom(0x7f7666842a90, 0x30, 0) = 0x30
+491776 --- SIGRT_2 {si_signo=SIGRT_2, si_code=SI_TKILL, si_pid=491776, si_uid=1000} ---
+492084 +++ exited with 0 +++
+492080 +++ exited with 0 +++
+492006 +++ exited with 0 +++
+492061 +++ exited with 0 +++
+492062 +++ exited with 0 +++
+491807 +++ exited with 0 +++
+491802 +++ exited with 0 +++
+491801 +++ exited with 0 +++
+491806 +++ exited with 0 +++
+491800 +++ exited with 0 +++
+491803 +++ exited with 0 +++
+491805 +++ exited with 0 +++
+491804 +++ exited with 0 +++
+491799 +++ exited with 0 +++
+492087 +++ exited with 0 +++
+492139 +++ exited with 0 +++
+492057 +++ exited with 0 +++
+492091 +++ exited with 0 +++
+491968 +++ exited with 0 +++
+492140 +++ exited with 0 +++
+492119 +++ exited with 0 +++
+492118 +++ exited with 0 +++
+492090 +++ exited with 0 +++
+492109 +++ exited with 0 +++
+492120 +++ exited with 0 +++
+491967 +++ exited with 0 +++
+492111 +++ exited with 0 +++
+492110 +++ exited with 0 +++
+492088 +++ exited with 0 +++
+492055 +++ exited with 0 +++
+491978 +++ exited with 0 +++
+491971 +++ exited with 0 +++
+492089 +++ exited with 0 +++
+491966 +++ exited with 0 +++
+492086 +++ exited with 0 +++
+491979 +++ exited with 0 +++
+491776 +++ exited with 0 +++

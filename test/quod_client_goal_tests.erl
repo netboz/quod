@@ -228,7 +228,7 @@ validator_context_is_exact_and_uses_admission_time_test() ->
          Bytes, Signature, ?NETWORK,
          {?NAMESPACE, ?ANCHOR}, not_a_timestamp)).
 
-decode_is_exact_bounded_and_total_test() ->
+decode_is_exact_and_total_test() ->
     Request = request(<<16#42:256>>, read, <<"true.">>),
     {ok, Bytes} = quod_client_goal:encode(Request),
     ?assertEqual({error, invalid_request},
@@ -237,9 +237,8 @@ decode_is_exact_bounded_and_total_test() ->
                  quod_client_goal:decode(binary:part(Bytes, 1,
                                                       byte_size(Bytes) - 1))),
     ?assertEqual(
-       {error, {too_large, request}},
-       quod_client_goal:decode(
-         <<0:(?QUOD_CLIENT_GOAL_REQUEST_BYTES + 1)/unit:8>>)),
+       {error, invalid_request},
+       quod_client_goal:decode(binary:copy(<<0>>, 300 * 1024))),
     ?assertEqual({error, invalid_signature},
                  quod_client_goal:verify(Bytes, <<0:512>>)),
     ?assertEqual({error, invalid_signature},
@@ -259,10 +258,10 @@ field_bounds_and_utf8_are_rejected_before_signature_work_test() ->
     Base = request(PublicKey, read, <<"true.">>),
     ExactGoal =
         iolist_to_binary(
-          [lists:duplicate(?QUOD_CLIENT_GOAL_TEXT_BYTES - 5, " "),
+          [lists:duplicate(140 * 1024 - 5, " "),
            "true."]),
     ExactNamespace =
-        binary:copy(<<"n">>, ?DIRECTORY_MAX_NAMESPACE_BYTES),
+        binary:copy(<<"n">>, ((1 bsl 16) - 1)),
     Exact = Base#{agent_namespace => ExactNamespace,
                   goal_text => ExactGoal},
     {ok, ExactBytes} = quod_client_goal:encode(Exact),
@@ -278,13 +277,7 @@ field_bounds_and_utf8_are_rejected_before_signature_work_test() ->
        quod_client_goal:encode(
          Base#{agent_namespace =>
                    binary:copy(<<"n">>,
-                               ?DIRECTORY_MAX_NAMESPACE_BYTES + 1)})),
-    ?assertEqual(
-       {error, {too_large, goal_text}},
-       quod_client_goal:encode(
-         Base#{goal_text =>
-                   binary:copy(<<"g">>,
-                               ?QUOD_CLIENT_GOAL_TEXT_BYTES + 1)})),
+                               ((1 bsl 16) - 1) + 1)})),
     ?assertEqual(
        {error, invalid_request},
        quod_client_goal:encode(Base#{goal_text => <<16#ff>>})).

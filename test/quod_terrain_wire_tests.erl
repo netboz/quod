@@ -1,32 +1,17 @@
 -module(quod_terrain_wire_tests).
 -include_lib("eunit/include/eunit.hrl").
--include("quod_client_goal_limits.hrl").
 
-content_batches_fit_the_actual_json_frame_test() ->
+complete_content_and_manifest_keep_every_requested_row_test() ->
     Token = <<42:256>>,
     Chunks = [{I,binary:copy(<<I>>,N)} || {I,N} <- [{0,233488},{1,100000},{2,233488},{3,100000}]],
-    ?assertEqual(ok,quod_terrain_wire:admit(Token,1,[row(I,B) || {I,B} <- Chunks])),
-    ?assert(frame_size({terrain_chunks,Token,Chunks,true}) > ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES),
-    ?assertEqual(2,check_batches(Token,Chunks,0)),
-    ?assertEqual({[],[]},quod_terrain_wire:batch(Token,[])).
-
-individual_content_and_manifest_bounds_test() ->
-    Token = <<42:256>>,Payload = binary:copy(<<255>>,400000),
-    ?assertMatch({error,<<"Terrain chunk encoding:",_/binary>>},quod_terrain_wire:admit(Token,1,[row(0,Payload)])),
+    Content = quod_terrain_wire:message({terrain_chunks,Token,Chunks,true}),
+    ?assert(frame_size({terrain_chunks,Token,Chunks,true}) > 512*1024),
+    ?assertEqual(Chunks,[{maps:get(index,R),base64:decode(maps:get(payload,R),
+        #{mode => urlsafe,padding => false})} || R <- maps:get(chunks,Content)]),
     Rows = [row(I,<<>>) || I <- lists:seq(0,3999)],
-    ?assert(frame_size({terrain_manifest,Token,1,Rows}) > ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES),
-    ?assertMatch({error,<<"Terrain manifest encoding:",_/binary>>},quod_terrain_wire:admit(Token,1,Rows)).
-
-check_batches(_,[],Count) -> Count;
-check_batches(Token,Chunks,Count) ->
-    {Batch,Rest} = quod_terrain_wire:batch(Token,Chunks),
-    ?assertNotEqual([],Batch),?assertEqual(Chunks,Batch++Rest),
-    ?assert(frame_size({terrain_chunks,Token,Batch,Rest =:= []}) =< ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES),
-    case Rest of
-        [Next|_] -> ?assert(frame_size({terrain_chunks,Token,Batch++[Next],false}) > ?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES);
-        [] -> ok
-    end,
-    check_batches(Token,Rest,Count+1).
+    ?assert(frame_size({terrain_manifest,Token,1,Rows}) > 512*1024),
+    ?assertEqual(4000,length(maps:get(chunks,quod_terrain_wire:message({terrain_manifest,Token,1,Rows})))),
+    ?assertMatch(#{chunks := [],complete := true},quod_terrain_wire:message({terrain_chunks,Token,[],true})).
 
 frame_size(Resource) ->
     Message = quod_terrain_wire:message(Resource),

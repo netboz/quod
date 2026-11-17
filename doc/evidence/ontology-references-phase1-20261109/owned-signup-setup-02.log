@@ -1,0 +1,51 @@
+===> Verifying dependencies...
+    Finished `release` profile [optimized] target(s) in 0.03s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+=WARNING REPORT==== 9-Nov-2026::20:11:35.237704 ===
+quod_prolog[quod:user]: can_invoke refused a top-level goal at pinned height 1
+[0;31mF[0m
+Failures:
+
+  1) quod_lifecycle_single_path_tests:-m1a_signup_terms_test_/0-fun-7-/0
+[0;31m     Failure/Error: {error,
+                        {badmatch,{ok,[{<<"V0">>,{0}},{<<"V1">>,[]}]}},
+                        [{quod_lifecycle_single_path_tests,m1a_read,2,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_lifecycle_single_path_tests.erl"},
+                              {line,1445}]},
+                         {quod_lifecycle_single_path_tests,
+                             '-m1a_setup_failures/1-lc$^4/1-0-',2,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_lifecycle_single_path_tests.erl"},
+                              {line,1111}]},
+                         {quod_lifecycle_single_path_tests,
+                             '-m1a_setup_failures/1-fun-7-',4,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_lifecycle_single_path_tests.erl"},
+                              {line,1111}]},
+                         {quod_lifecycle_single_path_tests,
+                             '-m1a_setup_failures/1-lc$^8/1-1-',4,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_lifecycle_single_path_tests.erl"},
+                              {line,1120}]},
+                         {quod_lifecycle_single_path_tests,
+                             m1a_setup_failures,1,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_lifecycle_single_path_tests.erl"},
+                              {line,1121}]},
+                         {quod_lifecycle_single_path_tests,
+                             '-m1a_signup_terms_test_/0-fun-7-',0,
+                             [{file,
+                                  "/home/yan/src/quod_worktrees/pearl-stone/test/quod_lifecycle_single_path_tests.erl"},
+                              {line,532}]},
+                         {eunit_test,run_testfun,1,
+                             [{file,"eunit_test.erl"},{line,83}]},
+                         {eunit_proc,run_test,1,
+                             [{file,"eunit_proc.erl"},{line,554}]}]}
+[0m[0;36m     Output: [0m
+
+Finished in 1.538 seconds
+[0;31m1 tests, 1 failures
+[0m===> Error running tests

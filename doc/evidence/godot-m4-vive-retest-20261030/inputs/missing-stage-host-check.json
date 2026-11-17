@@ -1,0 +1,7 @@
+{
+  "chunk_id": "bc9e45",
+  "wall_time_seconds": 0.063420082,
+  "exit_code": 0,
+  "original_token_count": 63,
+  "output": "{\"host_source_exists\": false, \"host_production_ebin\": false, \"host_test_ebin\": false, \"literal_source_symlink\": null}\n{\"pinned_fixture_image_exit\": 0, \"image_id\": \"sha256:12c1389ee346993026ea83248037af7629f344eb2eebf09a6917ca0d10900e55\", \"error\": \"\"}\n"
+}

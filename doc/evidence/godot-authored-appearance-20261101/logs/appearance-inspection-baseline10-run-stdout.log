@@ -1,0 +1,7 @@
+PASS enabled action create-key
+PASS enabled action connect
+PASS enabled action register
+PASS enabled action prepare
+PASS enabled action setup
+PASS ordinary authored workspace token update reaches the inspection owner
+{"passed": false, "failure": "AssertionError: ", "children": {"server": 0, "client-appearance-inspection": 1}, "native_inputs": 0}

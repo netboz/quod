@@ -6,7 +6,7 @@ committed knowledge base without touching it.
 Wrap a committed erlog state with `wrap_state/1,2`, run the goal, then extract:
 
 - `get_local_changes/1` — the ordered durable material: canonical fact
-  asserts/retracts followed by explicit event occurrences staged by the proof,
+  asserts/retracts and definition removals, then explicit event occurrences,
   as one `op()` list.
 - `get_read_set/1` — the **read-set**: one mutation-version token per
   `{Functor, Arity}` the proof read from the committed db (for the apply-time
@@ -34,8 +34,10 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
          write_intent/1, set_write_intent/2, signed_request/1,
          successful_independent/1, accept_independent/2, provenance/1,
          revision/1, replace_revision/2,
+         put_construction/4, construction/2,
          live_transaction_tokens/1,
-         committed_state/1, authored_state/1, checkpoint/1, restore/2,
+         committed_state/1, committed_read_state/1, read_mode/1,
+         authored_state/1, checkpoint/1, restore/2,
          enter_read_only/1, leave_read_only/2,
          get_local_changes/1, stage_event/2, get_read_set/1, get_dependencies/1,
          get_live_bridges/1, record_live_bridge/2, absorb_read_set/2,
@@ -61,6 +63,9 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
 -record(lp, {out_db   :: #db{},
              scope_id = undefined :: reference() | undefined,
              local    = #{}      :: #{term() => #fstate{}},
+             %% Original assertion context follows the same immutable revision
+             %% as membership and slots, through re-entry and rollback.
+             constructions = #{} :: map(),
              event_ops_rev = [] :: [{event, term(), ordinary | atomic | independent}],
              effects = []       :: [quod_effect:effect()],
              effect_provenance = #{} :: map(),
@@ -95,7 +100,10 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
              access_guard = unguarded :: access_guard(),
              %% Policy sub-proofs must reject the first attempted mutation,
              %% including changes whose eventual net diff would be empty.
-             read_only = false :: boolean()}).
+             read_only = false :: boolean(),
+             %% Invocation-local visibility. Keep the staged revision intact:
+             %% a committed guard may re-enter this same session.
+             committed_read = false :: boolean()}).
 
 %% Both tokens retain immutable terms already owned by the overlay. Creating or
 %% restoring one therefore copies no clause data. The identity fields prevent a
@@ -103,6 +111,7 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
 -type distributed_token() :: {batch, <<_:128>>} | {pending, <<_:128>>}.
 -record(checkpoint, {scope_id :: reference(),
                      local    :: #{term() => #fstate{}},
+                     constructions = #{} :: map(),
                      event_ops_rev = [] :: [{event, term(), ordinary | atomic | independent}],
                      effects = [] :: [quod_effect:effect()],
                      effect_provenance = #{} :: map(),
@@ -217,10 +226,14 @@ register_action_request(
                 ref = #lp{action_requests = Requests} = Ov} = Db} = St,
   Action, Structural) ->
     ensure_access(Ov),
-    Handle = make_ref(),
-    {Handle,
-     St#est{db = Db#db{ref = Ov#lp{
-         action_requests = Requests#{Handle => {Action, Structural}}}}}};
+    case action_request_bytes(Action) of
+        {ok, Bytes} ->
+            Handle = make_ref(),
+            {Handle,
+             St#est{db = Db#db{ref = Ov#lp{
+                 action_requests = Requests#{Handle => {Bytes, Structural}}}}}};
+        {error, _} -> erlog_int:domain_error(action_request, Action, St)
+    end;
 register_action_request(_St, _Action, _Structural) ->
     erlang:error(badarg).
 
@@ -231,11 +244,17 @@ action_request(
                 ref = #lp{action_requests = Requests} = Ov}},
   Handle, Action) when is_reference(Handle) ->
     ensure_access(Ov),
-    case maps:get(Handle, Requests, undefined) of
-        {Action, Structural} -> {ok, Structural};
+    case {maps:get(Handle, Requests, undefined), action_request_bytes(Action)} of
+        {{Bytes, Structural}, {ok, Bytes}} -> {ok, Structural};
         _ -> error
     end;
 action_request(_St, _Handle, _Action) -> error.
+
+%% Foreign prerequisites may rename clause variables. Their spelling and wire
+%% symbol representation are irrelevant; values and variable aliases are exact.
+action_request_bytes(Action) ->
+    {Canonical, _, _} = erlog_int:term_instance(Action, 0),
+    quod_wire_term:encode_canonical(Canonical).
 
 %% A control proof stages one indivisible owner operation. It cannot stage
 %% durable changes or split an atomic promise across independent live owners.
@@ -316,6 +335,9 @@ prepared_effect(_St, _Effect) -> error.
 -doc "Whether this rollback-safe revision contains an exact active effect promising the desired state.".
 -spec staged_desired_state(tuple(), term()) -> boolean().
 staged_desired_state(
+  #est{db = #db{mod = ?MODULE, ref = #lp{committed_read = true}}}, _) ->
+    false;
+staged_desired_state(
   #est{db = #db{mod = ?MODULE,
                 ref = #lp{effects = Effects,
                           prepared_effects = Prepared} = Ov}}, Desired) ->
@@ -391,10 +413,14 @@ provenance(#lp{local = Local, event_ops_rev = Events,
                          true -> committed_clauses(M, R, F);
                          false -> [{Tag, H, B} || {Tag, {H, B}} <- maps:to_list(Ret)]
                      end,
+          DefinitionMask = case Ab andalso M:get_procedure_type(R, F) =:= interpreted of
+                               true -> AssertMask bor intent_bit(AbMode);
+                               false -> AssertMask
+                           end,
           lists:foldl(
             fun({Tag, _, _}, Mask) ->
                 Mask bor intent_bit(maps:get({retract, Tag}, P, AbMode))
-            end, AssertMask, Retracts)
+            end, DefinitionMask, Retracts)
       end, 0, Local),
     EventMask = lists:foldl(
       fun({event, _, Mode}, Mask) -> Mask bor intent_bit(Mode) end, Facts, Events),
@@ -413,8 +439,8 @@ fresh_proof_state(
   #est{db = #db{mod = ?MODULE} = Db} = St) ->
     St#est{cps = [], bs = erlog_int:new_bindings(), vn = 0,
            db = Db#db{loc = []},
-           fail_reasons = [], fail_reason_count = 0,
-           fail_reasons_truncated = false, fail_boundaries = 0,
+           fail_reasons = [],
+           fail_reasons_truncated = false,
            checkpoint_depth = 0};
 fresh_proof_state(_St) ->
     erlang:error(badarg).
@@ -434,15 +460,24 @@ replace_revision(
   #est{db = #db{mod = ?MODULE,
                 ref = #lp{scope_id = ScopeId,
                           access_guard = AccessGuard,
-                          write_intent = Mode}} = Db} = St,
+                          write_intent = Mode,
+                          read_only = ReadOnly,
+                          committed_read = CommittedRead,
+                          transient_allowed = TransientAllowed}} = Db} = St,
   #revision{scope_id = ScopeId,
             overlay = #lp{access_guard = AccessGuard} = Overlay}) ->
-    St#est{db = Db#db{ref = Overlay#lp{write_intent = Mode}}};
+    St#est{db = Db#db{ref = Overlay#lp{write_intent = Mode,
+                 read_only = ReadOnly, committed_read = CommittedRead,
+                 transient_allowed = TransientAllowed}}};
 replace_revision(_St, _Revision) ->
     erlang:error(badarg).
 
 -doc "Return transaction tokens retained by the invocation's live choice points.".
 -spec live_transaction_tokens(tuple()) -> [distributed_token()].
+%% Checkpoints exist only inside the inherited or local savepoint mode.
+%% Exiting a savepoint discards its choicepoints before restoring depth zero.
+live_transaction_tokens(#est{checkpoint_depth = 0}) ->
+    [];
 live_transaction_tokens(#est{cps = Choicepoints}) ->
     lists:usort(live_transaction_tokens(Choicepoints, []));
 live_transaction_tokens(_St) ->
@@ -469,15 +504,45 @@ committed_state(
   #est{db = #db{mod = ?MODULE, ref = #lp{out_db = OutDb}}} = St) ->
     ensure_access(St),
     St#est{cps = [], bs = erlog_int:new_bindings(), vn = 0, db = OutDb,
-           fail_reasons = [], fail_reason_count = 0,
-           fail_reasons_truncated = false, fail_boundaries = 0,
+           fail_reasons = [],
+           fail_reasons_truncated = false,
            checkpoint_depth = 0}.
+
+-doc "Use this session's pinned committed view without replacing its staged revision or read set.".
+-spec committed_read_state(tuple()) -> tuple().
+committed_read_state(#est{db = #db{mod = ?MODULE, ref = Ov} = Db} = St) ->
+    ensure_access(Ov),
+    St#est{db = Db#db{ref = Ov#lp{committed_read = true, read_only = true,
+                                  transient_allowed = false},
+                      assert_hooks = #{}, retract_hooks = #{}}}.
+
+-spec read_mode(tuple()) -> read_write | read_only | committed_read.
+read_mode(#est{db = #db{mod = ?MODULE, ref = #lp{committed_read = true}}}) -> committed_read;
+%% Propagate the frame's full read restriction. A signed control proof forbids
+%% durable writes but retains its request-bound transient permission.
+read_mode(#est{db = #db{mod = ?MODULE,
+                      ref = #lp{read_only = true, transient_allowed = false}}}) -> read_only;
+read_mode(#est{}) -> read_write.
 
 -doc "Use the same staged view and read dependencies without generated following clauses.".
 -spec authored_state(tuple()) -> tuple().
 authored_state(#est{db = #db{mod = ?MODULE, ref = Ov} = Db} = St) ->
     ensure_access(Ov),
     St#est{db = Db#db{ref = Ov#lp{follow_disabled = true}}}.
+
+-doc "Retain the assertion hook's original class and inputs in this transaction revision.".
+-spec put_construction(tuple(), term(), term(), term()) -> tuple().
+put_construction(#est{db = #db{mod = ?MODULE,
+                              ref = #lp{read_only = false, constructions = Cs} = Ov} = Db} = St,
+                 Id, Class, Inputs) ->
+    ensure_access(Ov),
+    St#est{db = Db#db{ref = Ov#lp{constructions = Cs#{Id => {Class, Inputs}}}}}.
+
+-spec construction(tuple(), term()) -> {ok, {term(), term()}} | error.
+construction(#est{db = #db{mod = ?MODULE, ref = #lp{constructions = Cs} = Ov}}, Id) ->
+    ensure_access(Ov),
+    maps:find(Id, Cs);
+construction(#est{}, _) -> error.
 
 -doc "Capture the wrapped overlay's staged writes and assertion-order cursor in O(1).".
 -spec checkpoint(tuple()) -> checkpoint().
@@ -575,11 +640,17 @@ functor_ops(F, #fstate{abolished = Ab, asserta = A, assertz_rev = ZR,
                    true  -> [{retract, {H, B}} || {_T, H, B} <- committed_clauses(M, R, F)];
                    false -> [{retract, {H, B}} || {_Tag, {H, B}} <- maps:to_list(Ret)]
                end,
+    %% Keep exact clause removals for reactions, then remove the definition.
+    %% An empty interpreted predicate still has a definition to abolish.
+    Removal = case Ab andalso M:get_procedure_type(R, F) =:= interpreted of
+                  true -> [{abolish, F}];
+                  false -> []
+              end,
     %% A is already in final clause order. Apply front insertions oldest first
     %% so repeated prepend preserves that order ahead of committed clauses.
     Front = [{asserta, {H, B}} || {_T, H, B} <- lists:reverse(A)],
     Tail = [{assert, {H, B}} || {_T, H, B} <- lists:reverse(ZR)],
-    Retracts ++ Front ++ Tail.
+    Retracts ++ Removal ++ Front ++ Tail.
 
 -doc "The monotonic read set: predicate version tokens and exact terminal operation evidence.".
 -spec get_read_set(#lp{}) -> map().
@@ -699,13 +770,14 @@ new({OutRef, OutMod}) ->
 %% transaction and action-candidate entry savepoints. Neither callback traverses clause
 %% data; restore retains the current monotonic read-set and overlay metadata.
 choicepoint_checkpoint(
-  #lp{scope_id = ScopeId, local = Local, event_ops_rev = EventOpsRev,
+  #lp{scope_id = ScopeId, local = Local, constructions = Constructions,
+      event_ops_rev = EventOpsRev,
       effects = Effects,
       effect_provenance = EffectProvenance,
       prepared_effects = PreparedEffects,
       transient = Transient,
       next_tag = NextTag}) ->
-    #checkpoint{scope_id = ScopeId, local = Local,
+    #checkpoint{scope_id = ScopeId, local = Local, constructions = Constructions,
                 event_ops_rev = EventOpsRev, effects = Effects,
                 effect_provenance = EffectProvenance,
                 prepared_effects = PreparedEffects,
@@ -716,13 +788,15 @@ choicepoint_checkpoint(
 choicepoint_restore(
   #lp{scope_id = ScopeId} = Ov,
   #checkpoint{scope_id = ScopeId,
-              local = Local, event_ops_rev = EventOpsRev, effects = Effects,
+              local = Local, constructions = Constructions,
+              event_ops_rev = EventOpsRev, effects = Effects,
               effect_provenance = EffectProvenance,
               prepared_effects = PreparedEffects, next_tag = NextTag,
               transient = Transient,
               distributed = Distributed}) ->
     ok = quod_transaction_scope:restore_token(Distributed),
-    Ov#lp{local = Local, event_ops_rev = EventOpsRev, effects = Effects,
+    Ov#lp{local = Local, constructions = Constructions,
+          event_ops_rev = EventOpsRev, effects = Effects,
           effect_provenance = EffectProvenance,
           prepared_effects = PreparedEffects, transient = Transient, next_tag = NextTag};
 choicepoint_restore(_Ov, _Checkpoint) ->
@@ -824,11 +898,15 @@ abolish_clauses(
 
 get_procedure(St, F) ->
     ensure_access(St),
-    Base = raw_get_procedure(St, F),
+    View = read_view(St),
+    Base = raw_get_procedure(View, F),
     case is_tuple(F) andalso not St#lp.follow_disabled of
-        true  -> add_followers(St, F, Base);     %% synthesize read-time link followers
+        true  -> add_followers(View, F, Base);   %% synthesize read-time link followers
         false -> Base                            %% non-tuple functor, or a strictly-local verdict
     end.
+
+read_view(#lp{committed_read = true} = St) -> St#lp{local = #{}};
+read_view(St) -> St.
 
 raw_get_procedure(#lp{out_db = #db{mod = M, ref = R}, local = L, read_ets = RS}, F) ->
     FS = maps:get(F, L, #fstate{}),
@@ -923,7 +1001,7 @@ replace_nth(N, Value, [Head | Tail]) when N > 1 ->
 get_procedure_type(
   #lp{} = St, F) ->
     ensure_access(St),
-    procedure_type(St, F).
+    procedure_type(read_view(St), F).
 
 procedure_type(#lp{out_db = #db{mod = M, ref = R}, local = L}, F) ->
     FS = maps:get(F, L, #fstate{}),
@@ -938,7 +1016,8 @@ procedure_type(#lp{out_db = #db{mod = M, ref = R}, local = L}, F) ->
         undefined   -> case HasLocal of true -> interpreted; false -> undefined end
     end.
 
-get_interpreted_functors(#lp{out_db = #db{mod = M, ref = R}, local = L} = St) ->
+get_interpreted_functors(St0) ->
+    #lp{out_db = #db{mod = M, ref = R}, local = L} = St = read_view(St0),
     ensure_access(St),
     Locals = [F || {F, FS} <- maps:to_list(L),
                    FS#fstate.asserta =/= [] orelse FS#fstate.assertz_rev =/= []],

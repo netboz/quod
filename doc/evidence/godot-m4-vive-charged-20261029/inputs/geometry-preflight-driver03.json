@@ -1,0 +1,8 @@
+{
+  "source": "doc/evidence/godot-m4-vive-charged-20261029/build_preflight.py",
+  "pre_execution_copy": "/data/quod-m4-vr-ca84d4f8-20261029/private/preflight-inputs/charged-geometry-preflight03.py",
+  "sha256": "ee082558ed97c87e3f2e89aae396a696d494a1876cec8de17eed61f03e7ce9f4",
+  "python_ast_parse": true,
+  "previous_physical03": "source-only build passed; never native-executed; render-context observation not qualified",
+  "production_engine_runtime_changes": 0
+}

@@ -1,0 +1,2 @@
+Rows = [{N, G, element(1, quod_prolog:prove_ro(N, G))} || {N, G} <- [{<<"quod:gui">>, {gui_icon, attention, {'I'}}}, {<<"quod:gui">>, {gui_attribute, form, image, {'T'}, {'D'}}}, {<<"quod:gui">>, {image_asset, {asset, <<"392f95140074b3e5162d8b2cc860a3ebe66c0bb20ca30deb4f4fe31949eab56a">>, <<"image/png">>}}}, {<<"quod:space">>, {space_icon, enter, {'I'}}}, {<<"quod:space">>, {space_half_depth, infinite, {'H'}}}, {<<"quod:space">>, {space_near_location, unplaced, infinite, {'P'}}}, {<<"quod:space">>, {space_template_hash, {'D'}}}]],
+[{G, Res} || {_, G, Res} <- Rows].

@@ -1,0 +1,16 @@
+PASS retained actual solid-oblique raster
+PASS oblique solid faces have measurable directional shading rather than identical unshaded colour
+PASS three unchanged scene renewals retain mesh and material resources
+PASS retained actual green-oblique raster
+PASS a real authored colour update changes only its existing occurrence
+PASS existing metallic roughness emission permille reach native material and never become alpha
+PASS retained actual emissive-solid raster
+PASS retained actual wire-label raster
+PASS wire box remains twelve unshaded edges with no solid faces
+PASS authored billboard label stays opaque and unshaded
+PASS retained actual solid-sphere raster
+PASS ordinary sphere shares the same lit solid adapter
+PASS invalid material is refused before replacing accepted geometry
+PASS invalid material is refused before replacing accepted geometry
+PASS retirement withdraws geometry and picking together
+{"passed": true, "failure": null, "children": {"server": 0, "client-alignment-material-full": 0}, "native_inputs": 0}

@@ -4,25 +4,15 @@
 can_invoke(_, Principal, _, _) :- lobby_owner(Principal).
 can_invoke(_, Principal, _, _) :- lobby_personal_agent(Principal).
 
-%% The account template owns the distinct personal identity in U's history.
+%% The user's ontology owns the distinct personal identity in U's history.
 %% This local owner grant does not authorize arbitrary hosted agents.
 lobby_personal_agent(agent_instance_ref(Ns,A,personal)) :-
     lobby_owner(agent_instance_ref(Ns,A,_)).
-class_permission(space,create,check(lobby_space_creation)).
-class_permission(space,space_enter,check(lobby_space_permission)).
-lobby_space_creation(Actor,class(space),create(Inputs)) :-
-    lobby_personal_agent(Actor), lobby_owner(Owner),
-    (member(attribute(owner,Requested),Inputs) -> Requested = Owner; true).
-lobby_space_permission(Actor,construction(space,_,_),space_enter(_,_,placement)) :-
-    lobby_personal_agent(Actor).
-lobby_space_permission(Actor,instance(Space),space_admit(_,_,placement)) :-
-    lobby_personal_agent(Actor), instance_of(space,Space),
-    \+ space_instance(Space,physical_space), lobby_owner(Owner), attribute(Space,owner,Owner).
 
 ontology_source_mode(editable) :- current_principal(Principal), lobby_owner(Principal).
 
-isa(lobby, physical_space).
-instance_of(agent, physics_authority).
+isa(lobby, quod:space:physical_space).
+instance_of(quod:agent:agent, physics_authority).
 physics_space(personal_lobby, enabled, physics_authority).
 physics_run(personal_lobby, 0, none).
 physics_structure(personal_lobby, 1).
@@ -66,11 +56,11 @@ can_cancel_physics_activation(W,Owner) :- can_edit_physics(W,Owner).
 can_edit_physics_definition(Entity,Owner) :- lobby_owner(Owner), physics_definition(Entity,_,_).
 can_refresh_physics_definition(W,Owner,_) :- can_edit_physics(W,Owner).
 
-class_permission(Class,Operation,check(lobby_space_permission)) :-
-    member(Class,[agent,lobby_floor,lobby_roof,prolog_console]),
+instance_permission(Entity,Operation,check(lobby_space_permission)) :-
+    lobby_admission(_,Entity,_,_),
     member(Operation,[space_enter,space_leave]).
-class_permission(space,space_admit,check(lobby_space_permission)).
-class_permission(space,space_remove,check(lobby_space_permission)).
+instance_permission(Space,Operation,check(lobby_space_permission)) :-
+    lobby_physical_space(Space,_,_), member(Operation,[space_admit,space_remove]).
 lobby_space_permission(Owner,instance(Entity),
     space_enter(entity_ref(Ns,A,Entity),entity_ref(Ns,A,W),placement)) :-
     lobby_owner(Owner),lobby_physical_space(W,_,_),lobby_admission(W,Entity,_,_).
@@ -87,7 +77,8 @@ can_delegate_physics_definition(Entity,Owner,World,Authority) :-
 space_physical_change(Space,Subject,Change) :- physics_space_change(Space,Subject,Change).
 
 can_prepare_agent_key(Owner,Actor,none,0,Node) :-
-    lobby_owner(Owner),lobby_hosted_actor(Actor),physics_initial_host(personal_lobby,Node).
+    lobby_owner(Owner),lobby_hosted_actor(Actor),physics_initial_host(personal_lobby,Node),
+    \+ agent_host(Actor,_,_,_), \+ agent_key(Actor,_,_).
 can_assign_agent_host(Owner,Actor,none,0,Node,_) :-
     lobby_owner(Owner),lobby_hosted_actor(Actor),physics_initial_host(personal_lobby,Node).
 can_invoke((agent_hosted(Authority,Node,Epoch,Key),sign_agent_request(_,_)),Node,_,_) :-
@@ -98,19 +89,19 @@ can_request_agent_signature(Node,Authority,
     member(Mode,[read,execute]),lobby_physical_space(_,Authority,_),
     current_ontology_identity(Ns,A),physics_initial_host(personal_lobby,Node),
     agent_hosted(Authority,Node,_,Key).
-can_invoke(physics_store_request(W,_,_,_,_,_),agent_instance_ref(Ns,A,Authority),_,Ns) :-
-    lobby_physical_space(W,Authority,_),current_ontology_identity(Ns,A).
-can_invoke(physics_store_retired(W,_,_,_,_,_,_,_),agent_instance_ref(Ns,A,Authority),_,Ns) :-
-    lobby_physical_space(W,Authority,_),current_ontology_identity(Ns,A).
-can_invoke(physics_activate(W,_,_),agent_instance_ref(Ns,A,Authority),_,Ns) :-
-    lobby_physical_space(W,Authority,_),current_ontology_identity(Ns,A).
+can_invoke(physics_store_request(W,_,_,_,_,_),agent_instance_ref(Ns,_,Authority),_,Ns) :-
+    lobby_physical_space(W,Authority,_).
+can_invoke(physics_store_retired(W,_,_,_,_,_,_,_),agent_instance_ref(Ns,_,Authority),_,Ns) :-
+    lobby_physical_space(W,Authority,_).
+can_invoke(physics_activate(W,_,_),agent_instance_ref(Ns,_,Authority),_,Ns) :-
+    lobby_physical_space(W,Authority,_).
 
 lobby_space(Space, Modes) :-
     findall(S, instance_of(lobby, S), [Space]), findall(M, lobby_modes(M), [Modes]).
 
 lobby_modes(Modes) :-
     lobby_vocabulary(Namespace, Anchor),
-    Namespace::(current_ontology_identity(Namespace, Anchor), lobby_modes(Modes)).
+    in_ontology(Namespace,Anchor, lobby_modes(Modes)).
 
 %% Every visual parameter is durable lobby state. Exact-one reads make an
 %% incomplete or ambiguous edit fail closed instead of inventing a default.
@@ -138,13 +129,20 @@ entity_scene(Entity,Mode,appearance(Id,Style,Context,Layout,Eidolons)) :-
     ; Style = solid, Context = device(Entity), Layout = physical),
     member(Mode,[playing,edition]), entity_eidolons(Entity,Mode,Style,Eidolons).
 
+%% The shared thing base is composed here as in the vocabulary. A recipe this
+%% ontology already offers for thing is not forwarded again: the vocabulary's
+%% inherited copy would be filed under the requested class and beat a more
+%% specific local recipe, such as the space's own menu. thing itself is never
+%% forwarded, so the local check below cannot re-enter this clause.
 class_eidolon(Class,Mode,Style,Recipe) :-
+    Class \== thing,
     lobby_vocabulary(Ns,A), vocabulary_class(Class,Ns,Local),
-    Ns::(current_ontology_identity(Ns,A),class_eidolons([Local],Mode,Style,Choices)),
-    member(eidolon(Mode,Style,Recipe),Choices).
+    in_ontology(Ns,A,class_eidolons([Local],Mode,Style,Choices)),
+    member(eidolon(Mode,Style,Recipe),Choices),
+    \+ (isa(Class,thing), class_eidolon(thing,Mode,Style,Recipe)).
 class_eidolon(sky_sphere,Mode,Style,Recipe) :-
     environment_eidolons(Ns,A),
-    Ns::(current_ontology_identity(Ns,A),class_eidolon(sky_sphere,Mode,Style,Recipe)).
+    in_ontology(Ns,A,class_eidolon(sky_sphere,Mode,Style,Recipe)).
 
 no_follow(vocabulary_class/3).
 vocabulary_class(Reference, Namespace, Class) :-
@@ -160,4 +158,4 @@ eidolon(Kind, subject(Target, Entity), workspace(Kind,Target,Entity,Target,View)
     current_ontology_identity(Ns,A),
     entity_eidolons(Entity,workspace,Kind,[eidolon(workspace,Kind,recipe(Ns,A,Kind))]),
     current_principal(Owner), lobby_owner(Owner), gui_vocabulary(Gui,Anchor),
-    Gui::(current_ontology_identity(Gui,Anchor), gui_view(Kind,View)).
+    in_ontology(Gui,Anchor, gui_view(Kind,View)).

@@ -1,0 +1,13 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-m0-20261027/gate-campaign.py",
+    "r1-gates-02"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-27T16:51:47Z",
+  "elapsed_seconds": 1507.4175918102264,
+  "child_exit": 1,
+  "timed_out": false,
+  "error_diagnostics": 0
+}

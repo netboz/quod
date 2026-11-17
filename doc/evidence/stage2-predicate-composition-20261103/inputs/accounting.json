@@ -1,0 +1,648 @@
+{
+  "production_delta": {
+    "basis": "saved current-turn inputs including the inherited +41/-7 slice; not git HEAD",
+    "paths": {
+      "client/godot/Core/Eidolons.cs": {
+        "added": 0,
+        "removed": 6,
+        "before_sha256": "9036b4ea127f6cbb9a78f89baf6db2292dee34945809d8abfe236d74026c2913",
+        "current_sha256": "32d9962d715d4fbcf79e271730822df72a298d8340161f71a39f87b956be835b"
+      },
+      "client/godot/Core/Scene.cs": {
+        "added": 1,
+        "removed": 1,
+        "before_sha256": "cd060f35cf6656e55f92888ebaeb5f419b266b5a3d23c17f62f62228c8013a58",
+        "current_sha256": "b2f5592cdcdfd4365a0b414a984a40b23a899adf553ba7d6168ac4179275a8a8"
+      },
+      "client/godot/EidolonPanel.cs": {
+        "added": 2,
+        "removed": 4,
+        "before_sha256": "c30bbeb6b23e1edc5f466bfe87d5b132238f6d1d137289927a511ebd92ecd537",
+        "current_sha256": "0657c3cf4cd978ee488daf17822f180ed2afcd2f2c6f3ac41ab64e75a099ccd1"
+      },
+      "client/godot/SourcePanel.cs": {
+        "added": 11,
+        "removed": 18,
+        "before_sha256": "8126a42d8c21815d6d09d8796ffe444d7cbef76d170d6658e0a37e7a13cf8e25",
+        "current_sha256": "4e97985d6936855bb2bcf7d0a6cd320c6f27dfc07abe4ae8552d75f108e491b0"
+      },
+      "client/src/prolog-edit.js": {
+        "added": 11,
+        "removed": 0,
+        "before_sha256": "cca039de0e093d3f2313e4dc92fe7504958057aee1093b3effa5f75a9e6c2a1a",
+        "current_sha256": "ed820aac74ec1693774109e57921cce05dd628b2aeff95bace6516ae8b7a8804"
+      },
+      "client/src/world.d.ts": {
+        "added": 1,
+        "removed": 1,
+        "before_sha256": "e38bcff417fbb4e0b00bce656819bf1268fe6df8e834075b1742ffbef087948e",
+        "current_sha256": "388262c78c0a6d3919c243f01ee770e2a1245e7eea6b0036f45731562eadf322"
+      },
+      "client/src/world.js": {
+        "added": 7,
+        "removed": 2,
+        "before_sha256": "e7ed5edaa93cac0f9ebee65e82361b6c565e7eed6e3d38bc84785d3a555ddcf5",
+        "current_sha256": "b0941dcd4ff1962ffcfbcf61371d15e6940d879f41be3ba9ec30704080dc39b2"
+      },
+      "priv/ontologies/common_predicates.pl": {
+        "added": 214,
+        "removed": 10,
+        "before_sha256": "a277245bf43e62d183a0fef0db494e9bf12ef9038237a826f0fe1d1bf28d42ee",
+        "current_sha256": "c259025ea150516913c57acd23f92d80a726812c8f9468862ce5da41df2636ef"
+      },
+      "priv/ontologies/gui_scene.pl": {
+        "added": 1,
+        "removed": 1,
+        "before_sha256": "ff972d8136bc4355c985b232c6ee21ff7f44c3c1484a089aab976e4c7ccfa617",
+        "current_sha256": "a83631a318f930b1253ccf1efd1808d51c994a1068dfcaaf4ff03b83ff528cf7"
+      },
+      "priv/ontologies/gui_tools.pl": {
+        "added": 6,
+        "removed": 15,
+        "before_sha256": "e23cb85e063ceb90542fbadfae300487ac8381b3e33951fd0410abad61bb4f73",
+        "current_sha256": "a7ff7b5e609bd051f3feb043256252d19929f354e9d975bc9bcd58cab6761b9e"
+      },
+      "priv/ontologies/quod_space.pl": {
+        "added": 0,
+        "removed": 140,
+        "before_sha256": "1253476fcfbe135bb92d2c3266b6a4d62e59849e969c5ed96fd02dba6b9abff2",
+        "current_sha256": "70e1c448750c06f487f3f45378a869f09ab3a3281dfc3cdc55700a40b0f1204a"
+      },
+      "ui/src/PrologEditor.tsx": {
+        "added": 20,
+        "removed": 14,
+        "before_sha256": "2fe3f603b7f5b1a1c7dfdc36dc77bc3d2b22387c4789c917f4ce6d0a8c5c398b",
+        "current_sha256": "6e7375d0e15bf30cae3258adb0b39055e6964eea6cf07e7c8b25edcfe68ebc28"
+      }
+    },
+    "added": 274,
+    "removed": 212,
+    "net": 62
+  },
+  "runs": {
+    "allowance-signed01": {
+      "receipt_sha256": "362bd6bc002c6ae717308629679536ae2647b5fa26e693ba898e0a2b820f2d06",
+      "passed": true,
+      "wrapper_exit": 0,
+      "child_exits": {
+        "server": 0,
+        "client": 0
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 7,
+      "first_failure_lines": [],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "baseline-signed01": {
+      "receipt_sha256": "2d3e936c3f731832ea3b883b0b7377c7d1189e6fd91d66cbdd9b628552c103e6",
+      "passed": false,
+      "wrapper_exit": 1,
+      "child_exits": {
+        "server": 0,
+        "client": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 0,
+      "first_failure_lines": [
+        "System.Exception: ordinary predicate instance owns a source Eidolon without a client domain identity: "
+      ],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "candidate-signed01": {
+      "receipt_sha256": "2c321d9fd7b2b034478b2a9ffe8a4293be72a064dba2eac0f6460cb56f2c6df5",
+      "passed": true,
+      "wrapper_exit": 0,
+      "child_exits": {
+        "server": 0,
+        "client": 0
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 7,
+      "first_failure_lines": [],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "candidate-signed02": {
+      "receipt_sha256": "065cd98d70a5a23d992e8da4425380dbfe993c8c5c8cdd70b17ca99665f64c9b",
+      "passed": false,
+      "wrapper_exit": 1,
+      "child_exits": {
+        "server": 0,
+        "client": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 0,
+      "first_failure_lines": [
+        "System.NullReferenceException: Object reference not set to an instance of an object."
+      ],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "candidate-signed03": {
+      "receipt_sha256": "c72026dcb07c8109f217effdd545a0769a1add5b5be2f526f55025f370992d01",
+      "passed": false,
+      "wrapper_exit": 1,
+      "child_exits": {
+        "server": 0,
+        "client": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 0,
+      "first_failure_lines": [
+        "System.TimeoutException: The operation has timed out."
+      ],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "candidate-signed04": {
+      "receipt_sha256": "ad1cdacf38e9013e9a0b6c921eccdadc09cfe06e990a29f9201f0b4cab82688a",
+      "passed": true,
+      "wrapper_exit": 0,
+      "child_exits": {
+        "server": 0,
+        "client": 0
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 48,
+      "first_failure_lines": [],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "contents-signed01": {
+      "receipt_sha256": "a35499078c1c78819f2bce7349360d0cee6c2c2ba716080f8de6d68629ca830e",
+      "passed": false,
+      "wrapper_exit": 1,
+      "child_exits": {
+        "server": 0,
+        "client": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 0,
+      "first_failure_lines": [
+        "System.ArgumentNullException: Value cannot be null. (Parameter 'json')"
+      ],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "contents-signed02": {
+      "receipt_sha256": "b3360667bb95fa06ec5c80cff3e03e750e9fce1c832941cdf32fef3256d0ff79",
+      "passed": false,
+      "wrapper_exit": 1,
+      "child_exits": {
+        "server": 0,
+        "client": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 0,
+      "first_failure_lines": [
+        "System.NullReferenceException: Object reference not set to an instance of an object."
+      ],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "contents-signed03": {
+      "receipt_sha256": "6f9fa2b0445c60013ad4ff0d42fc30af1627798dc96f10b9a6a8a4d119085fc2",
+      "passed": false,
+      "wrapper_exit": 1,
+      "child_exits": {
+        "server": 0,
+        "client": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 0,
+      "first_failure_lines": [
+        "System.TimeoutException: The operation has timed out."
+      ],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "contents-signed04": {
+      "receipt_sha256": "4113a5855f8dde446a443bfbcdc834e60abc1c363cf19e842b70fbd0a990482b",
+      "passed": false,
+      "wrapper_exit": 1,
+      "child_exits": {
+        "server": 0,
+        "client": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 0,
+      "first_failure_lines": [
+        "System.TimeoutException: The operation has timed out."
+      ],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "contents-signed05": {
+      "receipt_sha256": "440de295a162fc5d66af2c7e0e11012a96202bdc3c2a3488bb5b19e8c8b18e98",
+      "passed": false,
+      "wrapper_exit": 1,
+      "child_exits": {
+        "server": 0,
+        "client": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 0,
+      "first_failure_lines": [
+        "System.TimeoutException: The operation has timed out."
+      ],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "contents-signed06": {
+      "receipt_sha256": "c5777a835e13b267fb032ed562612215b9daa371fbd28d58bf1e04be055e48ab",
+      "passed": false,
+      "wrapper_exit": 1,
+      "child_exits": {
+        "server": 0,
+        "client": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 0,
+      "first_failure_lines": [
+        "System.Threading.Tasks.TaskCanceledException: A task was canceled."
+      ],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "contents-signed07": {
+      "receipt_sha256": "d36c247ead0c82b2762b091936938a5136df6ec06ed5b80e84ebd8482911f4b8",
+      "passed": true,
+      "wrapper_exit": 0,
+      "child_exits": {
+        "server": 0,
+        "client": 0
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 22,
+      "first_failure_lines": [],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "cost-signed01": {
+      "receipt_sha256": "17c26fd1173417f4e5ed4145a9ccf7736d6ab4b8b3fd152c269c143b99e74f0d",
+      "passed": false,
+      "wrapper_exit": 1,
+      "child_exits": {
+        "server": 0,
+        "client": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 0,
+      "first_failure_lines": [
+        "System.Exception: local signed subset 1: "
+      ],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "delegated-signed01": {
+      "receipt_sha256": "cc7a4051f23a49994bcd6037c33da2035be77f3dbe836af429aa2f0444782025",
+      "passed": false,
+      "wrapper_exit": 1,
+      "child_exits": {
+        "server": 0,
+        "client": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 0,
+      "first_failure_lines": [
+        "System.Exception: ordinary non-predicate class authors a delegated fixed source workspace: "
+      ],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "delegated-signed02": {
+      "receipt_sha256": "52c96cab7913e0f1e78aba57a154ee3e0457e529b51a84869d076e937d6e22d2",
+      "passed": true,
+      "wrapper_exit": 0,
+      "child_exits": {
+        "server": 0,
+        "client": 0
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 14,
+      "first_failure_lines": [],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "label-cost-signed01": {
+      "receipt_sha256": "990573abe0afba9cf0c6b420c99130a78d03771218d2a6ae80e9bec99b4f1e17",
+      "passed": false,
+      "wrapper_exit": 1,
+      "child_exits": {
+        "server": 0,
+        "client": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 0,
+      "first_failure_lines": [
+        "System.FormatException: Invalid functional term at 0."
+      ],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "label-cost-signed02": {
+      "receipt_sha256": "d245517857a37985eaade4586a39afbda3b8e799252a271209cc3c160e25ef31",
+      "passed": false,
+      "wrapper_exit": 1,
+      "child_exits": {
+        "server": 0,
+        "client": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 0,
+      "first_failure_lines": [
+        "System.Exception: subset-1: "
+      ],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "label-first-signed01": {
+      "receipt_sha256": "1c9671977864c9ea7e2f9bff0ea4e59e8e1a36c73417ee2c556b7637f46eaa3c",
+      "passed": true,
+      "wrapper_exit": 0,
+      "child_exits": {
+        "server": 0,
+        "client": 0
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 11,
+      "first_failure_lines": [],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "label-signed01": {
+      "receipt_sha256": "4bc1f88a5aec3f1236302e08ac31243e15878a58ee309967ebcfc3edf75aa926",
+      "passed": false,
+      "wrapper_exit": 1,
+      "child_exits": {
+        "server": 0,
+        "client": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 0,
+      "first_failure_lines": [
+        "Quod.Client.ApiError: proof_unavailable"
+      ],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "label-trace-signed01": {
+      "receipt_sha256": "6239ece30ba3a0c58f46401050fe7a9a5e9ee8b0e2d76c997fb50146c399951c",
+      "passed": false,
+      "wrapper_exit": 1,
+      "child_exits": {
+        "server": 0,
+        "client": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 0,
+      "first_failure_lines": [
+        "Quod.Client.ApiError: proof_unavailable"
+      ],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "moved-signed01": {
+      "receipt_sha256": "06f096fccb6ade8a4556869369e90d427aaaa74c02f1de503148f2c7116a6a0d",
+      "passed": false,
+      "wrapper_exit": 1,
+      "child_exits": {
+        "server": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true
+      },
+      "checks": 0,
+      "first_failure_lines": [
+        "AssertionError: ('accepted predicate object custody missing', 'quod_predicates')"
+      ],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "moved-signed02": {
+      "receipt_sha256": "bd71b1e13445e4bbf3bea5eb567641e7e97f88eb84d3c498035ccebe537b04e7",
+      "passed": false,
+      "wrapper_exit": 1,
+      "child_exits": {
+        "server": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true
+      },
+      "checks": 0,
+      "first_failure_lines": [
+        "StopIteration"
+      ],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "moved-signed03": {
+      "receipt_sha256": "f4611ac2d41ace1df3ef5dcd09f87696264e23cb67146e27bee11c5f7cd86818",
+      "passed": true,
+      "wrapper_exit": 0,
+      "child_exits": {
+        "server": 0,
+        "client": 0
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 8,
+      "first_failure_lines": [],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "probe-signed01": {
+      "receipt_sha256": "95a598ebf3b1a4a58c071486e664e5d2a74edd3ae757005f6e0f86b63dc3757a",
+      "passed": true,
+      "wrapper_exit": 0,
+      "child_exits": {
+        "server": 0,
+        "client": 0
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 9,
+      "first_failure_lines": [],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "probe-signed02": {
+      "receipt_sha256": "e82f03ca782ffd09dcaa44153eb2abde4561c182a797e792e8a639c08b8645b9",
+      "passed": true,
+      "wrapper_exit": 0,
+      "child_exits": {
+        "server": 0,
+        "client": 0
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 12,
+      "first_failure_lines": [],
+      "forced_termination": false,
+      "reader_errors": []
+    },
+    "probe-signed03": {
+      "receipt_sha256": "c63843175dde2b1f15821a3dbe90b08797755794b86662e3f25e8ec2f4113638",
+      "passed": false,
+      "wrapper_exit": 1,
+      "child_exits": {
+        "server": 0,
+        "client": 1
+      },
+      "eof": {
+        "server-stdout": true,
+        "server-stderr": true,
+        "client-stdout": true,
+        "client-stderr": true
+      },
+      "checks": 0,
+      "first_failure_lines": [
+        "Quod.Client.ApiError: proof_unavailable"
+      ],
+      "forced_termination": false,
+      "reader_errors": []
+    }
+  },
+  "prior_freezes_intact": {
+    "01": {
+      "archive_sha256": "4232522d90f6d71b339eeb6ff6b071bdf6823e6b4e4d2ab20b9169e96fec22b6",
+      "manifest_sha256": "a9c8296b41869f92395c8f4809e17721b28296359eb29fed684cf8decb1a15d6"
+    },
+    "02": {
+      "archive_sha256": "5f529043534c589c79d77db47b96bccd5a016c77de179db3ece982c389c8cef4",
+      "manifest_sha256": "f68f226c27f3a90d7fef2608f6ecd75f87e00d78d1b172f68e6301dece4f5480"
+    },
+    "03": {
+      "archive_sha256": "5515c3bee9d460115912ebe147b026a1c7a10ca8e0bd1cb6040a2175eb487a03",
+      "manifest_sha256": "71c741c9c8794d553293e3c018474a8592ba2ccab5fe965dab3cb31912351b2a"
+    },
+    "04": {
+      "archive_sha256": "bf2cdcd5e45163900942ea823aa43cd5da630f4edf56b30124128612f9b4d87c",
+      "manifest_sha256": "4bf77989f73b14d2592de2b84cbe1929e355d675fef429bbb6db521942b237d9"
+    }
+  },
+  "raw_stream_hashes_verified": true,
+  "whole_tree_acceptance": false,
+  "hardware": false
+}

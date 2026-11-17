@@ -1,0 +1,68 @@
+[
+  {
+    "phase": "fresh",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/gui-development04/identity",
+      "--node",
+      "https://127.0.0.1:38673",
+      "--ca",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/gui-development04/proxy-ca.pem"
+    ],
+    "child_exit": -9,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "elapsed_seconds": 32.76267173099768,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "reset",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/gui-development04/identity",
+      "--node",
+      "https://127.0.0.1:38673",
+      "--ca",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/gui-development04/proxy-ca.pem"
+    ],
+    "child_exit": -9,
+    "expected_exit": -9,
+    "external_sigkill_at_observed_seam": true,
+    "elapsed_seconds": 22.302977785999246,
+    "godot_error_diagnostics": false,
+    "passed": true
+  },
+  {
+    "phase": "m4-live",
+    "command": [
+      "/home/yan/src/quod_worktrees/pearl-stone/client/godot/dist/quod.x86_64",
+      "--display-driver",
+      "wayland",
+      "--",
+      "--qualification",
+      "--profile",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/gui-development04/identity",
+      "--node",
+      "https://127.0.0.1:38673",
+      "--ca",
+      "/tmp/quod-m4-ca84d4f8/artifacts/private/gui-development04/proxy-ca.pem"
+    ],
+    "child_exit": 1,
+    "expected_exit": 0,
+    "external_sigkill_at_observed_seam": false,
+    "elapsed_seconds": 19.537531804999162,
+    "godot_error_diagnostics": false,
+    "passed": false
+  }
+]

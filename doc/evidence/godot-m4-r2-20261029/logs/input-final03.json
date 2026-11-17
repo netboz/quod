@@ -1,0 +1,20 @@
+{
+  "command": [
+    "python3",
+    "doc/evidence/godot-m4-r2-20261029/input-campaign.py",
+    "input-final03",
+    "--engine",
+    "/home/yan/.cache/quod-m4-r2-artifacts/artifacts/quod-m4-client-final03/source/client/godot/dist/quod.x86_64",
+    "--desktop"
+  ],
+  "cwd": "/home/yan/src/quod_worktrees/pearl-stone",
+  "start_utc": "2026-10-29T12:20:01Z",
+  "elapsed_seconds": 3.7848339080810547,
+  "child_exit": 0,
+  "timed_out": false,
+  "private_raw_log": "/home/yan/.cache/quod-m4-r2-artifacts/private/logs/input-final03.log",
+  "raw_sha256": "8e2a138ae605ad5f11833912a280f51ae6a18ecb180c1eace518aa625203fad6",
+  "sanitized_sha256": "8e2a138ae605ad5f11833912a280f51ae6a18ecb180c1eace518aa625203fad6",
+  "redactions": 0,
+  "error_diagnostics": 0
+}

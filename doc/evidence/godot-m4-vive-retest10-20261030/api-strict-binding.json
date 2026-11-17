@@ -1,0 +1,16 @@
+{
+  "path": "/data/quod-m4-vr-ca84d4f8-20261029/private/native-vive-product10/api-dump.raw",
+  "sha256": "232f957ba656b7d83f53d2fa10f5b0c3f9fa88349ee6cd490fb33d59bf04bd59",
+  "bytes": 681822869,
+  "stat_key": [
+    2050,
+    2110463,
+    681822869,
+    1793359121352146129,
+    1793359122537182736
+  ],
+  "scope": "New completed case10 only. One parse already completed; this remaining byte-only stat binding does not parse or run anything.",
+  "parse_count": 1,
+  "additional_byte_binding_pass": true,
+  "raw_bytes_remain_private": true
+}

@@ -1,0 +1,9 @@
+{
+  "failed_run": "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/vive-focus11-freeze-runs01",
+  "true_child_exit": 1,
+  "timeout": false,
+  "boundary01_created": false,
+  "failure": "Exact required coordinator authorization87 source not in new-source allow-list.",
+  "correction": "One read exact SHA-bound handoff path plus new labels; no product or generalized path change.",
+  "receipt_sha256": "5712ebfb3a4fcc18668bcce4bf30bf69f78a4047b2b1e9a633bf64a71c800902"
+}

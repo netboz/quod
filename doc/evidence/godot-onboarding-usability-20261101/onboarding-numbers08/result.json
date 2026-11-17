@@ -1,0 +1,86 @@
+{
+  "label": "onboarding-numbers08",
+  "qualification_phase": "onboarding-numbers",
+  "passed": true,
+  "physical": false,
+  "native_runtime_started": false,
+  "hardware_queried": false,
+  "display_or_focus_action": false,
+  "manifest": "doc/evidence/godot-onboarding-usability-20261101/inputs/client-onboarding-candidate08-manifest.json",
+  "manifest_sha256": "e03541592ff9a7c6f1833f343489870192897011e43a028fa2b1d7d48d84cfeb",
+  "sources": {
+    "doc/evidence/godot-onboarding-usability-20261101/run.py": "c02fa42e705be5288cd72f2bb4ce6b7c8fa3ecc265fe088aaa7df0116751fc0d",
+    "doc/evidence/godot-onboarding-usability-20261101/hashes.py": "36226eb6eb22aa41ee6aa39b205f8037cde4e6a66f647bf52b160b0715bd4245",
+    "doc/evidence/godot-m4-vive-physical-20261029/environment.py": "c3a54c8ce4d8360f8711e027d31f7a98f29cf3b9b4436c43a84984cf2c1f20f9"
+  },
+  "reader_errors": [],
+  "children": {
+    "client": {
+      "command": [
+        "/data/quod-m4-vr-ca84d4f8-20261029/artifacts/client-onboarding-candidate08/source/client/godot/dist/quod.x86_64",
+        "--headless",
+        "--audio-driver",
+        "Dummy",
+        "--xr-mode",
+        "off",
+        "--rendering-method",
+        "gl_compatibility",
+        "--rendering-driver",
+        "opengl3",
+        "--",
+        "--qualification",
+        "--profile",
+        "/data/quod-m4-vr-ca84d4f8-20261029/private/onboarding-numbers08/identity"
+      ],
+      "true_exit": 0
+    }
+  },
+  "eof": {
+    "client-stdout": true,
+    "client-stderr": true
+  },
+  "build_export_digest_reused": true,
+  "explicit_completion": true,
+  "streams": {
+    "client-stdout.raw": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/onboarding-numbers08/client-stdout.raw",
+      "sha256": "04407f6c5e66a7fa3a51514d8f6242be14c98ecf90d0d42f16c85a80b0bb848f",
+      "bytes": 4919,
+      "public_sha256": "58ee18a4adf116bb49f62059b2b87047f82a51bb0b503adc891fcd04442903cc"
+    },
+    "client-stderr.raw": {
+      "raw_path": "/data/quod-m4-vr-ca84d4f8-20261029/private/onboarding-numbers08/client-stderr.raw",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "diagnostics": [],
+  "client_result_sha256": "49b98292fb879d782dfc7ef064ab4605a3135726147c6c2a325f9d0c2bd2d030",
+  "client_report_passed": true,
+  "checks": [
+    "offered slider initial value is represented exactly",
+    "invalid numeric text remains editable and invalid without an invented slider value: slider 0.333",
+    "rebuilding the same invalid slider draft keeps its text and error",
+    "invalid numeric text remains editable and invalid without an invented slider value: slider 12",
+    "rebuilding the same invalid slider draft keeps its text and error",
+    "invalid numeric text remains editable and invalid without an invented slider value: slider 3",
+    "rebuilding the same invalid slider draft keeps its text and error",
+    "corrected native text restores the offered slider representation",
+    "native slider value change still edits the same exact draft",
+    "locked numeric native controls cannot change the draft",
+    "offered rotary_knob initial value is represented exactly",
+    "invalid numeric text remains editable and invalid without an invented slider value: rotary_knob 0.333",
+    "rebuilding the same invalid rotary_knob draft keeps its text and error",
+    "invalid numeric text remains editable and invalid without an invented slider value: rotary_knob 12",
+    "rebuilding the same invalid rotary_knob draft keeps its text and error",
+    "invalid numeric text remains editable and invalid without an invented slider value: rotary_knob 3",
+    "rebuilding the same invalid rotary_knob draft keeps its text and error",
+    "corrected native text restores the offered rotary_knob representation",
+    "native rotary_knob value change still edits the same exact draft",
+    "locked numeric native controls cannot change the draft"
+  ],
+  "prior_checks": [],
+  "total_checks": 20,
+  "elapsed_seconds": 1.2144147049984895
+}

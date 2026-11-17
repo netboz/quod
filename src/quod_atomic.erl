@@ -113,8 +113,7 @@ decode_group(Blob) ->
 decode_presentation(Origin, Id, Blob) ->
     case decode_group(Blob) of
         {ok, #{origin := Origin, group_id := Id} = Binding} ->
-            {Record, _, _} = Material = presentation(Binding),
-            case within_limit(Record) of true -> {ok, Material}; false -> error end;
+            {ok, presentation(Binding)};
         _ -> error
     end.
 
@@ -129,8 +128,7 @@ presentation(#{origin := Origin, group := Group} = Binding) ->
                                     intent_id => vote_intent(Group, Origin, none)}}.
 
 bind_group(Group, Manifest, RequestAuth, Attestation, Bundle) ->
-    case within_limit(Group) andalso
-         quod_dtx:attested_group_material(Manifest, Attestation, Bundle) of
+    case quod_dtx:attested_group_material(Manifest, Attestation, Bundle) of
         {ok, #{group := #{participants := Roles, vote_deadline_ms := Deadline} = Binding} = Material}
           when length(Roles) >= 2, is_integer(Deadline) ->
             case request_binding(RequestAuth, Binding) of
@@ -256,8 +254,8 @@ decode_material(Blob) ->
         error -> error
     end.
 
-canonical_body(Blob) when is_binary(Blob), byte_size(Blob) =< ?QUOD_MAX_DTX_BODY_BYTES ->
-    case quod_safe_term:decode(Blob, ?QUOD_MAX_DTX_BODY_BYTES) of
+canonical_body(Blob) when is_binary(Blob) ->
+    case quod_safe_term:decode(Blob, unlimited) of
         {ok, Term} ->
             case bytes(Term) =:= Blob of
                 true -> {ok, Term};
@@ -298,13 +296,9 @@ record_digest(Record) ->
 -doc "Authenticate once at an admission boundary and carry its exact material forward.".
 -spec admission_material(record()) -> {ok, admission_material()} | error.
 admission_material(Record) ->
-    case within_limit(Record) of
-        true ->
-            case record_material(Record) of
-                {ok, Material} -> {ok, {Record, record_digest(Record), Material}};
-                error -> error
-            end;
-        false -> error
+    case record_material(Record) of
+        {ok, Material} -> {ok, {Record, record_digest(Record), Material}};
+        error -> error
     end.
 
 -doc "Sign owned admission material without re-authenticating plans; no raw record or wire input is accepted.".
@@ -338,18 +332,15 @@ encode_control({quod_dtx_control, ?CONTROL_VERSION, Kind, Target, {Record, _, _}
         true ->
             Blob = bytes({quod_dtx_control, ?CONTROL_VERSION, Kind, Target, bytes(Record),
                           Author, Admission, Sequence, SubmittedAt, Signature}),
-            case byte_size(Blob) =< ?QUOD_MAX_DTX_CONTROL_BYTES of
-                true -> {ok, Blob};
-                false -> {error, invalid_control}
-            end;
+            {ok, Blob};
         false -> {error, invalid_control}
     end;
 encode_control(_) -> {error, invalid_control}.
 
 -doc "Decode canonical control bytes and authenticate embedded plans once; verify author separately.".
 -spec decode_control(binary()) -> {ok, control()} | {error, invalid_control}.
-decode_control(Blob) when is_binary(Blob), byte_size(Blob) =< ?QUOD_MAX_DTX_CONTROL_BYTES ->
-    case quod_safe_term:decode(Blob, ?QUOD_MAX_DTX_CONTROL_BYTES) of
+decode_control(Blob) when is_binary(Blob) ->
+    case quod_safe_term:decode(Blob, unlimited) of
         {ok, {quod_dtx_control, ?CONTROL_VERSION, Kind, Target, RecordBlob,
               <<_:256>> = Author, <<_:256>> = Admission, Sequence, SubmittedAt,
               <<_:512>> = Signature} = Wire} when is_binary(RecordBlob) ->
@@ -468,10 +459,9 @@ select_vote(Material = {{quod_dtx_vote, ?VERSION, _, _, Own, _} = Record, _, Met
     case Encoded of
         {ok, Selected} ->
             Updated = setelement(6, Record, Selected),
-            case {Updated =:= Record, within_limit(Updated)} of
-                {true, true} -> {ok, Material};
-                {false, true} -> {ok, {Updated, record_digest(Updated), Meta}};
-                _ -> error
+            case Updated =:= Record of
+                true -> {ok, Material};
+                false -> {ok, {Updated, record_digest(Updated), Meta}}
             end;
         error -> error
     end;
@@ -1168,7 +1158,7 @@ outcome_references(abort, {refused, Ref}) -> quod_dtx:validate_certified_ref(Ref
 outcome_references(_, _) -> false.
 
 reference_rows(Rows, Mode) ->
-    bounded(Rows, ?QUOD_MAX_DTX_PARTICIPANTS) andalso Rows =/= []
+    Rows =/= []
         andalso reference_rows(Rows, Mode, none).
 reference_rows([], _Mode, _Previous) -> true;
 reference_rows([{Target, Ref} | Rest], plain, Previous)
@@ -1181,7 +1171,7 @@ reference_rows([{Target, Ref, Generation} | Rest], generation, Previous)
 reference_rows(_, _, _) -> false.
 
 applied_rows(Rows, Previous) ->
-    bounded(Rows, ?QUOD_MAX_DTX_PARTICIPANTS) andalso applied_rows_valid(Rows, Previous).
+    applied_rows_valid(Rows, Previous).
 applied_rows_valid([], _) -> true;
 applied_rows_valid([{Target, Certificate} | Rest], Previous)
   when Previous =:= none; Previous < Target ->
@@ -1205,9 +1195,5 @@ valid_outcome(commit) -> true;
 valid_outcome(abort) -> true;
 valid_outcome(_) -> false.
 uint(N) -> is_integer(N) andalso N >= 0 andalso N =< ?MAX_UINT64.
-bounded([], _) -> true;
-bounded([_ | Rest], N) when N > 0 -> bounded(Rest, N - 1);
-bounded(_, _) -> false.
-within_limit(Term) -> erlang:external_size(Term) =< ?QUOD_MAX_DTX_BODY_BYTES.
 bytes(Term) -> term_to_binary(Term, [deterministic]).
 digest(Term) -> crypto:hash(sha256, bytes(Term)).

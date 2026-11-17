@@ -1,0 +1,38 @@
+[
+  {
+    "label": "trusted",
+    "command": [
+      "/tmp/quod-godot-m0-export/m0.x86_64",
+      "--headless"
+    ],
+    "child_exit": 0,
+    "expected": "accept"
+  },
+  {
+    "label": "untrusted",
+    "command": [
+      "/tmp/quod-godot-m0-export/m0.x86_64",
+      "--headless"
+    ],
+    "child_exit": 0,
+    "expected": "reject"
+  },
+  {
+    "label": "wrong-host",
+    "command": [
+      "/tmp/quod-godot-m0-export/m0.x86_64",
+      "--headless"
+    ],
+    "child_exit": 0,
+    "expected": "reject"
+  },
+  {
+    "label": "expired",
+    "command": [
+      "/tmp/quod-godot-m0-export/m0.x86_64",
+      "--headless"
+    ],
+    "child_exit": 0,
+    "expected": "reject"
+  }
+]

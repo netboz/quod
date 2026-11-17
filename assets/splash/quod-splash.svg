@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" role="img" aria-labelledby="title desc">
+  <title id="title">Quod startup splash</title>
+  <desc id="desc">A six-colour dodecahedron and cream quod wordmark, centred on a deep teal background with a soft pool of light.</desc>
+  <defs>
+    <radialGradient id="light" cx="50%" cy="44%" r="55%">
+      <stop stop-color="#164A5C"/>
+      <stop offset="0.55" stop-color="#0B3346"/>
+      <stop offset="1" stop-color="#062538"/>
+    </radialGradient>
+  </defs>
+  <path fill="#062538" d="M0 0H1920V1080H0Z"/>
+  <path fill="url(#light)" d="M0 0H1920V1080H0Z"/>
+  <image href="quod-logo.svg" x="720" y="300" width="480" height="480"/>
+</svg>

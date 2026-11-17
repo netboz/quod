@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="480" viewBox="0 0 480 480" role="img" aria-labelledby="title desc">
+  <title id="title">quod</title>
+  <desc id="desc">Quod's six-colour faceted dodecahedron above a cream geometric lowercase wordmark. Transparent background.</desc>
+  <defs>
+    <linearGradient id="gold" x2="0" y2="1"><stop stop-color="#FFDE4D"/><stop offset="1" stop-color="#D9A800"/></linearGradient>
+    <linearGradient id="blue" x2="0" y2="1"><stop stop-color="#3E90D8"/><stop offset="1" stop-color="#124F8C"/></linearGradient>
+    <linearGradient id="olive" x2="0" y2="1"><stop stop-color="#86AC5A"/><stop offset="1" stop-color="#4E6E2C"/></linearGradient>
+    <linearGradient id="rose" x2="0" y2="1"><stop stop-color="#D9727A"/><stop offset="1" stop-color="#97323B"/></linearGradient>
+    <linearGradient id="teal" x2="0" y2="1"><stop stop-color="#327E9C"/><stop offset="1" stop-color="#0F4257"/></linearGradient>
+    <linearGradient id="slate" x2="0" y2="1"><stop stop-color="#A2ACBE"/><stop offset="1" stop-color="#64708A"/></linearGradient>
+  </defs>
+  <!-- Existing Quod dodecahedron geometry and gradient palette. -->
+  <g transform="translate(63.6 -11.64) scale(2.94)" stroke="#F8F4EC" stroke-width="1.25" stroke-linejoin="round">
+    <path d="M60 36 39.1 51.2 47.1 75.8 72.9 75.8 80.9 51.2Z" fill="url(#gold)"/>
+    <path d="M60 36V10L31.8 19.2 14.4 43.2 39.1 51.2Z" fill="url(#blue)"/>
+    <path d="M39.1 51.2 14.4 43.2V72.8L31.8 96.8 47.1 75.8Z" fill="url(#olive)"/>
+    <path d="M47.1 75.8 31.8 96.8 60 106 88.2 96.8 72.9 75.8Z" fill="url(#rose)"/>
+    <path d="M72.9 75.8 88.2 96.8 105.6 72.8V43.2L80.9 51.2Z" fill="url(#teal)"/>
+    <path d="M80.9 51.2 105.6 43.2 88.2 19.2 60 10V36Z" fill="url(#slate)"/>
+  </g>
+  <!-- Path lettering keeps the wordmark independent of installed fonts. -->
+  <g transform="translate(98 350)" fill="none" stroke="#F5F1EB" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+    <ellipse cx="28" cy="54" rx="24" ry="26"/>
+    <path d="M52 29V99"/>
+    <path d="M80 29V56C80 72 88 80 104 80S128 72 128 56V29"/>
+    <ellipse cx="180" cy="54" rx="24" ry="26"/>
+    <ellipse cx="256" cy="54" rx="24" ry="26"/>
+    <path d="M280 2V79"/>
+  </g>
+</svg>

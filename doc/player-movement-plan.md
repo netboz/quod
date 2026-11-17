@@ -28,7 +28,8 @@ physical presets and later recursive entry/physics delivery retain their own sco
 `agent_instance_ref(Namespace, GenesisAnchor, Instance)`. Identity, keys,
 permissions, physical bodies and hosted processes are different concepts.
 [Login](../src/quod_client_auth.erl) authenticates a key; each signed request
-selects its agent principal. [The client reference store](../client/src/agent-references.js)
+selects its agent principal. In the browser client, parked since 2026-11-17,
+[the reference store](../client/src/agent-references.js)
 and [session selector](../ui/src/Session.tsx) support multiple references.
 Selecting one locally does not grant control of a physical entity.
 
@@ -296,16 +297,17 @@ The requested adapters support continuous travel, teleportation and snap turn
 where the controlled agent offers those capabilities. Device features do not
 create domain abilities. Locomotion and menus must arbitrate input gestures.
 
-The controller mapping is authored in the existing lobby/device vocabulary.
+The controller mapping is authored in `quod:controllers`.
 One Vive description serves both wands; saved settings in the human's ontology
-choose the movement/menu hands and supported bindings. The browser matches
+choose the movement/menu hands and supported bindings. The client matches
 named components on current XR sources, cancels held input on tracking or
 mapping loss, and requires neutral input before reuse. Opening a menu or
 workspace suppresses travel. Selection and draft editing remain local;
 Save uses the existing personal-agent operation path. Movement keeps the
-existing signed control lane and world permissions. The
-[controller plan](../nimbalyst-local/plans/quo-59-controller-ontology-design.md)
-specifies the class Eidolon, source lifetimes and separate physical acceptance.
+existing signed control lane and world permissions.
+[Controllers](controllers.md) specifies the descriptions, the bindings and the
+lifetime of a controller's input; the check with the physical wands is still
+to do.
 
 Raw human head/controller tracking, the agent's physical configuration and the
 selected viewpoint remain distinct. Direct one-to-one tracking is one mapping,
@@ -315,7 +317,7 @@ head or room-scale walking merely because the human uses a headset.
 The agent/avatar's ontology must be able to define the camera location and
 orientation relative to its body or a named component: for example an eye,
 cockpit or sensor mount. Define that attachment frame and local pose explicitly;
-do not impose a browser-owned eye height, body centre or humanoid camera mount.
+do not impose a client-owned eye height, body centre or humanoid camera mount.
 The camera follows its attachment's current transform. Multiple named viewpoints
 may be offered where domain policy permits selection.
 
@@ -337,8 +339,8 @@ it does not redefine the agent's body.
 Switching agents/view profiles resets tracking mappings and retires old inputs
 and queries. Do not carry the previous agent's scale, camera offset or control
 frame into its replacement. The original HTC Vive remains the first hardware
-target; portable Babylon/WebXR component discovery and configurable bindings
-remain required. Qualify its browser/runtime and test hardware separately.
+target; portable component discovery and configurable bindings
+remain required. Qualify the headset runtime and test hardware separately.
 
 ## Existing owners and the implementation boundary
 
@@ -414,10 +416,10 @@ examples need before freezing implementation scope.
 8. **Measure and validate hardware.** Repeated unchanged work reuses retained
    state without history replay, rebuilding or writes/syncs; real changes still
    install. Retain sequential gate logs and actual production deltas. Test
-   Vive mappings, switching and comfort separately from browser emulation.
+   Vive mappings, switching and comfort separately from emulation.
 
 Movement remains the priority before pushing and held objects. The exact
 implemented predicate, geometry, input, recovery and camera contracts are in
 [the native profile](physics-native.md#played-agent-movement). Hardware
-qualification remains a separate acceptance gate; browser emulation cannot
+qualification remains a separate acceptance gate; emulation cannot
 establish Vive device mappings or comfort.

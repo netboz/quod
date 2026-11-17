@@ -2,7 +2,7 @@
 
 The software gates do not establish headset comfort. Run this final session on
 the intended HTC Vive, through the configured HTTPS/WebXR path, with both base
-stations tracking and charged controllers. The [hardware fixture](../client/test/gui-hardware.fixture.js)
+stations tracking and charged controllers. The [hardware fixture](../../client/test/gui-hardware.fixture.js)
 uses the production spatial adapter and records local input only; signed
 lifecycle and authority checks are covered separately by the production-owner
 suite. Do not launch it automatically while Yan is away.

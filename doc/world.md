@@ -1,6 +1,6 @@
 # Client and world direction
 
-The current browser foundation has key handling, authentication, signed
+The current foundation has key handling, authentication, signed
 Prolog goals, retained answer cursors, unresolved-operation resolution and
 Explorer. Bundled ontologies define rendering, modelling, material,
 environment and lobby vocabulary. Client code can render supported
@@ -75,7 +75,7 @@ not another persistent state machine. Their display rules are:
 The shell first opens when `!entering && identity && agent` and the session
 has not expired. An opened shell stays mounted but hidden and inert during
 expiry and restoration, keeping source and console drafts. Sessions default to 15 minutes;
-the browser uses the expiry returned by authentication. Restoring uses the
+the client uses the expiry returned by authentication. Restoring uses the
 existing key and account flow, retires the old proof cursor, and recovers saved
 operation outcomes without resubmitting writes. This does not extend a signed
 goal's original deadline. An open shell is not proof that a personal lobby has
@@ -88,7 +88,7 @@ disabled while an operation remains unresolved.
 
 ### Identity and account ownership
 
-The browser owns the local signing key and its operation journal. The key is
+The client owns the local signing key and its operation journal. The key is
 not itself a user account. Authentication binds the session to the cluster's
 network identity; the remembered account is selected for that network and
 contains an exact ontology namespace, genesis anchor and agent instance.
@@ -126,10 +126,13 @@ live in the human ontology. The signed view carries descriptions and bindings,
 never raw poses or a persistent connected-device list. Each original Vive wand
 renders the same class-selected, digest-pinned model through the existing asset
 owner, attached to its current XR grip. Controller input uses existing GUI and
-physical control owners; it grants no new abilities. The
-[controller design and acceptance plan](../nimbalyst-local/plans/quo-59-controller-ontology-design.md)
-records the source-only implementation and deployment/hardware boundary.
+physical control owners; it grants no new abilities.
+[Controllers](controllers.md) gives the descriptions, the bindings and where
+a user's own choices are kept.
 
+The rest of this paragraph describes the browser client, parked since
+2026-11-17; the Godot client starts the headset through OpenXR, as its
+[README](../client/godot/README.md) describes.
 The world prepares its XR helper, held-controller input and existing-canvas
 render target before enabling **Enter VR**. Optional hand/interaction plugins,
 Babylon's entry UI and its online controller repository are not enabled.
@@ -149,7 +152,7 @@ existing physics owner applies collision, gravity and landing.
 After founding returns the exact anchor, the existing account controller reads
 `physics_preparation/2`. The owner-authorized shared `physics_initialize/3`
 assigns the prepared authority key, admits the initial bodies and selects the
-pilot/viewpoint in one transaction. The browser retains this signed child before
+pilot/viewpoint in one transaction. The client retains this signed child before
 sending it through its existing operation journal. A ready or intentionally
 disabled space needs no initialization write. Unknown writes are resolved from
 the retained request and are never reconstructed or resubmitted.
@@ -164,6 +167,7 @@ physics owner's actual installed readiness.
 
 ### Implementation and verification boundaries
 
+In the browser client, parked since 2026-11-17:
 [Session](../ui/src/Session.tsx) owns entry progress, identity recovery and the
 entry card; [App](../ui/src/App.tsx) mounts the lazy world behind that card.
 [Key handling](../client/src/key-provider.js),
@@ -173,7 +177,12 @@ responsibilities. [World](../ui/src/World.tsx) owns the subsequent projection,
 setup status and console. Saving/exporting a key and other ordinary session
 work must not unmount the lobby merely because `busy` becomes true.
 
-Browser acceptance must cover an empty profile, successful registration,
+In the Godot client the entry card is in [Main.cs](../client/godot/Main.cs),
+keys in [Identity.cs](../client/godot/Core/Identity.cs), account setup in
+[Accounts.cs](../client/godot/Core/Accounts.cs) and the journal of sent
+operations in [LocalStore.cs](../client/godot/Core/LocalStore.cs).
+
+Acceptance must cover an empty profile, successful registration,
 delayed restoration without a registration or lobby flash, automatic return
 with the same account, failed-connection retry without key replacement,
 signout, and console use after entry. Count actual signed execute requests:
@@ -202,7 +211,8 @@ OBJ, STL and polygon PLY and records conversion diagnostics and provenance.
 Private assets still require authorized byte delivery and publication; a
 digest grants no read access.
 
-The current client lives under `client/` and the shared browser shell under
+The Godot client lives under `client/godot/`. The browser client, parked since
+2026-11-17, lives under `client/src/`, with its shell and the Explorer under
 `ui/`. The server's TLS client endpoint is `src/quod_client.erl`.
 
 ## Authoritative physics contract

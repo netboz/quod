@@ -328,7 +328,7 @@ landing guarantee. The command owner checks again at application.
 `physics_agent(World, Agent, Revision, Body, Motion)` selects an existing local
 agent instance and its declared rigid body. `physics_viewpoint(World, Agent,
 Name, Body, LocalPose, Tracking)` defines both position and orientation of the
-camera in that body frame. There is no universal capsule or browser eye height.
+camera in that body frame. There is no universal capsule or client eye height.
 The human principal may belong to another ontology and never impersonates the
 controlled agent. A compound body may have arbitrary authored local parts;
 unsupported articulated controllers fail closed.
@@ -383,7 +383,7 @@ While the physical configuration is unavailable, mechanics pause and old inputs
 do not keep the step timer awake. A new view reads the retained sequence high-water mark,
 including after configuration edits with the same binding; its prior result is
 reported as suspended when the configuration changed. An
-old registration cannot take over with a higher sequence. The browser sends one
+old registration cannot take over with a higher sequence. The client sends one
 request at a time and suspends commands after an uncertain response, without
 replaying it. Proof success means queued admission; the view supplies the actual
 mechanical outcome.
@@ -411,7 +411,7 @@ travel solver and vertical state. Blocked vertical progress cancels upward
 velocity; tiny negative wall-normal components do not identify a ceiling.
 Disconnect cancels an unapplied jump and preserves an already applied fall or
 ascent. Desktop Space requests one jump per key press; held-key repeats do not
-submit further jumps. No browser prediction or durable jump transaction is added.
+submit further jumps. No client prediction or durable jump transaction is added.
 
 An occupied authored spawn or collider edit does not trigger hidden
 unbounded depenetration: travel is refused with `occupied`. Numerical
@@ -429,12 +429,12 @@ Relevant committed physical/control changes invalidate a runtime-owned shared
 generation before asynchronous reinstallation. Owners stop accepting/advancing
 old commands immediately on that token, coalesce invalidation notices, and
 notify only installed state. Shapes, indices and the simulation resource remain
-owned by the same retained physics process. No browser mesh or picking result
+owned by the same retained physics process. No client mesh or picking result
 becomes collision authority.
 
 ### Desktop and tracked viewing
 
-The desktop adapter removes Babylon's translating inputs for a controlled
+The browser client's desktop adapter removes Babylon's translating inputs for a controlled
 physical space in the ordinary view. Keys submit bounded desired travel through the predicate; the camera
 mount follows accepted poses without interpolation through walls. Look remains
 local. Unknown/unavailable worlds freeze commanded travel instead of enabling
@@ -455,11 +455,11 @@ Default XR mesh teleportation is disabled. On the intended Vive mapping, the
 left grip plus touchpad drives smooth travel; a left-pad left/right click requests
 snap turn and a forward click requests a half-range teleport in the controller's
 horizontal pointing direction. The right pad owns the action menu. Menus and
-workspaces suppress locomotion. Components are discovered by WebXR type; missing
+workspaces suppress locomotion. Components are discovered by their declared type; missing
 components are not guessed. Teleport placement uses body-origin coordinates and
 physical support, without a visual-floor ray granting permission. The current
 adapter has no landing preview marker. Hardware qualification must separately
-check Vive runtime/browser mappings, masking, comfort and contact feedback.
+check Vive runtime mappings, masking, comfort and contact feedback.
 
 ## Chair pushes and rest checkpoints
 
@@ -489,7 +489,7 @@ The native owner refuses a push whose resulting linear speed exceeds the limit,
 including accumulated velocity from earlier pushes. This bound governs the
 command's application, not later velocity caused by gravity or collisions.
 
-The client helper `pushInput(id, revision, impulse)` in
+The browser client's helper `pushInput(id, revision, impulse)` in
 [locomotion.js](../client/src/locomotion.js) accepts newton-seconds and preserves
 64-bit IDs. Pass its term to the simulation connection's `command` method.
 The current profile exposes this programmatic action; it does not add a desktop
@@ -818,7 +818,7 @@ provides a remotely authorized contact-proof interface.
 
 ## One client view
 
-The ordinary browser view opens `/api/views` with an exact visible
+The ordinary client view opens `/api/views` with an exact visible
 space reference, representation mode and the dependencies of its signed
 navigation read. Physics is selected at that space's owner. The acting agent
 retains its identity and ordinary local or remote signed ingress route. Only an
@@ -893,7 +893,7 @@ owner retains one latest frame, not a motion queue. Unchanged sleeping worlds
 send nothing; repeated acknowledgements neither step nor write. Command outcomes
 advance feedback even when the body does not move. This is transport credit,
 not durable acknowledgement. The original signed expiry is enforced by server
-and browser; a lost connection cannot keep an authorized view indefinitely.
+and client; a lost connection cannot keep an authorized view indefinitely.
 An origin shift can publish a new coherent frame without advancing the tick;
 an acknowledgement for the old origin cannot release that frame's credit.
 Terrain manifests and chunks share this same credit, with exact watch and
@@ -905,7 +905,7 @@ still apply. Completion gates navigation commands; retained unchanged chunks
 stay visible while the requested set is verified. Delivery and decoding of a
 large admitted set can take time; this protocol promises no per-frame latency.
 
-The browser signs one replacement read halfway through the view's remaining
+The client signs one replacement read halfway through the view's remaining
 lifetime, unless the view already reaches sign-in expiry. An unchanged ready
 view remains usable while that proof runs, under its original expiry. The
 socket retains exact dependency subscriptions and monitors; equal proof
@@ -918,7 +918,7 @@ The native owner replaces only the same socket's exact previous reference and
 unchanged physical selection. It issues a new random registration and delivery
 reference, retains admitted input sequences and deadlines, and waits for the
 new projection acknowledgement. Old references cannot detach or acknowledge
-the replacement. Browser command sequence and pending discrete-command
+the replacement. The client's command sequence and pending discrete-command
 obligations survive renewal; uncertainty still stops control without resubmission.
 An uncertain attachment closes the socket, whose death releases any registration
 installed by a late local call. The socket alone owns the view expiry timer.

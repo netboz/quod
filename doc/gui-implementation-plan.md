@@ -1,7 +1,9 @@
 # General GUI implementation plan
 
-Implement [the GUI design](gui-plan.md) for browser desktop and Babylon VR,
-with an ontology API and semantic descriptors that a later client can reuse.
+This plan implemented [the GUI design](gui-plan.md) first for the browser
+desktop and Babylon VR, with an ontology API and semantic descriptors that
+another client can reuse. The Godot client reuses them; it is the client since
+the browser one was parked on 2026-11-17.
 The deliverable is a general framework: the lobby and an independent application
 use the same component classes, submission rules and presentation contract.
 
@@ -25,7 +27,9 @@ number entry, checkbox/toggle, radio groups and single/multiple selectable lists
 The common composition, display, table and transient families now have implementations
 in the same vocabulary and adapters. The final software gates pass, including
 both renderers and the signed production-owner tests.
-[Final Vive acceptance](gui-hardware-acceptance.md) remains outstanding.
+The final Vive acceptance of this plan was written for the browser's WebXR
+path and was never run; [its checklist](outdated/gui-hardware-acceptance.md)
+is retired with the browser client.
 Section 5 defines the implemented native boundary and its verification limits.
 
 ## 1. Scope and existing owners
@@ -314,7 +318,7 @@ are a closed semantic vocabulary: label/help, field type, initial value,
 required/readonly/enabled, options with stable IDs, numeric range/step/unit,
 layout, focus order and accessible description. Collections are proper bounded
 lists. Text is binary, booleans are explicit, numeric units follow Quod measure
-conventions. Arbitrary executable terms, callbacks, CSS, HTML, Babylon handles
+conventions. Arbitrary executable terms, callbacks, CSS, HTML, renderer handles
 and client-local IDs are excluded from the descriptor.
 
 `FormRef` and `SubjectRef` use exact ontology anchors and instance identities.
@@ -538,7 +542,7 @@ The shared `/api/views` subscription owner serves world, human HUD, selected
 questions, offered operations, controller preferences and source-access projections
 through signed anchored reads. HUD and question adapters
 reuse the same connection, dependency, renewal and expiry machinery; they attach
-no physics subscription. The browser's question controller owns only local drafts
+no physics subscription. The client's question controller owns only local drafts
 and interaction locks. Submission and cancellation use the existing signed
 operation journal, and unresolved operations are checked only through its outcome
 endpoint. Renewals preserve drafts when revision and defaults are unchanged;
@@ -641,6 +645,11 @@ result remains in its existing domain owner. Ledger history still grows with
 commits; bounded current state is not ledger erasure.
 
 ## 7. Client and representation work
+
+This section's work was done in the browser client (`client/src`), parked
+since 2026-11-17. The Godot client has its own decoder and adapter:
+[Forms.cs](../client/godot/Core/Forms.cs), [FormPanel.cs](../client/godot/FormPanel.cs)
+and [SpatialGui.cs](../client/godot/SpatialGui.cs).
 
 Generalize [the form decoder](../client/src/world.js) and
 [workspace adapter](../client/src/workspace-panel.js) around the semantic tree.
@@ -768,8 +777,9 @@ Controller-ray interaction must work with relaxed arms, including seated and
 one-handed use. Direct touch is optional. World-stable placement, recentering
 and text/target scale are adjustable. Device profiles record viewing distance,
 physical panel dimensions, apparent text/target size, texture resolution and
-input method together; the current Babylon plane dimensions are not accepted
-ergonomic defaults.
+input method together. The browser client's Babylon plane dimensions were
+never accepted as ergonomic defaults; the Godot client's headset numbers are
+in [Main screen](main-screen.md#where-things-stand-in-the-headset).
 
 ### Visible states
 
@@ -938,7 +948,8 @@ descriptors and interaction vectors to the desktop and Babylon adapters, then
 to a minimal renderer-independent test adapter. Compare typed submissions,
 focus/selection identities and state transitions. No Babylon import is allowed
 in the semantic decoder/controller module. Building a complete future native
-renderer is outside this milestone.
+renderer is outside this milestone. (The Godot client has since become that
+renderer.)
 
 ## 10. Implementation slices and verification
 
@@ -990,8 +1001,8 @@ Production-seam tests must cover:
   signed-operation, runtime, multiwrite and reaction-metadata regression seams.
 
 Hardware acceptance uses the intended headset and actual input devices.
-Repository context names the original HTC Vive; confirm the browser/WebXR path
-on that device rather than treating native OpenXR simulator results as coverage.
+Repository context names the original HTC Vive. Acceptance is done in the Godot
+client through OpenXR on that device; simulator results are not coverage.
 Record text legibility, bright/dark/moving scenes, panel transparency, seated
 reach, target selection/mis-selections, keyboard entry, precise numeric input,
 frame behavior and arm/neck comfort. Desktop screenshots and simulated XR are

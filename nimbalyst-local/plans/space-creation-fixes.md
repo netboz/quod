@@ -15,8 +15,8 @@ planStatus:
     - pie-menu
   created: "2026-11-13"
   startDate: "2026-11-13"
-  updated: "2026-11-14T10:00:00.000Z"
-  progress: 73
+  updated: "2026-11-14T02:30:00.000Z"
+  progress: 86
 ---
 
 # Space creation fixes after the 2026-11-13 VR test
@@ -31,11 +31,11 @@ order. Nothing here is built yet.
   - [x] Client: a refresh of the space's view no longer re-anchors the VR world to the head.
   - [x] `quod:space`: "Near my agent" takes the first free place in front of the agent instead of always the same pose.
   - [x] Tests: two and three creations from the same standing point give three different poses and leave the earlier ones unchanged; a view refresh in VR keeps every thing where it was.
-- [ ] **Phase 2 — Names from `quod:names`**
+- [x] **Phase 2 — Names from `quod:names`**
   - [x] `quod:names`: a `place` kind built from the book's place elements (tables 4-1, 4-2) and its strange syllables (table 5-2); the file's licence note rewritten to say exactly which pages are used.
   - [x] `quod:space`: the `name` slot's default is drawn from `quod:names`, as `doc/proofs.md` already shows for `place`.
   - [x] Creation form: the name field is pre-filled with a drawn name (`gui_initial/3` calls `quod:names`).
-  - [ ] `quod:names` founded on the live network and listed in root as `system_ontology(quod:names, Anchor)`.
+  - [x] `quod:names` founded on the live network and listed in root as `system_ontology(quod:names, Anchor)`.
   - [x] Tests: the form opens with a drawn place name; a typed name is kept; a space asserted without a name gets a drawn one; creation fails plainly when `quod:names` cannot answer.
     Built: drawn name in the form and in a nameless assertion (creation, stage-1 and space tests); typed name kept (foreign lane). Not built: a test that creation fails when `quod:names` is absent.
 - [x] **Phase 3 — The resize buttons**
@@ -49,8 +49,9 @@ order. Nothing here is built yet.
   - [ ] Measure on the live network, name the slow step, and bring the fix back for a decision.
 - [ ] **Phase 5 — Release**
   - [x] Server and client gates; docs (`doc/spaces.md`, client README).
-  - [ ] Commit(s) and version bump on Yan's go.
-  - [ ] Live: `quod:space` source edit by transaction, `quod:names` founding, client install.
+  - [x] Commit(s) and version bump on Yan's go.
+  - [x] Live: `quod:space` source edit by transaction, `quod:names` founding, client install.
+    Done 2026-11-14: commits `a3c536c8` + `0f7aa3d5` (0.7.289), rolling upgrade, `quod:names` founded and listed (anchor `0D5869D9…E53E`), `quod:space` edited, all ten nodes verified (`doc/evidence/space-creation-fixes-20261113/live/report.md`). Client installed to `~/Games/quod` (rollback `~/Games/quod-before-spaces-20261114`).
 
 ## 1. A new space moved the ones already there
 

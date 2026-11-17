@@ -15,8 +15,8 @@ planStatus:
     - scene-vocabulary
     - vr
   created: "2026-11-16"
-  updated: "2026-11-16T23:59:00.000Z"
-  progress: 78
+  updated: "2026-11-17T00:30:00.000Z"
+  progress: 96
 ---
 
 # Matrix walls: rain of the space class's real source
@@ -55,16 +55,15 @@ Build model: **Opus 5.5** (`claude-opus-5-5`), with
   - [x] letter atlas, text texture, shader, material (engine MSDF via `FontFile`, JetBrains Mono NL Bold 2.304, OFL)
   - [x] named source read once through the existing source read (real client vs real server: once, 579 ms, 73,164 letters)
   - [x] engine tests and a captured image (`doc/evidence/matrix-walls-20261116/client-04-matrix-walls.png`)
-- [ ] Phase 7 — Other decoders stay in step (the browser accepts rain and draws none)
-  - [x] `client/src/marks.js` accepts rain, draws the surface black; test in `client/test/marks.test.js`
-  - [ ] bundle in `priv/explorer` rebuilt — BLOCKED by a fault already at HEAD: `ui/src/World.tsx` still uses `EidolonChoice.style`, removed by 0.7.293
-  - [x] `client/native` (Rust core, `scene.gd`): no gate builds them; unchanged, reported as dead
+- [x] Phase 7 — Other decoders stay in step (the browser accepts rain and draws none)
+  - [x] browser left alone (Yan, 2026-11-16): `marks.js` change reverted, no bundle
+  - [x] `client/native` deleted (dead; Yan's order)
 - [ ] Phase 8 — In the headset: frame time, letter size, screen glow on and off (needs Yan's headset)
-- [ ] Phase 9 — Gates, line delta, report to Yan, then his go for the commit
+- [x] Phase 9 — Gates, line delta, report to Yan, then his go for the commit
   - [x] gates: client-04 all pass; server ct/xref/dialyzer pass, eunit 1 physics custody failure that passes alone (`report.md`)
   - [x] line delta: production +400 −18, tests +205 −4
-  - [ ] Yan's go for the commit
-- [ ] Phase 10 — Release, on Yan's go
+  - [x] Yan's go: committed `49643e7c` + `896effdd` (0.7.294)
+- [x] Phase 10 — Release: 0.7.294 clean refound, anchor 375B3F5E…, client installed (`doc/evidence/matrix-walls-release-20261117/report.md`)
 
 ## What happened
 

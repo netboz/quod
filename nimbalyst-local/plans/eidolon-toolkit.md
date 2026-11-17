@@ -15,8 +15,8 @@ planStatus:
     - design
   created: "2026-11-12"
   startDate: "2026-11-12"
-  updated: "2026-11-12T15:12:07.000Z"
-  progress: 86
+  updated: "2026-11-12T20:22:49.000Z"
+  progress: 91
 ---
 
 # Eidolon toolkit — reusable recipes, modes, and the space seen from outside
@@ -60,7 +60,7 @@ Yan's notes this answers (2026-11-11/12):
   - [x] a class may offer a `selected` eidolon; none is required
 - [ ] Phase 5 — Other recipes move over (predicate boxes, status marks)
 - [ ] Phase 6 — Handling: move and resize (own design round, see below)
-- [ ] Gates, line delta, changed doc sentences, then release on Yan's go
+- [x] Gates, line delta, changed doc sentences, then release on Yan's go (live as 0.7.286 on 2026-11-12, phases 1 to 4)
 
 ## How eidolons work today
 

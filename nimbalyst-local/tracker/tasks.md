@@ -1,6 +1,6 @@
 # Tasks
 
-Implementation tickets for the [space architecture plan](/home/yan/src/quod/nimbalyst-local/plans/space-conceptual-architecture-review.md). Stages 0–2 are complete for their agreed local software scope; Stage 3 remains unstarted. Stage-1 implementation and agreed local acceptance are complete; S1.1–S1.8 are committed; S1.9 is committed as `948b3c20`, and its ticket and fully verified stage-1 parent are completed. Dependency order is 1 → 2 → 3.
+Implementation tickets for the [space architecture plan](/home/yan/src/quod/nimbalyst-local/plans/space-conceptual-architecture-review.md). Stages 0–2 are complete for their agreed local software scope; Stage 3 is not started and was rewritten on 2026-11-17 (retirement only, terrain parked). Stage-1 implementation and agreed local acceptance are complete; S1.1–S1.8 are committed; S1.9 is committed as `948b3c20`, and its ticket and fully verified stage-1 parent are completed. Dependency order is 1 → 2 → 3.
 
 - Stage 1 — One empty space through the user's agent #task[id:tsk_01M5PY8TEX7NP119X8SXNN3HNB status:done priority:medium created:2026-10-24 tags:architecture,space]
   Plan: [Space and interaction architecture](/home/yan/src/quod/nimbalyst-local/plans/space-conceptual-architecture-review.md#smallest-staged-normalization). Implements stage 1 and confirmed decisions D1–D4/D8–D10; the plan remains authoritative. Read [AGENTS.md](/home/yan/src/quod/AGENTS.md) and [multiwrite architecture](/home/yan/src/quod/doc/multiwrite-architecture.md) before implementation.
@@ -62,27 +62,24 @@ Implementation tickets for the [space architecture plan](/home/yan/src/quod/nimb
   
   Read [AGENTS.md](/home/yan/src/quod/AGENTS.md) and [multiwrite architecture](/home/yan/src/quod/doc/multiwrite-architecture.md) before implementation. Keep policy and authorization in Prolog and reuse existing actions, transactions, recovery and runtime owners. No speculative subtasks or additional architecture gates are introduced by this ticket. The accepted implementation is local software only; no deployment, data deletion, hardware test or user-store migration is implied.
 
-- Stage 3 — Terrain separation and obsolete-helper retirement #task[id:tsk_01M5PY8TEXWW97YYRVFRG3GRPY status:to-do priority:medium created:2026-10-24 tags:architecture,space]
-  Plan: [Space and interaction architecture](/home/yan/src/quod/nimbalyst-local/plans/space-conceptual-architecture-review.md#smallest-staged-normalization). Implements stage 3 and the plan's code retention/retirement conditions.
-  
-  Status: unstarted. Depends on [tsk_01M5PY8TEXKG858WBZJ1RHC6EW](nimbalyst://tsk_01M5PY8TEXKG858WBZJ1RHC6EW) (stage 2).
-  
-  **Agreed scope**
-  
-  - Resolve the applicable existing D7 terrain/physical-entry choices. Separate terrain identity, settings, patches and revisions from space; retain voxel generation as its implementation and preserve physical binding.
-  - Bind terrain construction and edits through the shared constructors, personal-agent operations and existing generation GUI. Compose a landscape preset from space and terrain; ordinary empty-space creation stays empty.
-  - Retire replaced `world_responder` declarations, helper-only hosting/setup/grants, active-question and question-derived identity coupling, UI setup gating and unused support together once all callers and obligations are covered.
-  - Keep generic hosting, questions/FIPA for genuine deferred or inter-actor work, shared physics setup, physical authority and useful embodiment roles. Neither `world_authority` nor `world_pilot` is automatically dead because the form helper is removed. Rebind the existing generation form rather than replacing it with a duplicate.
-  
+- Stage 3 — Retire the old lobby and world-helper sources #task[id:tsk_01M5PY8TEXWW97YYRVFRG3GRPY status:to-do priority:medium created:2026-10-24 tags:architecture,space]
+  Rewritten on 2026-11-17 on Yan's ruling: stage 3 keeps the retirement, and the terrain part is parked.
+
+  **Scope**
+
+  - Retire the replaced `world_responder` declarations, the helper-only hosting, setup and grants, the active-question and question-derived identity coupling, the UI setup gating and their unused support, together, once every caller and obligation is accounted for. Today these live only in sources the live network does not found (`priv/ontologies/lobby_worlds.pl` and the other lobby sources), reached only by tests.
+  - This is the same work as the retirement in M5 (QUO-66): do it there, following the archive rule of [the foundation contract](/home/yan/src/quod/doc/godot-foundation-contract.md) (superseded Prolog sources go to `outdated/ontologies/prolog/`).
+  - Keep generic hosting, questions and FIPA for real deferred or inter-actor work, shared physics setup, physical authority and useful embodiment roles. Neither `world_authority` nor `world_pilot` is dead just because the form helper is removed.
+
+  **Parked: terrain separation**
+
+  Separating terrain identity, settings, patches and revisions from the space waits for the voxel ground work, which Yan stopped. When it resumes, it must not go "through the shared constructors" as the earlier text said: constructors build nothing, and an instance is asserted ([proofs](/home/yan/src/quod/doc/proofs.md), "Creation inputs, defaults and inheritance").
+
   **Completion checks**
-  
-  - [ ] Terrain has its own identity and state; shared construction/edit operations and the landscape preset work through the personal agent. Existing generation controls and feedback remain available.
-  - [ ] Ownership, revisions, generation validation, edited/occupied-terrain refusal, physical consequences and atomic rollback retain their protections after separation.
-  - [ ] Replacement covers every helper caller and its acceptance, authorization, operation correlation, uncertainty, cancellation and result feedback. Existing pending questions, key custody and user state are accounted for before retirement.
-  - [ ] Caller and runtime reachability checks justify removals, including helper-only exports, UI gating and obsolete fixtures. Preserve still-valid test obligations and document the actual production-line delta.
-  - [ ] Shared physics setup, generic questions/FIPA, useful physical authority/embodiment and current terrain arithmetic remain where still required. Authored or founded rules are not silently rewritten, and no user data is deleted.
-  
-  Read [AGENTS.md](/home/yan/src/quod/AGENTS.md) and [multiwrite architecture](/home/yan/src/quod/doc/multiwrite-architecture.md) before implementation. Keep domain policy/state in Prolog and reuse existing actions, atomic transactions, recovery, reactions and runtime owners. No gameplay, rendering, fog or further voxel feature work is included. Implementation remains unstarted; this ticket authorizes no deployment, commit or data wipe.
+
+  - [ ] Every helper caller is covered or removed, with its acceptance, authorization, operation correlation, uncertainty, cancellation and result feedback accounted for; pending questions, key custody and user state are accounted for before retirement.
+  - [ ] Caller and runtime reachability checks justify each removal, including helper-only exports, UI gating and obsolete fixtures. Still-valid test obligations are kept; the real production-line delta is reported.
+  - [ ] Shared physics setup, generic questions and FIPA, and useful physical authority and embodiment remain where still required. No founded rule is silently rewritten and no user data is deleted.
 
 - S1.1 — Recover original result bindings through ordinary transaction outcomes #task[id:tsk_01M5Q1YXC2H4S1BERCY9ERXWJQ status:done priority:medium created:2026-10-24 tags:architecture,space,stage-1]
   Parent work item: [tsk_01M5PY8TEX7NP119X8SXNN3HNB](nimbalyst://tsk_01M5PY8TEX7NP119X8SXNN3HNB). Plan: [Space and interaction architecture](/home/yan/src/quod/nimbalyst-local/plans/space-conceptual-architecture-review.md#stage-1-implementation-tickets). Status: completed; implemented, verified and committed as `671e1f76a3919c2aa3a0c80bce1878781d918cf2`, including the ordinary foreign-only recovery correction. Other stage-1 tickets remain unstarted.

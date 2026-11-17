@@ -17,7 +17,7 @@ implementation and names each state owner. Follow only the subject you need:
 | Spaces: classes, creation, placement, travel, Eidolons of a space | [Governed spaces](spaces.md) |
 | The Godot client's screen: pointing, pies, the strip, placement in the headset | [Main screen](main-screen.md) |
 | Eidolons, rain, forms and questions | [GUI](gui-plan.md) |
-| Godot client and the seven founding ontologies | [Foundation contract](godot-foundation-contract.md) |
+| Godot client and the founding ontologies | [Foundation contract](godot-foundation-contract.md) |
 | Server physics | [Physics profile](physics-native.md) |
 | Voxel terrain | [Voxel terrain arithmetic](voxel-world.md) |
 | Node identity enrollment | [Node enrollment](node-enrollment.md) |

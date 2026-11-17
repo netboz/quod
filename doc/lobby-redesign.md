@@ -1,5 +1,13 @@
 # Default physical lobby
 
+**Not what signup does today** (Yan, 2026-11-17). A new user gets an ordinary
+empty space, which is the stub lobby and the testing space for now; see
+[Governed spaces](spaces.md#new-user-onboarding-and-parentless-spaces). The
+physical lobby described here comes later, after the basic space functions and
+the physical space built as a subclass of space. Its acceptance sentence
+"Fresh normal signup reaches a visible controlled lobby" does not hold until
+then.
+
 Build the default lobby by composing the existing ontology, space, agent,
 physics and Eidolon mechanisms. The contracts are [world.md](world.md),
 [spaces.md](spaces.md), [physics-native.md](physics-native.md) and

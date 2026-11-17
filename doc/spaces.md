@@ -48,6 +48,11 @@ The setup form uses `quod:space:space` and its defaults, including the 10-metre
 box extent, after signup has allocated the user's ontology. S0 is an ordinary
 space instance; a dedicated user-lobby subclass is later work.
 
+Order of work (Yan, 2026-11-17): the basic functions of a space come first.
+The physical space is then built as a subclass of space, and the lobby is
+elaborated as that work moves on. Until then the empty space a user gets at
+login is both the stub lobby and the testing space.
+
 The [M0 contract](godot-foundation-contract.md#ordinary-onboarding-and-storage)
 selects the user's existing ontology explicitly for S0 and records that exact
 selection. Additional spaces use explicit selected storage, including permitted

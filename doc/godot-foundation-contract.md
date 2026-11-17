@@ -20,7 +20,10 @@ authorized by this contract.
 An ontology is the exact pair `ontology_ref(Namespace, GenesisAnchor)`. Actor
 references add an instance. Keys prove control; they are neither the actor nor
 its storage. Root is the configured bootstrap exception and is not a catalogue
-row. The target is root plus six catalogue entries, not seven total ledgers.
+row. The founded network is root plus seven catalogue entries: the six this
+contract froze and `quod:names`, added on 2026-11-13 (Yan). The count is not a
+limit: more system ontologies may be added, and reaching ten would not be a
+problem (Yan, 2026-11-17).
 Node identities, private user histories and independently selected storage
 histories remain ordinary instances outside this shared count.
 
@@ -33,6 +36,7 @@ histories remain ordinary instances outside this shared count.
 | `quod:controllers` | Device descriptions, capabilities, roles and binding validation | `quod_controllers.pl` |
 | `quod:space` | Space class, slots, extent, admission, entry and space forms/Eidolons | `quod_space.pl`; optional `space_physics.pl`, `space_terrain.pl`, `space_hinged.pl`, `space_environment.pl` templates |
 | `quod:user` | Human/personal-agent classes, setup, instructions, signup policy and private receipts | `quod_user.pl`; signup returns facts, ACL clauses and reactions as terms |
+| `quod:names` | Personal and world names: the name tables and drawing a name from them | `quod_names.pl`; founded through the ordinary lifecycle, then listed in root |
 
 The required compositions are authoritative. Optional filenames describe
 their later owner consolidation. The retirement map records the original
@@ -392,7 +396,7 @@ genesis; it never reopens these packaged files.
    `ontology_hosting_policy(<<"quod:user">>, UClass)` delegation. Keep the
    hosting write at the enrolled node, tied to the existing effect executor.
    Root administrator/source-edit authority alone is not a creator grant.
-7. Verify root plus six unique catalogue identities, zero rejected/conflicting
+7. Verify root plus seven unique catalogue identities, zero rejected/conflicting
    anchors, readiness, module profiles and new node enrollment. Record endpoint,
    certificate SHA-256/CA, expected hostname, network R and all exact catalogue
    pins as public client configuration. No private key/unlock bytes enter it.

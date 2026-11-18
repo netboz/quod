@@ -404,8 +404,9 @@ expiry never turns an uncertain write into a definite failure or resubmits it.
 
 An explicit refusal reason is one ground term with the shape `{What, Detail}` or a bare atom,
 portable under `quod_wire_term` (atoms, integers, binaries, lists, tuples;
-no pids, references, funs or maps), and at most
-`?ERLOG_MAX_FAILURE_REASON_BYTES` canonical bytes. `What` is a lower-case
+no pids, references, funs or maps). No size limit applies to a reason or to
+the list of reasons: a fixed limit would make the result of a proof depend on
+it (Yan, 2026-11-03 and 2026-11-18). `What` is a lower-case
 atom naming the refused operation or resource in domain words. `Detail` is
 the smallest term that lets the caller act: an identifier, an expected value,
 or a sub-reason atom. Do not put internal state, process names, stack traces

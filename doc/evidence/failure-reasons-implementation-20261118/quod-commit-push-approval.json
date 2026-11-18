@@ -1,0 +1,9 @@
+{
+  "approved_at": "2026-11-18T18:20:44.207748+00:00",
+  "commit_quod": true,
+  "push_quod": true,
+  "branch": "master",
+  "remote_base": "a55a3f0889d269ba48fd864ded281ea6799deb51",
+  "scope": "all reviewed Quod code, exact engine pin, tests, specification, tools, unfinished release plan and complete redacted evidence",
+  "version_refound_deployment_approved": false
+}

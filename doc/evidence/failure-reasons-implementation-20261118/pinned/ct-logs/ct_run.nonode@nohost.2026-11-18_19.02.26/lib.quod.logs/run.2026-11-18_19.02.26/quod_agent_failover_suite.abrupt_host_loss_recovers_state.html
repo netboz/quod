@@ -1,0 +1,254 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<title>Test quod_agent_failover_SUITE:abrupt_host_loss_recovers_state result</title>
+<meta http-equiv="cache-control" content="no-cache"></meta>
+<meta http-equiv="content-type" content="text/html; charset=utf-8"></meta>
+<link rel="stylesheet" href="../../ct_default.css" type="text/css"></link>
+<script type="text/javascript" src="../../jquery-latest.js"></script>
+<script type="text/javascript" src="../../jquery.tablesorter.min.js"></script>
+</head>
+<body>
+
+<a name="top"></a><pre>
+=== Test case: <a href="quod_agent_failover_suite.src.html#abrupt_host_loss_recovers_state-1">quod_agent_failover_SUITE:abrupt_host_loss_recovers_state/1</a> (click for source code)
+
+=== Config value:
+
+    [{watchdog,&lt;0.8655.0&gt;},
+     {tc_logfile,"/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_19.02.26/lib.quod.logs/run.2026-11-18_19.02.26/quod_agent_failover_suite.abrupt_host_loss_recovers_state.html"},
+     {tc_group_properties,[{suite,quod_agent_failover_SUITE}]},
+     {tc_group_path,[]},
+     {data_dir,"/home/yan/src/quod/_build/test/lib/quod/test/quod_agent_failover_SUITE_data/"},
+     {priv_dir,"/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_19.02.26/lib.quod.logs/run.2026-11-18_19.02.26/log_private/"}]
+
+=== Current directory is "/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_19.02.26"
+
+=== Started at 2026-11-18 19:04:04
+
+<br />
+=WARNING REPORT==== 18-Nov-2026::19:04:10.201952 ===
+quod[agent:failover]: no download contact — Brahms sample empty and no non-self seed (isolated node? seeds=[] node_addr={"127.0.0.1",
+                                                                                                                         53233})
+
+
+</pre>
+<div class="default"><pre><b>*** User 2026-11-18 19:04:15.436 ***</b><a id=e-5 class="link-to-entry" href="#e-5">&#x1f517;</a>
+Host fault accepted at -576460623195
+</pre></div>
+<pre>
+
+</pre>
+<div class="sasl"><pre><b>*** System report during quod_agent_failover_SUITE:abrupt_host_loss_recovers_state/1 2026-11-18 19:04:15.435 ***</b><a id=e-4 class="link-to-entry" href="#e-4">&#x1f517;</a>
+=ERROR REPORT==== 18-Nov-2026::19:04:15.434855 ===
+** Generic server &lt;0.8699.0&gt; terminating 
+** Last message in was {#Port&lt;0.37&gt;,{exit_status,137}}
+** When Server state == {peer_state,#{args =&gt;
+                                          ["+S","2:2","-pa",
+                                           "/home/yan/src/quod/_build/test/lib/quod/ebin",
+                                           "/home/yan/src/quod/_build/test/lib/quod/test",
+                                           "/home/yan/src/quod/_build/default/lib/cowboy/ebin",
+                                           "/home/yan/src/quod/_build/default/lib/erlog/ebin",
+                                           "/home/yan/src/quod/_build/default/lib/gproc/ebin",
+                                           "/home/yan/src/quod/_build/default/lib/hocon/ebin",
+                                           "/home/yan/src/quod/_build/default/lib/opentelemetry/ebin",
+                                           "/home/yan/src/quod/_build/default/lib/opentelemetry_api/ebin",
+                                           "/home/yan/src/quod/_build/default/lib/opentelemetry_exporter/ebin",
+                                           "/home/yan/src/quod/_build/default/lib/prometheus/ebin",
+                                           "/home/yan/src/quod/_build/default/lib/prometheus_httpd/ebin",
+                                           "/home/yan/src/quod/_build/default/lib/quic/ebin",
+                                           "/home/yan/src/quod/_build/default/lib/accept/ebin",
+                                           "/home/yan/src/quod/_build/default/lib/cowlib/ebin",
+                                           "/home/yan/src/quod/_build/default/lib/getopt/ebin",
+                                           "/home/yan/src/quod/_build/default/lib/grpcbox/ebin",
+                                           "/home/yan/src/quod/_build/default/lib/quantile_estimator/ebin",
+                                           "/home/yan/src/quod/_build/default/lib/ranch/ebin",
+                                           "/home/yan/src/quod/_build/default/lib/tls_certificate_check/ebin",
+                                           "/home/yan/src/quod/_build/default/lib/typerefl/ebin",
+                                           "/home/yan/src/quod/_build/default/lib/acceptor_pool/ebin",
+                                           "/home/yan/src/quod/_build/default/lib/chatterbox/ebin",
+                                           "/home/yan/src/quod/_build/default/lib/ctx/ebin",
+                                           "/home/yan/src/quod/_build/default/lib/erlang_qq/ebin",
+                                           "/home/yan/src/quod/_build/default/lib/ssl_verify_fun/ebin",
+                                           "/home/yan/src/quod/_build/default/lib/hpack/ebin",
+                                           "/home/yan/src/quod/_build/default/plugins/rebar3_hex/ebin",
+                                           "/home/yan/src/quod/_build/default/plugins/hex_core/ebin",
+                                           "/home/yan/src/quod/_build/default/plugins/verl/ebin",
+                                           "/usr/bin/rebar3/ssl_verify_fun/ebin",
+                                           "/usr/bin/rebar3/relx/ebin",
+                                           "/usr/bin/rebar3/rebar/ebin",
+                                           "/usr/bin/rebar3/providers/ebin",
+                                           "/usr/bin/rebar3/getopt/ebin",
+                                           "/usr/bin/rebar3/eunit_formatters/ebin",
+                                           "/usr/bin/rebar3/erlware_commons/ebin",
+                                           "/usr/bin/rebar3/cth_readable/ebin",
+                                           "/usr/bin/rebar3/cf/ebin",
+                                           "/usr/bin/rebar3/certifi/ebin",
+                                           "/usr/bin/rebar3/bbmustache/ebin",
+                                           "/usr/bin/rebar3",".",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/kernel-10.3.2/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/stdlib-7.0.2/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/xmerl-2.1.5/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/wx-2.5.1/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/tools-4.1.2/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/tftp-1.2.3/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/syntax_tools-4.0/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/ssl-11.3.2/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/ssh-5.3.2/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/snmp-5.19/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/sasl-4.3/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/runtime_tools-2.2/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/reltool-1.0.2/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/public_key-1.18.2/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/parsetools-2.7/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/os_mon-2.11/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/observer-2.18/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/mnesia-4.24/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/megaco-4.8/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/jinterface-1.15/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/inets-9.4/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/ftp-1.2.4/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/eunit-2.10/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/et-1.7.2/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/erts-16.0.2/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/erl_interface-5.6/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/eldap-1.2.16/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/edoc-1.4/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/diameter-2.5/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/dialyzer-5.4/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/debugger-6.0.2/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/crypto-5.6/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/compiler-9.0.1/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/common_test-1.28/ebin",
+                                           "/home/yan/.asdf/installs/erlang/28.0.2/lib/asn1-5.4.1/ebin",
+                                           "/home/yan/src/quod"],
+                                      name =&gt; agent_failover_53233,
+                                      connection =&gt; standard_io,
+                                      peer_down =&gt; crash},
+                                    agent_failover_53233@prospero,
+                                    "/home/yan/.asdf/installs/erlang/28.0.2/erts-16.0.2/bin/erl",
+                                    ["-sname","agent_failover_53233","+S",
+                                     "2:2","-pa",
+                                     "/home/yan/src/quod/_build/test/lib/quod/ebin",
+                                     "/home/yan/src/quod/_build/test/lib/quod/test",
+                                     "/home/yan/src/quod/_build/default/lib/cowboy/ebin",
+                                     "/home/yan/src/quod/_build/default/lib/erlog/ebin",
+                                     "/home/yan/src/quod/_build/default/lib/gproc/ebin",
+                                     "/home/yan/src/quod/_build/default/lib/hocon/ebin",
+                                     "/home/yan/src/quod/_build/default/lib/opentelemetry/ebin",
+                                     "/home/yan/src/quod/_build/default/lib/opentelemetry_api/ebin",
+                                     "/home/yan/src/quod/_build/default/lib/opentelemetry_exporter/ebin",
+                                     "/home/yan/src/quod/_build/default/lib/prometheus/ebin",
+                                     "/home/yan/src/quod/_build/default/lib/prometheus_httpd/ebin",
+                                     "/home/yan/src/quod/_build/default/lib/quic/ebin",
+                                     "/home/yan/src/quod/_build/default/lib/accept/ebin",
+                                     "/home/yan/src/quod/_build/default/lib/cowlib/ebin",
+                                     "/home/yan/src/quod/_build/default/lib/getopt/ebin",
+                                     "/home/yan/src/quod/_build/default/lib/grpcbox/ebin",
+                                     "/home/yan/src/quod/_build/default/lib/quantile_estimator/ebin",
+                                     "/home/yan/src/quod/_build/default/lib/ranch/ebin",
+                                     "/home/yan/src/quod/_build/default/lib/tls_certificate_check/ebin",
+                                     "/home/yan/src/quod/_build/default/lib/typerefl/ebin",
+                                     "/home/yan/src/quod/_build/default/lib/acceptor_pool/ebin",
+                                     "/home/yan/src/quod/_build/default/lib/chatterbox/ebin",
+                                     "/home/yan/src/quod/_build/default/lib/ctx/ebin",
+                                     "/home/yan/src/quod/_build/default/lib/erlang_qq/ebin",
+                                     "/home/yan/src/quod/_build/default/lib/ssl_verify_fun/ebin",
+                                     "/home/yan/src/quod/_build/default/lib/hpack/ebin",
+                                     "/home/yan/src/quod/_build/default/plugins/rebar3_hex/ebin",
+                                     "/home/yan/src/quod/_build/default/plugins/hex_core/ebin",
+                                     "/home/yan/src/quod/_build/default/plugins/verl/ebin",
+                                     "/usr/bin/rebar3/ssl_verify_fun/ebin",
+                                     "/usr/bin/rebar3/relx/ebin",
+                                     "/usr/bin/rebar3/rebar/ebin",
+                                     "/usr/bin/rebar3/providers/ebin",
+                                     "/usr/bin/rebar3/getopt/ebin",
+                                     "/usr/bin/rebar3/eunit_formatters/ebin",
+                                     "/usr/bin/rebar3/erlware_commons/ebin",
+                                     "/usr/bin/rebar3/cth_readable/ebin",
+                                     "/usr/bin/rebar3/cf/ebin",
+                                     "/usr/bin/rebar3/certifi/ebin",
+                                     "/usr/bin/rebar3/bbmustache/ebin",
+                                     "/usr/bin/rebar3",".",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/kernel-10.3.2/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/stdlib-7.0.2/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/xmerl-2.1.5/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/wx-2.5.1/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/tools-4.1.2/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/tftp-1.2.3/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/syntax_tools-4.0/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/ssl-11.3.2/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/ssh-5.3.2/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/snmp-5.19/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/sasl-4.3/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/runtime_tools-2.2/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/reltool-1.0.2/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/public_key-1.18.2/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/parsetools-2.7/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/os_mon-2.11/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/observer-2.18/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/mnesia-4.24/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/megaco-4.8/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/jinterface-1.15/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/inets-9.4/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/ftp-1.2.4/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/eunit-2.10/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/et-1.7.2/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/erts-16.0.2/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/erl_interface-5.6/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/eldap-1.2.16/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/edoc-1.4/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/diameter-2.5/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/dialyzer-5.4/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/debugger-6.0.2/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/crypto-5.6/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/compiler-9.0.1/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/common_test-1.28/ebin",
+                                     "/home/yan/.asdf/installs/erlang/28.0.2/lib/asn1-5.4.1/ebin",
+                                     "/home/yan/src/quod","-user","peer"],
+                                    undefined,undefined,&lt;&lt;&gt;&gt;,
+                                    {down,{exit_status,137}},
+                                    {&lt;0.8697.0&gt;,
+                                     #Ref&lt;0.2546447374.1743257601.216484&gt;},
+                                    50,#{}}
+** Reason for termination ==
+** {exit_status,137}
+
+
+</pre></div>
+<pre>
+
+</pre>
+<div class="default"><pre><b>*** User 2026-11-18 19:04:21.957 ***</b><a id=e-6 class="link-to-entry" href="#e-6">&#x1f517;</a>
+Committed epoch 2 at height 5, time -576460616674
+</pre></div>
+<pre>
+
+</pre>
+<div class="default"><pre><b>*** User 2026-11-18 19:04:38.301 ***</b><a id=e-7 class="link-to-entry" href="#e-7">&#x1f517;</a>
+Replacement work committed before host return at -576460600330
+</pre></div>
+<pre>
+=WARNING REPORT==== 18-Nov-2026::19:04:39.762442 ===
+quod_prolog[agent:failover]: can_invoke refused a top-level goal at pinned height 9
+
+<a name="end"></a>
+
+
+=== Ended at 2026-11-18 19:04:39
+=== successfully completed test case
+=== === Returned value: ok
+</pre>
+<center>
+<br /><hr /><p>
+<a href="../../../all_runs.html">Test run history
+</a>  |  <a href="../../../index.html">Top level test index
+</a>  |  <a href="../../../suite.log.latest.html">Latest test result</a>
+</p>
+<div class="copyright">Copyright &copy; 2026 <a href="http://www.erlang.org">Open Telecom Platform</a><br />
+Updated: <!--date-->Wed Nov 18 2026 19:04:04<!--/date--><br />
+</div>
+</center>
+</body>
+</html>

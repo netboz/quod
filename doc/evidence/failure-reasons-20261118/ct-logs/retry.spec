@@ -1,0 +1,33 @@
+{cases,"/home/yan/src/quod/_build/failure-reasons-20261118/quod/test",
+       quod_ns_SUITE,
+       [t_admit_grows_committee]}.
+{cases,"/home/yan/src/quod/_build/failure-reasons-20261118/quod/test",
+       quod_names_SUITE,
+       [cohosted_draw_labels_an_agent,public_queries_open_mutation_refused,
+        creator_narrows_the_policy,backtracking_cut_and_savepoint]}.
+{cases,"/home/yan/src/quod/_build/failure-reasons-20261118/quod/test",
+       quod_ask_SUITE,
+       [remote_signed_transaction_savepoints,
+        cut_findall_signed_multiscope_savepoints,
+        remote_native_read_uses_selected_observer,remote_scope_symbol_safety,
+        remote_scope_failure_reasons,remote_scope_nested_failure_reasons,
+        remote_scope_deep_failure_reasons,
+        remote_scope_structural_reason_depth,remote_independent_root_effect,
+        independent_action_remote_prepared_rollback,
+        remote_independent_branch_provenance,
+        remote_independent_nesting_and_auth,
+        remote_signed_gateway_group_with_root_effect,
+        node_enrollment_remote_custodian]}.
+{cases,"/home/yan/src/quod/_build/failure-reasons-20261118/quod/test",
+       quod_agent_failover_SUITE,
+       [validator_host_loss_recovers_state,abrupt_host_loss_recovers_state,
+        suspended_host_retires_stale_process]}.
+{cases,"/home/yan/src/quod/_build/failure-reasons-20261118/quod/test",
+       join_SUITE,
+       [joiner_promoted_to_voter,runtime_join_action_catches_up,
+        self_seeded_joiner_catches_up]}.
+{cases,"/home/yan/src/quod/_build/failure-reasons-20261118/quod/test",
+       growth_SUITE,
+       [policy_upgrade_live,admit_refused_mid_catchup,grow_to_two,
+        grow_to_three,grow_to_four,rotation_sweep,
+        byzantine_on_grown_committee,dead_member_removed,demote_to_observer]}.

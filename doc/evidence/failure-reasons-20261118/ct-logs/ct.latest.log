@@ -1,0 +1,266 @@
+
+Common Test starting (cwd is /home/yan/src/quod/_build/failure-reasons-20261118/quod)
+
+
+
+CWD set to: "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_16.18.34"
+
+TEST INFO: 1 test(s), 150 case(s) in 13 suite(s)
+
+Testing lib.quod: Starting test, 150 test cases
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+growth_SUITE:policy_upgrade_live failed on line 95
+Reason: {assertMatch,[{module,...},{...}|...]}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 3 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+growth_SUITE:admit_refused_mid_catchup failed on line 113
+Reason: {assertMatch,[{module,...},{...}|...]}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 4 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+growth_SUITE:grow_to_two failed on line 121
+Reason: {test_case_failed,missing saved_config from the previous ordered case (chain broken)}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 5 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+growth_SUITE:grow_to_three failed on line 136
+Reason: {test_case_failed,missing saved_config from the previous ordered case (chain broken)}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 6 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+growth_SUITE:grow_to_four failed on line 150
+Reason: {test_case_failed,missing saved_config from the previous ordered case (chain broken)}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 7 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+growth_SUITE:rotation_sweep failed on line 165
+Reason: {test_case_failed,missing saved_config from the previous ordered case (chain broken)}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 8 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+growth_SUITE:byzantine_on_grown_committee failed on line 191
+Reason: {test_case_failed,missing saved_config from the previous ordered case (chain broken)}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 9 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+growth_SUITE:dead_member_removed failed on line 234
+Reason: {test_case_failed,missing saved_config from the previous ordered case (chain broken)}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 10 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+growth_SUITE:demote_to_observer failed on line 264
+Reason: {test_case_failed,missing saved_config from the previous ordered case (chain broken)}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 11 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+join_SUITE:joiner_promoted_to_voter failed on line 226
+Reason: {assertMatch,[{module,...},{...}|...]}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 14 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+join_SUITE:runtime_join_action_catches_up failed on line 296
+Reason: {badmatch,undefined}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 15 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+join_SUITE:self_seeded_joiner_catches_up failed on line 268
+Reason: {badmatch,undefined}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 16 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+quod_agent_failover_SUITE:exercise_host_loss failed on line 240
+Reason: {assertMatch,[{module,...},{...}|...]}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 17 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+quod_agent_failover_SUITE:exercise_host_loss failed on line 240
+Reason: {assertMatch,[{module,...},{...}|...]}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 18 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+quod_agent_failover_SUITE:exercise_host_loss failed on line 240
+Reason: {assertMatch,[{module,...},{...}|...]}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 19 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+quod_ask_SUITE:'-remote_signed_transaction_savepoints/1-fun-5-' failed on line 403
+Reason: {assertMatch,[{module,...},{...}|...]}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 22 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+quod_ask_SUITE:'-cut_findall_signed_multiscope_savepoints/1-fun-6-' failed on line 449
+Reason: {assertMatch,[{module,...},{...}|...]}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 25 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+quod_ask_SUITE:remote_native_read_uses_selected_observer failed on line 753
+Reason: {assertMatch,[{module,...},{...}|...]}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 27 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+quod_ask_SUITE:remote_scope_symbol_safety failed on line 1181
+Reason: {assertMatch,[{module,...},{...}|...]}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 33 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+quod_ask_SUITE:remote_scope_failure_reasons failed on line 1275
+Reason: {assertMatch,[{module,...},{...}|...]}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 36 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+quod_ask_SUITE:remote_scope_nested_failure_reasons failed on line 1285
+Reason: {assertMatch,[{module,...},{...}|...]}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 37 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+quod_ask_SUITE:remote_scope_deep_failure_reasons failed on line 1303
+Reason: {assert,[{module,...},{...}|...]}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 38 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+quod_ask_SUITE:remote_scope_structural_reason_depth failed on line 1338
+Reason: {assertEqual,[{module,...},{...}|...]}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 39 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+quod_ask_SUITE:remote_independent_root_effect failed on line 1945
+Reason: {test_case_failed,{not_ready,<<"ct:s8-effect-418">>,{error,no_such_namespace}}}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 53 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+quod_ask_SUITE:independent_action_remote_prepared_rollback failed on line 1925
+Reason: {assertEqual,[{module,...},{...}|...]}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 54 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+quod_ask_SUITE:'-remote_independent_branch_provenance/1-fun-8-' failed on line 2091
+Reason: {assertMatch,[{module,...},{...}|...]}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 56 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+quod_ask_SUITE:remote_independent_nesting_and_auth failed on line 2113
+Reason: {assertMatch,[{module,...},{...}|...]}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 57 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+quod_ask_SUITE:remote_signed_gateway_group_with_root_effect failed on line 2386
+Reason: {test_case_failed,{effect_state_timeout,<<"ct:remote-effect-898">>,
+                      {group,<<"pets">>,
+                          <<80,163,77,250,58,118,203,252,109,216,203,191,34,27,
+                            56,164,198,5,192,140,236,143,112,221,190,14,194,90,
+                            116,253,9,107>>,
+                          <<51,14,149,107,34,147,31,211,230,116,122,98,164,93,
+                            96,44,41,152,167,30,150,161,175,222,8,227,34,67,
+                            255,237,55,185>>,
+                          <<137,84,80,90,147,146,32,27,79,170,145,20,186,12,38,
+                            241,40,103,104,152,18,26,165,221,5,102,247,23,95,
+                            228,103,45>>,
+                          <<95,224,243,35,117,36,60,241,232,104,251,10,141,
+                            239,142,136,237,41,254,74,208,219,182,123,119,115,
+                            170,78,4,35,151,179>>},
+                      applied}}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 61 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+gen_server:call failed on line 1301
+Reason: {timeout,{gen_server,call,...}}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 67 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+quod_names_SUITE:cohosted_draw_labels_an_agent failed on line 127
+Reason: {assertMatch,[{module,...},{...}|...]}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 69 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+quod_names_SUITE:public_queries_open_mutation_refused failed on line 198
+Reason: {assertMatch,[{module,...},{...}|...]}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 71 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+quod_names_SUITE:creator_narrows_the_policy failed on line 280
+Reason: {assertMatch,[{module,...},{...}|...]}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 72 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+quod_names_SUITE:backtracking_cut_and_savepoint failed on line 326
+Reason: {assertMatch,[{module,...},{...}|...]}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 73 of 150 ***
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+quod_ns_SUITE:t_admit_grows_committee failed on line 54
+Reason: {assertMatch,[{module,...},{...}|...]}
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Testing lib.quod: *** FAILED test case 77 of 150 ***
+Testing lib.quod: TEST COMPLETE, 116 ok, 34 failed of 150 test cases
+
+Updating /home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/logs/index.html ... done
+Updating /home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/logs/all_runs.html ... done

@@ -70,7 +70,7 @@ invalid_committed_limits_withdraw_and_resume_from_dependency_notices_test_() ->
         try
             %% Every malformed selection uses the real committed owner. A
             %% failed proof must not install its temporary override.
-            ?assertMatch({fail, _}, quod_prolog:execute(?ROOT,
+            ?assertMatch(fail, quod_prolog:execute(?ROOT,
                 {',', {set_effect_custody_limits, 1, 0}, fail})),
             settled(Observer),
             ?assertEqual({64, unlimited}, quod_effect_journal:limits()),

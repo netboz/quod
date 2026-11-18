@@ -1,0 +1,556 @@
+    PID COMMAND         %CPU %MEM
+2148649 python3         66.6  0.0
+2103548 chrome          10.7  0.4
+ 196464 chrome           9.7  0.7
+1618969 chrome           7.8  0.4
+   5163 chrome           5.4  0.8
+   1878 Hyprland         5.0  0.5
+1488420 chrome           4.7  0.6
+   5269 chrome           4.1  0.5
+   9122 nimbalyst        3.2  1.6
+  69709 qemu-system-x86  3.2  4.2
+2088695 chrome           2.7  0.4
+2144480 node-MainThread  2.7  1.1
+   8922 nimbalyst        1.8  0.3
+   8868 nimbalyst        1.7  0.7
+2080128 chrome           1.3  0.4
+   4347 steam            1.2  0.3
+2107408 codex            1.0  0.4
+2144475 nvim             0.9  0.0
+   5277 chrome           0.6  0.2
+   2060 Xwayland         0.5  0.1
+   1759 pipewire-pulse   0.5  0.0
+1172972 chrome           0.5  0.3
+   3172 code             0.4  0.2
+1182688 steamwebhelper   0.4  0.1
+1089521 chrome           0.4  0.2
+   3442 code             0.4  0.5
+1176213 chrome           0.3  0.4
+    498 nvidia-modeset/  0.3  0.0
+2082387 chrome           0.3  0.6
+   1757 pipewire         0.3  0.0
+1296883 vesktop.bin      0.2  0.2
+   3838 slack            0.2  0.3
+  95459 claude           0.2  0.2
+   3876 slack            0.2  0.6
+ 172495 chrome           0.2  0.7
+   6239 signal-desktop   0.2  0.2
+2083718 chrome           0.2  0.4
+ 963054 chrome           0.2  0.3
+ 182514 chrome           0.2  0.4
+2118821 chrome           0.2  0.3
+   7152 chrome           0.2  0.1
+1917613 chrome           0.2  0.3
+   4546 claude           0.1  0.2
+   3466 code             0.1  0.3
+    718 consul           0.1  0.0
+2147652 chrome           0.1  0.1
+  96937 code             0.1  0.1
+2143373 chrome           0.1  0.2
+1296944 vesktop.bin      0.1  0.4
+1297002 vesktop.bin      0.1  0.5
+    720 nomad            0.1  0.1
+   3135 code             0.1  0.2
+2102493 chrome           0.1  0.2
+ 583672 nautilus         0.1  0.3
+    719 dockerd          0.1  0.2
+   3538 code             0.1  0.2
+   6675 teams-for-linux  0.1  0.9
+1155803 chrome           0.0  0.6
+ 132752 chrome           0.0  0.6
+   1924 swaync           0.0  0.3
+ 196023 chrome           0.0  0.4
+   3326 code             0.0  0.3
+  69727 remote-viewer    0.0  0.1
+   2501 waybar           0.0  0.0
+   1335 nomad            0.0  0.1
+   4666 code             0.0  0.0
+2126902 chrome           0.0  0.2
+2117817 chrome           0.0  0.2
+   3485 slack            0.0  0.2
+   6291 signal-desktop   0.0  0.3
+2107717 codex-code-mode  0.0  0.0
+   1341 nomad            0.0  0.0
+     16 rcu_preempt      0.0  0.0
+   6546 teams-for-linux  0.0  0.2
+     75 kcompactd0       0.0  0.0
+2107520 npm exec @model  0.0  0.1
+2107519 npm exec @model  0.0  0.1
+   9608 elp              0.0  0.8
+   1470 traefik          0.0  0.0
+1488361 chrome           0.0  0.5
+     93 kswapd0          0.0  0.0
+2108106 kworker/u32:1-e  0.0  0.0
+   3518 codex            0.0  0.0
+    648 containerd       0.0  0.0
+ 303073 chrome           0.0  0.2
+   5657 udisksd          0.0  0.0
+   1900 nvidia-drm/time  0.0  0.0
+ 388749 chrome           0.0  0.3
+   6183 signal-desktop   0.0  0.1
+   3989 slack            0.0  0.0
+ 388591 chrome           0.0  0.2
+ 519123 chrome           0.0  0.2
+    303 systemd-resolve  0.0  0.0
+   3847 slack            0.0  0.0
+ 172887 chrome           0.0  0.2
+   6599 teams-for-linux  0.0  0.1
+1173689 chrome           0.0  0.2
+   5389 chrome           0.0  0.2
+1439387 chrome           0.0  0.2
+2134380 kworker/u32:3-e  0.0  0.0
+   3570 code             0.0  0.0
+2106527 kworker/1:2-mm_  0.0  0.0
+   5300 chrome           0.0  0.0
+2082412 chrome           0.0  0.2
+1330478 chrome           0.0  0.3
+   2228 upowerd          0.0  0.0
+2118826 kworker/0:1-mm_  0.0  0.0
+2107677 node-MainThread  0.0  0.1
+2107670 node-MainThread  0.0  0.1
+1437698 chrome           0.0  0.3
+1942455 chrome           0.0  0.2
+1182718 steamwebhelper   0.0  0.0
+   3569 code             0.0  0.1
+   1758 wireplumber      0.0  0.0
+2082511 chrome           0.0  0.2
+   2077 at-spi-bus-laun  0.0  0.0
+1296951 vesktop.bin      0.0  0.1
+  80434 nimbalyst        0.0  0.0
+   9368 nimbalyst        0.0  0.0
+   2151 qs               0.0  0.1
+ 974351 chrome           0.0  0.3
+2119489 kworker/2:2-ino  0.0  0.0
+1858886 kworker/3:1-rcu  0.0  0.0
+ 974376 chrome           0.0  0.2
+   9211 codex            0.0  0.0
+    490 jbd2/nvme0n1p1-  0.0  0.0
+ 590197 kworker/6:1-mm_  0.0  0.0
+ 827040 kworker/7:1-mm_  0.0  0.0
+ 132764 chrome           0.0  0.2
+2144837 kworker/u32:2-e  0.0  0.0
+   6603 teams-for-linux  0.0  0.0
+   8872 Nimbalyst-Linux  0.0  0.0
+   3416 code             0.0  0.1
+   5321 nvidia-drm/time  0.0  0.0
+2093225 kworker/5:1-eve  0.0  0.0
+1926335 kworker/2:1-eve  0.0  0.0
+ 542256 chrome           0.0  0.2
+2108123 kworker/4:2-mm_  0.0  0.0
+2101189 kworker/u32:0-e  0.0  0.0
+   1756 dbus-broker      0.0  0.0
+   3178 code             0.0  0.0
+2090082 kworker/u32:5-e  0.0  0.0
+2131409 kworker/3:0-mm_  0.0  0.0
+    541 dbus-broker      0.0  0.0
+   1477 cephcsi          0.0  0.0
+ 465526 nimbalyst        0.0  0.1
+   5240 chrome           0.0  0.0
+     77 khugepaged       0.0  0.0
+   9173 nimbalyst        0.0  0.0
+   1431 containerd-shim  0.0  0.0
+   9038 nvidia-drm/time  0.0  0.0
+   1963 qs               0.0  0.2
+    872 docker-driver    0.0  0.0
+2140378 kworker/0:2-rcu  0.0  0.0
+1297132 sd_dummy         0.0  0.0
+    846 containerd-shim  0.0  0.0
+   5551 p11-kit-remote   0.0  0.0
+   1415 containerd-shim  0.0  0.0
+   1557 nomad            0.0  0.1
+2138999 chrome           0.0  0.1
+    268 systemd-journal  0.0  0.0
+   1512 nomad            0.0  0.1
+   1949 xdg-desktop-por  0.0  0.0
+  69493 kitty            0.0  0.2
+   4766 code             0.0  0.1
+     51 ksoftirqd/5      0.0  0.0
+    446 nv_mem_pool_scr  0.0  0.0
+1182747 steamwebhelper   0.0  0.1
+   9150 nimbalyst        0.0  0.0
+    542 earlyoom         0.0  0.0
+   9327 nimbalyst        0.0  0.0
+2107521 github-mcp-serv  0.0  0.0
+    632 sshd             0.0  0.0
+   9256 nimbalyst        0.0  0.0
+   3465 code             0.0  0.0
+   4038 code             0.0  0.0
+      1 systemd          0.0  0.0
+   8929 nimbalyst        0.0  0.0
+    543 NetworkManager   0.0  0.0
+1297103 vesktop.bin      0.0  0.0
+  69522 kitten           0.0  0.0
+  69519 kitten           0.0  0.0
+ 252397 signal-desktop   0.0  0.0
+   6780 teams-for-linux  0.0  0.0
+   6248 signal-desktop   0.0  0.0
+   1785 polkitd          0.0  0.0
+  95469 github-mcp-serv  0.0  0.0
+   1926 hypridle         0.0  0.0
+   4855 github-mcp-serv  0.0  0.0
+    547 systemd-logind   0.0  0.0
+ 583822 python3          0.0  0.0
+    721 nomad-sleep-mon  0.0  0.0
+   2135 gvfsd-metadata   0.0  0.0
+   6554 teams-for-linux  0.0  0.0
+ 583689 gvfs-afc-volume  0.0  0.0
+    494 jbd2/sdb1-8      0.0  0.0
+1182716 steamwebhelper   0.0  0.2
+ 583812 gvfsd-wsdd       0.0  0.0
+   4915 node-MainThread  0.0  0.0
+    311 systemd-network  0.0  0.0
+  95574 node-MainThread  0.0  0.0
+    644 Xorg             0.0  0.0
+  95580 node-MainThread  0.0  0.0
+   5141 accounts-daemon  0.0  0.0
+   4922 node-MainThread  0.0  0.0
+     39 ksoftirqd/3      0.0  0.0
+   1952 xdg-desktop-por  0.0  0.0
+    188 kworker/4:1H-kb  0.0  0.0
+   2087 at-spi2-registr  0.0  0.0
+   2114 xdg-desktop-por  0.0  0.0
+    492 jbd2/sdc1-8      0.0  0.0
+   1709 systemd          0.0  0.0
+   2084 dbus-broker      0.0  0.0
+   2031 xdg-desktop-por  0.0  0.0
+    128 kworker/5:1H-kb  0.0  0.0
+ 583725 goa-identity-se  0.0  0.0
+  95472 npm exec @model  0.0  0.0
+1297118 speech-dispatch  0.0  0.0
+ 984698 beam.smp         0.0  0.1
+   1960 nm-applet        0.0  0.0
+  95470 npm exec @model  0.0  0.0
+   4856 npm exec @model  0.0  0.0
+   4858 npm exec @model  0.0  0.0
+     45 ksoftirqd/4      0.0  0.0
+     27 ksoftirqd/1      0.0  0.0
+   3324 nvidia-drm/time  0.0  0.0
+     33 ksoftirqd/2      0.0  0.0
+     15 ksoftirqd/0      0.0  0.0
+    129 kworker/7:1H-kb  0.0  0.0
+   1762 gnome-keyring-d  0.0  0.0
+    214 kworker/6:1H-kb  0.0  0.0
+     71 khungtaskd       0.0  0.0
+    259 psimon           0.0  0.0
+    126 kworker/2:1H-kb  0.0  0.0
+     63 ksoftirqd/7      0.0  0.0
+    229 kworker/0:1H-kb  0.0  0.0
+    201 kworker/1:1H-kb  0.0  0.0
+ 583683 gvfs-udisks2-vo  0.0  0.0
+     57 ksoftirqd/6      0.0  0.0
+    127 kworker/3:1H-kb  0.0  0.0
+   4830 code             0.0  0.0
+ 228786 epmd             0.0  0.0
+   1774 rtkit-daemon     0.0  0.0
+    307 systemd-udevd    0.0  0.0
+ 583805 gvfsd-dnssd      0.0  0.0
+1182719 steamwebhelper   0.0  0.0
+   5404 chrome           0.0  0.0
+   1921 polkit-gnome-au  0.0  0.0
+    294 systemd-userdbd  0.0  0.0
+   4208 x86_64-linux-gn  0.0  0.0
+   5159 xdg-dbus-proxy   0.0  0.0
+   5174 flatpak-portal   0.0  0.0
+   4576 pet              0.0  0.0
+   2021 xdg-document-po  0.0  0.0
+   6904 teams-for-linux  0.0  0.0
+    513 systemd-timesyn  0.0  0.0
+   6628 teams-for-linux  0.0  0.0
+   2149 qs               0.0  0.0
+   4213 srt-bwrap        0.0  0.0
+   5150 flatpak-session  0.0  0.0
+   6179 xdg-dbus-proxy   0.0  0.0
+   4155 srt-logger       0.0  0.0
+    765 cifsd            0.0  0.0
+1297001 p11-kit-remote   0.0  0.0
+   3874 nvidia-drm/time  0.0  0.0
+   4172 steam            0.0  0.0
+     56 migration/6      0.0  0.0
+     62 migration/7      0.0  0.0
+     26 migration/1      0.0  0.0
+     32 migration/2      0.0  0.0
+     38 migration/3      0.0  0.0
+     44 migration/4      0.0  0.0
+     50 migration/5      0.0  0.0
+ 583727 gvfsd-trash      0.0  0.0
+     20 migration/0      0.0  0.0
+    474 irq/136-nvidia   0.0  0.0
+     19 rcu_exp_gp_kthr  0.0  0.0
+1296867 bwrap            0.0  0.0
+1182697 steamwebhelper   0.0  0.0
+   2074 nvidia-drm/time  0.0  0.0
+   1542 docker-proxy     0.0  0.0
+   1526 docker-proxy     0.0  0.0
+ 583709 goa-daemon       0.0  0.0
+   2004 xdg-permission-  0.0  0.0
+   1928 wl-paste         0.0  0.0
+    635 sddm             0.0  0.0
+    209 jbd2/sda2-8      0.0  0.0
+      2 kthreadd         0.0  0.0
+1296908 vesktop.bin      0.0  0.0
+1296897 bwrap            0.0  0.0
+1296890 vesktop.bin      0.0  0.0
+1296878 xdg-dbus-proxy   0.0  0.0
+1209694 bash             0.0  0.0
+1182694 steamwebhelper   0.0  0.0
+1182695 steamwebhelper   0.0  0.0
+   9060 nimbalyst        0.0  0.0
+   8892 nimbalyst        0.0  0.0
+   6312 nvidia-drm/time  0.0  0.0
+   5137 bwrap            0.0  0.0
+   2215 power-profiles-  0.0  0.0
+   1917 awww-daemon      0.0  0.0
+    544 bluetoothd       0.0  0.0
+    540 dbus-broker-lau  0.0  0.0
+ 583798 gvfsd-network    0.0  0.0
+ 583700 gvfs-mtp-volume  0.0  0.0
+ 146594 bwrap            0.0  0.0
+  76297 nvidia-drm/time  0.0  0.0
+   8891 nimbalyst        0.0  0.0
+   6552 teams-for-linux  0.0  0.0
+   6551 teams-for-linux  0.0  0.0
+   6209 signal-desktop   0.0  0.0
+   6190 signal-desktop   0.0  0.0
+   6197 bwrap            0.0  0.0
+   6169 bwrap            0.0  0.0
+   5202 bwrap            0.0  0.0
+   5196 chrome           0.0  0.0
+   3495 slack            0.0  0.0
+   3496 slack            0.0  0.0
+   3138 code             0.0  0.0
+   3139 code             0.0  0.0
+   2626 swaync-client    0.0  0.0
+   2596 swaync-client    0.0  0.0
+   2537 swaync-client    0.0  0.0
+   2419 swaync-client    0.0  0.0
+   2036 gvfsd            0.0  0.0
+   1908 dconf-service    0.0  0.0
+   1703 sddm-helper      0.0  0.0
+     96 scsi_eh_0        0.0  0.0
+    107 scsi_eh_5        0.0  0.0
+      3 pool_workqueue_  0.0  0.0
+      4 kworker/R-rcu_g  0.0  0.0
+      5 kworker/R-sync_  0.0  0.0
+      6 kworker/R-kvfre  0.0  0.0
+      7 kworker/R-slub_  0.0  0.0
+      8 kworker/R-netns  0.0  0.0
+     11 kworker/0:0H-kb  0.0  0.0
+     13 kworker/R-mm_pe  0.0  0.0
+     17 rcub/0           0.0  0.0
+     18 rcu_exp_par_gp_  0.0  0.0
+     21 kprobe-optimize  0.0  0.0
+     22 idle_inject/0    0.0  0.0
+     23 cpuhp/0          0.0  0.0
+     24 cpuhp/1          0.0  0.0
+     25 idle_inject/1    0.0  0.0
+     29 kworker/1:0H-kb  0.0  0.0
+     30 cpuhp/2          0.0  0.0
+     31 idle_inject/2    0.0  0.0
+     35 kworker/2:0H-kb  0.0  0.0
+     36 cpuhp/3          0.0  0.0
+     37 idle_inject/3    0.0  0.0
+     41 kworker/3:0H-kb  0.0  0.0
+     42 cpuhp/4          0.0  0.0
+     43 idle_inject/4    0.0  0.0
+     47 kworker/4:0H-kb  0.0  0.0
+     48 cpuhp/5          0.0  0.0
+     49 idle_inject/5    0.0  0.0
+     53 kworker/5:0H-kb  0.0  0.0
+     54 cpuhp/6          0.0  0.0
+     55 idle_inject/6    0.0  0.0
+     59 kworker/6:0H-kb  0.0  0.0
+     60 cpuhp/7          0.0  0.0
+     61 idle_inject/7    0.0  0.0
+     65 kworker/7:0H-kb  0.0  0.0
+     66 kdevtmpfs        0.0  0.0
+     67 kworker/R-inet_  0.0  0.0
+     68 rcu_tasks_kthre  0.0  0.0
+     69 rcu_tasks_rude_  0.0  0.0
+     70 kauditd          0.0  0.0
+     72 oom_reaper       0.0  0.0
+     74 kworker/R-write  0.0  0.0
+     76 ksmd             0.0  0.0
+     78 kworker/R-kbloc  0.0  0.0
+     79 kworker/R-blkcg  0.0  0.0
+     80 kworker/R-kinte  0.0  0.0
+     81 irq/9-acpi       0.0  0.0
+     85 kworker/R-tpm_d  0.0  0.0
+     86 kworker/R-ata_s  0.0  0.0
+     87 kworker/R-edac-  0.0  0.0
+     88 kworker/R-devfr  0.0  0.0
+     89 watchdogd        0.0  0.0
+     90 kworker/R-quota  0.0  0.0
+     94 kworker/R-kthro  0.0  0.0
+     95 kworker/R-acpi_  0.0  0.0
+     97 kworker/R-scsi_  0.0  0.0
+     99 scsi_eh_1        0.0  0.0
+    100 kworker/R-scsi_  0.0  0.0
+    101 scsi_eh_2        0.0  0.0
+    102 kworker/R-scsi_  0.0  0.0
+    103 scsi_eh_3        0.0  0.0
+    104 kworker/R-scsi_  0.0  0.0
+    105 scsi_eh_4        0.0  0.0
+    106 kworker/R-scsi_  0.0  0.0
+    108 kworker/R-scsi_  0.0  0.0
+    117 kworker/R-mld    0.0  0.0
+    118 kworker/R-ipv6_  0.0  0.0
+    119 kworker/R-kstrp  0.0  0.0
+    124 kworker/u33:0-h  0.0  0.0
+    193 kworker/R-nvme-  0.0  0.0
+    194 kworker/R-nvme-  0.0  0.0
+    195 kworker/R-nvme-  0.0  0.0
+    196 kworker/R-nvme-  0.0  0.0
+    210 kworker/R-ext4-  0.0  0.0
+    281 kworker/R-nbd0-  0.0  0.0
+    299 psimon           0.0  0.0
+    309 psimon           0.0  0.0
+    369 kworker/R-cfg80  0.0  0.0
+    413 kworker/u33:2-h  0.0  0.0
+    420 irq/133-mei_me   0.0  0.0
+    445 nv_queue         0.0  0.0
+    447 nv_mem_pool_scr  0.0  0.0
+    448 nv_mem_pool_scr  0.0  0.0
+    449 nv_queue         0.0  0.0
+    451 nv_open_q        0.0  0.0
+    475 nvidia           0.0  0.0
+    476 nv_queue         0.0  0.0
+    491 kworker/R-ext4-  0.0  0.0
+    493 kworker/R-ext4-  0.0  0.0
+    497 kworker/R-ext4-  0.0  0.0
+    499 nvidia-modeset/  0.0  0.0
+    598 UVM global queu  0.0  0.0
+    599 UVM deferred re  0.0  0.0
+    600 UVM Tools Event  0.0  0.0
+    675 nvidia-drm/time  0.0  0.0
+    736 kworker/R-ib-co  0.0  0.0
+    737 kworker/R-ib-co  0.0  0.0
+    738 kworker/R-ib_mc  0.0  0.0
+    739 kworker/R-ib_nl  0.0  0.0
+    740 kworker/R-iw_cm  0.0  0.0
+    741 kworker/R-rdma_  0.0  0.0
+    747 kworker/R-smbdi  0.0  0.0
+    756 kworker/R-cifsi  0.0  0.0
+    757 kworker/R-smb3d  0.0  0.0
+    758 kworker/R-cifsf  0.0  0.0
+    759 kworker/R-cifso  0.0  0.0
+    760 kworker/R-defer  0.0  0.0
+    761 kworker/R-serve  0.0  0.0
+    762 kworker/R-cfid_  0.0  0.0
+    763 kworker/R-cifs-  0.0  0.0
+   1593 kworker/R-ceph-  0.0  0.0
+   1594 kworker/R-rbd    0.0  0.0
+   1711 (sd-pam)         0.0  0.0
+   1755 dbus-broker-lau  0.0  0.0
+   1761 ydotoold         0.0  0.0
+   1778 start-hyprland   0.0  0.0
+   1897 krfcommd         0.0  0.0
+   1970 bash             0.0  0.0
+   1998 inotifywait      0.0  0.0
+   1999 bash             0.0  0.0
+   2027 fusermount3      0.0  0.0
+   2049 gvfsd-fuse       0.0  0.0
+   2083 dbus-broker-lau  0.0  0.0
+   2445 nvidia-drm/time  0.0  0.0
+   3141 code             0.0  0.0
+   3156 chrome_crashpad  0.0  0.0
+   3343 vidmem lazy fre  0.0  0.0
+   3344 UVM GPU1 BH      0.0  0.0
+   3345 UVM GPU1 KC      0.0  0.0
+   3356 nvidia-drm/time  0.0  0.0
+   3359 nvidia-drm/time  0.0  0.0
+   3362 nvidia-drm/time  0.0  0.0
+   3506 slack            0.0  0.0
+   3684 dconf            0.0  0.0
+   3754 chrome_crashpad  0.0  0.0
+   3884 slack            0.0  0.0
+   3892 nvidia-drm/time  0.0  0.0
+   3897 nvidia-drm/time  0.0  0.0
+   3900 nvidia-drm/time  0.0  0.0
+   4136 bash             0.0  0.0
+   4197 srt-client-cont  0.0  0.0
+   4301 pv-adverb        0.0  0.0
+   4416 nvidia-drm/time  0.0  0.0
+   4687 bash             0.0  0.0
+   5155 p11-kit-server   0.0  0.0
+   5158 bwrap            0.0  0.0
+   5162 bwrap            0.0  0.0
+   5189 chrome_crashpad  0.0  0.0
+   5191 chrome_crashpad  0.0  0.0
+   5198 zypak-sandbox <  0.0  0.0
+   5200 cat              0.0  0.0
+   5201 cat              0.0  0.0
+   5239 bwrap            0.0  0.0
+   5413 nvidia-drm/time  0.0  0.0
+   5421 nvidia-drm/time  0.0  0.0
+   5425 nvidia-drm/time  0.0  0.0
+   5740 nvidia-drm/time  0.0  0.0
+   6178 bwrap            0.0  0.0
+   6182 bwrap            0.0  0.0
+   6192 zypak-sandbox <  0.0  0.0
+   6194 cat              0.0  0.0
+   6195 cat              0.0  0.0
+   6208 bwrap            0.0  0.0
+   6313 signal-desktop   0.0  0.0
+   6320 nvidia-drm/time  0.0  0.0
+   6323 nvidia-drm/time  0.0  0.0
+   6326 nvidia-drm/time  0.0  0.0
+   6602 teams-for-linux  0.0  0.0
+   8894 nimbalyst        0.0  0.0
+   9069 nvidia-drm/time  0.0  0.0
+   9072 nvidia-drm/time  0.0  0.0
+   9076 nvidia-drm/time  0.0  0.0
+  69492 sh               0.0  0.0
+  69518 nvidia-drm/time  0.0  0.0
+  69521 bash             0.0  0.0
+  69722 kvm-pit/69709    0.0  0.0
+  76291 nvidia-drm/time  0.0  0.0
+  76294 nvidia-drm/time  0.0  0.0
+ 146587 flatpak-spawn    0.0  0.0
+ 146602 bwrap            0.0  0.0
+ 146603 glycin-image-rs  0.0  0.0
+ 583695 gvfs-gphoto2-vo  0.0  0.0
+ 583705 gvfs-goa-volume  0.0  0.0
+ 583753 nvidia-drm/time  0.0  0.0
+ 583756 nvidia-drm/time  0.0  0.0
+ 583759 nvidia-drm/time  0.0  0.0
+ 583781 gvfsd-recent     0.0  0.0
+ 583867 bwrap            0.0  0.0
+ 583868 bwrap            0.0  0.0
+ 583869 glycin-image-rs  0.0  0.0
+ 984713 erl_child_setup  0.0  0.0
+1182756 nvidia-drm/time  0.0  0.0
+1182757 steamwebhelper   0.0  0.0
+1296875 bwrap            0.0  0.0
+1296881 bwrap            0.0  0.0
+1296882 bash             0.0  0.0
+1296892 zypak-sandbox <  0.0  0.0
+1296894 cat              0.0  0.0
+1296895 cat              0.0  0.0
+1296907 bwrap            0.0  0.0
+1297038 nvidia-drm/time  0.0  0.0
+1297045 nvidia-drm/time  0.0  0.0
+1297048 nvidia-drm/time  0.0  0.0
+1297051 nvidia-drm/time  0.0  0.0
+1297128 sd_festival <de  0.0  0.0
+1297129 sd_espeak-ng-mb  0.0  0.0
+1297131 sd_espeak-ng     0.0  0.0
+1297135 sd_openjtalk <d  0.0  0.0
+1297136 sd_espeak-ng     0.0  0.0
+2129863 kworker/0:0-rcu  0.0  0.0
+2130820 kworker/6:2-eve  0.0  0.0
+2134145 kworker/5:0-eve  0.0  0.0
+2137914 kworker/7:0-mm_  0.0  0.0
+2138274 kworker/1:1-cgr  0.0  0.0
+2138479 kworker/4:0-eve  0.0  0.0
+2140142 systemd-userwor  0.0  0.0
+2141085 kworker/2:0-ino  0.0  0.0
+2142481 systemd-userwor  0.0  0.0
+2143589 kworker/3:2      0.0  0.0
+2144469 nvim             0.0  0.0
+2145384 wl-copy          0.0  0.0
+2146234 kworker/2:3      0.0  0.0
+2146417 kworker/6:0      0.0  0.0
+2146768 kworker/5:2      0.0  0.0
+2147185 sleep            0.0  0.0
+2147553 systemd-userwor  0.0  0.0
+2148650 ps               0.0  0.0

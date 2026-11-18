@@ -411,8 +411,42 @@ atom naming the refused operation or resource in domain words. `Detail` is
 the smallest term that lets the caller act: an identifier, an expected value,
 or a sub-reason atom. Do not put internal state, process names, stack traces
 or raw Erlang error terms in a reason. Record one explicit reason per refusal.
-The engine also retains failed predicate calls as diagnostic boundaries;
-these describe the path and do not replace the explicit refusal reason.
+
+The engine records only explicitly stated refusal reasons. An ordinary
+failed predicate call adds nothing, including when a previously successful
+call is exhausted by backtracking. `fail_with_reason(Reason)` resolves and
+checks one ground portable term, records it, and fails through ordinary
+Prolog backtracking. A non-ground reason raises an instantiation error; a
+non-portable reason raises a failure-reason domain error. `get_fail_reasons(Reasons)`
+unifies `Reasons` with the complete list, newest first, without adding or
+clearing anything. The engine's existing reserved `fail_reasons_truncated`
+atom remains a marker recorded at most once; domain code must not use it as
+an ordinary refusal reason. Explicit reasons survive failed alternatives, transaction
+rollback, negation, collectors and cut; they can remain in a proof that later
+succeeds. A fresh proof starts with an empty list. Quod uses native reason
+admission with no size, count or depth limit on reasons; existing request,
+runtime and encoding constraints remain separate. A proof that states no
+reason may fail with an empty list.
+
+Ordinary proof failure closes the proof without sealing its staged writes.
+A refused atomic Vote is a different result: commit validation supplies its
+deterministic reason after a successful proof has sealed its plans. Refused
+Votes, abort resolutions and their terminal outcomes still require a non-empty
+list. They do not depend on automatic failed-call entries.
+
+Policy may inspect `get_fail_reasons/1`, so automatic and explicit-only reason
+semantics must not be mixed among validators in an active fleet. Recovery
+revalidates recorded authorization at historical parents. Retaining existing
+histories across this change requires offline replay of those actual certified
+histories, including foreign projections, against the candidate. A refound
+requires separate authorization; this change grants no history rewrite or
+store deletion.
+
+The [baseline experiment](evidence/failure-reasons-20261118/report.md) and
+[implementation validation](evidence/failure-reasons-implementation-20261118/report.md)
+retain the semantic, lifecycle and scene-cost evidence for this contract.
+The [published-pin checks](evidence/failure-reasons-implementation-20261118/pinned/report.md)
+verify the committed engine dependency without a development checkout override.
 
 ### Owner replies
 

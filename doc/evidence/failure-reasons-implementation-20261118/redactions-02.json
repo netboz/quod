@@ -1,0 +1,12 @@
+{
+  "reason": "quoted-binary private key found by final scan",
+  "representation_checks": 6,
+  "changes": [
+    {
+      "path": "combined-eunit-02.log",
+      "private_key_octet_strings": 1,
+      "original_sha256": "f674aafcd836473a324f58ad422621caed082a7f3987d9b74974691a089516ba",
+      "redacted_sha256": "a1916cc8ab68efcfab95b0fe9f126ef6b11a5354a1cafa1c1212fc21fdac7f43"
+    }
+  ]
+}

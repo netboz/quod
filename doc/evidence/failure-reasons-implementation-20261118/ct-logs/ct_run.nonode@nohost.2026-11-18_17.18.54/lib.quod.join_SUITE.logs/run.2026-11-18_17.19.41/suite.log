@@ -1,0 +1,109 @@
+=== Suite started at 2026-11-18 17:19:41
+=== Starting test, 5 test cases
+=cases         5
+=user          yan
+=host          nohost
+=hosts         nohost 
+=emulator_vsn  16.0.2
+=emulator      beam
+=otp_release   28
+=started       2026-11-18 17:19:41
+=case          join_SUITE:init_per_suite
+=logfile       join_suite.init_per_suite.html
+=started       2026-11-18 17:19:41
+=ended         2026-11-18 17:19:44
+=result        ok
+=elapsed       2.210772s
+=case          join_SUITE:joiner_catches_up
+=logfile       join_suite.joiner_catches_up.html
+=started       2026-11-18 17:19:44
+=ended         2026-11-18 17:19:44
+=result        ok
+=elapsed       0.302786s
+=case          join_SUITE:joiner_resumes_after_restart
+=logfile       join_suite.joiner_resumes_after_restart.html
+=started       2026-11-18 17:19:44
+=ended         2026-11-18 17:19:46
+=result        ok
+=elapsed       2.365735s
+=case          join_SUITE:joiner_promoted_to_voter
+=logfile       join_suite.joiner_promoted_to_voter.html
+=started       2026-11-18 17:19:46
+=ended         2026-11-18 17:19:50
+=result        ok
+=elapsed       3.257372s
+=case          join_SUITE:runtime_join_action_catches_up
+=logfile       join_suite.runtime_join_action_catches_up.html
+=started       2026-11-18 17:19:50
+=ended         2026-11-18 17:19:51
+=result        failed: {{assertMatch,
+                            [{module,join_SUITE},
+                             {line,386},
+                             {expression,
+                                 "peer : call ( ActionNode , quod_prolog , execute , [ NodeNs , WrongAction ] )"},
+                             {pattern,"{ fail , [ _ | _ ] }"},
+                             {value,fail}]},
+                        [{join_SUITE,runtime_join_action_catches_up,1,
+                             [{file,"/home/yan/src/quod/test/join_SUITE.erl"},
+                              {line,386}]},
+                         {test_server,ts_tc,3,
+                             [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                             [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                             [{file,"test_server.erl"},{line,1237}]}]}, [{join_SUITE,
+                                                                          runtime_join_action_catches_up,
+                                                                          386},
+                                                                         {test_server,
+                                                                          ts_tc,
+                                                                          1796},
+                                                                         {test_server,
+                                                                          run_test_case_eval1,
+                                                                          1305},
+                                                                         {test_server,
+                                                                          run_test_case_eval,
+                                                                          1237}]
+=elapsed       1.677767s
+=== *** FAILED test case 4 of 5 ***
+=case          join_SUITE:self_seeded_joiner_catches_up
+=logfile       join_suite.self_seeded_joiner_catches_up.html
+=started       2026-11-18 17:19:51
+=ended         2026-11-18 17:19:51
+=result        failed: {{badmatch,undefined},
+                        [{join_SUITE,self_seeded_joiner_catches_up,1,
+                             [{file,"/home/yan/src/quod/test/join_SUITE.erl"},
+                              {line,268}]},
+                         {test_server,ts_tc,3,
+                             [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                             [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                             [{file,"test_server.erl"},{line,1237}]}]}, [{join_SUITE,
+                                                                          self_seeded_joiner_catches_up,
+                                                                          268},
+                                                                         {test_server,
+                                                                          ts_tc,
+                                                                          1796},
+                                                                         {test_server,
+                                                                          run_test_case_eval1,
+                                                                          1305},
+                                                                         {test_server,
+                                                                          run_test_case_eval,
+                                                                          1237}]
+=elapsed       0.000023s
+=== *** FAILED test case 5 of 5 ***
+=case          join_SUITE:end_per_suite
+=logfile       join_suite.end_per_suite.html
+=started       2026-11-18 17:19:51
+=ended         2026-11-18 17:19:51
+=result        ok
+=elapsed       0.000006s
+=group_time    9.955s
+=== TEST COMPLETE, 3 ok, 2 failed of 5 test cases
+
+=finished      2026-11-18 17:19:51
+=failed        2
+=successful    3
+=user_skipped  0
+=auto_skipped  0
+=elapsed_time  9990527

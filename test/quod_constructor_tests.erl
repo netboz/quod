@@ -370,9 +370,9 @@ signed_qualified_class() ->
             {attribute, {'I'}, name, <<"Vehicle">>},
             {attribute, {'I'}, wheels, 4}, {attribute, {'I'}, flag, good}])),
         ?assertMatch({ok, [_], _}, quod_lobby_tests:read(Ctx, Query)),
-        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx,
+        ?assertMatch(fail, quod_lobby_tests:read(Ctx,
             Ask(Owner, {attribute, {'_'}, flag, good}))),
-        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx, Ask(Store,
+        ?assertMatch(fail, quod_lobby_tests:read(Ctx, Ask(Store,
             {',', {created, {'I'}}, {operation_authorized, {instance, {'I'}}, place}}))),
         lists:foreach(fun(Goal) ->
             ?assertMatch({ok, _, {normalized, {failed, _}}},
@@ -383,7 +383,7 @@ signed_qualified_class() ->
         ?assertMatch({ok, _, {normalized, {error, proof_unavailable}}},
             quod_lobby_tests:submit(Ctx, execute, Ask(Store,
                 {assert, {instance_of, Class(mutating_default), {'_'}}}))),
-        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx, Ask(Owner, leaked))),
+        ?assertMatch(fail, quod_lobby_tests:read(Ctx, Ask(Owner, leaked))),
         %% Invalid owner order remains invalid after qualifying its parent names.
         commit(Ctx, Ask(Owner, conj([
             {retract, {constructor_order, amphibious, [car, boat]}},
@@ -458,7 +458,7 @@ signed_owner() ->
                         {attribute, existing_id, wheels, 4}])))),
         ?assertMatch({ok, _, {normalized, {failed, _}}}, quod_lobby_tests:submit(Ctx,
             execute, Scope({transaction, {test_initialize, failing_child, refused}}))),
-        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx,
+        ?assertMatch(fail, quod_lobby_tests:read(Ctx,
             Scope({attribute, refused, {'_'}, {'_'}})))
     after quod_lobby_tests:stop_process(Sup), quod_lobby_tests:stop(Ctx) end.
 

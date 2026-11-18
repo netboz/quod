@@ -23,7 +23,7 @@ icon_bytes_are_public_signed_facts_test_() ->
         ?assertMatch({ok,_,{normalized,{failed,_}}},quod_client_goal_ingress:submit(Request,Signature)),
         {BadRead,BadSignature} = quod_personal_agent_tests:request(C,read,
             {'::',Gui,{gui_asset,Digest,<<"image/jpeg">>,{'Bytes'}}}),
-        ?assertMatch({ok,_,{normalized,{read,_,{failed,_}}}},quod_client_goal_ingress:submit(BadRead,BadSignature))
+        ?assertMatch({ok,_,{normalized,{read,_,fail}}},quod_client_goal_ingress:submit(BadRead,BadSignature))
     end) end}.
 
 release_terms_use_the_existing_signed_edit_gate_test_() ->
@@ -161,7 +161,8 @@ interior_walls_use_the_shared_extent_test_() ->
         %% Walls need a finite size: an infinite space keeps its choice and
         %% draws none.
         executed(C,space({space_represent,ref(Ns,closed),solid,T,none,solid,T,matrix})),
-        applied(Ns,fun() -> element(1,quod_prolog:prove_ro(Ns,{attribute,closed,interior,matrix})) =:= ok end),
+        applied(Ns,fun() -> case quod_prolog:prove_ro(Ns,{attribute,closed,interior,matrix}) of
+            {ok,[_],_} -> true; fail -> false end end),
         ?assertEqual([],boundary(C,Ns,A,closed))
     end) end}.
 
@@ -258,7 +259,7 @@ executed(C,Goal) ->
     ?assertMatch({ok,_,{normalized,{committed,_,_}}},Result),
     {ok,Evidence,_} = Result, Op = quod_client_goal:operation_ref(Evidence),
     ?assertMatch(#{operation_state:=terminal},quod_ct:await_operation_complete(element(2,Op),Op,10000)).
-fails(Ns,Goal) -> ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,Goal)).
+fails(Ns,Goal) -> ?assertMatch(fail,quod_prolog:prove_ro(Ns,Goal)).
 %% A committed change becomes readable when the owner's projection advances;
 %% recheck on those notices only, never on a timer.
 applied(Ns,Ready) ->
@@ -353,13 +354,17 @@ overflow_nests_under_more_and_keeps_pins_test_() ->
         ?assertEqual({8,3,[1,2]},{property(wedge(Four,4),wedges),property(wedge(Four,4),back),
                                   [property(W,slot) || W <- children(wedge(Four,4))]}),
         %% Conflicting or impossible positions and empty labels are refused.
-        [?assertMatch({fail,_},quod_prolog:prove_ro(Gui,{menu_tree,Bad,{'T'}})) || Bad <- [
-            {menu,<<"Clash">>,<<>>,[],[Item(1,[{slot,2}]),Item(2,[{slot,2}])]},
-            {menu,<<"Outside">>,<<>>,[{wedges,4}],[Item(1,[{slot,5}])]},
-            {menu,<<"Back">>,<<>>,[],[{menu,<<"Sub">>,<<>>,[{slot,1}],[Item(1,[{slot,5}])]}]},
-            {menu,<<"Too few">>,<<>>,[{wedges,1}],[Item(1,[]),Item(2,[])]},
-            {menu,<<>>,<<>>,[],[Item(1,[])]},
-            {menu,<<"Unlabelled">>,<<>>,[],[setelement(3,Item(1,[]),<<>>)]}]],
+        [?assertEqual(Expected,quod_prolog:prove_ro(Gui,{menu_tree,Bad,{'T'}})) || {Bad,Expected} <- [
+            {{menu,<<"Clash">>,<<>>,[],[Item(1,[{slot,2}]),Item(2,[{slot,2}])]},
+             {fail,[{duplicate_menu_slot,[2,2]}]}},
+            {{menu,<<"Outside">>,<<>>,[{wedges,4}],[Item(1,[{slot,5}])]},
+             {fail,[{menu_slot_unavailable,5,4}]}},
+            {{menu,<<"Back">>,<<>>,[],[{menu,<<"Sub">>,<<>>,[{slot,1}],[Item(1,[{slot,5}])]}]},
+             {fail,[{menu_slot_unavailable,5,8}]}},
+            {{menu,<<"Too few">>,<<>>,[{wedges,1}],[Item(1,[]),Item(2,[])]},
+             {fail,[{menu_wedges_too_few,1}]}},
+            {{menu,<<>>,<<>>,[],[Item(1,[])]},fail},
+            {{menu,<<"Unlabelled">>,<<>>,[],[setelement(3,Item(1,[]),<<>>)]},fail}]],
         ?assert(is_map(C))
     end) end}.
 
@@ -383,6 +388,7 @@ read(C,Goal) ->
     case quod_client_goal_ingress:submit(Bytes,Signature) of
         {ok,_,{normalized,{read,_,{answers,_,[Binding]}}}} ->
             {ok,[{_,Value}]} = quod_client_result:decode_binding(Binding), Value;
+        {ok,_,{normalized,{read,_,fail}}} -> error({menu_read_failed,Goal,"[]"});
         {ok,_,{normalized,{read,_,{failed,Blob}}}} ->
             {ok,Reasons} = quod_wire_term:decode_failure_reasons(Blob),
             error({menu_read_failed,Goal,lists:flatten(io_lib:format("~P",[Reasons,12]))});

@@ -124,7 +124,7 @@ cohosted_draw_labels_an_agent(Config) ->
     ?assertEqual(Before, count(Target, ?NAMES_NS)),
     %% quod:names has an attribute/3 of its own now, the class view over its
     %% pools, so what matters is that the agent's label did not leak into it.
-    ?assertMatch({fail, _},
+    ?assertMatch(fail,
                  quod_ct:peer_prove(Target, ?NAMES_NS,
                                     {attribute, me, display_name, {'_'}})),
     ?assertMatch({ok, [#{'S' := Size}], _} when is_integer(Size),
@@ -195,7 +195,7 @@ public_queries_open_mutation_refused(Config) ->
     Refused({retract, {pool, <<"orc">>, <<"personal">>, <<"male">>, {'_'}}}),
     Refused({assertz, {naming_query, {assertz, {'_'}}}}),
     ?assertEqual(Before, count(Target, ?NAMES_NS)),
-    ?assertMatch({fail, _},
+    ?assertMatch(fail,
                  quod_ct:peer_prove(Target, ?NAMES_NS, {elements, <<"zz">>, {'_'}})),
     ?assertMatch({ok, [#{'N' := _}], _},
                  quod_ct:peer_prove(
@@ -277,7 +277,7 @@ creator_narrows_the_policy(Config) ->
                           {',', {retract, {pool, <<"testfolk">>, <<"personal">>, <<"any">>, listed}},
                            {retract, {listed, <<"testfolk">>, <<"personal">>, <<"any">>, {'_'}}}}}),
     ?assertEqual(Before, count(Target, ?NAMES_NS)),
-    ?assertMatch({fail, _},
+    ?assertMatch(fail,
                  quod_ct:peer_prove(
                    Target, ?NAMES_NS,
                    {pool, <<"testfolk">>, {'_'}, {'_'}, {'_'}})).
@@ -323,7 +323,7 @@ backtracking_cut_and_savepoint(Config) ->
               {',', {'==', {'N1'}, {'N2'}},
                {assertz, {kept, {'N2'}}}}}}},
     {ok, [#{'N1' := N, 'N2' := N}], _} = execute(Target, ?AGENT_NS, Goal),
-    ?assertMatch({fail, _},
+    ?assertMatch(fail,
                  quod_ct:peer_prove(Target, ?AGENT_NS, {rolled, {'_'}})),
     ?assertMatch({ok, [#{}], _},
                  quod_ct:peer_prove(Target, ?AGENT_NS, {kept, N})).

@@ -82,7 +82,7 @@ t_create_root({_Dir, Ns, Content}) ->
         %% Root is the configured bootstrap exception, not a recursive entry
         %% in the system-ontology catalogue.
         ?assertMatch(
-           {fail, _},
+           fail,
            rp(Ns, {system_ontology, {'_'}, {'_'}})),
         %% This fixture uses root's Prolog source under a unique test namespace,
         %% so its ontology-specific manifest is correctly empty.  The actual

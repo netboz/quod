@@ -257,10 +257,10 @@ signed_foreign_guard() ->
         ?assertMatch({ok, [#{}], _}, quod_lobby_tests:read(Ctx,
             Ask(Store, {operation_authorized, {instance, inherited}, {review, 3}}))),
         lists:foreach(fun(N) ->
-            ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx,
+            ?assertMatch(fail, quod_lobby_tests:read(Ctx,
                 Ask(Store, {operation_authorized, {instance, inherited}, {review, N}})))
         end, [4, 12]),
-        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx,
+        ?assertMatch(fail, quod_lobby_tests:read(Ctx,
             Ask(Store, {operation_authorized, {instance, local_name}, {edit, 3}}))),
         commit(Ctx, Ask(Store, conjunction([
             {with_build_plan, [{attribute, name, <<"Original">>}],
@@ -271,7 +271,7 @@ signed_foreign_guard() ->
             {with_build_plan, [{attribute, name, <<"Forged">>}],
              Ask(Owner, {reenter_creation, {'New'}})},
             {assertz, {created, {'New'}}}]))),
-        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx, Ask(Store,
+        ?assertMatch(fail, quod_lobby_tests:read(Ctx, Ask(Store,
             {',', {created, {'New'}}, {operation_authorized, {instance, {'New'}}, touch}}))),
         commit(Ctx, Ask(Store, conjunction([
             {assertz, staged_domain_work},
@@ -288,8 +288,8 @@ signed_foreign_guard() ->
         ?assertMatch({ok, [#{}], _}, quod_lobby_tests:read(Ctx,
             Ask(Store, {',', staged_domain_work, after_guard}))),
         ?assertMatch({ok, [#{}], _}, quod_lobby_tests:read(Ctx, Ask(Owner, foreign_domain_work))),
-        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx, Ask(Store, committed_marker))),
-        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx, Ask(Store, Guard))),
+        ?assertMatch(fail, quod_lobby_tests:read(Ctx, Ask(Store, committed_marker))),
+        ?assertMatch(fail, quod_lobby_tests:read(Ctx, Ask(Store, Guard))),
         refuse(Ctx, Ask(Store, conjunction([
             Ask(Owner, conjunction([
                 {retract, {class_permission, document, edit, deny}},
@@ -301,12 +301,12 @@ signed_foreign_guard() ->
             Check = {'$quod_committed_check', Ask(Owner, Forbidden)},
             ?assertMatch({ok, _, {normalized, {error, proof_unavailable}}},
                 quod_lobby_tests:submit(Ctx, execute, Ask(Store, Check))),
-            ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx, Ask(Owner, leaked)))
+            ?assertMatch(fail, quod_lobby_tests:read(Ctx, Ask(Owner, leaked)))
         end, [{assertz, leaked}, {'$quod_ontology_routes', []}]),
         ?assertMatch({ok, _, {normalized, {error, proof_unavailable}}},
             quod_lobby_tests:submit(Ctx, execute, Ask(Store,
                 {'$quod_state_check', Ask(Owner, {assertz, leaked})}))),
-        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx, Ask(Owner, leaked))),
+        ?assertMatch(fail, quod_lobby_tests:read(Ctx, Ask(Owner, leaked))),
         commit(Ctx, Ask(Owner, conjunction([
             {retract, {class_permission, document, edit, deny}},
             {assertz, {class_permission, document, edit, allow}}]))),
@@ -372,11 +372,11 @@ signed_boundaries() ->
             {assertz, {class_permission, report, create, allow}},
             {with_build_plan, [{attribute, name, <<"Report">>}], {assert, {instance_of, report, {'_'}}}}]))),
         commit(Ctx, Scope({retract, {class_permission, report, create, deny}})),
-        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx,
+        ?assertMatch(fail, quod_lobby_tests:read(Ctx,
             Scope({instance_permission, report1, edit, {'_'}}))),
-        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx,
+        ?assertMatch(fail, quod_lobby_tests:read(Ctx,
             Scope({permission_administrator, report1, Guest}))),
-        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx, Scope({'$quod_construction', report1, {'_'}, {'_'}}))),
+        ?assertMatch(fail, quod_lobby_tests:read(Ctx, Scope({'$quod_construction', report1, {'_'}, {'_'}}))),
         commit(Ctx, Scope({set_instance_permission, report1, edit, allow})),
         commit(GuestCtx, Scope({edit_document, report1, 5})),
         refuse(GuestCtx, Scope({edit_document, report1, 12})),
@@ -391,7 +391,7 @@ signed_boundaries() ->
         %% Warm ordinary read path, then measure actual forbidden work.
         Advisory = Scope({operation_authorized, {instance, report1}, {edit, 3}}),
         ?assertMatch({ok, [#{}], _}, quod_lobby_tests:read(Ctx, Advisory)),
-        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx,
+        ?assertMatch(fail, quod_lobby_tests:read(Ctx,
             Scope({operation_authorized, {instance, report1}, {edit, {'_'}}}))),
         Before = quod_prolog:applied(Ns),
         quod_lobby_tests:assert_read_has_no_io(fun() ->
@@ -400,10 +400,12 @@ signed_boundaries() ->
         end),
         ?assertEqual(Before, quod_prolog:applied(Ns)),
         commit(Ctx, Scope({set_instance_permission, report1, edit, deny})),
-        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx, Advisory)),
+        ?assertMatch(fail, quod_lobby_tests:read(Ctx, Advisory)),
         %% Target admission remains independent, even with a class grant.
         commit(Ctx, Scope({retract, guest_admitted})),
-        refuse(GuestCtx, Scope({edit_document, report2, 3}))
+        {ok, _, {normalized, {failed, Denied}}} =
+            quod_lobby_tests:submit(GuestCtx, execute, Scope({edit_document, report2, 3})),
+        ?assertEqual({ok, [{not_allowed, Ns}]}, quod_wire_term:decode_failure_reasons(Denied))
     after
         quod_lobby_tests:stop_process(Sup), quod_lobby_tests:stop(Ctx)
     end.
@@ -417,7 +419,7 @@ commit(Ctx, Goal) ->
     ?assertMatch(#{operation_state := terminal},
         quod_ct:await_operation_complete(element(2, Ref), Ref, 10000)).
 refuse(Ctx, Goal) ->
-    ?assertMatch({ok, _, {normalized, {failed, _}}},
+    ?assertMatch({ok, _, {normalized, fail}},
                  quod_lobby_tests:submit(Ctx, execute, Goal)).
 
 fixture() -> quod_prolog:read_terms("test/fixtures/class-permissions.pl").

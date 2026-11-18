@@ -13,7 +13,7 @@ editable_lobby_notification_cannot_borrow_node_authority_test_() ->
         try
             Goal = {'::', Root, {assertz, authority_root_marker}},
             ?assertMatch({ok, _, {normalized, {failed, _}}}, submit(Ctx, Goal)),
-            ?assertMatch({fail, _}, quod_prolog:prove_ro(Root, authority_root_marker)),
+            ?assertMatch(fail,quod_prolog:prove_ro(Root,authority_root_marker)),
             %% No hosted agent belongs to this personal lobby. Selecting any
             %% actor here, including either kind of node, is an authority leak.
             Reaction = observed_reaction(authority_lobby_tick, Goal, {me, {'Actor'}}),
@@ -31,7 +31,7 @@ editable_lobby_notification_cannot_borrow_node_authority_test_() ->
                 ?assertEqual(0, maps:get(candidates, Stats)),
                 ?assertEqual(0, maps:get(matches, Stats)),
                 ?assertEqual(0, maps:get(executed, Stats)),
-                ?assertMatch({fail, _}, quod_prolog:prove_ro(Root, authority_root_marker))
+                ?assertMatch(fail,quod_prolog:prove_ro(Root,authority_root_marker))
             after trace:session_destroy(Trace) end
         after quod_lobby_tests:stop(Ctx) end,
         ok = file:del_dir_r(Dir)

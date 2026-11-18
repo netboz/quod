@@ -7,7 +7,7 @@ Engine bindings are converted once to the signed request's binary variable
 names and encoded with the shared canonical binding codec. Proof answer policy
 owns answer allocation; remote delivery retains complete transport admission.
 Failure stacks reuse the existing
-bounded failure-reason codec. The transport therefore never carries arbitrary
+atom-safe failure-reason codec. The transport therefore never carries arbitrary
 Erlang result terms, and the HTTP layer has only one renderer regardless of
 where the proof ran.
 """.

@@ -107,9 +107,7 @@ failure_reasons_survive_rollback_test() ->
              {fail_with_reason, rejected_candidate}},
             {get_fail_reasons, {'Reasons'}}},
     {succeed, Final} = prove(Goal, []),
-    ?assertEqual([{transaction,
-                   {fail_with_reason, rejected_candidate}},
-                  rejected_candidate],
+    ?assertEqual([rejected_candidate],
                  erlog_int:dderef({'Reasons'}, Final#est.bs)).
 
 ordinary_backtracking_remains_non_transactional_test() ->

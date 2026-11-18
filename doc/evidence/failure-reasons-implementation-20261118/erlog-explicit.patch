@@ -1,0 +1,334 @@
+diff --git a/README.md b/README.md
+index 7c0dc56..84c4d34 100644
+--- a/README.md
++++ b/README.md
+@@ -135,21 +135,9 @@ the deps section of your rebar config file.
+ 
+ ## Testing
+ 
+-Erlog is tested to work with Erlang versions R14B02 - 17, the tests
+-are both eunit tests and quick-check properties, if you do not have
+-quickcheck don't worry you can still use Erlog, you just won't be able
+-to run the properties.
+-
+-If you want to run the tests you will need to install quickcheck mini
+-(Or the full quickcheck) you can do this with these commands:
+-
+-````bash
+-   wget http://www.quviq.com/downloads/eqcmini.zip
+-   unzip eqcmini.zip
+-   export ERL_LIBS=eqcmini:$ERL_LIBS
+-````
+-
+-to run the tests then run `rebar eunit`
++Run `rebar3 eunit` for the EUnit suite and the generated record get/set
++properties. The test profile uses PropEr 1.5.0; each property runs 100 cases.
++PropEr is a test-only dependency.
+ 
+ ## Licence 
+ 
+diff --git a/doc/user_guide.txt b/doc/user_guide.txt
+index e772868..414f131 100644
+--- a/doc/user_guide.txt
++++ b/doc/user_guide.txt
+@@ -99,13 +99,20 @@ database and a goal is entered.
+ 
+ FAILURE DIAGNOSTICS
+ 
+-fail_with_reason(Reason) records a ground diagnostic term and immediately
+-fails. get_fail_reasons(Reasons) unifies Reasons with the current proof's
+-bounded failure stack. Ordinary exhausted predicates add their call term
+-automatically. The stack is retained through backtracking, cuts, negation and
+-findall so a later alternative can inspect it; a new top-level proof resets it.
+-When either the reason-byte limit or the automatic-call boundary limit is
+-reached, fail_reasons_truncated appears once in the stack.
++fail_with_reason(Reason) resolves and records a ground portable diagnostic term
++and immediately fails. A non-ground term raises instantiation_error; a
++non-portable term raises domain_error(failure_reason, Term).
++get_fail_reasons(Reasons) unifies Reasons with the complete current proof's
++newest-first failure list without adding or clearing reasons. Ordinary failed
++or exhausted predicates add nothing. Reasons survive backtracking, cut,
++negation and findall; a new top-level proof starts with an empty list.
++
++Native admission has no byte, entry-count or nesting-depth quota. Host admission
++callbacks retain their existing separate API. The reserved atom
++fail_reasons_truncated retains its existing marker behavior and appears at most
++once when explicitly recorded or when a host admission policy rejects an
++entry. It is not an ordinary application reason. Removing automatic boundaries
++does not introduce a truncation policy.
+ 
+ ERLANG INTERFACE
+ 
+diff --git a/rebar.config b/rebar.config
+index 9889c6d..0fafe2a 100755
+--- a/rebar.config
++++ b/rebar.config
+@@ -2,3 +2,5 @@
+ 
+ {erl_opts,              [debug_info]}.
+ {cover_enabled,         true}.
++
++{profiles, [{test, [{deps, [{proper, "1.5.0"}]}]}]}.
+diff --git a/src/erlog_int.erl b/src/erlog_int.erl
+index d4e44e3..7b8bef7 100644
+--- a/src/erlog_int.erl
++++ b/src/erlog_int.erl
+@@ -551,68 +551,23 @@ prove_goal(G0, Next, #est{bs=Bs,db=Db}=St) ->
+     try get_procedure(functor(G), Db) of
+ 	built_in ->
+             observe({native, erlog_bips, prove_goal, functor(G)}, St),
+-            erlog_bips:prove_goal(G, Next, predicate_failure_boundary(G, St));
++            erlog_bips:prove_goal(G, Next, St);
+ 	{code,{Mod,Func}} ->
+             observe({native, Mod, Func, functor(G)}, St),
+-            Mod:Func(G, Next, predicate_failure_boundary(G, St));
+-	{clauses,Cs} -> prove_goal_clauses(G, Cs, Next, predicate_failure_boundary(G, St));
++            Mod:Func(G, Next, St);
++	{clauses,Cs} -> prove_goal_clauses(G, Cs, Next, St);
+ 	undefined ->
+ 	    case get_prolog_flag(unknown, St) of
+ 		error ->			%Throw error
+ 		    existence_error(procedure, pred_ind(functor(G)), St);
+ 		_ ->				%Fail or warning
+-		    ?FAIL(add_predicate_failure_reason(G, St))
++		    ?FAIL(St)
+ 	    end
+     catch
+ 	throw:{erlog_error,E} ->
+ 	    erlog_error(E, St)	                %Add state to error
+     end.
+ 
+-%% A predicate's own alternatives sit above this boundary. Only when all of
+-%% them (and every continuation they can satisfy) are exhausted does failure
+-%% reach the boundary and add the call to the diagnostic stack. Store the
+-%% already-dereferenced call by reference and freeze it only if the boundary is
+-%% reached; successful calls therefore do not deep-copy their arguments.
+-%%
+-%% The two diagnostic built-ins do not describe application-level failures and
+-%% therefore do not frame themselves.
+-predicate_failure_boundary({fail_with_reason,_Reason}, St) ->
+-    St;
+-predicate_failure_boundary({get_fail_reasons,_Reasons}, St) ->
+-    St;
+-predicate_failure_boundary(Goal,
+-			   #est{cps=Cps}=St) ->
+-    case internal_predicate(Goal) of
+-	true -> St;
+-	false ->
+-	    St#est{cps=[#cp{type=predicate_failure,data=Goal}|Cps]}
+-    end.
+-
+-add_predicate_failure_reason(Goal, St) ->
+-    case internal_predicate(Goal) of
+-	true -> St;
+-	false -> add_failure_reason(freeze_failure_term(Goal), St)
+-    end.
+-
+-%% '$'-prefixed predicates are interpreter/application plumbing, not calls a
+-%% Prolog author can usefully diagnose. Their enclosing public predicate still
+-%% contributes the meaningful failure frame.
+-internal_predicate(Goal) ->
+-    {Name,_Arity} = functor(Goal),
+-    case atom_to_binary(Name, utf8) of
+-	<<$$,_/binary>> -> true;
+-	_ -> false
+-    end.
+-
+-freeze_failure_term({_Variable}) -> unbound;
+-freeze_failure_term([H|T]) ->
+-    [freeze_failure_term(H)|freeze_failure_term(T)];
+-freeze_failure_term([]) -> [];
+-freeze_failure_term(T) when ?IS_FUNCTOR(T) ->
+-    list_to_tuple([freeze_failure_term(E) || E <- tuple_to_list(T)]);
+-freeze_failure_term(T) when is_atom(T); is_number(T); is_binary(T) -> T;
+-freeze_failure_term(_) -> opaque.
+-
+ fail_disjunction(#cp{next=Next,bs=Bs,vn=Vn}, Cps, St) ->
+     prove_body(Next, St#est{cps=Cps,bs=Bs,vn=Vn}).
+ 
+@@ -663,9 +618,7 @@ fail_choicepoint(#cp{type=current_prolog_flag}=Cp, Cps, St) ->
+     fail_current_prolog_flag(Cp, Cps, St);
+ fail_choicepoint(#cp{type=compiled,data=F}=Cp, Cps, St) ->
+     observe(native_continuation, St),
+-    F(Cp, Cps, St);
+-fail_choicepoint(#cp{type=predicate_failure,data=Goal}, Cps, St) ->
+-    fail(Cps, add_predicate_failure_reason(Goal, St)).
++    F(Cp, Cps, St).
+ 
+ cut(Label, Last, Next, #est{cps=Cps}=St) ->
+     cut(Label, Last, Next, Cps, St).
+diff --git a/test/erlog_failure_reasons_tests.erl b/test/erlog_failure_reasons_tests.erl
+index 4762cc8..34eff81 100644
+--- a/test/erlog_failure_reasons_tests.erl
++++ b/test/erlog_failure_reasons_tests.erl
+@@ -9,36 +9,36 @@ direct_failure_reason_test() ->
+     {fail, Final} = prove({fail_with_reason, impossible_to_link}),
+     ?assertEqual([impossible_to_link], Final#est.fail_reasons).
+ 
+-standard_predicate_gets_default_reason_test() ->
++ordinary_predicate_failure_has_no_reason_test() ->
+     {fail, Final} = prove({atom, 42}),
+-    ?assertEqual([{atom, 42}], Final#est.fail_reasons).
++    ?assertEqual([], Final#est.fail_reasons).
+ 
+-nested_predicates_form_failure_trace_test() ->
++nested_ordinary_failures_have_no_reasons_test() ->
+     St = clauses([
+           {':-', {inner, {'X'}}, {atom, {'X'}}},
+           {':-', {outer, {'X'}}, {inner, {'X'}}}
+          ]),
+     {fail, Final} = erlog_int:prove_goal({outer, 42}, St),
+-    ?assertEqual([{outer, 42}, {inner, 42}, {atom, 42}],
++    ?assertEqual([],
+                  Final#est.fail_reasons).
+ 
+-explicit_reason_is_root_cause_of_trace_test() ->
++only_explicit_reason_is_retained_test() ->
+     St = clauses([
+           {':-', {inner, {'X'}},
+            {fail_with_reason, {impossible_to_link, {'X'}}}},
+           {':-', {outer, {'X'}}, {inner, {'X'}}}
+          ]),
+     {fail, Final} = erlog_int:prove_goal({outer, bob}, St),
+-    ?assertEqual([{outer, bob}, {inner, bob}, {impossible_to_link, bob}],
++    ?assertEqual([{impossible_to_link, bob}],
+                  Final#est.fail_reasons).
+ 
+-internal_predicates_do_not_pollute_failure_trace_test() ->
++internal_and_public_wrappers_add_no_reasons_test() ->
+     St = clauses([
+           {':-', {'$internal_cleanup', {'X'}}, fail},
+           {':-', {outer, {'X'}}, {'$internal_cleanup', {'X'}}}
+          ]),
+     {fail, Final} = erlog_int:prove_goal({outer, 42}, St),
+-    ?assertEqual([{outer, 42}], Final#est.fail_reasons).
++    ?assertEqual([], Final#est.fail_reasons).
+ 
+ ecall_is_not_available_test() ->
+     erase(ecall_executed),
+@@ -48,17 +48,17 @@ ecall_is_not_available_test() ->
+        catch prove({ecall, Call, {'Result'}})),
+     ?assertEqual(undefined, get(ecall_executed)).
+ 
+-unbound_default_arguments_are_frozen_test() ->
++unbound_unknown_call_adds_no_reason_test() ->
+     {succeed, UnknownFails} = erlog_int:prove_goal(
+                                 {set_prolog_flag, unknown, fail}, state()),
+     {fail, Final} = erlog_int:prove_goal({missing, {'X'}}, UnknownFails),
+-    ?assertEqual([{missing, unbound}], Final#est.fail_reasons).
++    ?assertEqual([], Final#est.fail_reasons).
+ 
+-non_prolog_default_arguments_are_sanitized_test() ->
++non_prolog_unknown_call_adds_no_reason_test() ->
+     {succeed, UnknownFails} = erlog_int:prove_goal(
+                                 {set_prolog_flag, unknown, fail}, state()),
+     {fail, Final} = erlog_int:prove_goal({missing, self()}, UnknownFails),
+-    ?assertEqual([{missing, opaque}], Final#est.fail_reasons).
++    ?assertEqual([], Final#est.fail_reasons).
+ 
+ backtracking_fallback_reads_reason_test() ->
+     Goal = {';',
+@@ -102,33 +102,35 @@ findall_retains_explicit_reason_test() ->
+     ?assertEqual([], value('Found', Final)),
+     ?assertEqual([generator_failure], value('Reasons', Final)).
+ 
+-successful_negation_retains_automatic_trace_test() ->
++successful_negation_adds_no_automatic_reason_test() ->
+     Goal = {',',
+             {'\\+', {atom, 42}},
+             {get_fail_reasons, {'Reasons'}}},
+     {succeed, Final} = prove(Goal),
+-    ?assertEqual([{atom, 42}], value('Reasons', Final)).
++    ?assertEqual([], value('Reasons', Final)).
+ 
+-successful_findall_retains_automatic_trace_test() ->
++successful_findall_adds_no_automatic_reason_test() ->
+     Goal = {',',
+             {findall, {'X'}, {atom, 42}, {'Found'}},
+             {get_fail_reasons, {'Reasons'}}},
+     {succeed, Final} = prove(Goal),
+     ?assertEqual([], value('Found', Final)),
+-    ?assertEqual([{atom, 42}], value('Reasons', Final)).
++    ?assertEqual([], value('Reasons', Final)).
+ 
+ get_fail_reasons_does_not_frame_itself_test() ->
+     Goal = {',', {get_fail_reasons, {'Reasons'}}, fail},
+     {fail, Final} = prove(Goal),
+     ?assertEqual([], Final#est.fail_reasons).
+ 
+-successful_call_boundaries_are_retained_test() ->
++successful_calls_and_exhaustion_add_no_reasons_test() ->
+     Goal = conjunction(lists:duplicate(256 + 50,
+                                        {atom, ok})),
+     {succeed, Final} = prove(Goal),
+-    Boundaries = [Cp || #cp{type=predicate_failure}=Cp <- Final#est.cps],
+-    ?assertEqual(306, length(Boundaries)),
+-    ?assertNot(Final#est.fail_reasons_truncated).
++    ?assertEqual([], Final#est.cps),
++    ?assertEqual([], Final#est.fail_reasons),
++    {fail, Exhausted} = erlog_int:fail(Final),
++    ?assertEqual([], Exhausted#est.fail_reasons),
++    ?assertNot(Exhausted#est.fail_reasons_truncated).
+ 
+ non_ground_reason_is_error_test() ->
+     ?assertMatch({erlog_error, instantiation_error, _},
+@@ -143,7 +145,7 @@ large_reason_is_preserved_test() ->
+     {fail, Final} = prove({fail_with_reason, Reason}),
+     ?assertEqual([Reason], Final#est.fail_reasons).
+ 
+-outer_frames_preserve_a_large_inner_reason_test() ->
++explicit_host_insertions_preserve_a_large_reason_test() ->
+     Oversized = binary:copy(<<"x">>, 4096 + 1),
+     Inner = erlog_int:add_failure_reason(Oversized, state()),
+     Outer = erlog_int:add_failure_reason({outer, failed}, Inner),
+diff --git a/test/erlog_test.hrl b/test/erlog_test.hrl
+index fc1e276..619e5be 100644
+--- a/test/erlog_test.hrl
++++ b/test/erlog_test.hrl
+@@ -1,30 +1,7 @@
+ -include("../src/erlog_int.hrl").
+ 
+-get_quickcheck_properties() ->
+-    Funs  = ?MODULE:module_info(functions),
+-    Funs1 = [P || {P, 0} <- Funs],
+-    Props = lists:filter(fun(Fun) ->
+-				 FnName = atom_to_list(Fun),
+-				 "prop_" =:= string:sub_string(FnName, 1,5)
+-			 end, Funs1),
+-    Props.
+-
+-run_quickcheck_properties_test_() ->
+-    run_quickcheck(get_quickcheck_properties()).
+-
+-run_quickcheck(Tests) ->
+-    run_quickcheck(Tests,100).
+-
+-run_quickcheck(Tests, _Count) ->
+-    begin
+-	[begin
+-	     P1 = ?MODULE:Prop(),
+-	     P2 = out(P1),
+-	     ?_assert(eqc:quickcheck(P2))
+-	 end  || Prop<-Tests]
+-    end.
+-
+-%-------------------------------------------------------------------------------
+-
+-out(P) ->
+-   on_output(fun(S,F) -> io:format(user, S, F) end,P).
++run_properties_test_() ->
++    [{atom_to_list(Prop), ?_assert(proper:quickcheck(?MODULE:Prop(),
++         [{numtests, 100}, {on_output, fun(S, F) -> io:format(user, S, F) end}]))}
++     || {Prop, 0} <- ?MODULE:module_info(exports),
++        lists:prefix("prop_", atom_to_list(Prop))].
+diff --git a/test/records_test.erl b/test/records_test.erl
+index e744a4f..6b853ca 100644
+--- a/test/records_test.erl
++++ b/test/records_test.erl
+@@ -1,5 +1,5 @@
+ -module(records_test).
+--include_lib("eqc/include/eqc.hrl").
++-include_lib("proper/include/proper.hrl").
+ -include_lib("eunit/include/eunit.hrl").
+ -include("erlog_test.hrl").
+ -compile(export_all).

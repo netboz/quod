@@ -1089,6 +1089,7 @@ desired_state(ControlNs, Desired, Effect) ->
     case quod_prolog:prove_ro(ControlNs, Desired) of
         {ok, [_ | _], _} -> desired_target_state(Effect);
         {ok, [], _} -> absent;
+        fail -> absent;
         {fail, _Reasons} -> absent;
         Other -> {unavailable, bounded_reason(Other)}
     end.

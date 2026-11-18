@@ -1,0 +1,32 @@
+{
+  "time": "2026-11-18T18:14:46.624196+00:00",
+  "cpu_count": 8,
+  "load_average": [
+    3.5263671875,
+    4.291015625,
+    3.2275390625
+  ],
+  "processes": [
+    "    PID COMMAND         %CPU",
+    "2327115 chrome           102",
+    "2319303 vesktop.bin     61.5",
+    "2323648 chrome          19.5",
+    "2296821 chrome          13.4",
+    "2159038 chrome          12.5",
+    " 196464 chrome           9.2",
+    "2102493 chrome           7.0",
+    "1618969 chrome           6.6",
+    "2159142 chrome           5.6",
+    "   5163 chrome           5.5",
+    "   1878 Hyprland         4.9",
+    "1488420 chrome           4.1",
+    "   5269 chrome           4.1",
+    "   9122 nimbalyst        3.5",
+    "  69709 qemu-system-x86  3.1",
+    "2088695 chrome           2.7",
+    "   8922 nimbalyst        1.8",
+    "   8868 nimbalyst        1.8",
+    "2326294 chrome           1.7",
+    "   4347 steam            1.2"
+  ]
+}

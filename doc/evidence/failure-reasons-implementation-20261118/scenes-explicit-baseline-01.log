@@ -1,0 +1,48 @@
+engine="/home/yan/src/quod/_build/proof-scenes-explicit-baseline/ebin/erlog_int.beam" otp="28" schedulers=8
+SCENE {"reductions":56097636,"seconds":0.426516,"mode":"valid","allocated_words":"unmeasured","before_gc_bytes":80899824,"held_process_bytes":85563832,"marks":300,"measurement":"timing","reasons":0,"sample":1}
+SCENE {"reductions":56122972,"seconds":0.445829,"mode":"valid","allocated_words":"unmeasured","before_gc_bytes":116495280,"held_process_bytes":85563832,"marks":300,"measurement":"timing","reasons":0,"sample":2}
+SCENE {"reductions":56135336,"seconds":0.444801,"mode":"valid","allocated_words":"unmeasured","before_gc_bytes":116495280,"held_process_bytes":85563832,"marks":300,"measurement":"timing","reasons":0,"sample":3}
+engine="/home/yan/src/quod/_build/proof-scenes-explicit-baseline/ebin/erlog_int.beam" otp="28" schedulers=8
+SCENE {"reductions":39790735,"seconds":0.351931,"mode":"refused","allocated_words":"unmeasured","before_gc_bytes":59419648,"held_process_bytes":88688,"marks":300,"measurement":"timing","reasons":0,"sample":1}
+SCENE {"reductions":39781320,"seconds":0.344174,"mode":"refused","allocated_words":"unmeasured","before_gc_bytes":59419648,"held_process_bytes":88688,"marks":300,"measurement":"timing","reasons":0,"sample":2}
+SCENE {"reductions":39781532,"seconds":0.342198,"mode":"refused","allocated_words":"unmeasured","before_gc_bytes":59419648,"held_process_bytes":88688,"marks":300,"measurement":"timing","reasons":0,"sample":3}
+engine="/home/yan/src/quod/_build/proof-scenes-explicit-baseline/ebin/erlog_int.beam" otp="28" schedulers=8
+SCENE {"reductions":178702446,"seconds":1.326258,"mode":"valid","allocated_words":"unmeasured","before_gc_bytes":289875960,"held_process_bytes":306588000,"marks":600,"measurement":"timing","reasons":0,"sample":1}
+SCENE {"reductions":178925802,"seconds":1.389505,"mode":"valid","allocated_words":"unmeasured","before_gc_bytes":347850936,"held_process_bytes":306588000,"marks":600,"measurement":"timing","reasons":0,"sample":2}
+SCENE {"reductions":178932802,"seconds":1.374236,"mode":"valid","allocated_words":"unmeasured","before_gc_bytes":347850936,"held_process_bytes":306588000,"marks":600,"measurement":"timing","reasons":0,"sample":3}
+engine="/home/yan/src/quod/_build/proof-scenes-explicit-baseline/ebin/erlog_int.beam" otp="28" schedulers=8
+SCENE {"reductions":112338373,"seconds":0.941988,"mode":"refused","allocated_words":"unmeasured","before_gc_bytes":241563480,"held_process_bytes":230544,"marks":600,"measurement":"timing","reasons":0,"sample":1}
+SCENE {"reductions":112324063,"seconds":0.957988,"mode":"refused","allocated_words":"unmeasured","before_gc_bytes":241563480,"held_process_bytes":230544,"marks":600,"measurement":"timing","reasons":0,"sample":2}
+SCENE {"reductions":112266171,"seconds":0.944005,"mode":"refused","allocated_words":"unmeasured","before_gc_bytes":241563480,"held_process_bytes":230544,"marks":600,"measurement":"timing","reasons":0,"sample":3}
+engine="/home/yan/src/quod/_build/proof-scenes-explicit-baseline/ebin/erlog_int.beam" otp="28" schedulers=8
+SCENE {"reductions":624003473,"seconds":4.54387,"mode":"valid","allocated_words":"unmeasured","before_gc_bytes":1246410088,"held_process_bytes":1098557560,"marks":1200,"measurement":"timing","reasons":0,"sample":1}
+SCENE {"reductions":623811498,"seconds":4.512436,"mode":"valid","allocated_words":"unmeasured","before_gc_bytes":1246410088,"held_process_bytes":1098557560,"marks":1200,"measurement":"timing","reasons":0,"sample":2}
+SCENE {"reductions":623861746,"seconds":4.509636,"mode":"valid","allocated_words":"unmeasured","before_gc_bytes":1246410088,"held_process_bytes":1098557560,"marks":1200,"measurement":"timing","reasons":0,"sample":3}
+engine="/home/yan/src/quod/_build/proof-scenes-explicit-baseline/ebin/erlog_int.beam" otp="28" schedulers=8
+SCENE {"reductions":357115161,"seconds":3.012793,"mode":"refused","allocated_words":"unmeasured","before_gc_bytes":865562880,"held_process_bytes":372400,"marks":1200,"measurement":"timing","reasons":0,"sample":1}
+SCENE {"reductions":357102072,"seconds":3.006701,"mode":"refused","allocated_words":"unmeasured","before_gc_bytes":865562880,"held_process_bytes":372400,"marks":1200,"measurement":"timing","reasons":0,"sample":2}
+SCENE {"reductions":357074980,"seconds":3.009092,"mode":"refused","allocated_words":"unmeasured","before_gc_bytes":865562880,"held_process_bytes":372400,"marks":1200,"measurement":"timing","reasons":0,"sample":3}
+engine="/home/yan/src/quod/_build/proof-scenes-explicit-baseline/ebin/erlog_int.beam" otp="28" schedulers=8
+SCENE {"reductions":80203550,"seconds":2.310399,"mode":"valid","allocated_words":111529166,"before_gc_bytes":80899824,"held_process_bytes":85563832,"marks":300,"measurement":"allocation","reasons":0,"sample":1}
+SCENE {"reductions":80186242,"seconds":2.297032,"mode":"valid","allocated_words":111525505,"before_gc_bytes":80899824,"held_process_bytes":85563832,"marks":300,"measurement":"allocation","reasons":0,"sample":2}
+SCENE {"reductions":80182442,"seconds":2.293685,"mode":"valid","allocated_words":111524978,"before_gc_bytes":80899824,"held_process_bytes":85563832,"marks":300,"measurement":"allocation","reasons":0,"sample":3}
+engine="/home/yan/src/quod/_build/proof-scenes-explicit-baseline/ebin/erlog_int.beam" otp="28" schedulers=8
+SCENE {"reductions":56363665,"seconds":1.694214,"mode":"refused","allocated_words":94162898,"before_gc_bytes":67416696,"held_process_bytes":88688,"marks":300,"measurement":"allocation","reasons":0,"sample":1}
+SCENE {"reductions":56279046,"seconds":1.65296,"mode":"refused","allocated_words":94081172,"before_gc_bytes":67416696,"held_process_bytes":88688,"marks":300,"measurement":"allocation","reasons":0,"sample":2}
+SCENE {"reductions":56279094,"seconds":1.658139,"mode":"refused","allocated_words":94080630,"before_gc_bytes":67416696,"held_process_bytes":88688,"marks":300,"measurement":"allocation","reasons":0,"sample":3}
+engine="/home/yan/src/quod/_build/proof-scenes-explicit-baseline/ebin/erlog_int.beam" otp="28" schedulers=8
+SCENE {"reductions":256985855,"seconds":7.235071,"mode":"valid","allocated_words":290666351,"before_gc_bytes":289875960,"held_process_bytes":306588000,"marks":600,"measurement":"allocation","reasons":0,"sample":1}
+SCENE {"reductions":257284194,"seconds":7.343996,"mode":"valid","allocated_words":290698257,"before_gc_bytes":347850936,"held_process_bytes":306588000,"marks":600,"measurement":"allocation","reasons":0,"sample":2}
+SCENE {"reductions":257291398,"seconds":7.343972,"mode":"valid","allocated_words":290697730,"before_gc_bytes":347850936,"held_process_bytes":306588000,"marks":600,"measurement":"allocation","reasons":0,"sample":3}
+engine="/home/yan/src/quod/_build/proof-scenes-explicit-baseline/ebin/erlog_int.beam" otp="28" schedulers=8
+SCENE {"reductions":160277091,"seconds":4.671805,"mode":"refused","allocated_words":221793087,"before_gc_bytes":201303080,"held_process_bytes":230544,"marks":600,"measurement":"allocation","reasons":0,"sample":1}
+SCENE {"reductions":160384871,"seconds":4.69976,"mode":"refused","allocated_words":221698209,"before_gc_bytes":241563480,"held_process_bytes":230544,"marks":600,"measurement":"allocation","reasons":0,"sample":2}
+SCENE {"reductions":160180470,"seconds":4.625626,"mode":"refused","allocated_words":221766835,"before_gc_bytes":201303080,"held_process_bytes":230544,"marks":600,"measurement":"allocation","reasons":0,"sample":3}
+engine="/home/yan/src/quod/_build/proof-scenes-explicit-baseline/ebin/erlog_int.beam" otp="28" schedulers=8
+SCENE {"reductions":901529275,"seconds":25.269716,"mode":"valid","allocated_words":851699889,"before_gc_bytes":1246410088,"held_process_bytes":1098557560,"marks":1200,"measurement":"allocation","reasons":0,"sample":1}
+SCENE {"reductions":900495384,"seconds":25.379152,"mode":"valid","allocated_words":851644870,"before_gc_bytes":1038675248,"held_process_bytes":1098557560,"marks":1200,"measurement":"allocation","reasons":0,"sample":2}
+SCENE {"reductions":900584896,"seconds":25.327922,"mode":"valid","allocated_words":851644343,"before_gc_bytes":1038675248,"held_process_bytes":1098557560,"marks":1200,"measurement":"allocation","reasons":0,"sample":3}
+engine="/home/yan/src/quod/_build/proof-scenes-explicit-baseline/ebin/erlog_int.beam" otp="28" schedulers=8
+SCENE {"reductions":511966413,"seconds":14.812421,"mode":"refused","allocated_words":578541941,"before_gc_bytes":721302576,"held_process_bytes":372400,"marks":1200,"measurement":"allocation","reasons":0,"sample":1}
+SCENE {"reductions":511730913,"seconds":14.651975,"mode":"refused","allocated_words":578537785,"before_gc_bytes":721302576,"held_process_bytes":372400,"marks":1200,"measurement":"allocation","reasons":0,"sample":2}
+SCENE {"reductions":511759005,"seconds":14.656745,"mode":"refused","allocated_words":578537258,"before_gc_bytes":721302576,"held_process_bytes":372400,"marks":1200,"measurement":"allocation","reasons":0,"sample":3}

@@ -1,0 +1,262 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<title>Test quod_ask_SUITE:init_per_suite result</title>
+<meta http-equiv="cache-control" content="no-cache"></meta>
+<meta http-equiv="content-type" content="text/html; charset=utf-8"></meta>
+<link rel="stylesheet" href="../../ct_default.css" type="text/css"></link>
+<script type="text/javascript" src="../../jquery-latest.js"></script>
+<script type="text/javascript" src="../../jquery.tablesorter.min.js"></script>
+</head>
+<body>
+
+<a name="top"></a><pre>
+=== Config function: <a href="quod_ask_suite.src.html#init_per_suite-1">quod_ask_SUITE:init_per_suite/1</a> (click for source code)
+
+=== Config value:
+
+    [{tc_logfile,"/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_17.28.23/lib.quod.quod_ask_SUITE.remote_native_read_uses_selected_observer.logs/run.2026-11-18_17.28.23/quod_ask_suite.init_per_suite.html"},
+     {tc_group_properties,[]},
+     {tc_group_path,[]},
+     {data_dir,"/home/yan/src/quod/_build/test/lib/quod/test/quod_ask_SUITE_data/"},
+     {priv_dir,"/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_17.28.23/lib.quod.quod_ask_SUITE.remote_native_read_uses_selected_observer.logs/run.2026-11-18_17.28.23/log_private/"}]
+
+=== Current directory is "/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_17.28.23"
+
+=== Started at 2026-11-18 17:28:23
+
+<br />
+=SUPERVISOR REPORT==== 18-Nov-2026::17:28:25.314547 ===
+    supervisor: {local,httpd_acceptor_sup_14568default}
+    errorContext: start_error
+    reason: {listen,eaddrinuse}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor,start_link,
+                       [httpd_14568default,ip_comm,any,14568,inet,
+                        httpd_conf_14568default,15000]}},
+               {restart_type,transient},
+               {significant,false},
+               {shutdown,brutal_kill},
+               {child_type,worker}]
+
+
+=SUPERVISOR REPORT==== 18-Nov-2026::17:28:25.314660 ===
+    supervisor: {local,httpd_instance_sup_14568default}
+    errorContext: start_error
+    reason: {shutdown,
+                {failed_to_start_child,
+                    {httpd_acceptor_sup,any,14568,default},
+                    {listen,eaddrinuse}}}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor_sup,start_link,
+                       [[any,14568,
+                         [{ipfamily,inet},
+                          {bind_address,any},
+                          {modules,[prometheus_httpd]},
+                          {port,14568},
+                          {server_name,"Prometheus.io metrics."},
+                          {document_root,
+                              "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"},
+                          {server_root,
+                              "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"}],
+                         15000,undefined]]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,infinity},
+               {child_type,supervisor}]
+
+
+=WARNING REPORT==== 18-Nov-2026::17:28:25.314825 ===
+quod: prometheus_httpd start: {error,
+                               {{shutdown,
+                                 {failed_to_start_child,
+                                  {httpd_acceptor_sup,any,14568,default},
+                                  {shutdown,
+                                   {failed_to_start_child,
+                                    {httpd_acceptor_sup,any,14568,default},
+                                    {listen,eaddrinuse}}}}},
+                                {child,undefined,
+                                 {httpd_instance_sup,any,14568,default},
+                                 {httpd_instance_sup,start_link,
+                                  [[{bind_address,any},
+                                    {ipfamily,inet},
+                                    {modules,[prometheus_httpd]},
+                                    {port,14568},
+                                    {server_name,"Prometheus.io metrics."},
+                                    {document_root,
+                                     "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"},
+                                    {server_root,
+                                     "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"}],
+                                   15000,[]]},
+                                 permanent,false,infinity,supervisor,
+                                 [httpd_instance_sup]}}}
+
+=SUPERVISOR REPORT==== 18-Nov-2026::17:28:26.395331 ===
+    supervisor: {local,httpd_acceptor_sup_14568default}
+    errorContext: start_error
+    reason: {listen,eaddrinuse}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor,start_link,
+                       [httpd_14568default,ip_comm,any,14568,inet,
+                        httpd_conf_14568default,15000]}},
+               {restart_type,transient},
+               {significant,false},
+               {shutdown,brutal_kill},
+               {child_type,worker}]
+
+
+=SUPERVISOR REPORT==== 18-Nov-2026::17:28:26.395445 ===
+    supervisor: {local,httpd_instance_sup_14568default}
+    errorContext: start_error
+    reason: {shutdown,
+                {failed_to_start_child,
+                    {httpd_acceptor_sup,any,14568,default},
+                    {listen,eaddrinuse}}}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor_sup,start_link,
+                       [[any,14568,
+                         [{ipfamily,inet},
+                          {bind_address,any},
+                          {modules,[prometheus_httpd]},
+                          {port,14568},
+                          {server_name,"Prometheus.io metrics."},
+                          {document_root,
+                              "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"},
+                          {server_root,
+                              "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"}],
+                         15000,undefined]]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,infinity},
+               {child_type,supervisor}]
+
+
+=WARNING REPORT==== 18-Nov-2026::17:28:26.395616 ===
+quod: prometheus_httpd start: {error,
+                               {{shutdown,
+                                 {failed_to_start_child,
+                                  {httpd_acceptor_sup,any,14568,default},
+                                  {shutdown,
+                                   {failed_to_start_child,
+                                    {httpd_acceptor_sup,any,14568,default},
+                                    {listen,eaddrinuse}}}}},
+                                {child,undefined,
+                                 {httpd_instance_sup,any,14568,default},
+                                 {httpd_instance_sup,start_link,
+                                  [[{bind_address,any},
+                                    {ipfamily,inet},
+                                    {modules,[prometheus_httpd]},
+                                    {port,14568},
+                                    {server_name,"Prometheus.io metrics."},
+                                    {document_root,
+                                     "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"},
+                                    {server_root,
+                                     "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"}],
+                                   15000,[]]},
+                                 permanent,false,infinity,supervisor,
+                                 [httpd_instance_sup]}}}
+
+<a name="end"></a>
+
+
+=== Ended at 2026-11-18 17:28:27
+=== successfully completed test case
+=== === Returned value: [{target,&lt;0.761.0&gt;},
+                     {asker,&lt;0.763.0&gt;},
+                     {third,&lt;0.762.0&gt;},
+                     {target_pub,
+                         &lt;&lt;89,185,92,57,231,110,51,76,53,193,95,106,241,233,
+                           59,163,28,37,156,82,247,18,123,96,133,153,191,183,
+                           234,29,230,204&gt;&gt;},
+                     {asker_pub,
+                         &lt;&lt;109,108,52,205,26,133,153,248,223,123,166,190,61,
+                           251,91,109,255,66,11,71,242,209,166,56,26,66,126,
+                           204,243,240,19,155&gt;&gt;},
+                     {target_addr,{"127.0.0.1",15970}},
+                     {third_pub,
+                         &lt;&lt;34,187,102,87,107,132,35,47,210,202,253,17,118,224,
+                           161,140,170,159,34,160,184,243,224,70,40,217,212,
+                           52,54,149,226,198&gt;&gt;},
+                     {third_addr,{"127.0.0.1",15972}},
+                     {network_id,
+                         &lt;&lt;210,174,111,250,128,95,11,110,34,255,12,152,233,
+                           180,158,50,143,177,4,231,200,220,68,231,126,207,47,
+                           13,134,6,212,114&gt;&gt;},
+                     {target_anchor,
+                         &lt;&lt;119,248,33,168,116,106,4,95,141,234,245,182,115,97,
+                           136,97,250,58,10,165,29,49,103,45,26,58,75,23,120,
+                           198,143,67&gt;&gt;},
+                     {third_anchor,
+                         &lt;&lt;15,23,98,93,249,4,211,157,97,39,142,35,14,10,79,66,
+                           184,65,196,72,126,21,43,245,224,34,230,124,194,144,
+                           89,252&gt;&gt;},
+                     {fourth_anchor,
+                         &lt;&lt;23,111,151,42,19,1,93,214,137,99,137,218,174,65,
+                           198,124,5,188,110,75,212,59,11,117,246,76,140,91,
+                           197,117,74,214&gt;&gt;},
+                     {asker_anchor,
+                         &lt;&lt;35,8,137,6,24,113,216,96,200,225,227,11,88,251,121,
+                           10,200,180,158,94,140,127,195,86,202,253,254,101,
+                           166,181,249,247&gt;&gt;},
+                     {filter_symbol_name,
+                         &lt;&lt;"quod_r4_target_only_863EB17BF2C368D3"&gt;&gt;},
+                     {agent_ref,
+                         {agent_instance_ref,&lt;&lt;"pets"&gt;&gt;,
+                             &lt;&lt;35,8,137,6,24,113,216,96,200,225,227,11,88,251,
+                               121,10,200,180,158,94,140,127,195,86,202,253,
+                               254,101,166,181,249,247&gt;&gt;,
+                             {human_user,test_agent}}},
+                     {agent_key,
+                         {&lt;&lt;140,214,86,174,3,14,48,44,86,116,79,25,64,243,85,
+                            15,122,241,40,28,247,242,237,86,44,9,207,155,125,
+                            101,243,235&gt;&gt;,
+                          &lt;&lt;85,134,200,188,216,243,146,111,90,135,175,224,
+                            254,163,178,230,59,230,116,227,227,67,96,155,233,
+                            205,171,53,133,60,198,83&gt;&gt;}},
+                     {agent_pub,
+                         &lt;&lt;140,214,86,174,3,14,48,44,86,116,79,25,64,243,85,
+                           15,122,241,40,28,247,242,237,86,44,9,207,155,125,
+                           101,243,235&gt;&gt;},
+                     {client_peer,{127,0,0,1}},
+                     {client_session,
+                         #{public_key =&gt;
+                               &lt;&lt;140,214,86,174,3,14,48,44,86,116,79,25,64,243,
+                                 85,15,122,241,40,28,247,242,237,86,44,9,207,
+                                 155,125,101,243,235&gt;&gt;,
+                           session_id =&gt;
+                               &lt;&lt;231,23,13,170,247,30,174,83,195,167,241,68,22,
+                                 180,194,116,224,182,57,156,116,179,64,186,27,
+                                 94,238,52,128,244,178,209&gt;&gt;,
+                           expires_ms =&gt; 1795020207154}},
+                     {client_auth,&lt;21288.209.0&gt;},
+                     {watchdog,&lt;0.759.0&gt;},
+                     {tc_logfile,
+                         "/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_17.28.23/lib.quod.quod_ask_SUITE.remote_native_read_uses_selected_observer.logs/run.2026-11-18_17.28.23/quod_ask_suite.init_per_suite.html"},
+                     {tc_group_properties,[]},
+                     {tc_group_path,[]},
+                     {data_dir,
+                         "/home/yan/src/quod/_build/test/lib/quod/test/quod_ask_SUITE_data/"},
+                     {priv_dir,
+                         "/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_17.28.23/lib.quod.quod_ask_SUITE.remote_native_read_uses_selected_observer.logs/run.2026-11-18_17.28.23/log_private/"}]
+</pre>
+<center>
+<br /><hr /><p>
+<a href="../../../all_runs.html">Test run history
+</a>  |  <a href="../../../index.html">Top level test index
+</a>  |  <a href="../../../suite.log.latest.html">Latest test result</a>
+</p>
+<div class="copyright">Copyright &copy; 2026 <a href="http://www.erlang.org">Open Telecom Platform</a><br />
+Updated: <!--date-->Wed Nov 18 2026 17:28:23<!--/date--><br />
+</div>
+</center>
+</body>
+</html>

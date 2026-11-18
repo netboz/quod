@@ -1,0 +1,5 @@
+engine="/home/yan/src/quod/_build/test/lib/erlog/ebin/erlog_int.beam"
+======================== EUnit ========================
+quod_rendering_tests: complete_scenes_and_authored_resources_test...[1.700 s] ok
+=======================================================
+  Test passed.

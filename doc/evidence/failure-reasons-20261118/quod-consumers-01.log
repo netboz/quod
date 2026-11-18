@@ -1,0 +1,1115 @@
+priv/ontologies/common_predicates.pl:56:    ; fail_with_reason(invalid_subject_name(Subject))).
+priv/ontologies/common_predicates.pl:187:    ; fail_with_reason(ambiguous_menu(Entity))).
+priv/ontologies/construction.pl:12:        (instance_of(_, Instance) -> fail_with_reason(instance_identity_collision(Instance)); true),
+priv/ontologies/construction.pl:18:      ; fail_with_reason(creation_requires_output_variable(Class)))).
+priv/ontologies/construction.pl:30:    ; fail_with_reason(invalid_build_inputs)).
+priv/ontologies/construction.pl:51:        fail_with_reason(unknown_initial_attribute(Key)); true),
+priv/ontologies/construction.pl:55:    (member_eq(Class, Path) -> fail_with_reason(constructor_cycle(Class)); true),
+priv/ontologies/construction.pl:74:          fail_with_reason(constructor_body(Class)); true),
+priv/ontologies/construction.pl:88:    ; fail_with_reason(constructor_order(Class))).
+priv/ontologies/construction.pl:110:    ; fail_with_reason(constructor_order_cycle)).
+priv/ontologies/construction.pl:128:        ; fail_with_reason(invalid_initial_attribute(Key))),
+priv/ontologies/construction.pl:144:    ; fail_with_reason(conflicting_attribute_defaults(Class, Key))).
+priv/ontologies/construction.pl:147:'$quod_default_value'(required, _, Key, _) :- fail_with_reason(missing_initial_attribute(Key)).
+priv/ontologies/construction.pl:155:    ; fail_with_reason(initial_default_failed(Key, Provider))).
+priv/ontologies/geometry_schema.pl:94:    (physics_coordinate(X, Limit) -> true ; fail_with_reason(coordinate_allowance(Limit))).
+priv/ontologies/gui_tools.pl:470:    (workbench_member(Fact, Program) -> fail_with_reason(fact_already_present)
+priv/ontologies/gui_tools.pl:480:      (workbench_member(After, Rest) -> fail_with_reason(fact_already_present)
+priv/ontologies/gui_tools.pl:493:workbench_remove([], _, _) :- fail_with_reason(fact_not_present).
+priv/ontologies/gui_tools.pl:535:    (Unique == true -> true ; fail_with_reason(duplicate_clause(Selection))),
+priv/ontologies/gui_tools.pl:556:             -> true ; fail_with_reason(edit_conflict(all))),
+priv/ontologies/gui_tools.pl:565:             -> true ; fail_with_reason(edit_conflict(Indicator))),
+priv/ontologies/gui_tools.pl:618:    Check = ('$quod_predicate_source'(Indicator, CanonicalDraft) -> true ; fail_with_reason(edit_not_representable(Indicator))),
+priv/ontologies/lobby_worlds.pl:41:    (Count =< Limit -> true ; fail_with_reason(world_library_allowance(Count,Limit))).
+priv/ontologies/lobby_worlds.pl:89:        (Count < Limit -> true ; fail_with_reason(world_library_allowance(Count,Limit))),
+priv/ontologies/lobby_worlds.pl:130:    ; fail_with_reason(world_arrival_unavailable)).
+priv/ontologies/quod_gui.pl:621:    (Keep >= 1 -> true; fail_with_reason(menu_wedges_too_few(Wedges))),
+priv/ontologies/quod_gui.pl:643:    (length(Unique, Count) -> true; fail_with_reason(duplicate_menu_slot(Pinned))),
+priv/ontologies/quod_gui.pl:645:        fail_with_reason(menu_slot_unavailable(Slot, Wedges))
+priv/ontologies/quod_gui.pl:1116:    (hud_direct_contributor(Hud, Principal) -> fail_with_reason(hud_contribute_directly); true),
+priv/ontologies/quod_hinged.pl:24:        ; fail_with_reason(invalid_hinge_definition)),
+priv/ontologies/quod_hinged.pl:26:        ; fail_with_reason(invalid_hinge_command)),
+priv/ontologies/quod_hinged.pl:56:        ; fail_with_reason(hinged_custody_held(D))),
+priv/ontologies/quod_physics.pl:163:    ; fail_with_reason(frame_allowance_missing(W))),
+priv/ontologies/quod_physics.pl:165:    (Count + Additional =< Limit -> true; fail_with_reason(frame_allowance(Limit))).
+priv/ontologies/quod_physics.pl:181:    ; fail_with_reason(incompatible_physics_run(Space))),
+priv/ontologies/quod_physics.pl:183:    ; fail_with_reason(incompatible_physics_configuration(Space))).
+priv/ontologies/quod_physics.pl:228:        ; Selections = [] -> fail_with_reason(physics_admission_unavailable(Subject))
+priv/ontologies/quod_physics.pl:229:        ; fail_with_reason(ambiguous_physics_admission(Subject))),
+priv/ontologies/quod_physics.pl:342:    ; fail_with_reason(body_allocator_missing(W))).
+priv/ontologies/quod_physics.pl:346:    ; fail_with_reason(body_identity_unavailable(B))),
+priv/ontologies/quod_physics.pl:351:    (Count + Additional =< Max -> true ; fail_with_reason(body_allowance(Max))).
+priv/ontologies/quod_physics.pl:476:    ; fail_with_reason(body_constraint_group(B))).
+priv/ontologies/quod_physics.pl:479:    (\+ physics_agent(W,_,_,B,_) -> true ; fail_with_reason(body_agent_binding(B))),
+priv/ontologies/quod_physics.pl:517:    ; fail_with_reason(ambiguous_physics_configuration)).
+priv/ontologies/quod_physics.pl:524:    (Rows = [] -> fail_with_reason(Missing) ; true).
+priv/ontologies/quod_physics.pl:557:    ; fail_with_reason(ambiguous_control(W))).
+priv/ontologies/quod_physics.pl:565:        ; fail_with_reason(control_conflict(Epoch))),
+priv/ontologies/quod_physics.pl:577:        Other \== Principal) -> true ; fail_with_reason(agent_controlled(Agent))).
+priv/ontologies/quod_physics.pl:592:    ; fail_with_reason(ambiguous_agent(Agent))),
+priv/ontologies/quod_physics.pl:636:    (Selection = controlled(Agent, Viewpoint) -> true ; fail_with_reason(no_control(W))),
+priv/ontologies/quod_physics.pl:637:    (Epoch = Current -> true ; fail_with_reason(control_conflict(Current))),
+priv/ontologies/quod_physics.pl:754:    ; fail_with_reason(ambiguous_physical_appearance(Subject))).
+priv/ontologies/quod_physics.pl:868:        fail_with_reason(unsupported_framed_terrain(Id))
+priv/ontologies/quod_physics.pl:870:    ; fail_with_reason(invalid_physics_body(Id))).
+priv/ontologies/quod_physics.pl:950:        (physics_free_body(W,D,Revision) -> true ; fail_with_reason(body_not_free(D))),
+priv/ontologies/quod_physics.pl:951:        (physics_rest_policy(W,D,_) -> true ; fail_with_reason(rest_policy_missing(D))),
+priv/ontologies/quod_physics.pl:953:        (Sequence = Current -> true ; fail_with_reason(checkpoint_conflict(D))),
+priv/ontologies/quod_physics.pl:954:        (Before \= waiting(_) -> true ; fail_with_reason(checkpoint_pending(D))),
+priv/ontologies/quod_physics.pl:957:        ; fail_with_reason(checkpoint_custody_held(D))),
+priv/ontologies/quod_physics.pl:966:    ; fail_with_reason(ambiguous_checkpoint(D))).
+priv/ontologies/quod_physics.pl:970:    ; fail_with_reason(ambiguous_checkpoint_custody(D))).
+priv/ontologies/quod_space.pl:151:    ; fail_with_reason(ambiguous_space_assignment(Entity))),
+priv/ontologies/quod_space.pl:210:        ; fail_with_reason(space_physical_change_refused(Space,Change)))
+priv/ontologies/quod_space.pl:594:          ; fail_with_reason(space_contents_unavailable(Subject)))
+priv/ontologies/quod_space.pl:613:    (Selected == World -> true; fail_with_reason(incompatible_physics_view(Selected,World))),
+priv/ontologies/voxel_world.pl:21:    ; fail_with_reason(ambiguous_voxel_world(W))).
+priv/ontologies/voxel_world.pl:25:    (Revision = Expected -> true ; fail_with_reason(voxel_world_conflict(W,Revision))),
+priv/ontologies/voxel_world.pl:26:    (Spec = Actual -> true ; fail_with_reason(voxel_world_exists(W))).
+priv/ontologies/voxel_world.pl:78:        (Expected = Revision -> true ; fail_with_reason(voxel_world_conflict(W,Revision))),
+priv/ontologies/voxel_world.pl:80:        (Current = Versions -> true ; fail_with_reason(voxel_patch_conflict(W))),
+priv/ontologies/voxel_world.pl:81:        (Operation = regenerate, Current \= [] -> fail_with_reason(voxel_world_edited(W)); true),
+priv/ontologies/voxel_world.pl:85:        ; fail_with_reason(voxel_world_occupied(W))),
+priv/ontologies/voxel_world.pl:136:    ; fail_with_reason(ambiguous_voxel_patch(W,C))).
+priv/ontologies/voxel_world.pl:151:        (Revision = ExpectedWorld -> true ; fail_with_reason(voxel_world_conflict(W,Revision))),
+priv/ontologies/voxel_world.pl:152:        (Current = ExpectedChunks -> true ; fail_with_reason(voxel_patch_conflict(W))),
+priv/ontologies/voxel_world.pl:201:    (Bytes =< Maximum -> true ; fail_with_reason(voxel_allowance(geometry_bytes,Bytes,Maximum))),
+priv/ontologies/voxel_world.pl:206:    (Count =< Maximum -> true ; fail_with_reason(voxel_allowance(affected_chunks,Count,Maximum))).
+priv/ontologies/voxel_world_gui.pl:134:        (Versions = Current -> true ; fail_with_reason(voxel_patch_conflict(W))),
+priv/ontologies/voxel_world_view.pl:34:        (Before = Expected -> true ; fail_with_reason(voxel_view_conflict(W))),
+scripts/release/godot_m3b_fixture.erl:66:                {ok,[#{'U':=UserClass}],_}=quod_prolog:prove_ro(<<"quod:root">>,
+scripts/release/quod_source_release.erl:13:    {ok, [#{'Clauses' := Clauses}], _} = quod_prolog:prove_ro(Ns, {'$quod_program_source', {'Clauses'}, Text}),
+scripts/release/quod_source_release.erl:26:    {ok, [#{'Text' := Text}], _} = quod_prolog:prove_ro(Ns, {'$quod_program_source', [canonical(C) || C <- Clauses], {'Text'}}),
+scripts/release/quod_source_release.erl:40:    case quod_prolog:prove_ro(Ns, {prolog_introspection, {source, {'/', Name, Arity}}, {'Source'}}) of
+scripts/release/quod_source_release.erl:71:    {ok, [#{'Clauses' := Clauses}], _} = quod_prolog:prove_ro(Ns, {'$quod_program_source', {'Clauses'}, Text}),
+scripts/release/quod_source_release.erl:79:    case quod_prolog:prove_ro(?GUI, {prolog_edit_goal, Target, {'/', Name, Arity}, Before, Draft, {'Edit'}}) of
+scripts/release/quod_source_release.erl:89:        {fail, Reasons} -> {edit_goal_failed, {Name, Arity}, lists:last(Reasons)};
+scripts/release/quod_source_release.erl:109:      current_space_template_hash => quod_prolog:prove_ro(SpaceNs, {space_template_hash, {'D'}}),
+scripts/release/quod_source_release.erl:110:      current_user_components => quod_prolog:prove_ro(UserNs, {findall, {'-', {'F'}, {'H'}}, {user_source_component, {'F'}, {'H'}}, {'L'}}),
+scripts/release/refound/fleet-verify.erl:2:P = fun(Ns, G) -> case quod_prolog:prove_ro(Ns, G) of {ok, [B], _} -> {ok, B}; Other -> Other end end,
+scripts/release/refound/fleet-verify.erl:10:  leave_to_parent => P(Space, {clause, {space_leave_to, {'_'}, {'_'}}, {'_'}}) =/= {fail, []},
+scripts/release/refound/fleet-verify.erl:12:  personal_icons => P(User, {clause, {personal_menu_destination, {'_'}, {'_'}}, {'_'}}) =/= {fail, []},
+scripts/release/refound/fleet-verify.erl:14:  show_as => P(User, {clause, {show_as, {'_'}, {'_'}, {'_'}}, {'_'}}) =/= {fail, []},
+scripts/release/refound/fleet-verify.erl:15:  default_icon => P(<<"quod:gui">>, {gui_icon, default, {'_'}}) =/= {fail, []},
+scripts/release/refound/quod_refound_operator.erl:52:    {ok, [#{'Profile' := Expected}], _} = quod_prolog:prove_ro(Ns, {external_predicate_modules, {'Profile'}}),
+scripts/release/refound/quod_refound_operator.erl:74:    {fail, _} = quod_prolog:prove_ro(?ROOT, {root_administrator_agent, Node}),
+scripts/release/refound/quod_refound_operator.erl:76:    {ok, [_], _} = quod_prolog:prove_ro(?ROOT, {root_administrator_agent, Node}),
+scripts/release/refound/quod_refound_operator.erl:116:    {ok, [_], _} = quod_prolog:prove_ro(NodeNs, {hosts_ontology, Node, NodeNs, NodeAnchor, discoverable}),
+scripts/release/refound/quod_refound_operator.erl:119:    {ok, [#{'N' := Places}], _} = quod_prolog:prove_ro(<<"quod:names">>,
+scripts/release/refound/quod_refound_operator.erl:128:    {ok, [#{'Rows' := Assets}], _} = quod_prolog:prove_ro(Gui,
+scripts/release/refound/quod_refound_operator.erl:147:        {ok, [#{'Profile' := Expected}], _} = quod_prolog:prove_ro(Ns, {external_predicate_modules, {'Profile'}}),
+scripts/release/refound/quod_refound_operator.erl:178:    {ok, [#{'Rows' := Result}], _} = quod_prolog:prove_ro(Ontology,
+scripts/release/refound/quod_refound_operator.erl:182:    {ok, [#{'Rows' := Result}], _} = quod_prolog:prove_ro(Ontology,
+src/predicates/quod_agent_predicates.erl:51:        _ -> quod_predicates:fail_reason(node_actor_unavailable,St)
+src/predicates/quod_agent_predicates.erl:90:                {error, Reason} -> quod_predicates:fail_reason(Reason,St)
+src/predicates/quod_agent_predicates.erl:92:        error -> quod_predicates:fail_reason(scope_identity_unavailable,St)
+src/predicates/quod_agent_predicates.erl:124:        none -> quod_predicates:fail_reason(custody_executor_unavailable, St)
+src/predicates/quod_agent_predicates.erl:154:                        false -> quod_predicates:fail_reason(custody_destination_unavailable, St)
+src/predicates/quod_agent_predicates.erl:189:                        false -> quod_predicates:fail_reason(custody_destination_unavailable, St)
+src/predicates/quod_agent_predicates.erl:191:                {error, Reason} -> quod_predicates:fail_reason({agent_custody_unavailable, Reason}, St)
+src/predicates/quod_agent_predicates.erl:214:                                false -> quod_predicates:fail_reason(invalid_custody_receipt, St)
+src/predicates/quod_agent_predicates.erl:216:                        error -> quod_predicates:fail_reason(invalid_custody_receipt, St)
+src/predicates/quod_agent_predicates.erl:218:                _ -> quod_predicates:fail_reason(invalid_custody_receipt, St)
+src/predicates/quod_agent_predicates.erl:244:                        error -> quod_predicates:fail_reason({scope_identity_unavailable,Ns},St);
+src/predicates/quod_agent_predicates.erl:253:                                _ -> quod_predicates:fail_reason(node_actor_unavailable,St)
+src/predicates/quod_agent_predicates.erl:290:                {error,Reason} -> quod_predicates:fail_reason({agent_signing_unavailable,Reason},St)
+src/predicates/quod_ask.erl:134:            case erlog_int:merge_failure_reasons(Reasons, St1) of
+src/predicates/quod_ask.erl:298:                    {ok,{complete,1,Reasons,false}} -> {fail,Reasons};
+src/predicates/quod_ask.erl:1186:      failure_reasons, Blob,
+src/predicates/quod_ask.erl:1351:      failure_reasons, Reasons,
+src/predicates/quod_ask.erl:1919:        {fail, _} -> denied;
+src/predicates/quod_committee_predicates.erl:104:                        true -> quod_predicates:fail_reason(last_committee_member,St);
+src/predicates/quod_gui_predicates.erl:26:                {error,Reason} -> quod_predicates:fail_reason({gui_presentation_failed,Reason},St)
+src/predicates/quod_gui_predicates.erl:121:                        none -> quod_predicates:fail_reason(gui_executor_unavailable,St)
+src/predicates/quod_gui_predicates.erl:123:                {fail,Reasons} -> quod_predicates:fail_reason({gui_open_failed,Reasons},St);
+src/predicates/quod_ontology_predicates.erl:145:        {error,Reason} -> fail_reason(lifecycle_error(RequestAction,Reason),St)
+src/predicates/quod_ontology_predicates.erl:193:            fail_reason(failure_reason(Action, rebuilding), St)
+src/predicates/quod_ontology_predicates.erl:275:                {error, not_hosted} -> fail_reason({ontology_anchor_failed,not_hosted},St);
+src/predicates/quod_ontology_predicates.erl:277:                {error,Reason} -> fail_reason({ontology_anchor_failed,Reason},St)
+src/predicates/quod_physics_predicates.erl:40:                        error -> fail_reason({scope_identity_unavailable,W},St);
+src/predicates/quod_physics_predicates.erl:87:                        undefined -> fail_reason({physics_world_unavailable,W},St);
+src/predicates/quod_physics_predicates.erl:88:                        _Pid when Remaining =< 0 -> fail_reason(expired,St);
+src/predicates/quod_physics_predicates.erl:95:                                {error,Reason} -> fail_reason({Reason,W},St)
+src/predicates/quod_physics_predicates.erl:131:                error -> fail_reason({scope_identity_unavailable,element(2,Action)},St);
+src/predicates/quod_physics_predicates.erl:169:                                        undefined -> fail_reason({physics_world_unavailable,W},St);
+src/predicates/quod_physics_predicates.erl:175:                                                {error,Reason} -> fail_reason(Reason,St)
+src/predicates/quod_runtime_predicates.erl:77:        error -> quod_predicates:fail_reason(scope_identity_unavailable,St)
+src/predicates/quod_runtime_predicates.erl:100:        error -> quod_predicates:fail_reason(scope_identity_unavailable, St)
+src/predicates/quod_runtime_predicates.erl:147:        {error,_} -> quod_predicates:fail_reason(scope_identity_unavailable,St);
+src/predicates/quod_runtime_predicates.erl:353:        {fail, _Reasons} -> unmatched;
+src/quod_atomic.erl:125:    {ok, Reasons} = quod_wire_term:encode_failure_reasons([vote_deadline]),
+src/quod_atomic.erl:184:    case quod_wire_term:encode_failure_reasons(Reasons) of
+src/quod_atomic.erl:209:    case quod_wire_term:encode_failure_reasons(Reasons) of
+src/quod_atomic.erl:216:resolution_reasons(abort, Blob) when is_binary(Blob) -> quod_wire_term:decode_failure_reasons(Blob);
+src/quod_atomic.erl:453:            case quod_wire_term:encode_failure_reasons(Reasons) of
+src/quod_atomic.erl:637:         #{group := #{group_id := GroupId}}} -> quod_wire_term:decode_failure_reasons(Reasons);
+src/quod_atomic.erl:1150:    case quod_wire_term:decode_failure_reasons(Blob) of
+src/quod_client_goal_router.erl:716:    Result = quod_client_result:normalize(Evidence, {fail, [{proof_timeout, Ns}]}),
+src/quod_client_result.erl:144:normalize_unvalidated(_Evidence, {fail, Reasons}) when is_list(Reasons) ->
+src/quod_client_result.erl:145:    case quod_wire_term:encode_failure_reasons(Reasons) of
+src/quod_client_result.erl:297:    case quod_wire_term:decode_failure_reasons(ReasonsBlob) of
+src/quod_client_result.erl:423:    {ok, Reasons} = quod_wire_term:decode_failure_reasons(ReasonsBlob),
+src/quod_commit_validation.erl:558:                    {ok, Reasons} = quod_wire_term:decode_failure_reasons(Blob),
+src/quod_commit_validation.erl:883:                {fail, _Reasons} -> {invalid, can_join};
+src/quod_conn.erl:391:        {{fail, Reason}, _} ->
+src/quod_conn.erl:776:                {ok, _Other} -> {fail, pubkey_mismatch};
+src/quod_conn.erl:777:                error        -> {fail, bad_peer_cert}
+src/quod_conn.erl:779:        {error, _} -> {fail, no_peercert}
+src/quod_conn.erl:781:bind_ok(_RemotePeer, _Conn) -> {fail, malformed_header_identity}.
+src/quod_directory_control.erl:470:      quod_prolog:prove_ro(?ROOT_NS, Goal)).
+src/quod_directory_control.erl:490:validate_peer_proof({fail, _Reasons}) ->
+src/quod_dtx_recovery.erl:216:            {ok, Reasons} = quod_wire_term:decode_failure_reasons(Blob),
+src/quod_effect_journal.erl:1089:    case quod_prolog:prove_ro(ControlNs, Desired) of
+src/quod_effect_journal.erl:1092:        {fail, _Reasons} -> absent;
+src/quod_erlog_db_local_prove.erl:442:           fail_reasons = [],
+src/quod_erlog_db_local_prove.erl:443:           fail_reasons_truncated = false,
+src/quod_erlog_db_local_prove.erl:507:           fail_reasons = [],
+src/quod_erlog_db_local_prove.erl:508:           fail_reasons_truncated = false,
+src/quod_explorer_http.erl:680:        {refused, Blob} -> {refused, failure_reasons_json(Blob)}
+src/quod_explorer_http.erl:697:      applied_generation => Generation, reasons => failure_reasons_json(Reasons)};
+src/quod_explorer_http.erl:715:failure_reasons_json(none) -> null;
+src/quod_explorer_http.erl:716:failure_reasons_json(Blob) ->
+src/quod_explorer_http.erl:717:    {ok, Reasons} = quod_wire_term:decode_failure_reasons(Blob),
+src/quod_node_actor.erl:283:                          quod_prolog:prove_ro(<<"quod:node">>,
+src/quod_node_actor.erl:285:                          quod_prolog:prove_ro(<<"quod:root">>,
+src/quod_node_actor.erl:297:    case quod_prolog:prove_ro(<<"quod:node">>,
+src/quod_node_actor.erl:357:            case quod_prolog:prove_ro(Ns, {hosts_ontology, Ref, Ns, Anchor, discoverable}) of
+src/quod_node_actor.erl:487:    case quod_prolog:prove_ro(Namespace, Goal) of
+src/quod_node_actor.erl:500:        {fail, _} -> {error, node_actor_instance_mismatch};
+src/quod_outcome.erl:1324:    case quod_wire_term:encode_failure_reasons(Reasons) of
+src/quod_predicates.erl:102:fail_reason(Reason, St) ->
+src/quod_predicates.erl:103:    erlog_int:prove_body([{fail_with_reason, Reason}], St).
+src/quod_prolog.erl:457:        {error, term()} | fail | {fail, [term()]}.
+src/quod_prolog.erl:480:          {error, term()} | fail | {fail, [term()]}.
+src/quod_prolog.erl:508:          {error, term()} | fail | {fail, [term()]}.
+src/quod_prolog.erl:554:        {ok, [map()], log_index()} | {error, term()} | fail | {fail, [term()]}.
+src/quod_prolog.erl:3264:      failure_reasons, Reasons,
+src/quod_prolog.erl:3707:      failure_reasons, Blob, Pid, Binding, RequestRef,
+src/quod_prolog.erl:4423:                        {error,Reason} -> {fail,[Reason]};
+src/quod_prolog.erl:5471:            {fail, Reasons};
+src/quod_prolog.erl:5499:        {fail, [{proof_timeout,
+src/quod_prolog.erl:5558:proof_reply({fail, []}, _) -> fail;
+src/quod_prolog.erl:5559:proof_reply({fail, Reasons}, _) -> {fail, Reasons};
+src/quod_prolog.erl:5802:    {fail, [{proof_timeout, Ns}]};
+src/quod_prolog.erl:6041:        {fail, _Reasons} -> fail;
+src/quod_prolog.erl:6838:                        {fail, Reasons}
+src/quod_prolog.erl:6863:    case quod_wire_term:encode_failure_reasons(Reasons) of
+src/quod_prolog.erl:6897:                              GroupId, Waiter, {fail, Reasons},
+src/quod_prolog.erl:6940:dtx_waiter_result({fail, _}) -> rejected.
+src/quod_proof_scope.erl:122:drive({fail, St}, _Goal, Scope) ->
+src/quod_proof_scope.erl:123:    {complete, St#est.fail_reasons, Scope#scope{state = St}};
+src/quod_proof_session.erl:242:            {ok, {fail_with_reason, {not_allowed, Ns}}};
+src/quod_proof_session.erl:791:          {ok, map(), list(), map()} | {fail, [term()]} | {error, term()}.
+src/quod_proof_session.erl:808:          {ok, map(), list(), map()} | {fail, [term()]} | {error, term()}.
+src/quod_proof_session.erl:830:            {fail, Reasons};
+src/quod_resource_basis.erl:83:       {fail_with_reason, 1}, {get_fail_reasons, 1}]);
+src/quod_runtime.erl:3063:resource_read_result(Goal,{fail,Reasons}) -> {error,{no_solution,functor_key(Goal),Reasons}}.
+src/quod_runtime.erl:3257:        {fail, Reasons} -> case Requirement of
+src/quod_scope_wire.erl:114:        goal | answer | failure_reasons | erlog_error | plan | manifest |
+src/quod_scope_wire.erl:362:encode_payload(failure_reasons, Reasons) ->
+src/quod_scope_wire.erl:364:      quod_wire_term:encode_failure_reasons(Reasons));
+src/quod_scope_wire.erl:413:decode_payload(failure_reasons, Encoded) ->
+src/quod_scope_wire.erl:415:      quod_wire_term:decode_failure_reasons(Encoded));
+src/quod_scope_wire.erl:448:payload_limit(Kind) when Kind =:= failure_reasons; Kind =:= erlog_error;
+src/quod_system_ontology.erl:38:      quod_prolog:prove_ro(?ROOT_NS, {findall, Row, Row, Rows})).
+src/quod_system_ontology.erl:59:validate_catalog_proof({fail, _}) -> {error, root_not_ready};
+src/quod_trace.erl:268:outcome({fail, _Reasons}) -> {error, <<"fail">>};
+src/quod_wire_term.erl:35:         encode_failure_reasons/1, decode_failure_reasons/1,
+src/quod_wire_term.erl:591:-spec encode_failure_reasons(term()) ->
+src/quod_wire_term.erl:593:encode_failure_reasons(Reasons) ->
+src/quod_wire_term.erl:594:    case validate_failure_reasons(Reasons) of
+src/quod_wire_term.erl:600:-spec decode_failure_reasons(term()) ->
+src/quod_wire_term.erl:602:decode_failure_reasons(Blob) when is_binary(Blob) ->
+src/quod_wire_term.erl:607:decode_failure_reasons(_) -> {error, bad_term}.
+src/quod_wire_term.erl:612:    case encode_failure_reasons(Reasons) of
+src/quod_wire_term.erl:617:validate_failure_reasons([]) -> ok;
+src/quod_wire_term.erl:618:validate_failure_reasons([Reason | Rest]) ->
+src/quod_wire_term.erl:620:        ok -> validate_failure_reasons(Rest);
+src/quod_wire_term.erl:623:validate_failure_reasons(_) -> {error, bad_term}.
+src/quod_wire_term.erl:651:            case encode_failure_reasons(Reasons) of
+Binary file test/fixtures/l2-s7-v5/Y2hhaW5fYw/log.0001 matches
+test/fixtures/ontology-acl-acceptance.pl:20:         term_digest(Current, Digest)), [done-Expected]) -> true ; fail_with_reason(edit_conflict(all)))) :-
+test/fixtures/ontology-acl-acceptance.pl:23:                       fail_with_reason(edit_conflict(Indicator)))) :- acl_test_content_indicator(Indicator).
+test/fixtures/ontology-acl-acceptance.pl:25:                       fail_with_reason(edit_not_representable(Indicator)))) :- acl_test_content_indicator(Indicator).
+test/growth_SUITE.erl:95:    ?assertMatch({fail, [_ | _]},
+test/growth_SUITE.erl:113:    ?assertMatch({fail, [_ | _]},
+test/join_SUITE.erl:226:    ?assertMatch({fail, [_ | _]},
+test/join_SUITE.erl:386:           {fail, [_ | _]},
+test/quod_action_predicates_tests.erl:16:      fun(Goal) -> ?assertMatch({fail, _}, erlog_int:prove_goal(Goal, St)) end,
+test/quod_action_predicates_tests.erl:35:    {fail, Refused} = erlog_int:prove_goal({run_declared_action, bad_step}, St),
+test/quod_action_predicates_tests.erl:116:    {fail, Final} = erlog_int:prove_goal({goal, target}, St),
+test/quod_action_predicates_tests.erl:132:failed_candidates_retain_explicit_failure_reasons_test() ->
+test/quod_action_predicates_tests.erl:134:           <<"action(first, [fail_with_reason(denied_first)], target).\n"
+test/quod_action_predicates_tests.erl:135:             "action(second, [fail_with_reason(denied_second)], target).\n">>),
+test/quod_action_predicates_tests.erl:136:    {fail, Final} = erlog_int:prove_goal({goal, target}, St),
+test/quod_action_predicates_tests.erl:137:    ?assert(lists:member(denied_first, Final#est.fail_reasons)),
+test/quod_action_predicates_tests.erl:138:    ?assert(lists:member(denied_second, Final#est.fail_reasons)).
+test/quod_action_savepoint_tests.erl:80:        ?assertMatch({fail, _}, erlog_int:prove_goal({proof_savepoint, true}, St)),
+test/quod_action_savepoint_tests.erl:81:        ?assertMatch({fail, _}, erlog_int:prove_goal({savepoint, true}, St))
+test/quod_agent_actions_tests.erl:8:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:12:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:19:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:28:        {fail, Final} = erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:43:            {fail, Refused} = erlog_int:prove_goal(Candidate(Host, Epoch), St),
+test/quod_agent_actions_tests.erl:61:          ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:63:          ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:73:          ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:75:          ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:81:        {fail, Final} = erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:98:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:118:        ?assertMatch({fail, _}, erlog_int:prove_goal(Event, Reported)),
+test/quod_agent_actions_tests.erl:124:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:126:        ?assertMatch({fail, _}, erlog_int:prove_goal(Report, Withdrawn)),
+test/quod_agent_actions_tests.erl:127:        ?assertMatch({fail, _}, erlog_int:prove_goal({goal, Report}, Withdrawn)),
+test/quod_agent_actions_tests.erl:128:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:144:            {fail, Final} = erlog_int:prove_goal({goal, Bad}, St),
+test/quod_agent_actions_tests.erl:152:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:173:        ?assertMatch({fail, _}, erlog_int:prove_goal(First, Reported)),
+test/quod_agent_actions_tests.erl:174:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:179:        ?assertMatch({fail, _}, erlog_int:prove_goal(Next, St)),
+test/quod_agent_actions_tests.erl:180:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:213:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:215:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:230:            ?assertMatch({fail, _}, erlog_int:prove_goal({goal, State}, Moved))
+test/quod_agent_actions_tests.erl:253:        ?assertMatch({fail, _}, erlog_int:prove_goal(Resolve, Suspect)),
+test/quod_agent_actions_tests.erl:260:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:275:        ?assertMatch({fail, _}, erlog_int:prove_goal(Candidate, Moved)),
+test/quod_agent_actions_tests.erl:276:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:280:        ?assertMatch({fail, _}, erlog_int:prove_goal(Goal, Moved)),
+test/quod_agent_actions_tests.erl:301:          {fail, Failed} = erlog_int:prove_goal({goal, Candidate}, St),
+test/quod_agent_actions_tests.erl:310:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:317:            {fail, Final} = erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:323:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:338:        ?assertMatch({fail, _}, erlog_int:prove_goal({goal, Move}, Prepared)),
+test/quod_agent_actions_tests.erl:342:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:344:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:352:        ?assertMatch({fail, _}, erlog_int:prove_goal(Move, St)),
+test/quod_agent_actions_tests.erl:356:        ?assertMatch({fail, _}, erlog_int:prove_goal(Move, Duplicate)),
+test/quod_agent_actions_tests.erl:362:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:383:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:387:        ?assertMatch({fail, _}, erlog_int:prove_goal(Move, Ambiguous)),
+test/quod_agent_actions_tests.erl:392:        ?assertMatch({fail, _}, erlog_int:prove_goal(Move, Expired))
+test/quod_agent_actions_tests.erl:402:        ?assertMatch({fail, _}, erlog_int:prove_goal(Resolution, Reachable)),
+test/quod_agent_actions_tests.erl:406:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:422:        ?assertMatch({fail, _}, erlog_int:prove_goal(Move, Quorum)),
+test/quod_agent_actions_tests.erl:515:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_actions_tests.erl:517:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_capacity_tests.erl:55:    ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {ping, at_capacity})),
+test/quod_agent_custody_tests.erl:96:                        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns,
+test/quod_agent_custody_tests.erl:163:                        {ok, Reasons} = quod_wire_term:decode_failure_reasons(Encoded),
+test/quod_agent_custody_tests.erl:178:    ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {agent_hosted, actor, Node, 2, Pub})),
+test/quod_agent_custody_tests.erl:179:    ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {agent_key, actor, OldKey, revoked})),
+test/quod_agent_custody_tests.erl:180:    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {agent_candidate_key, actor, {'_'}, {'_'}, {'_'}, {'_'}})),
+test/quod_agent_custody_tests.erl:185:    ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {agent_hosted, actor, Old, 1, OldKey})),
+test/quod_agent_custody_tests.erl:186:    ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns,
+test/quod_agent_custody_tests.erl:189:    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {agent_candidate_key, actor, {'_'}, {'_'}, {'_'}, {'_'}}));
+test/quod_agent_custody_tests.erl:191:    ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {agent_hosted, actor, Old, 1, OldKey})),
+test/quod_agent_custody_tests.erl:192:    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {agent_candidate_key, actor, {'_'}, {'_'}, {'_'}, {'_'}})),
+test/quod_agent_custody_tests.erl:193:    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns,
+test/quod_agent_failover_SUITE.erl:712:    case quod_prolog:prove_ro(Ns, Goal) of
+test/quod_agent_failover_SUITE.erl:714:        {fail, _} -> await_goal_edge(Ns, Owner, Monitor, Goal, Deadline);
+test/quod_agent_failover_SUITE.erl:800:    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {recovered_work, stale_old_host})),
+test/quod_agent_hosting_tests.erl:19:                quod_prolog:prove_ro(Ns, {agent_hosted, actor, Node, 1, Key})),
+test/quod_agent_hosting_tests.erl:29:                quod_prolog:prove_ro(Ns, {agent_key, actor, Key, revoked})),
+test/quod_agent_hosting_tests.erl:31:                quod_prolog:prove_ro(Ns, {agent_hosted, actor, Node, 2, NewKey})),
+test/quod_agent_hosting_tests.erl:42:                quod_prolog:prove_ro(Ns, {agent_hosted, actor, Node, 2, NewKey})),
+test/quod_agent_hosting_tests.erl:57:                quod_prolog:prove_ro(Ns, {findall, {report, {'O'}, {'K'}},
+test/quod_agent_hosting_tests.erl:64:            ?assertMatch({ok, [#{'Rows' := []}], _}, quod_prolog:prove_ro(Ns,
+test/quod_agent_hosting_tests.erl:66:            ?assertMatch({ok, [#{'Rows' := []}], _}, quod_prolog:prove_ro(Ns,
+test/quod_agent_hosting_tests.erl:69:            ?assertEqual(fail, quod_prolog:prove_ro(Ns,
+test/quod_agent_hosting_tests.erl:97:                ?assertEqual(fail, quod_prolog:prove_ro(Ns,
+test/quod_agent_hosting_tests.erl:144:                ?assertMatch({ok, [#{'Rows' := []}], _}, quod_prolog:prove_ro(Owner,
+test/quod_agent_hosting_tests.erl:229:        ?assertMatch({ok, [#{'Rows' := [<<0:256>>]}], _}, quod_prolog:prove_ro(Ns,
+test/quod_agent_hosting_tests.erl:231:        {ok, [#{'Rows' := Done}], _} = quod_prolog:prove_ro(Ns,
+test/quod_agent_hosting_tests.erl:257:        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, {work_done, <<1:256>>})),
+test/quod_agent_hosting_tests.erl:258:        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {work_pending, <<1:256>>})),
+test/quod_agent_hosting_tests.erl:332:                ?assertMatch({ok, [#{'Count' := 20}], _}, quod_prolog:prove_ro(Ns,
+test/quod_agent_hosting_tests.erl:349:            {ok, [#{'Done' := Done}], _} = quod_prolog:prove_ro(Ns,
+test/quod_agent_hosting_tests.erl:430:            ?assertEqual(Expected, element(1, quod_prolog:prove_ro(Ns, {ping, Case})) =:= ok),
+test/quod_agent_hosting_tests.erl:438:                        quod_prolog:prove_ro(Ns, {findall, {'V'}, {ping, {'V'}}, {'Rows'}}));
+test/quod_agent_hosting_tests.erl:580:                    ?assertMatch({fail, _}, quod_prolog:prove_ro(SenderNs,
+test/quod_agent_hosting_tests.erl:582:                    ?assertMatch({fail, _}, quod_prolog:prove_ro(ReceiverNs, injected))
+test/quod_agent_hosting_tests.erl:590:        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(SenderNs, Waiting)),
+test/quod_agent_hosting_tests.erl:591:        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(ReceiverNs, Pending)),
+test/quod_agent_hosting_tests.erl:678:                ?assertMatch({fail, _}, quod_prolog:prove_ro(ReceiverNs, {reserved, object})),
+test/quod_agent_hosting_tests.erl:679:                ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(ReceiverNs, {available, object})),
+test/quod_agent_hosting_tests.erl:680:                ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(ReceiverNs, Pending)),
+test/quod_agent_hosting_tests.erl:681:                ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(SenderNs, Waiting));
+test/quod_agent_hosting_tests.erl:784:            ?assertEqual({ok, [conflict_retry]}, quod_wire_term:decode_failure_reasons(Reasons))
+test/quod_agent_hosting_tests.erl:837:    case {quod_prolog:prove_ro(SenderNs, setelement(7, Waiting, done)),
+test/quod_agent_hosting_tests.erl:838:          quod_prolog:prove_ro(ReceiverNs, setelement(7, Pending, done))} of
+test/quod_agent_hosting_tests.erl:853:    ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(SenderNs, setelement(7, Waiting, done))),
+test/quod_agent_hosting_tests.erl:854:    ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(ReceiverNs, setelement(7, Pending, done))),
+test/quod_agent_hosting_tests.erl:855:    ?assertMatch({ok, [#{'Objects' := [object]}], _}, quod_prolog:prove_ro(ReceiverNs,
+test/quod_agent_hosting_tests.erl:857:    ?assertMatch({fail, _}, quod_prolog:prove_ro(SenderNs,
+test/quod_agent_hosting_tests.erl:875:                ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns,
+test/quod_agent_hosting_tests.erl:941:                ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns,
+test/quod_agent_hosting_tests.erl:1031:        {ok, [#{'ActiveKey' := ActiveKey}], _} = quod_prolog:prove_ro(
+test/quod_agent_hosting_tests.erl:1037:        ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {agent_key, actor, OldKey, revoked})),
+test/quod_agent_hosting_tests.erl:1038:        ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {ping, durable_before_loss})),
+test/quod_agent_hosting_tests.erl:1039:        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {agent_failure_report, actor,
+test/quod_agent_hosting_tests.erl:1045:        ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {ping, after_automatic_move}))
+test/quod_agent_hosting_tests.erl:1129:    ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,handler_observation_leak)),
+test/quod_agent_hosting_tests.erl:1170:        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {ping, delegated})),
+test/quod_agent_hosting_tests.erl:1179:        ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {ping, delegated})),
+test/quod_agent_hosting_tests.erl:1182:        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {ping, ungranted})),
+test/quod_agent_hosting_tests.erl:1263:        ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {recorded_request, Expiry, Operation})),
+test/quod_agent_hosting_tests.erl:1282:        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {agent_host, uncommitted, {'_'}, {'_'}, {'_'}})),
+test/quod_agent_hosting_tests.erl:1311:            ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {ping, {'Anything'}}))
+test/quod_agent_hosting_tests.erl:1353:            ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(
+test/quod_agent_hosting_tests.erl:1355:            ?assertMatch({fail, _}, quod_prolog:prove_ro(
+test/quod_agent_hosting_tests.erl:1360:            ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(
+test/quod_agent_hosting_tests.erl:1365:            ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(
+test/quod_agent_hosting_tests.erl:1370:    Report = quod_prolog:prove_ro(Ns,
+test/quod_agent_hosting_tests.erl:1374:        _ -> ?assertMatch({fail, _}, Report)
+test/quod_agent_hosting_tests.erl:1448:    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {ping, stale})),
+test/quod_agent_hosting_tests.erl:1488:        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {ping, expires}))
+test/quod_agent_hosting_tests.erl:1604:        ?assertMatch({fail, _}, quod_prolog:prove_ro(SenderNs, {request, exchange})),
+test/quod_agent_hosting_tests.erl:1605:        ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(ReceiverNs, {answered, exchange})),
+test/quod_agent_hosting_tests.erl:1610:        ?assertMatch({ok, [#{'Ids' := [exchange]}], _}, quod_prolog:prove_ro(
+test/quod_agent_hosting_tests.erl:1616:        ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(ReceiverNs, {answered, after_receiver_restart}))
+test/quod_agent_hosting_tests.erl:1661:    ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {ping, first})),
+test/quod_agent_hosting_tests.erl:1662:    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {do_work, first})),
+test/quod_agent_hosting_tests.erl:1678:    ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {agent_key, actor, Key, revoked})),
+test/quod_agent_hosting_tests.erl:1688:    ?assertMatch({ok, [#{'Values' := [first]}], _}, quod_prolog:prove_ro(
+test/quod_agent_hosting_tests.erl:1696:    ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {ping, after_restart})),
+test/quod_agent_hosting_tests.erl:1697:    ?assertMatch({fail, _}, quod_prolog:execute(Ns,
+test/quod_agent_predicates_tests.erl:15:        ?assertMatch({fail, _}, erlog_int:prove_goal({me, other}, St))
+test/quod_agent_predicates_tests.erl:42:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_predicates_tests.erl:49:        ?assertMatch({fail, _}, erlog_int:prove_goal(Goal, St0)),
+test/quod_agent_predicates_tests.erl:51:            ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_predicates_tests.erl:63:        ?assertMatch({fail, _}, erlog_int:prove_goal({current_request_expiry, {'D'}}, St)),
+test/quod_agent_predicates_tests.erl:126:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_agent_predicates_tests.erl:137:        {fail, Bound} = erlog_int:prove_goal(bound_probe, St),
+test/quod_agent_predicates_tests.erl:139:        {fail, Live} = erlog_int:prove_goal(live_probe, St),
+test/quod_agent_reaction_tests.erl:62:            ?assertEqual(fail, quod_prolog:prove_ro(
+test/quod_agent_reaction_tests.erl:100:              ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, forbidden_guard_write)),
+test/quod_agent_reaction_tests.erl:101:              ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, forbidden_goal_write)),
+test/quod_agent_reaction_tests.erl:167:    {ok, [#{'Values' := Values}], _} = quod_prolog:prove_ro(
+test/quod_agent_recovery_tests.erl:40:            ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns,
+test/quod_agent_recovery_tests.erl:195:        State = quod_prolog:prove_ro(Ns,
+test/quod_agent_recovery_tests.erl:220:    ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, conjunction(Checks))),
+test/quod_agent_recovery_tests.erl:221:    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns,
+test/quod_agent_recovery_tests.erl:231:        ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {recovery_work_done, First}))
+test/quod_agent_trace_tests.erl:37:            ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {ping, ?SECRET}))
+test/quod_agent_trace_tests.erl:116:                quod_prolog:prove_ro(Ns, {trace_prepared, {prepared, {'Key'}}}))
+test/quod_agent_vault_tests.erl:541:            ?assertMatch({fail, _}, quod_prolog:prove_ro(<<"agents">>,
+test/quod_agent_vault_tests.erl:543:            ?assertMatch({fail, _}, quod_prolog:prove_ro(<<"agents">>,
+test/quod_ask_SUITE.erl:22:         remote_scope_chain_policy/1, remote_scope_failure_reasons/1,
+test/quod_ask_SUITE.erl:23:         remote_scope_nested_failure_reasons/1,
+test/quod_ask_SUITE.erl:24:         remote_scope_deep_failure_reasons/1,
+test/quod_ask_SUITE.erl:82:          remote_scope_chain_policy, remote_scope_failure_reasons,
+test/quod_ask_SUITE.erl:83:          remote_scope_nested_failure_reasons,
+test/quod_ask_SUITE.erl:84:          remote_scope_deep_failure_reasons,
+test/quod_ask_SUITE.erl:158:            ct:fail({enrollment_failed, quod_wire_term:decode_failure_reasons(Reasons)});
+test/quod_ask_SUITE.erl:367:    case quod_prolog:prove_ro(Ns, Goal) of
+test/quod_ask_SUITE.erl:403:        ?assertMatch({fail, _}, peer:call(Peer, quod_prolog, prove, [Ns, {RemoveAtom, {'X'}}])),
+test/quod_ask_SUITE.erl:449:        ?assertMatch({fail, _}, peer:call(Peer, quod_prolog, prove, [Ns, {cut_keep, 2}])),
+test/quod_ask_SUITE.erl:450:        ?assertMatch({fail, _}, peer:call(Peer, quod_prolog, prove, [Ns, {cut_remove, {'X'}}]))
+test/quod_ask_SUITE.erl:476:            "blocked(X) :- fail_with_reason(impossible_to_link(X)).\n",
+test/quod_ask_SUITE.erl:496:            "third_blocked :- fail_with_reason(third_declined).\n"
+test/quod_ask_SUITE.erl:554:            "get_fail_reasons([_, _, _, _, third_declined]).\n"]),
+test/quod_ask_SUITE.erl:749:    ?assertMatch({fail,_},Read(Identity,{current_executor_key,Key})),
+test/quod_ask_SUITE.erl:753:    ?assertMatch({fail,_},peer:call(Observer,quod_prolog,prove_ro,[?NS,native_scope_write])),
+test/quod_ask_SUITE.erl:1181:    ?assertMatch({fail, [_ | _]},
+test/quod_ask_SUITE.erl:1249:    {fail, DeniedReasons} =
+test/quod_ask_SUITE.erl:1268:remote_scope_failure_reasons(Config) ->
+test/quod_ask_SUITE.erl:1272:               {get_fail_reasons,
+test/quod_ask_SUITE.erl:1282:remote_scope_nested_failure_reasons(Config) ->
+test/quod_ask_SUITE.erl:1297:remote_scope_deep_failure_reasons(Config) ->
+test/quod_ask_SUITE.erl:1300:    {fail, Reasons} = peer:call(
+test/quod_ask_SUITE.erl:1333:    {fail, Reasons} = peer:call(
+test/quod_ask_SUITE.erl:1340:    ?assertNot(lists:member(fail_reasons_truncated, Reasons)),
+test/quod_ask_SUITE.erl:2091:        ?assertMatch({fail, _}, peer:call(Target, quod_prolog, prove, [?NS, Fact])),
+test/quod_ask_SUITE.erl:2092:        ?assertMatch({fail, _}, peer:call(Third, quod_prolog, prove, [?THIRD_NS, Fact]))
+test/quod_ask_SUITE.erl:2113:    ?assertMatch({fail, _}, peer:call(
+test/quod_ask_SUITE.erl:3364:     "deep_failure(0) :- fail_with_reason(deep_bottom).\n",
+test/quod_ask_SUITE.erl:3368:     "fail_with_reason(Reason).\n"
+test/quod_ask_tests.erl:335:          ?_test(t_nested_failure_reasons(Ctx)),
+test/quod_ask_tests.erl:344:          ?_test(t_failure_reasons_cross_local_ask(Ctx)),
+test/quod_ask_tests.erl:387:        ?assertMatch({fail, _}, prove(B, s7_single_vector_live)),
+test/quod_ask_tests.erl:466:        "blocked(X) :- fail_with_reason(impossible_to_link(X)).\n"
+test/quod_ask_tests.erl:521:        "blocked :- fail_with_reason(c_blocked).\n"
+test/quod_ask_tests.erl:610:          {fail, Reasons} = quod_prolog:execute_signed(
+test/quod_ask_tests.erl:640:            ?assertMatch({fail,_},prove(C,read_must_not_write)),
+test/quod_ask_tests.erl:681:    ?assertMatch({fail, _}, prove(B, s6_unsigned)),
+test/quod_ask_tests.erl:682:    ?assertMatch({fail, _}, prove(C, s6_unsigned)).
+test/quod_ask_tests.erl:701:    ?assertMatch({fail, _}, independent_signed(B,
+test/quod_ask_tests.erl:704:        ?assertMatch({fail, _}, prove(B, Fact)),
+test/quod_ask_tests.erl:705:        ?assertMatch({fail, _}, prove(C, Fact))
+test/quod_ask_tests.erl:869:    ?assertMatch({fail, [_ | _]},
+test/quod_ask_tests.erl:946:    ?assertMatch({fail, _}, prove(B, tx_hidden)),
+test/quod_ask_tests.erl:957:    ?assertMatch({fail, _}, prove(B, origin_tx_hidden)).
+test/quod_ask_tests.erl:965:    ?assertMatch({fail, _}, prove(C, c_tx_hidden)),
+test/quod_ask_tests.erl:976:    ?assertMatch({fail, _}, prove(B, tx_reentry_hidden)).
+test/quod_ask_tests.erl:985:    ?assertMatch({fail, _}, prove(B, {local_scratch, {'_'}})),
+test/quod_ask_tests.erl:986:    ?assertMatch({fail, _}, prove(B, many_local_hidden)),
+test/quod_ask_tests.erl:987:    ?assertMatch({fail, _}, prove(C, many_foreign_hidden)),
+test/quod_ask_tests.erl:994:        ?assertMatch({fail, _}, prove(B, Fact)),
+test/quod_ask_tests.erl:995:        ?assertMatch({fail, _}, prove(C, Fact))
+test/quod_ask_tests.erl:1007:    ?assertMatch({fail, _}, prove(B, b_total_rollback)),
+test/quod_ask_tests.erl:1008:    ?assertMatch({fail, _}, prove(C, c_total_rollback)).
+test/quod_ask_tests.erl:1097:t_nested_failure_reasons(#{pets := P}) ->
+test/quod_ask_tests.erl:1098:    {fail, Reasons} = prove(P, {'::', chain_b, via_c_failure}),
+test/quod_ask_tests.erl:1105:%% fail_with_reason(not_allowed(Ns)) and completes with the reason like any goal.
+test/quod_ask_tests.erl:1107:    {fail, Reasons} = prove(P, {'::', chain_b, via_private_denied}),
+test/quod_ask_tests.erl:1119:       quod_prolog:prove_ro(P, {assertz, LocalMarker})),
+test/quod_ask_tests.erl:1120:    ?assertMatch({fail, [_ | _]}, prove(P, LocalMarker)),
+test/quod_ask_tests.erl:1124:       quod_prolog:prove_ro(P, {'::', animals, {assertz, ForeignMarker}})),
+test/quod_ask_tests.erl:1125:    ?assertMatch({fail, [_ | _]}, prove(A, ForeignMarker)).
+test/quod_ask_tests.erl:1377:    ?assertMatch({fail, [_ | _]}, prove(P, Denied)),
+test/quod_ask_tests.erl:1378:    {fail, Reasons} = prove(P, Denied),
+test/quod_ask_tests.erl:1389:    %% fail_with_reason/1 root cause.
+test/quod_ask_tests.erl:1392:               {get_fail_reasons, [{'Frame'}, {not_allowed, Private}]}},
+test/quod_ask_tests.erl:1396:t_failure_reasons_cross_local_ask(#{pets := P}) ->
+test/quod_ask_tests.erl:1399:               {get_fail_reasons,
+test/quod_ask_tests.erl:1589:    ?assertMatch({ok, #est{fail_reasons = Stack}},
+test/quod_ask_tests.erl:1590:                 erlog_int:merge_failure_reasons(Stack, #est{})),
+test/quod_assertion_construction_tests.erl:58:        ?assert(lists:member({creation_requires_output_variable, car}, F#est.fail_reasons)),
+test/quod_assertion_construction_tests.erl:69:                         F#est.fail_reasons)),
+test/quod_assertion_construction_tests.erl:251:refused(G, St) -> {fail, S} = erlog_int:prove_goal(G, St), S.
+test/quod_assertion_construction_tests.erl:253:fails(G, St) -> ?assertMatch({fail, _}, erlog_int:prove_goal(G, St)).
+test/quod_atomic_projection_tests.erl:875:        {fail, _} -> false
+test/quod_atomic_projection_tests.erl:1988:            {ok, Reasons} = quod_wire_term:decode_failure_reasons(ReasonsBlob),
+test/quod_atomic_tests.erl:457:    {ok, Blob} = quod_wire_term:encode_failure_reasons([vote_deadline]),
+test/quod_class_permissions_tests.erl:207:        ?assertMatch({fail, _}, erlog_int:prove_goal(leaked, St))
+test/quod_class_permissions_tests.erl:260:            ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx,
+test/quod_class_permissions_tests.erl:263:        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx,
+test/quod_class_permissions_tests.erl:274:        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx, Ask(Store,
+test/quod_class_permissions_tests.erl:291:        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx, Ask(Store, committed_marker))),
+test/quod_class_permissions_tests.erl:292:        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx, Ask(Store, Guard))),
+test/quod_class_permissions_tests.erl:304:            ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx, Ask(Owner, leaked)))
+test/quod_class_permissions_tests.erl:309:        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx, Ask(Owner, leaked))),
+test/quod_class_permissions_tests.erl:375:        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx,
+test/quod_class_permissions_tests.erl:377:        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx,
+test/quod_class_permissions_tests.erl:379:        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx, Scope({'$quod_construction', report1, {'_'}, {'_'}}))),
+test/quod_class_permissions_tests.erl:394:        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx,
+test/quod_class_permissions_tests.erl:403:        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx, Advisory)),
+test/quod_class_semantics_tests.erl:79:          ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_class_semantics_tests.erl:108:    ?assertMatch({fail, _}, erlog_int:prove_goal(Goal, St)).
+test/quod_client_cursor_tests.erl:47:    Failure = {fail, [{proof_timeout, <<"test">>}]},
+test/quod_client_goal_ingress_tests.erl:371:                                      {fail, [{proof_timeout, Ns}]}}} -> ok
+test/quod_client_goal_ingress_tests.erl:373:        Expected = quod_client_result:normalize(Evidence, {fail, [{proof_timeout, Ns}]}),
+test/quod_client_goal_router_tests.erl:333:        Expected = quod_client_result:normalize(Evidence, {fail, [{proof_timeout, Ns}]}),
+test/quod_client_http_tests.erl:88:failure_reasons_are_rendered_test() ->
+test/quod_client_http_tests.erl:93:         {fail, [{outer, bob}, {missing, bob}]})).
+test/quod_client_result_tests.erl:20:    end,[{ok,[#{0 => bob}],7},fail,{fail,[denied]},{error,read_only}]),
+test/quod_client_result_tests.erl:102:    {ok, ReasonsBlob} = quod_wire_term:encode_failure_reasons(
+test/quod_committee_predicates_tests.erl:44:        {fail, _}     -> fail
+test/quod_common_primitives_tests.erl:23:        ?assertMatch({fail,_},erlog_int:prove_goal({'$quod_voxel',Request,Limits,wrong},St)),
+test/quod_common_primitives_tests.erl:41:        ?assertMatch({fail, _}, erlog_int:prove_goal({agent_request_bytes, Intent, <<>>}, St)),
+test/quod_common_primitives_tests.erl:65:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_common_primitives_tests.erl:67:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_common_primitives_tests.erl:76:        ?assertMatch({fail, _}, erlog_int:prove_goal({binary, Value}, St))
+test/quod_common_primitives_tests.erl:91:    ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_common_primitives_tests.erl:130:    ?assertMatch({fail,_},erlog_int:prove_goal({binary_codes,<<"Ug">>,[$U]},St)),
+test/quod_common_primitives_tests.erl:166:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_common_primitives_tests.erl:202:        ?assertMatch({fail,_},erlog_int:prove_goal({physics_world_position,
+test/quod_common_primitives_tests.erl:265:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_common_primitives_tests.erl:334:            ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_common_primitives_tests.erl:420:        {fail, Refused} = erlog_int:prove_goal(
+test/quod_common_primitives_tests.erl:422:        ?assert(lists:member({syntax_error, invalid_syntax}, Refused#est.fail_reasons))
+test/quod_common_primitives_tests.erl:486:        ?assertMatch({fail, _}, erlog_int:prove_goal(Goal, bare())),
+test/quod_common_primitives_tests.erl:487:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_constructor_tests.erl:29:        {fail, Failed} = erlog_int:prove_goal({test_initialize, amphibious, id}, St),
+test/quod_constructor_tests.erl:61:        {fail, F} = erlog_int:prove_goal({test_initialize, amphibious, id}, St),
+test/quod_constructor_tests.erl:80:        {fail, F} = erlog_int:prove_goal(
+test/quod_constructor_tests.erl:94:        {fail, F} = erlog_int:prove_goal({test_initialize, Class, id}, St),
+test/quod_constructor_tests.erl:219:        {fail, Failed} = erlog_int:prove_goal({test_initialize, joined, id}, St),
+test/quod_constructor_tests.erl:221:        ?assert(lists:member(constructor_order_cycle, Failed#est.fail_reasons))
+test/quod_constructor_tests.erl:249:        ?assertMatch({fail, _}, erlog_int:prove_goal(
+test/quod_constructor_tests.erl:373:        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx,
+test/quod_constructor_tests.erl:375:        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx, Ask(Store,
+test/quod_constructor_tests.erl:386:        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx, Ask(Owner, leaked))),
+test/quod_constructor_tests.erl:461:        ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx,
+test/quod_constructor_tests.erl:491:fails(Goal, St) -> ?assertMatch({fail, _}, erlog_int:prove_goal(Goal, St)).
+test/quod_constructor_tests.erl:493:    {fail, Failed} = erlog_int:prove_goal({with_build_plan, Inputs, Goal}, St),
+test/quod_constructor_tests.erl:494:    ?assert(lists:member(Reason, Failed#est.fail_reasons)).
+test/quod_controller_tests.erl:20:        ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{attribute,me,controller_preferences,{'_'}})),
+test/quod_controller_tests.erl:53:        [?assertMatch({fail,_},quod_prolog:prove_ro(Gui,{controller_configuration,S,{'_'}})) || S <- Invalid],
+test/quod_controller_tests.erl:133:read(Ns,Goal) -> {ok,[#{'V':=V}],_}=quod_prolog:prove_ro(Ns,Goal),V.
+test/quod_create_root_tests.erl:85:           {fail, _},
+test/quod_ct.erl:179:    {ok, Reasons} = quod_wire_term:encode_failure_reasons([vote_deadline]),
+test/quod_directory_predicates_tests.erl:21:    {fail, _} = erlog:next_solution(Erl2),
+test/quod_directory_predicates_tests.erl:25:    {fail, _} = erlog:prove(
+test/quod_directory_predicates_tests.erl:69:          {fail, _} = erlog:next_solution(Erl2),
+test/quod_directory_predicates_tests.erl:87:    {fail, _} = erlog:prove(Goal, Erl0).
+test/quod_directory_predicates_tests.erl:115:          {fail, _} = erlog:prove(
+test/quod_dtx_endpoint_tests.erl:721:    {ok, Blob} = quod_wire_term:encode_failure_reasons([vote_deadline]),
+test/quod_dtx_recovery_tests.erl:43:        ?assertEqual({ok, Reasons}, quod_wire_term:decode_failure_reasons(Blob)),
+test/quod_dtx_tests.erl:919:    Result = {fail, [expected_failure]},
+test/quod_e2e_tests.erl:98:        ?assertMatch({fail, [_ | _]}, rp(Ns, {grandparent, tom, {'Y'}})),
+test/quod_e2e_tests.erl:271:        ?assertMatch({fail, [_ | _]}, rp(Ns, {item, bow}))
+test/quod_e2e_tests.erl:279:        ?assertMatch({fail, [_ | _]}, rp(Ns, {nope, x})),   %% also waits for readiness
+test/quod_e2e_tests.erl:281:        _ = [?assertMatch({fail, [_ | _]},
+test/quod_erlog_db_mvcc_tests.erl:13:    ?assertMatch({fail, _}, erlog_int:prove_goal({value, two}, Version1)),
+test/quod_gui_browser_tests.erl:79:    {ok,[#{'Ids':=Ids}],_} = quod_prolog:prove_ro(Ns,{findall,{'Id'},
+test/quod_gui_browser_tests.erl:93:    {ok,[#{'Count':=Count}],_} = quod_prolog:prove_ro(Ns,
+test/quod_gui_browser_tests.erl:96:    ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{attribute,{'_'},name,<<"A revised note">>})),
+test/quod_gui_browser_tests.erl:97:    ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{gui_pending_question,{'_'},{'_'}})).
+test/quod_gui_components_tests.erl:23:            ?assertMatch({fail,_},read(Ctx,Ns,{gui_schema,extra,{0},{1}})),
+test/quod_gui_components_tests.erl:29:                ?assertMatch({fail,_},read(Ctx,Ns,bad_table_write))
+test/quod_gui_components_tests.erl:37:            ?assertMatch({fail,_},read(Ctx,Ns,{gui_schema,extra,{0},{1}}))
+test/quod_gui_components_tests.erl:75:            ?assertMatch({fail, _}, read(Ctx, Ns, Bind(Values ++ [{field, loading, 65}]))),
+test/quod_gui_components_tests.erl:81:                ?assertMatch({fail, _}, read(Ctx, Ns, {gui_schema, composed, {0}, {1}})),
+test/quod_gui_components_tests.erl:138:                ?assertMatch({fail, _}, read(Ctx, Ns, invalid_variant_write))
+test/quod_gui_components_tests.erl:140:            ?assertMatch({fail, _}, read(Ctx#{instance => <<"human_user(other_agent).">>}, Ns, Bind(Fields))),
+test/quod_gui_components_tests.erl:175:            ?assertMatch({fail, _}, read(Ctx, Ns,
+test/quod_gui_components_tests.erl:177:            ?assertMatch({fail, _}, read(Ctx, Ns,
+test/quod_gui_components_tests.erl:231:        ?assertMatch({fail, _}, read(Ctx, Ns, {gui_bind, settings, Revision, apply, Values, {0}})),
+test/quod_gui_components_tests.erl:232:        ?assertMatch({fail, _}, read(Ctx, Ns, {gui_definition, settings, {0}, {1}, {2}, {3}}))
+test/quod_gui_components_tests.erl:266:    ?assertMatch({fail, _}, read(Ctx, Ns, invalid_form_write)),
+test/quod_gui_components_tests.erl:278:    ?assertMatch({fail, _}, read(Other, Ns, {gui_schema, settings, {0}, {1}})),
+test/quod_gui_components_tests.erl:282:        ?assertMatch({fail, _}, read(Ctx, Ns, Bind(Revision, Invalid)))
+test/quod_gui_components_tests.erl:294:    ?assertMatch({fail, _}, read(Ctx, Ns, Bind(<<0:256>>, Fields))),
+test/quod_gui_components_tests.erl:318:    ?assertMatch({fail, _}, read(Ctx, Ns,
+test/quod_gui_components_tests.erl:321:    ?assertMatch({fail, _}, read(Ctx, Ns, {gui_schema, settings, {0}, {1}})),
+test/quod_gui_components_tests.erl:326:    ?assertMatch({fail, _}, read(Ctx, Ns, {gui_schema, settings, {0}, {1}})),
+test/quod_gui_components_tests.erl:329:    ?assertMatch({fail, _}, read(Ctx, Ns, Bind(Revision, Fields))),
+test/quod_gui_components_tests.erl:332:    ?assertMatch({fail, _}, read(Ctx, Ns, Bind(DisabledRevision, Fields))),
+test/quod_gui_components_tests.erl:339:    ?assertMatch({fail, _}, read(Ctx, Ns, Bind(DisabledRevision, Frozen))),
+test/quod_gui_components_tests.erl:343:    ?assertMatch({fail, _}, read(Ctx, Ns, {gui_schema, settings, {0}, {1}})),
+test/quod_gui_components_tests.erl:354:        ?assertMatch({fail, _}, read(Ctx, Ns, {gui_schema, settings, {0}, {1}})),
+test/quod_gui_components_tests.erl:364:        ?assertMatch({fail, _}, read(Ctx, Ns, {gui_schema, settings, {0}, {1}})),
+test/quod_gui_components_tests.erl:377:    ?assertMatch({fail, _}, read(Ctx, Ns, Bind(SharedRevision, Fields))),
+test/quod_gui_components_tests.erl:393:    ?assertMatch({fail, _}, read(Ctx, Ns, Bind(Revision, Fields))),
+test/quod_gui_components_tests.erl:397:    ?assertMatch({fail, _}, read(Ctx, Ns, {gui_schema, settings, {0}, {1}})).
+test/quod_gui_examples_tests.erl:42:            ?assertMatch({fail,_},read(Ctx#{instance => <<"human_user(other_agent).">>},Ns,{world_library,{0}})),
+test/quod_gui_examples_tests.erl:432:                ?assertMatch({fail, _}, read(Ctx, ResponderNs,
+test/quod_gui_examples_tests.erl:446:        ?assertMatch({fail, _}, read(Ctx, InstrumentNs, {instance_of, space, {'_'}})),
+test/quod_gui_hud_tests.erl:52:        {ok,[#{'P':=Stranger}],_} = quod_prolog:prove_ro(Ns,{hud_offered,my_hud,{'P'},Closet,EnterHere}),
+test/quod_gui_hud_tests.erl:111:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{hud_contribution,my_hud,Subject,Choice,Owner})),
+test/quod_gui_hud_tests.erl:147:    io:format(user,"REFUSED ~P: ~p~n",[Goal,8,quod_wire_term:decode_failure_reasons(Blob)]);
+test/quod_gui_hud_tests.erl:156:fails(Ns,Goal) -> ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,Goal)).
+test/quod_gui_menu_tests.erl:67:        {ok,[#{'Choices':=Choices}],_} = quod_prolog:prove_ro(Ns,{entity_eidolons,n1,{'Choices'}}),
+test/quod_gui_menu_tests.erl:164:        applied(Ns,fun() -> element(1,quod_prolog:prove_ro(Ns,{attribute,closed,interior,matrix})) =:= ok end),
+test/quod_gui_menu_tests.erl:261:fails(Ns,Goal) -> ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,Goal)).
+test/quod_gui_menu_tests.erl:336:        {ok,[#{'T':=Tree}],_} = quod_prolog:prove_ro(Gui,{menu_tree,{menu,<<"Many">>,<<>>,[],Entries},{'T'}}),
+test/quod_gui_menu_tests.erl:349:        {ok,[#{'T':=Four}],_} = quod_prolog:prove_ro(Gui,{menu_tree,
+test/quod_gui_menu_tests.erl:356:        [?assertMatch({fail,_},quod_prolog:prove_ro(Gui,{menu_tree,Bad,{'T'}})) || Bad <- [
+test/quod_gui_menu_tests.erl:387:            {ok,Reasons} = quod_wire_term:decode_failure_reasons(Blob),
+test/quod_gui_operations_tests.erl:82:                {ok,[_],_} = quod_prolog:prove_ro(Ns,{gui_operations,Subject,{'Views'}})
+test/quod_gui_operations_tests.erl:241:        {ok,[#{'Classes':=Classes}],_} = quod_prolog:prove_ro(Ns,{gui_operation_classes,{'Classes'}}),
+test/quod_gui_operations_tests.erl:294:holds(Ns,Goal) -> ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,Goal)).
+test/quod_gui_operations_tests.erl:295:fails(Ns,Goal) -> ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,Goal)).
+test/quod_gui_question_tests.erl:26:            ?assertMatch({fail,_},read(Ctx,Ns,{saved,ok})),
+test/quod_gui_question_tests.erl:28:            ?assertMatch({fail,_},read(Ctx,Ns,native_scope_write)),
+test/quod_gui_question_tests.erl:126:            ?assertEqual({fail,[{not_allowed,<<"quod:gui">>}]},quod_ask:native_read(Node,GuiIdentity,
+test/quod_gui_question_tests.erl:175:            ?assertMatch({fail,_},read(Ctx,HumanNs,{saved,ok})),
+test/quod_gui_question_tests.erl:248:                {fail,HandlerReasons} = read(HumanCtx,Ns,
+test/quod_gui_question_tests.erl:269:                ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{gui_question,{'_'},{'_'},{'_'},{'_'},{'_'},{'_'}})),
+test/quod_gui_question_tests.erl:293:                        ?assertEqual({ok,[conflict_retry]},quod_wire_term:decode_failure_reasons(Conflict));
+test/quod_gui_question_tests.erl:340:                ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{gui_question,{'_'},{'_'},{'_'},{'_'},{'_'},{'_'}})),
+test/quod_gui_question_tests.erl:399:                error({gui_open_failed,quod_wire_term:decode_failure_reasons(Reasons),Frames});
+test/quod_gui_question_tests.erl:489:            ?assertMatch({fail, _}, read(ActorCtx, HumanNs, gui({gui_pending_questions, {0}}))),
+test/quod_gui_question_tests.erl:515:            ?assertMatch({fail, _}, read(OtherHumanCtx, ResponderNs, gui(FormQuery))),
+test/quod_gui_question_tests.erl:516:            ?assertMatch({fail, _}, read(ActorCtx, ResponderNs, gui(FormQuery))),
+test/quod_gui_question_tests.erl:525:            ?assertMatch({fail, _}, read(Ctx, ResponderNs, gui(FormQuery))),
+test/quod_gui_question_tests.erl:554:            ?assertMatch({fail, _}, read(Ctx, ResponderNs, {gui_submitted, Question, Submission})),
+test/quod_gui_question_tests.erl:574:            ?assertMatch({fail, _}, read(Ctx, ResponderNs, Submitted)),
+test/quod_gui_question_tests.erl:575:            ?assertMatch({fail, _}, read(Ctx, ResponderNs, gui(setelement(5, View, {'_'})))),
+test/quod_gui_question_tests.erl:576:            ?assertMatch({fail, _}, read(Ctx, ResponderNs, gui(FormQuery))),
+test/quod_gui_question_tests.erl:577:            ?assertMatch({fail, _}, read(Ctx, HumanNs, {gui_pending, HumanInstance, Reference})),
+test/quod_gui_question_tests.erl:591:            ?assertMatch({fail, _}, read(Ctx, ResponderNs, OtherRow)),
+test/quod_gui_question_tests.erl:592:            ?assertMatch({fail, _}, read(Ctx, HumanNs, {gui_pending, HumanInstance, OtherRef})),
+test/quod_gui_question_tests.erl:602:            ?assertMatch({fail, _}, read(Ctx, ResponderNs, gui(setelement(2, FormQuery, question_ref(ResponderNs,WrongQ))))),
+test/quod_gui_question_tests.erl:634:                _ -> ?assertMatch({fail, _}, read(Ctx, ResponderNs,
+test/quod_gui_question_tests.erl:655:                ?assertMatch({fail, _}, read(Ctx, AppNs, {saved, <<Id:32>>, {'_'}, {'_'}, {'_'}})),
+test/quod_gui_question_tests.erl:676:            ?assertMatch({fail, _}, read(OtherHumanCtx, ResponderNs,
+test/quod_gui_question_tests.erl:679:            ?assertMatch({fail, _}, read(Ctx, ResponderNs, ExpiredRow)),
+test/quod_gui_question_tests.erl:680:            ?assertMatch({fail, _}, read(Ctx, HumanNs, {gui_pending, HumanInstance, ExpiredRef})),
+test/quod_gui_question_tests.erl:690:    ?assertMatch({fail, _}, read(Ctx, AppNs, {gui_application_active, {'_'}})),
+test/quod_gui_question_tests.erl:691:    ?assertMatch({fail, _}, read(Ctx, ResponderNs, {gui_retiring, {'_'}, {'_'}})).
+test/quod_gui_question_tests.erl:735:    {ok,Reasons} = quod_wire_term:decode_failure_reasons(Encoded),
+test/quod_gui_question_tests.erl:852:                ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(AppNs,
+test/quod_gui_question_tests.erl:854:                ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, Row)),
+test/quod_gui_question_tests.erl:859:                ?assertMatch({fail, _}, quod_prolog:prove_ro(HumanNs,
+test/quod_gui_question_tests.erl:899:                ?assertMatch({ok, [#{'Rows' := [true]}], _}, quod_prolog:prove_ro(AppNs,
+test/quod_gui_question_tests.erl:1155:    ?assertMatch({fail,_},read(ActorCtx,HumanNs,Read)),
+test/quod_gui_question_tests.erl:1166:    ?assertMatch({fail,_},read(ActorCtx,HumanNs,Read)).
+test/quod_gui_stage1_tests.erl:55:    {ok,[#{'Rows':=Rows}],_}=quod_prolog:prove_ro(Ns,{findall,{'I'},{instance_of,space_class(),{'I'}},{'Rows'}}),Rows.
+test/quod_gui_stage1_tests.erl:75:        {ok,[#{'Classes':=Classes}],_} = quod_prolog:prove_ro(Ns,{gui_operation_classes,{'Classes'}}),
+test/quod_gui_stage1_tests.erl:224:holds(Ns,Goal) -> ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,Goal)).
+test/quod_gui_stage1_tests.erl:225:fails(Ns,Goal) -> ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,Goal)).
+test/quod_independent_predicates_tests.erl:52:        {fail, Last} = erlog_int:fail(Second),
+test/quod_lens_tests.erl:338:fails(Goal, St) -> ?assertMatch({fail, _}, erlog_int:prove_goal(Goal, St)).
+test/quod_licence_tests.erl:178:    ?assertMatch({fail, _}, erlog_int:prove_goal(Goal, St)).
+test/quod_lifecycle_single_path_tests.erl:35:                ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, {same_value, first, first})),
+test/quod_lifecycle_single_path_tests.erl:36:                ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, {same_value, second, second})),
+test/quod_lifecycle_single_path_tests.erl:37:                ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {same_value, first, second})),
+test/quod_lifecycle_single_path_tests.erl:71:                quod_prolog:prove_ro(?ROOT_NS,{material_limit,founding,canonical_bytes,0})) end,
+test/quod_lifecycle_single_path_tests.erl:75:            {fail,Reasons} = quod_prolog:execute(?ROOT_NS,Goal),
+test/quod_lifecycle_single_path_tests.erl:198:                ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns,
+test/quod_lifecycle_single_path_tests.erl:200:                ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns,
+test/quod_lifecycle_single_path_tests.erl:226:                ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
+test/quod_lifecycle_single_path_tests.erl:345:    ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(?ROOT_NS, {me, {node, Pub}})),
+test/quod_lifecycle_single_path_tests.erl:349:       quod_prolog:prove_ro(
+test/quod_lifecycle_single_path_tests.erl:359:           quod_prolog:prove_ro(
+test/quod_lifecycle_single_path_tests.erl:367:           {fail, _},
+test/quod_lifecycle_single_path_tests.erl:479:            {fail, Reasons} = quod_prolog:execute(?ROOT_NS,
+test/quod_lifecycle_single_path_tests.erl:496:                ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {source_text, OriginalText}))
+test/quod_lifecycle_single_path_tests.erl:602:    ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(NodeNs,
+test/quod_lifecycle_single_path_tests.erl:634:    {ok, [#{'Rows' := Catalogue}], _} = quod_prolog:prove_ro(?ROOT_NS,
+test/quod_lifecycle_single_path_tests.erl:720:        {fail_with_reason,m2_after_foreign_ack}])},
+test/quod_lifecycle_single_path_tests.erl:722:    {ok,FailureReasons}=quod_wire_term:decode_failure_reasons(EncodedReasons),
+test/quod_lifecycle_single_path_tests.erl:725:    ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,m2_local_staging)),
+test/quod_lifecycle_single_path_tests.erl:779:    ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{space_assignment_state,Personal,FinalRevision,S0})),
+test/quod_lifecycle_single_path_tests.erl:827:                    {ok,Reasons}=quod_wire_term:decode_failure_reasons(Blob),
+test/quod_lifecycle_single_path_tests.erl:934:    {ok,Reasons}=quod_wire_term:decode_failure_reasons(Blob),
+test/quod_lifecycle_single_path_tests.erl:947:    {ok,[#{'Rows':=Rows}],_}=quod_prolog:prove_ro(Ns,{findall,Template,Goal,{'Rows'}}),lists:sort(Rows).
+test/quod_lifecycle_single_path_tests.erl:985:    {ok,[#{'Chunks':=Chunks}],_}=quod_prolog:prove_ro(Ns,
+test/quod_lifecycle_single_path_tests.erl:997:        {ok, [#{'Profile' := Expected}], _} = quod_prolog:prove_ro(Ns, {external_predicate_modules, {'Profile'}}),
+test/quod_lifecycle_single_path_tests.erl:1025:        ?assertMatch({fail,_},quod_prolog:prove_ro(<<"quod:user">>,{enrollment_receipt,Public,Token,{'_'}})),
+test/quod_lifecycle_single_path_tests.erl:1044:        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Name, {signup_origin, <<"quod:user">>, UserClass, Token})),
+test/quod_lifecycle_single_path_tests.erl:1087:    {ok,[#{'G':=GuiPin}],_}=quod_prolog:prove_ro(Ns,{rendering_vocabulary,<<"quod:gui">>,{'G'}}),
+test/quod_lifecycle_single_path_tests.erl:1105:    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {signup_origin, {'_'}, {'_'}, {'_'}})),
+test/quod_lifecycle_single_path_tests.erl:1106:    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {instance_of, {':',quod,{':',space,physical_space}}, Space})),
+test/quod_lifecycle_single_path_tests.erl:1190:    Refusal = {':-', {acknowledge_signup, {'_'}, {'_'}}, {fail_with_reason, injected_signup_ack_failure}},
+test/quod_lifecycle_single_path_tests.erl:1194:        {ok, Decoded} = quod_wire_term:decode_failure_reasons(Reasons),
+test/quod_lifecycle_single_path_tests.erl:1472:                {ok, [#{'Profile' := Profile}], _} = quod_prolog:prove_ro(N, {external_predicate_modules, {'Profile'}}),
+test/quod_lifecycle_single_path_tests.erl:1542:            ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns,
+test/quod_lifecycle_single_path_tests.erl:1544:            ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(?NODE_NS,
+test/quod_lifecycle_single_path_tests.erl:1625:                ?assertMatch({fail, _}, quod_prolog:prove_ro(?NODE_NS,
+test/quod_lifecycle_single_path_tests.erl:1660:                {ok, [#{'Ref' := Ref}], _} = quod_prolog:prove_ro(?NODE_NS,
+test/quod_lifecycle_single_path_tests.erl:1682:                ?assertMatch({fail, _}, quod_prolog:prove_ro(?NODE_NS,
+test/quod_lifecycle_single_path_tests.erl:1703:                    quod_prolog:prove_ro(?NODE_NS,
+test/quod_lifecycle_single_path_tests.erl:1751:    ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {hello, world})),
+test/quod_lifecycle_single_path_tests.erl:1795:        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, {composition_marker, complete})),
+test/quod_lifecycle_single_path_tests.erl:1796:        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, {current_predicate, {'/', physics_close_hinged, 4}})),
+test/quod_lifecycle_single_path_tests.erl:1803:        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, {composition_marker, complete}))
+test/quod_lifecycle_single_path_tests.erl:1838:    ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(
+test/quod_lifecycle_single_path_tests.erl:1843:        ?assertMatch({ok, [_ | _], _}, quod_prolog:prove_ro(Ns,
+test/quod_lifecycle_single_path_tests.erl:1878:    ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {joined_fact, ok})).
+test/quod_lifecycle_single_path_tests.erl:1907:       quod_prolog:prove_ro(
+test/quod_lifecycle_single_path_tests.erl:1980:        ?assertMatch({fail, _}, quod_prolog:prove_ro(AgentNs, {budget_side_effect, {'_'}})),
+test/quod_lifecycle_single_path_tests.erl:2039:        {ok, HostRows, _} = quod_prolog:prove_ro(
+test/quod_lifecycle_single_path_tests.erl:2067:       quod_prolog:prove_ro(ActorNs, {findall, Host, Host, {'Rows'}})),
+test/quod_lifecycle_single_path_tests.erl:2071:        ?assertMatch({fail, _}, quod_prolog:execute(ActorNs, Bad))
+test/quod_lifecycle_single_path_tests.erl:2108:    ?assertMatch({fail, _}, quod_prolog:execute(ActorNs,
+test/quod_lifecycle_single_path_tests.erl:2111:    ?assertMatch({fail, _}, quod_prolog:prove_ro(ActorNs,
+test/quod_lifecycle_single_path_tests.erl:2232:        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(?NODE_NS,
+test/quod_lifecycle_single_path_tests.erl:2242:            quod_prolog:prove_ro(?NODE_NS, {node_identity_allocation, Public, {'Ref'}, Host}),
+test/quod_lifecycle_single_path_tests.erl:2244:        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(ActorNs,
+test/quod_lifecycle_single_path_tests.erl:2247:        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Name,
+test/quod_lifecycle_single_path_tests.erl:2249:        ?assertMatch({fail, _}, quod_prolog:prove_ro(?ROOT_NS,
+test/quod_lifecycle_single_path_tests.erl:2256:        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(?NODE_NS,
+test/quod_lifecycle_single_path_tests.erl:2437:            {ok, Reasons} = quod_wire_term:decode_failure_reasons(ReasonsBlob),
+test/quod_lifecycle_single_path_tests.erl:2463:                 quod_prolog:prove_ro(Ns, {prepared_value, original})),
+test/quod_lifecycle_single_path_tests.erl:2464:    ?assertMatch({fail, _},
+test/quod_lifecycle_single_path_tests.erl:2465:                 quod_prolog:prove_ro(Ns, {prepared_value, changed})).
+test/quod_lifecycle_single_path_tests.erl:2575:    ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, {prepared_identity, first, first})),
+test/quod_lifecycle_single_path_tests.erl:2576:    ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, {prepared_identity, second, second})),
+test/quod_lifecycle_single_path_tests.erl:2577:    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {prepared_identity, first, second})),
+test/quod_lifecycle_single_path_tests.erl:2579:                 quod_prolog:prove_ro(Ns, {consensus_incarnation, {'Incarnation'}})),
+test/quod_lifecycle_single_path_tests.erl:2792:       quod_prolog:prove_ro(?NODE_NS,
+test/quod_lifecycle_single_path_tests.erl:2795:       {fail, _},
+test/quod_lifecycle_single_path_tests.erl:2796:       quod_prolog:prove_ro(
+test/quod_lifecycle_single_path_tests.erl:2880:              "fail_with_reason(remote_lifecycle_denied).\n">>}]),
+test/quod_lifecycle_single_path_tests.erl:2894:        {fail, Reasons} = quod_prolog:execute(
+test/quod_lifecycle_single_path_tests.erl:2933:        {ok, Reasons} = quod_wire_term:decode_failure_reasons(ReasonsBlob),
+test/quod_lifecycle_single_path_tests.erl:3009:    ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {kept, true})),
+test/quod_lifecycle_single_path_tests.erl:3010:    ?assertMatch({fail, _},
+test/quod_lifecycle_single_path_tests.erl:3011:                 quod_prolog:prove_ro(Ns, {replacement, forbidden})).
+test/quod_lifecycle_single_path_tests.erl:3080:        {ok, Reasons} = quod_wire_term:decode_failure_reasons(ReasonsBlob),
+test/quod_lifecycle_single_path_tests.erl:3131:                     quod_prolog:prove_ro(Ns, {approved, ok}))
+test/quod_lifecycle_single_path_tests.erl:3183:       {fail, _},
+test/quod_lifecycle_single_path_tests.erl:3186:    ?assertMatch({fail, _}, quod_prolog:prove_ro(ActorNs, Host)).
+test/quod_lifecycle_single_path_tests.erl:3331:    {ok, [#{'Refs' := Hosted}], _} = quod_prolog:prove_ro(ActorNs,
+test/quod_lifecycle_single_path_tests.erl:3337:            [quod_prolog:prove_ro(Name, {physical_fixture_reference, {'State'}})]],
+test/quod_lifecycle_single_path_tests.erl:3360:        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Name,
+test/quod_lifecycle_single_path_tests.erl:3365:        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(LobbyName,
+test/quod_lifecycle_single_path_tests.erl:3550:        quod_wire_term:decode_failure_reasons(FailureBlob),
+test/quod_lifecycle_single_path_tests.erl:3698:    case quod_prolog:prove_ro(Ns, true) of
+test/quod_lobby_tests.erl:204:    {ok, Reasons} = quod_wire_term:decode_failure_reasons(Encoded),
+test/quod_lobby_tests.erl:313:            ?assertMatch({fail, _}, read(Ctx, {'::', Ns,
+test/quod_lobby_tests.erl:326:            ?assertMatch({fail, _}, read(Other, Goal)),
+test/quod_lobby_tests.erl:500:            ?assertMatch({fail, _}, Ask(ModelNs, {model, [{0}], {1}})),
+test/quod_lobby_tests.erl:501:            ?assertMatch({fail, _}, Ask(ModelNs,
+test/quod_lobby_tests.erl:503:            ?assertMatch({fail, _}, Ask(ModelNs,
+test/quod_lobby_tests.erl:507:            ?assertMatch({fail, _}, Ask(ModelNs,
+test/quod_lobby_tests.erl:557:            ?assertMatch({fail, _}, read(OtherViewer,
+test/quod_lobby_tests.erl:564:            ?assertMatch({fail, _}, Ask(MatNs, {isa, bronze, wood})),
+test/quod_lobby_tests.erl:565:            ?assertMatch({fail, _}, Ask(MatNs, {material_property, wood, density, {0}, {1}, {2}})),
+test/quod_lobby_tests.erl:581:            ?assertMatch({fail, _}, Ask(EidolonNs,
+test/quod_lobby_tests.erl:585:            ?assertMatch({fail, _}, quod_prolog:prove_ro(
+test/quod_lobby_tests.erl:594:            ?assertMatch({fail, _}, quod_prolog:prove_ro(
+test/quod_lobby_tests.erl:657:            ?assertMatch({fail, _}, read(Ctx, Scope(Ns, {editor_fact, saved}))),
+test/quod_lobby_tests.erl:659:            ?assertMatch({fail, _}, read(Other,
+test/quod_lobby_tests.erl:718:            ?assertMatch({fail, _}, read(Reader,
+test/quod_lobby_tests.erl:728:                ?assertMatch({fail, _}, read(Reader, editor_scope(<<"quod:gui">>,
+test/quod_lobby_tests.erl:730:                ?assertMatch({fail, _}, read(Reader, editor_scope(<<"quod:gui">>,
+test/quod_lobby_tests.erl:765:            ?assertMatch({fail, _}, read(Reader,
+test/quod_lobby_tests.erl:767:            ?assertMatch({fail, _}, read(Ctx, {'::', Ns,
+test/quod_lobby_tests.erl:773:                ?assertMatch({fail, _}, read(Reader,
+test/quod_lobby_tests.erl:776:                ?assertMatch({fail, _}, read(Ctx,
+test/quod_lobby_tests.erl:821:            ?assertMatch({fail, _}, read(Ctx,
+test/quod_lobby_tests.erl:845:                ?assertMatch({fail, _}, read(Ctx, Workspace))
+test/quod_lobby_tests.erl:848:            ?assertMatch({fail, _}, read(Ctx, editor_scope(Recipe,
+test/quod_lobby_tests.erl:990:            ?assertMatch({fail, _}, read(Ctx,
+test/quod_lobby_tests.erl:992:            ?assertMatch({fail, _}, read(Ctx, editor_scope(Tools,
+test/quod_lobby_tests.erl:1001:            ?assertMatch({fail, _}, read(Ctx, editor_scope(Recipe,
+test/quod_lobby_tests.erl:1003:            ?assertMatch({fail, _}, read(Ctx, editor_scope(Tools,
+test/quod_lobby_tests.erl:1028:            ?assertMatch({fail, _}, read(Ctx,
+test/quod_lobby_tests.erl:1033:            ?assertMatch({fail, _}, read(Ctx, editor_scope(Tools,
+test/quod_lobby_tests.erl:1067:            ?assertMatch({fail, _}, read(Ctx,
+test/quod_lobby_tests.erl:1069:            ?assertMatch({fail, _},
+test/quod_lobby_tests.erl:1108:            ?assertMatch({fail,_},read(Ctx,editor_scope(Root,{system_source_access,Target,{0}}))),
+test/quod_lobby_tests.erl:1109:            ?assertMatch({fail,_},read(Ctx,Query)),
+test/quod_lobby_tests.erl:1110:            ?assertMatch({fail,_},read(Ctx,editor_scope(Gui,
+test/quod_lobby_tests.erl:1121:    ?assertMatch({fail, _}, read(Ctx, {'::', Ns,
+test/quod_lobby_tests.erl:1157:        <<"quod:root">> -> ?assertMatch({fail, _}, read(Other, Source));
+test/quod_lobby_tests.erl:1158:        <<"quod:user">> -> ?assertMatch({fail, _}, read(Other, Source));
+test/quod_lobby_tests.erl:1239:            ?assertMatch({fail, _}, read(Ctx, editor_scope(Ns, {readonly_content, visible})))
+test/quod_lobby_tests.erl:1275:            ?assertMatch({fail, _}, read(Ctx, editor_scope(Ns, forbidden_route_write))),
+test/quod_lobby_tests.erl:1277:            ?assertMatch({fail, _}, read(Reader, editor_scope(<<"quod:gui">>, {view, Lens, [Target], {0}}))),
+test/quod_lobby_tests.erl:1352:            ?assertMatch({fail, _}, read(Other,
+test/quod_lobby_tests.erl:1400:            {ok, DecodedReasons} = quod_wire_term:decode_failure_reasons(Reasons),
+test/quod_lobby_tests.erl:1426:            {ok,Reasons} = quod_wire_term:decode_failure_reasons(Encoded),
+test/quod_lobby_tests.erl:1688:            {ok, Decoded} = quod_wire_term:decode_failure_reasons(Reasons),
+test/quod_lobby_tests.erl:1689:            {fail, Decoded};
+test/quod_material_admission_tests.erl:37:    ?assertMatch({fail, _}, erlog_int:prove_goal(policy_changed, Est)).
+test/quod_measure_tests.erl:131:fails(Goal, St) -> ?assertMatch({fail, _}, erlog_int:prove_goal(Goal, St)).
+test/quod_names_SUITE.erl:127:    ?assertMatch({fail, _},
+test/quod_names_SUITE.erl:198:    ?assertMatch({fail, _},
+test/quod_names_SUITE.erl:280:    ?assertMatch({fail, _},
+test/quod_names_SUITE.erl:286:failed({fail, _Reasons}) -> true;
+test/quod_names_SUITE.erl:326:    ?assertMatch({fail, _},
+test/quod_names_tests.erl:434:    ?assertMatch({fail, _}, erlog_int:prove_goal(Goal, St)).
+test/quod_node_context_tests.erl:33:                  ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Source, {ping, recovery_allowed})),
+test/quod_node_context_tests.erl:41:                      ?assertMatch({fail, _}, quod_prolog:prove_ro(NodeNs, borrowed_node_authority)),
+test/quod_node_context_tests.erl:43:                                   quod_prolog:prove_ro(Target, {effect_custody_limits, {'Capacity'}, unlimited}))
+test/quod_ns_SUITE.erl:54:    ?assertMatch({fail, [_ | _]},
+test/quod_ns_SUITE.erl:82:    ?assertMatch({fail, [_ | _]}, rp(Ns, {remove, Self})),
+test/quod_outcome_result_tests.erl:71:            ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Writer, Saved)),
+test/quod_outcome_result_tests.erl:73:            ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Writer, Saved)),
+test/quod_outcome_result_tests.erl:76:            ?assertMatch({fail, _}, quod_prolog:prove_ro(Writer, {created, Reference})),
+test/quod_outcome_tests.erl:1052:            {ok, Decoded} = quod_wire_term:decode_failure_reasons(ReasonsBlob),
+test/quod_overlay_tests.erl:61:    ?assertMatch({fail, _}, erlog_int:prove_goal({child, bob}, C5)).
+test/quod_overlay_tests.erl:286:    ?assertMatch({fail, _}, erlog_int:prove_goal(fail, Committed)).
+test/quod_overlay_tests.erl:410:    ?assertMatch({fail, _}, erlog_int:prove_goal({policy, deny}, Guard)),
+test/quod_overlay_tests.erl:418:    ?assertMatch({fail, _}, erlog_int:prove_goal(domain_work, Refreshed)),
+test/quod_personal_agent_tests.erl:106:                            {ok, Reasons} = quod_wire_term:decode_failure_reasons(Encoded),
+test/quod_personal_agent_tests.erl:174:            ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns,
+test/quod_personal_agent_tests.erl:178:            ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, forbidden_later)),
+test/quod_personal_agent_tests.erl:198:        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, forbidden_later)),
+test/quod_personal_agent_tests.erl:201:        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns,
+test/quod_personal_agent_tests.erl:203:        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, forbidden_later)),
+test/quod_personal_agent_tests.erl:255:        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, forbidden_later)),
+test/quod_personal_agent_tests.erl:256:        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns,
+test/quod_personal_agent_tests.erl:290:        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, forbidden_later)),
+test/quod_personal_agent_tests.erl:291:        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns,
+test/quod_personal_agent_tests.erl:309:        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, forbidden))
+test/quod_personal_agent_tests.erl:330:        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, forbidden))
+test/quod_personal_agent_tests.erl:364:        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, forbidden)),
+test/quod_personal_agent_tests.erl:365:        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns,
+test/quod_personal_agent_tests.erl:397:                    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, original_work));
+test/quod_personal_agent_tests.erl:401:                    ?assertMatch({ok, [#{'Rows' := [ok]}], _}, quod_prolog:prove_ro(Ns,
+test/quod_personal_agent_tests.erl:415:            quod_prolog:prove_ro(Ns, {can_invoke, Work, Agent, [Ns], Ns})) end,
+test/quod_personal_agent_tests.erl:424:                ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns,
+test/quod_personal_agent_tests.erl:434:        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {can_invoke, Work, Agent, [Ns], Ns})),
+test/quod_personal_agent_tests.erl:544:        quod_prolog:prove_ro(Ns, {findall, {instruction, {'I'}, {'B'}, {'S'}},
+test/quod_personal_agent_tests.erl:562:    ?assertMatch({ok, [#{'Rows' := [Agent]}], _}, quod_prolog:prove_ro(Ns,
+test/quod_personal_agent_tests.erl:602:        ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Target, {created, Agent})),
+test/quod_personal_agent_tests.erl:605:        ?assertMatch({fail, _}, quod_prolog:prove_ro(Target, {can_invoke, element(3, Work), Agent, [Ns], Target})),
+test/quod_personal_agent_tests.erl:608:        ?assertMatch({ok, [#{'Rows' := [Agent]}], _}, quod_prolog:prove_ro(Target,
+test/quod_personal_agent_tests.erl:611:            atomic -> ?assertMatch({ok, [#{'Rows' := [ok]}], _}, quod_prolog:prove_ro(Ns,
+test/quod_physics_control_tests.erl:7:        ?assertMatch({ok,[_],_}, quod_prolog:prove_ro(Ns,
+test/quod_physics_control_tests.erl:13:        {ok,[Configuration],_} = quod_prolog:prove_ro(Ns,
+test/quod_physics_control_tests.erl:23:        ?assertMatch({ok,[_],_}, quod_prolog:prove_ro(Ns,{physics_control,room,Human,3,none})),
+test/quod_physics_control_tests.erl:57:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
+test/quod_physics_control_tests.erl:59:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
+test/quod_physics_control_tests.erl:94:    {ok,[#{'Bodies' := Bodies}],_} = quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:15:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,space({space_assignment,entity_ref(Ns,inner),0,none}))),
+test/quod_physics_tests.erl:16:        ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_frame_member,room,S1,{'_'},{'_'},{'_'}})),
+test/quod_physics_tests.erl:27:        {ok,[#{'Path' := Path}],_}=quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:30:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:34:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,space({space_assignment,entity_ref(Source,obstacle),1,S2}))),
+test/quod_physics_tests.erl:35:        ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{space_placement,room,Leaf,{'_'}})),
+test/quod_physics_tests.erl:83:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,
+test/quod_physics_tests.erl:108:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,space({space_assignment,entity_ref(Ns,independent),0,none}))),
+test/quod_physics_tests.erl:109:        ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_frame_member,room,Independent,{'_'},{'_'},{'_'}})),
+test/quod_physics_tests.erl:110:        ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_definition_delegate,independent,{'_'},{'_'},{'_'}})),
+test/quod_physics_tests.erl:124:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,space({space_assignment,entity_ref(Source,bounded),0,none}))),
+test/quod_physics_tests.erl:125:        ?assertMatch({fail,_},quod_prolog:prove_ro(Source,{physics_definition_delegate,bounded,{'_'},{'_'},{'_'}})),
+test/quod_physics_tests.erl:271:            ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:277:            ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_frame_member,room,{'_'},{'_'},{'_'},{'_'}})),
+test/quod_physics_tests.erl:278:            ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_body_definition,room,4,{'_'},{'_'},{'_'},{'_'}})),
+test/quod_physics_tests.erl:279:            ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,space({space_assignment,entity_ref(Source,obstacle),1,S2}))),
+test/quod_physics_tests.erl:280:            ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,space({space_assignment,entity_ref(Source,nested),1,S1}))),
+test/quod_physics_tests.erl:281:            ?assertMatch({fail,_},quod_prolog:prove_ro(Source,{physics_definition_delegate,{'_'},World,{'_'},{'_'}})),
+test/quod_physics_tests.erl:298:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_view_bodies,[Mark],room})),
+test/quod_physics_tests.erl:299:        ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_view_bodies,
+test/quod_physics_tests.erl:425:    ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,space({space_instance,entity_ref(Ns,room),physical_space}))),
+test/quod_physics_tests.erl:426:    ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{agent_host,actor,{'_'},{'_'},{'_'}})),
+test/quod_physics_tests.erl:443:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,Before))
+test/quod_physics_tests.erl:476:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{agent_hosted,actor,Node,1,Key})),
+test/quod_physics_tests.erl:477:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:479:        {ok,[#{'Body' := PilotBody}],_} = quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:488:    [?assertMatch({fail,_},quod_prolog:prove_ro(Ns,Goal)) || Goal <-
+test/quod_physics_tests.erl:653:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,{physics_definition,obstacle,2,{geometry,{ball,600},1}})),
+test/quod_physics_tests.erl:721:            {ok,[#{'Revision' := Revision,'Path' := Path}],_} = quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:731:                export -> ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,Member));
+test/quod_physics_tests.erl:732:                member -> ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,Member))
+test/quod_physics_tests.erl:891:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,space({space_assignment,entity_ref(Source,obstacle),0,none}))),
+test/quod_physics_tests.erl:915:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_space,room,enabled,actor})),
+test/quod_physics_tests.erl:916:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,
+test/quod_physics_tests.erl:927:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,
+test/quod_physics_tests.erl:957:            ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:980:            ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{space_placement,room,Subject,1})),
+test/quod_physics_tests.erl:985:            ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,
+test/quod_physics_tests.erl:1008:            ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,
+test/quod_physics_tests.erl:1010:            ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{space_placement,room,Subject,{'_'}})),
+test/quod_physics_tests.erl:1068:            ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{space_placement,room,Subject,1})),
+test/quod_physics_tests.erl:1154:            ?assertMatch({ok,[#{'Ids' := [4]}],_},quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:1166:                    ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,{space_assignment_state,obstacle,1,Destination}));
+test/quod_physics_tests.erl:1169:                    ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,{space_assignment_state,obstacle,2,none})),
+test/quod_physics_tests.erl:1170:                    ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,
+test/quod_physics_tests.erl:1219:        ?assertMatch({fail,_},quod_prolog:prove_ro(Source,space({space_instance,Destination,space}))),
+test/quod_physics_tests.erl:1223:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,space({space_assignment,entity_ref(Source,obstacle),0,none}))),
+test/quod_physics_tests.erl:1224:        ?assertMatch({fail,_},quod_prolog:prove_ro(Source,{physics_definition_delegate,obstacle,{'_'},{'_'},{'_'}})),
+test/quod_physics_tests.erl:1256:            ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,space({space_assignment,entity_ref(Source,obstacle),1,Destination}))),
+test/quod_physics_tests.erl:1257:            ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:1262:            ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,space({space_assignment,entity_ref(Source,obstacle),2,none}))),
+test/quod_physics_tests.erl:1263:            ?assertMatch({fail,_},quod_prolog:prove_ro(Source,
+test/quod_physics_tests.erl:1265:            ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{space_placement,room,Subject,{'_'}})),
+test/quod_physics_tests.erl:1266:            ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:1274:            ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{space_placement,room,Subject,3}))
+test/quod_physics_tests.erl:1386:            ?assertMatch({ok,[_],Height},quod_prolog:prove_ro(Ns,{',',Body,{physics_structure,room,1}})),
+test/quod_physics_tests.erl:1395:        {ok,[#{'NativeMax' := Max}],_} = quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:1398:        [?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_milli_integer,X}))
+test/quod_physics_tests.erl:1400:        [?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_milli_integer,X}))
+test/quod_physics_tests.erl:1402:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_positive_scalar,Max})),
+test/quod_physics_tests.erl:1403:        ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_positive_scalar,Max+1})),
+test/quod_physics_tests.erl:1404:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:1406:        [?assertMatch({fail,_},quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:1426:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:1437:            ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_next_body,room,12}))
+test/quod_physics_tests.erl:1445:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:1449:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:1554:            {ok, [#{'Manifest' := Manifest}], _} = quod_prolog:prove_ro(
+test/quod_physics_tests.erl:1582:            ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(
+test/quod_physics_tests.erl:1637:    {ok,Reasons} = quod_wire_term:decode_failure_reasons(Blob),
+test/quod_physics_tests.erl:1646:    {ok,Reasons} = quod_wire_term:decode_failure_reasons(Blob),
+test/quod_physics_tests.erl:1697:            {ok,Decoded} = quod_wire_term:decode_failure_reasons(Reasons),
+test/quod_physics_tests.erl:1714:            ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,Fact)),
+test/quod_physics_tests.erl:1782:        {ok,DecodedQueryReasons} = quod_wire_term:decode_failure_reasons(QueryReasons),
+test/quod_physics_tests.erl:2504:            ?assertMatch({ok,[#{}],_},quod_prolog:prove_ro(N,{agent_hosting_projection,all,Human,all,[]})),
+test/quod_physics_tests.erl:3278:        ?assertMatch({ok,[#{'Rows' := []}],_},quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:3440:    {ok,[#{'Source' := Source}],_} = quod_prolog:prove_ro(<<"quod:space">>,
+test/quod_physics_tests.erl:3514:brief({ok, _, {normalized, {failed, Blob}}}) -> redact(quod_wire_term:decode_failure_reasons(Blob));
+test/quod_physics_tests.erl:3740:        ?assertMatch({ok, [#{'Rows' := [replay_once]}], _}, quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:3986:                    ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{agent_key,actor,Key,revoked}))
+test/quod_physics_tests.erl:4026:        ?assertMatch({ok,[#{'G' := 0}],_},quod_prolog:prove_ro(Ns,{physics_run,room,{'G'},none}))
+test/quod_physics_tests.erl:4051:            ?assertMatch({ok,[#{}],_},quod_prolog:prove_ro(Ns,{ping,release_regression}))
+test/quod_physics_tests.erl:4091:        ?assertMatch({ok,[#{}],_},quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:4135:                ?assertMatch({ok,[#{}],_},quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:4415:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_hinged,room,10,1,{finished,R,{blocked,3}}})),
+test/quod_physics_tests.erl:4417:            quod_prolog:prove_ro(Ns,{physics_hinged_request,room,10,{'Request'}}),
+test/quod_physics_tests.erl:4436:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_hinged,room,10,1,{finished,R,{blocked,3}}})),
+test/quod_physics_tests.erl:4460:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:4560:            quod_prolog:prove_ro(Ns,{physics_hinged_request,room,10,{'C'}}),
+test/quod_physics_tests.erl:4669:                quod_prolog:prove_ro(Ns,{physics_hinged_request,room,10,{'C'}}),
+test/quod_physics_tests.erl:4678:                quod_prolog:prove_ro(Ns,{physics_hinged_request,room,10,{'C'}}),
+test/quod_physics_tests.erl:4747:                quod_prolog:prove_ro(Ns,{physics_hinged_request,room,10,{'C'}}),
+test/quod_physics_tests.erl:4766:                quod_prolog:prove_ro(Ns,{physics_hinged_request,room,10,{'C'}}),
+test/quod_physics_tests.erl:4838:            ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_hinged,room,10,2,{closing,{close,2,Id}}})),
+test/quod_physics_tests.erl:4864:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_hinged_source,room,10,Source}))
+test/quod_physics_tests.erl:4914:                    quod_prolog:prove_ro(Ns,{physics_hinged_request,room,10,{'C'}}),
+test/quod_physics_tests.erl:5125:            ?assertEqual({ok,[{stale_sequence,1}]},quod_wire_term:decode_failure_reasons(DuplicateReasons)),
+test/quod_physics_tests.erl:5198:            ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:5201:                quod_prolog:prove_ro(Ns,{physics_rest_request,room,3,{'C'}}),
+test/quod_physics_tests.erl:5233:            ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_checkpoint,room,CP})),
+test/quod_physics_tests.erl:5255:    {ok,[#{'C' := CP}],_} = quod_prolog:prove_ro(Ns,{physics_checkpoint,room,{'C'}}), CP.
+test/quod_physics_tests.erl:5293:            ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_checkpoint,room,CP}))
+test/quod_physics_tests.erl:5309:                    quod_prolog:prove_ro(Ns,{physics_rest_request,room,3,{'C'}}),
+test/quod_physics_tests.erl:5319:                ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_checkpoint,room,{'_'}})),
+test/quod_physics_tests.erl:5320:                ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_rest_request,room,3,Custody})),
+test/quod_physics_tests.erl:5358:        ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_checkpoint,room,{'_'}})),
+test/quod_physics_tests.erl:5360:        {ok,[#{'C' := Original}],_} = quod_prolog:prove_ro(Ns,{physics_rest_request,room,3,{'C'}}),
+test/quod_physics_tests.erl:5366:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_rest_request,room,3,Original})),
+test/quod_physics_tests.erl:5367:        ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_checkpoint,room,{'_'}})),
+test/quod_physics_tests.erl:5372:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_rest_request,room,3,Original})),
+test/quod_physics_tests.erl:5432:                ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_checkpoint,room,{'_'}})),
+test/quod_physics_tests.erl:5433:                ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_body_definition, room, 3, 2, dynamic, {pose,{vector,4000,500,0},{rotation,0,785,0}}, {owned, Shape, 1}}))
+test/quod_physics_tests.erl:5477:    {ok,[#{'Marks' := AuthoredMarks}],_} = quod_prolog:prove_ro(Ns,{hinged_example_view,room,{'Marks'}}),
+test/quod_physics_tests.erl:5478:    ?assertMatch({ok,[_],_},quod_prolog:prove_ro(<<"physics-test-rendering">>,{well_formed_scene,AuthoredMarks})),
+test/quod_physics_tests.erl:5490:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_hinged,room,10,0,idle})),
+test/quod_physics_tests.erl:5499:        {ok,[#{'Angle' := BlockedAngle}],_} = quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:5522:        {ok,[#{'Angle' := Angle}],_} = quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:5534:        {ok,[#{'Results' := Results}],_} = quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:5583:            ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{hinged_result,Meaning,R})),
+test/quod_physics_tests.erl:5584:            {ok,[#{'A' := Angle}],_} = quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:5611:            {ok,[#{'Rows' := Rows}],_} = quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:5650:        quod_prolog:prove_ro(Ns,{hinged_example,{'Name'},{'Pose'},{'Target'},{'Obstacle'},{'Meaning'}}),
+test/quod_physics_tests.erl:5709:                    quod_prolog:prove_ro(Ns,{physics_hinged_request,room,10,{'C'}}),
+test/quod_physics_tests.erl:5712:                ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Receiver,{received_hinged,R}));
+test/quod_physics_tests.erl:5738:    ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_hinged,room,10,1,{closing,R}})),
+test/quod_physics_tests.erl:5739:    ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_checkpoint,room,{'_'}})),
+test/quod_physics_tests.erl:5740:    ?assertMatch({fail,_},quod_prolog:prove_ro(Receiver,{received_hinged,R})).
+test/quod_physics_tests.erl:5750:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_structure,room,2})),
+test/quod_physics_tests.erl:5751:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,Body)),
+test/quod_physics_tests.erl:5752:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:5766:                ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:5768:                ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:5800:            ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_checkpoint,room,{'_'}})),
+test/quod_physics_tests.erl:5801:            ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_hinged,room,10,1,{closing,R}})),
+test/quod_physics_tests.erl:5822:            ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{hinged_result,{'_'},{'_'}})),
+test/quod_physics_tests.erl:5833:                ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_hinged,room,10,2,{cancelled,R}}))
+test/quod_physics_tests.erl:5848:                quod_prolog:prove_ro(Ns,{physics_hinged_request,room,10,{'C'}}),
+test/quod_physics_tests.erl:5849:            {ok,[#{'Pose' := Pose}],_} = quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:5854:            ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_checkpoint,room,{'_'}})),
+test/quod_physics_tests.erl:5861:                quod_prolog:prove_ro(Ns,{physics_hinged_request,room,10,{'C'}}),
+test/quod_physics_tests.erl:5865:            ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
+test/quod_physics_tests.erl:6473:        ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
+test/quod_predicate_failure_tests.erl:98:assert_reason(Reason,{fail,Reasons}) when is_list(Reasons) -> ?assert(lists:member(Reason,Reasons)).
+test/quod_predicate_failure_tests.erl:105:        ?assertMatch({fail,_},quod_proof_session:run_first(
+test/quod_predicate_withdrawal_tests.erl:58:            ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx,
+test/quod_prolog_ontology_tests.erl:29:        ?assertMatch({fail, _}, erlog_int:prove_goal(must_not_run, Edited)),
+test/quod_prolog_ontology_tests.erl:142:            {fail, Refused} = erlog_int:prove_goal(Goal, Current),
+test/quod_prolog_ontology_tests.erl:143:            ?assert(lists:member({edit_conflict, Indicator}, Refused#est.fail_reasons)),
+test/quod_prolog_ontology_tests.erl:153:        {fail, Refused} = erlog_int:prove_goal(Goal, Target),
+test/quod_prolog_ontology_tests.erl:154:        ?assert(lists:member({edit_not_representable, Indicator}, Refused#est.fail_reasons)),
+test/quod_prolog_ontology_tests.erl:164:            {fail, Refused} = erlog_int:prove_goal(
+test/quod_prolog_ontology_tests.erl:166:            ?assert(lists:member({duplicate_clause, Indicator}, Refused#est.fail_reasons)),
+test/quod_prolog_ontology_tests.erl:241:            {fail, Refused} = erlog_int:prove_goal(Goal, Current),
+test/quod_prolog_ontology_tests.erl:242:            ?assert(lists:member({edit_conflict, all}, Refused#est.fail_reasons)),
+test/quod_prolog_ontology_tests.erl:263:            {fail, Refused} = erlog_int:prove_goal(Goal, Current),
+test/quod_prolog_ontology_tests.erl:264:            ?assert(lists:member({edit_conflict, all}, Refused#est.fail_reasons)),
+test/quod_prolog_tests.erl:21:          ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, native_committed)),
+test/quod_prolog_tests.erl:22:          ?assertMatch({fail, _}, quod_prolog:execute(Ns, {assertz, native_refused})),
+test/quod_prolog_tests.erl:23:          ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, native_refused))
+test/quod_prolog_tests.erl:60:        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, wrong_incarnation))
+test/quod_prolog_tests.erl:120:            ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, cancelled_native_write))
+test/quod_prolog_tests.erl:144:        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, expired_request)),
+test/quod_prolog_tests.erl:155:                ?assertMatch({fail, [{proof_timeout, Ns}]}, Reply)
+test/quod_prolog_tests.erl:159:            ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, expired_during_proof))
+test/quod_prolog_tests.erl:720:         ?_assertEqual({fail, [{proof_timeout, Ns}]},
+test/quod_prolog_tests.erl:757:                  {fail, [{proof_timeout, Ns}]}} -> ok
+test/quod_prolog_tests.erl:796:             ?assertMatch({fail, [_ | _]},
+test/quod_prolog_tests.erl:814:             ?assertMatch({fail, [_ | _]},
+test/quod_prolog_tests.erl:919:                    {fail, [_ | _]},
+test/quod_prolog_tests.erl:1248:           {fail, [{nonexistent, foo}]},
+test/quod_prolog_tests.erl:1258:                       {fail_with_reason, {impossible_to_link, {'X'}}}},
+test/quod_prolog_tests.erl:1262:           {fail, [{blocked, bob}, {impossible_to_link, bob}]},
+test/quod_prolog_tests.erl:1294:        ?assertMatch({fail, [_ | _]}, quod_prolog:prove(Ns, {sibling, x})),
+test/quod_prolog_tests.erl:1318:        ?assertMatch({fail, [_ | _]}, quod_prolog:prove(Ns, missing_after_reject)),
+test/quod_prolog_tests.erl:1341:        ?assertMatch({fail, [_ | _]}, quod_prolog:prove(Ns, missing_after_replay))
+test/quod_prolog_tests.erl:1362:        ?assertMatch({fail, [_ | _]},
+test/quod_prolog_tests.erl:1406:        ?assertMatch({fail, [_ | _]}, quod_prolog:prove(Ns, {dependent, x})),
+test/quod_prolog_tests.erl:1717:               {fail, [_ | _]}, quod_prolog:prove(Ns, {saved, other}))
+test/quod_prolog_tests.erl:1933:        ?assertMatch({fail, [_ | _]}, quod_prolog:prove(Ns, {widget, z}))
+test/quod_prolog_tests.erl:2010:        ?assertMatch({fail, [_ | _]}, quod_prolog:prove(Ns, {sibling, x}))
+test/quod_proof_session_tests.erl:370:       {fail, _},
+test/quod_proof_trace_tests.erl:77:            ?assertEqual({fail, [Goal]}, quod_prolog:prove(Ns, Goal)),
+test/quod_reaction_authority_tests.erl:16:            ?assertMatch({fail, _}, quod_prolog:prove_ro(Root, authority_root_marker)),
+test/quod_reaction_authority_tests.erl:34:                ?assertMatch({fail, _}, quod_prolog:prove_ro(Root, authority_root_marker))
+test/quod_reaction_authority_tests.erl:67:                    quod_prolog:prove_ro(Ns, {findall, {'Value'}, {ping, {'Value'}}, {'Values'}}))
+test/quod_reaction_metadata_tests.erl:26:        ?assertMatch({fail, _}, match(Est, Meta, {recovery_observation, Event}, true)),
+test/quod_reaction_metadata_tests.erl:29:        ?assertMatch({fail, _}, match(Est, Owned,
+test/quod_reaction_metadata_tests.erl:47:        ?assertMatch({fail, _}, match(Est, Context, Goal, {record, {'Result'}}))
+test/quod_reaction_metadata_tests.erl:82:        ?assertMatch({fail, _}, match(Est, metadata(),
+test/quod_reaction_metadata_tests.erl:102:        ?assertMatch({fail, _}, run({current_request_expiry, {'Expiry'}}, St)),
+test/quod_reaction_metadata_tests.erl:103:        ?assertMatch({fail, _}, run({current_request_operation, {'Operation'}}, St)),
+test/quod_reaction_metadata_tests.erl:104:        ?assertMatch({fail, _}, run({current_signed_request, <<>>}, St)),
+test/quod_reaction_metadata_tests.erl:117:            ?assertMatch({fail, _}, run({current_signed_request, Different}, St)),
+test/quod_reaction_metadata_tests.erl:118:            ?assertMatch({fail, _}, run({current_signed_request, <<Bytes/binary, 0>>}, St)),
+test/quod_reaction_metadata_tests.erl:121:            ?assertMatch({fail, _}, run({current_request_operation,
+test/quod_reaction_metadata_tests.erl:203:        ?assertMatch({fail, _}, match(Est, metadata(), Guard, Goal)),
+test/quod_reaction_metadata_tests.erl:204:        ?assertMatch({fail, _}, match(Est, Meta#{physics => #{}}, Guard, Goal)),
+test/quod_reaction_metadata_tests.erl:205:        ?assertMatch({fail, _}, match(Est, Meta#{recovery => #{}}, Guard, Goal)),
+test/quod_remaining_admission_tests.erl:57:    Reasons = Next#est.fail_reasons,
+test/quod_remaining_admission_tests.erl:59:    ?assertNot(lists:member(fail_reasons_truncated,Reasons)),
+test/quod_remaining_admission_tests.erl:60:    {ok,Blob} = quod_wire_term:encode_failure_reasons(Reasons),
+test/quod_remaining_admission_tests.erl:61:    ?assertEqual({ok,Reasons},quod_wire_term:decode_failure_reasons(Blob)),
+test/quod_remaining_admission_tests.erl:62:    ?assertEqual({error,bad_term},quod_wire_term:encode_failure_reasons([{'Unbound'}])),
+test/quod_remaining_admission_tests.erl:63:    ?assertEqual({error,bad_term},quod_wire_term:encode_failure_reasons([ok|invalid])),
+test/quod_remaining_admission_tests.erl:66:    ?assertEqual([fail_reasons_truncated,reason],Refused#est.fail_reasons).
+test/quod_rendering_tests.erl:455:fails(Goal, St) -> ?assertMatch({fail, _}, erlog_int:prove_goal(Goal, St)).
+test/quod_resource_basis_tests.erl:59:        {fail, Basis} = prove(optional_selector, Est),
+test/quod_resource_basis_tests.erl:67:        {fail, Basis} = prove({current_predicate, {'/', enabled, 0}}, Est),
+test/quod_resource_basis_tests.erl:80:        {{fail, _}, Missing} = select(
+test/quod_resource_basis_tests.erl:100:        {fail, Basis} = prove(opaque_native, Native),
+test/quod_resource_lifecycle_tests.erl:124:    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, must_not_apply)),
+test/quod_root_resource_lifecycle_tests.erl:73:            ?assertMatch({fail, _}, quod_prolog:execute(?ROOT,
+test/quod_runtime_tests.erl:172:            ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {react_on, {'_'}, {'_'}}))
+test/quod_runtime_tests.erl:819:        ?assertMatch({fail, _}, quod_prolog:prove(
+test/quod_runtime_tests.erl:981:        ?assertMatch({fail, _}, quod_prolog:prove(Ns, {alarm, critical}))
+test/quod_runtime_tests.erl:1170:        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, illegal_selector_write)),
+test/quod_runtime_tests.erl:1302:        ?assertMatch({ok, [#{'Markers' := [one, two]}], _}, quod_prolog:prove_ro(
+test/quod_scope_wire_tests.erl:39:    Reasons = payload(failure_reasons, [{missing, item}]),
+test/quod_scope_wire_tests.erl:177:    Reasons = payload(failure_reasons, [{failed, c}]),
+test/quod_scope_wire_tests.erl:533:         failure_reasons,
+test/quod_scope_wire_tests.erl:534:         payload(failure_reasons, [{because, no_clause}]))),
+test/quod_scope_wire_tests.erl:543:                      failure_reasons, Reasons),
+test/quod_scope_wire_tests.erl:547:       quod_scope_wire:decode_payload(failure_reasons, AtLimit)),
+test/quod_scope_wire_tests.erl:551:    ?assertMatch({ok, _}, quod_scope_wire:encode_payload(failure_reasons, TooLarge)),
+test/quod_scope_wire_tests.erl:555:         failure_reasons, <<AtLimit/binary, 0>>)),
+test/quod_scope_wire_tests.erl:559:         failure_reasons, payload(failure_reasons, []))).
+test/quod_selection_basis_tests.erl:41:    {fail, Missing} = prove({current_prolog_flag, nonexistent_flag, {'Value'}}, Est),
+test/quod_show_as_tests.erl:29:        {ok,[#{'M':=NodeMarks}],_} = quod_prolog:prove_ro(<<"quod:space">>,{world_view,Room,playing,{'M'}}),
+test/quod_show_as_tests.erl:146:        {ok,_,{normalized,{failed,Blob}}} -> {ok,Rs} = quod_wire_term:decode_failure_reasons(Blob), error({refused,Name,Rs});
+test/quod_show_as_tests.erl:154:holds(Ns,Goal) -> ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,Goal)).
+test/quod_signing_journal_tests.erl:1218:    {ok, Reasons} = quod_wire_term:encode_failure_reasons([conflict]),
+test/quod_source_view_tests.erl:55:            ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx, {'::', Owner, leaked})),
+test/quod_source_view_tests.erl:57:            ?assertMatch({read, _, {fail, _}}, Read(Query))
+test/quod_source_view_tests.erl:136:        ?assertMatch({fail, _}, HiddenRead),
+test/quod_source_view_tests.erl:143:        ?assertMatch({fail, _}, RevokedRead)
+test/quod_space_creation_tests.erl:21:            _ -> ?assertMatch({ok,[_],_}, quod_prolog:prove_ro(<<"quod:names">>,
+test/quod_space_creation_tests.erl:306:            {ok,Decoded} = quod_wire_term:decode_failure_reasons(Reasons),
+test/quod_space_creation_tests.erl:334:        {ok,Decoded}=quod_wire_term:decode_failure_reasons(Reasons),
+test/quod_space_creation_tests.erl:347:    {ok,[#{'Rows':=Rows}],_} = quod_prolog:prove_ro(Ns,{findall,{'I'},{instance_of,space_class(),{'I'}},{'Rows'}}), Rows.
+test/quod_space_creation_tests.erl:349:    {ok,[#{'Rows':=Rows}],_} = quod_prolog:prove_ro(Ns,
+test/quod_space_creation_tests.erl:351:holds(Ns,Goal) -> ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,Goal)).
+test/quod_space_creation_tests.erl:352:fails(Ns,Goal) -> ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,Goal)).
+test/quod_space_tests.erl:28:            ?assertMatch({ok,[#{'Poses':=[Pose]}],_},quod_prolog:prove_ro(Store,
+test/quod_space_tests.erl:69:                                      {fail_with_reason,after_travel_ack}}},after_travel_ack),
+test/quod_space_tests.erl:278:    {ok, Reasons} = quod_wire_term:decode_failure_reasons(Blob),
+test/quod_system_ontology_tests.erl:277:    ?assertMatch({ok, [#{'Self' := {node, Self}}], _}, quod_prolog:prove_ro(Ns,
+test/quod_trace_tests.erl:157:              {fail, error, <<"fail">>}, {{fail, private}, error, <<"fail">>},
+test/quod_transaction_predicates_tests.erl:34:    {fail, Final} = prove(Goal, [{parent, tom, bob}, {obsolete, value}]),
+test/quod_transaction_predicates_tests.erl:62:    {fail, Exhausted} = erlog_int:fail(Final),
+test/quod_transaction_predicates_tests.erl:78:    {fail, RolledBack} = prove(Failure, []),
+test/quod_transaction_predicates_tests.erl:90:    ?assertMatch({fail, _}, erlog_int:fail(Final)).
+test/quod_transaction_predicates_tests.erl:102:    ?assertMatch({fail, _}, erlog_int:fail(Final)).
+test/quod_transaction_predicates_tests.erl:104:failure_reasons_survive_rollback_test() ->
+test/quod_transaction_predicates_tests.erl:107:             {fail_with_reason, rejected_candidate}},
+test/quod_transaction_predicates_tests.erl:108:            {get_fail_reasons, {'Reasons'}}},
+test/quod_transaction_predicates_tests.erl:111:                   {fail_with_reason, rejected_candidate}},
+test/quod_transaction_predicates_tests.erl:140:    {fail, RolledBack} = prove(
+test/quod_voxel_world_tests.erl:220:        {fail,Final} = erlog_int:prove_goal(Goal,St),
+test/quod_voxel_world_tests.erl:223:            is_tuple(R) andalso element(1,R) =:= Reason end,Final#est.fail_reasons) of
+test/quod_voxel_world_tests.erl:225:            false -> error({missing_refusal_reason,Reason,lists:sublist(Final#est.fail_reasons,8)})
+test/quod_voxel_world_tests.erl:233:        {fail,Final} -> error({proof_refused,Goal,lists:sublist(Final#est.fail_reasons,8)})
+test/quod_wire_term_tests.erl:265:    {fail, St1} = erlog_int:prove_goal(
+test/quod_wire_term_tests.erl:266:                    {fail_with_reason, {impossible_to_link, bob, tom}},
+test/quod_wire_term_tests.erl:268:    Reasons = St1#est.fail_reasons,
+test/quod_wire_term_tests.erl:270:    {ok, Blob} = quod_wire_term:encode_failure_reasons(Reasons),
+test/quod_wire_term_tests.erl:273:                 quod_wire_term:decode_failure_reasons(Blob)),
+test/quod_wire_term_tests.erl:274:    ?assertEqual(Blob, canonical_failure_reasons(Reasons)).
+test/quod_wire_term_tests.erl:283:    CountBounded = St1#est.fail_reasons,
+test/quod_wire_term_tests.erl:285:    ?assertNot(lists:member(fail_reasons_truncated, CountBounded)),
+test/quod_wire_term_tests.erl:287:    {ok, CountBlob} = quod_wire_term:encode_failure_reasons(CountBounded),
+test/quod_wire_term_tests.erl:290:       quod_wire_term:decode_failure_reasons(CountBlob)),
+test/quod_wire_term_tests.erl:298:    ?assertEqual([CanonicallyLarge], St2#est.fail_reasons),
+test/quod_wire_term_tests.erl:300:              St2#est.fail_reasons)).
+test/quod_wire_term_tests.erl:304:    ?assertMatch({ok, _}, quod_wire_term:encode_failure_reasons(AtCount)),
+test/quod_wire_term_tests.erl:307:       quod_wire_term:encode_failure_reasons([refused | AtCount])),
+test/quod_wire_term_tests.erl:312:       quod_wire_term:encode_failure_reasons([{'Unbound'}])),
+test/quod_wire_term_tests.erl:315:       quod_wire_term:encode_failure_reasons([{42, not_a_functor}])),
+test/quod_wire_term_tests.erl:318:       quod_wire_term:encode_failure_reasons([ok | improper_tail])).
+test/quod_wire_term_tests.erl:323:       {ok, _}, quod_wire_term:encode_failure_reasons([AtReason])),
+test/quod_wire_term_tests.erl:326:       quod_wire_term:encode_failure_reasons(
+test/quod_wire_term_tests.erl:330:    {ok, AtLimitBlob} = quod_wire_term:encode_failure_reasons(AtStack),
+test/quod_wire_term_tests.erl:334:                 quod_wire_term:decode_failure_reasons(AtLimitBlob)),
+test/quod_wire_term_tests.erl:339:       quod_wire_term:encode_failure_reasons(
+test/quod_wire_term_tests.erl:343:    {ok, Blob} = quod_wire_term:encode_failure_reasons([]),
+test/quod_wire_term_tests.erl:345:    ?assertEqual({ok, []}, quod_wire_term:decode_failure_reasons(Blob)).
+test/quod_wire_term_tests.erl:348:    {ok, Canonical} = quod_wire_term:encode_failure_reasons([refused]),
+test/quod_wire_term_tests.erl:353:       quod_wire_term:decode_failure_reasons(Noncanonical)).
+test/quod_wire_term_tests.erl:360:    byte_size(canonical_failure_reasons(Reasons)).
+test/quod_wire_term_tests.erl:362:canonical_failure_reasons(Reasons) ->
+test/reason_admission_tests.erl:8:    ?assertEqual([{diagnostic,I}||I<-lists:seq(128,1,-1)],Final#est.fail_reasons),
+test/reason_admission_tests.erl:13:    {Final,Calls}=measured_add(St,{quod_wire_term,encode_failure_reasons,1},128),
+test/reason_admission_tests.erl:15:    Reasons=Final#est.fail_reasons,
+test/reason_admission_tests.erl:17:    {ok,Blob}=quod_wire_term:encode_failure_reasons(Reasons),
+test/reason_admission_tests.erl:18:    ?assertEqual({ok,Reasons},quod_wire_term:decode_failure_reasons(Blob)).

@@ -20,13 +20,13 @@ remaining_controls_preserve_binding_and_atomic_refusal_test_() ->
             {ok, [#{<<"V0">> := Picture}], _} = read(Ctx, Ns, {attribute,picture,image,{0}}),
             commit(Ctx,Ns,{transaction,{',',{retract,{attribute,picture,image,Picture}},
                                           {assertz,{attribute,picture,image,none}}}}),
-            ?assertMatch({fail,_},read(Ctx,Ns,{gui_schema,extra,{0},{1}})),
+            ?assertMatch(fail,read(Ctx,Ns,{gui_schema,extra,{0},{1}})),
             commit(Ctx,Ns,{transaction,{',',{retract,{attribute,picture,image,none}},
                                           {assertz,{attribute,picture,image,Picture}}}}),
             lists:foreach(fun(Bad) ->
-                ?assertMatch({ok,_,{normalized,{failed,_}}},quod_lobby_tests:submit(Ctx,execute,
+                ?assertMatch({ok,_,{normalized,fail}},quod_lobby_tests:submit(Ctx,execute,
                     scope(Ns,{transaction,{',',{assertz,bad_table_write},Bind(Bad)}}))),
-                ?assertMatch({fail,_},read(Ctx,Ns,bad_table_write))
+                ?assertMatch(fail,read(Ctx,Ns,bad_table_write))
             end,[lists:keyreplace(rows,2,Values,{field,rows,[{row,missing}]}),
                  lists:keyreplace(rows,2,Values,{field,rows,[{row,a},{row,a}]}),
                  Values ++ [{field,picture,<<"ignored">>}]]),
@@ -34,7 +34,7 @@ remaining_controls_preserve_binding_and_atomic_refusal_test_() ->
             ?assertMatch({ok,[_],_},read(Ctx,Ns,{extra_answer,{entered,[{row,b},{row,a}],<<"two\nlines">>,true}})),
             commit(Ctx,Ns,{transaction,{',',{retract,{attribute,rows,headings,{'_'}}},
                                           {assertz,{attribute,rows,headings,[<<"Wrong column count">>]}}}}),
-            ?assertMatch({fail,_},read(Ctx,Ns,{gui_schema,extra,{0},{1}}))
+            ?assertMatch(fail,read(Ctx,Ns,{gui_schema,extra,{0},{1}}))
         after quod_lobby_tests:stop(Ctx), file:del_dir_r(Dir) end
     end}.
 
@@ -72,13 +72,13 @@ composition_uses_inherited_defaults_and_only_binds_inputs_test_() ->
                                  read(Ctx, Ns, Bind(Values)))
                 end, [first, repeated])
             end),
-            ?assertMatch({fail, _}, read(Ctx, Ns, Bind(Values ++ [{field, loading, 65}]))),
+            ?assertMatch(fail, read(Ctx, Ns, Bind(Values ++ [{field, loading, 65}]))),
             commit(Ctx, Ns, {transaction, {',', Bind(Values), {assertz, {composed_answer, {0}}}}}),
             ?assertMatch({ok, [_], _}, read(Ctx, Ns, {composed_answer, {entered, <<"L">>, <<"R">>}})),
             lists:foreach(fun({Id, Key, Before, Invalid}) ->
                 commit(Ctx, Ns, {transaction, {',', {retract, {attribute, Id, Key, Before}},
                                                        {assertz, {attribute, Id, Key, Invalid}}}}),
-                ?assertMatch({fail, _}, read(Ctx, Ns, {gui_schema, composed, {0}, {1}})),
+                ?assertMatch(fail, read(Ctx, Ns, {gui_schema, composed, {0}, {1}})),
                 commit(Ctx, Ns, {transaction, {',', {retract, {attribute, Id, Key, Invalid}},
                                                        {assertz, {attribute, Id, Key, Before}}}})
             end, [{loading, percent, 65, 101}, {inputs, columns, 3, 0}, {details, visible_rows, 2, -1}])
@@ -132,10 +132,10 @@ input_variants_keep_typed_binding_and_rollback_test_() ->
                        {selectable_list, [{':', unintended, value}]}, {selectable_list, {mode, a}}],
             lists:foreach(fun({Kind, Value}) ->
                 Bad = lists:keyreplace(Kind, 2, Fields, {field, Kind, Value}),
-                ?assertMatch({ok, _, {normalized, {failed, _}}},
+                ?assertMatch({ok, _, {normalized, fail}},
                     quod_lobby_tests:submit(Ctx, execute, scope(Ns, {transaction,
                         {',', {assertz, invalid_variant_write}, Bind(Bad)}}))),
-                ?assertMatch({fail, _}, read(Ctx, Ns, invalid_variant_write))
+                ?assertMatch(fail, read(Ctx, Ns, invalid_variant_write))
             end, Invalid),
             ?assertMatch({fail, _}, read(Ctx#{instance => <<"human_user(other_agent).">>}, Ns, Bind(Fields))),
             commit(Ctx, Ns, {transaction, {',', Bind(Fields), {assertz, {variant_answer, {0}}}}}),
@@ -172,9 +172,9 @@ elaborate_form_uses_one_vocabulary_projection_test_() ->
             ?assertMatch({ok, [#{<<"V0">> := {entered, Values}}], _}, Bound),
             ?assertMatch({ok, [#{<<"V0">> := {entered, Values}}], _},
                 read(Ctx, Ns, {gui_bind, elaborate, Revision, apply, lists:reverse(Values), {0}})),
-            ?assertMatch({fail, _}, read(Ctx, Ns,
+            ?assertMatch(fail, read(Ctx, Ns,
                 {gui_bind, elaborate, Revision, apply, Values ++ [hd(Values)], {0}})),
-            ?assertMatch({fail, _}, read(Ctx, Ns,
+            ?assertMatch(fail, read(Ctx, Ns,
                 {gui_bind, elaborate, Revision, apply,
                  lists:keyreplace({setting, 32}, 2, Values, {field, {setting, 32}, 101}), {0}})),
             {Initial, 2} = vocabulary_calls(fun() ->
@@ -228,8 +228,8 @@ schema_only_reader(Ctx, Base, Owner, Terms, Dir) ->
         {ok, [#{<<"V0">> := Revision}], _} =
             read(Ctx, Ns, {gui_schema, settings, {0}, {'_'}}),
         {ok, [#{<<"V1">> := Values}], _} = read(Ctx, Ns, {gui_values, settings, {'_'}, {0}}),
-        ?assertMatch({fail, _}, read(Ctx, Ns, {gui_bind, settings, Revision, apply, Values, {0}})),
-        ?assertMatch({fail, _}, read(Ctx, Ns, {gui_definition, settings, {0}, {1}, {2}, {3}}))
+        ?assertMatch({fail,[{not_allowed,Ns}]}, read(Ctx, Ns, {gui_bind, settings, Revision, apply, Values, {0}})),
+        ?assertMatch({fail,[{not_allowed,Ns}]}, read(Ctx, Ns, {gui_definition, settings, {0}, {1}, {2}, {3}}))
     after quod_lobby_tests:stop_process(Sup) end.
 
 exercise(Ctx, Ns) ->
@@ -260,10 +260,10 @@ exercise(Ctx, Ns) ->
     %% Validate inside the same transaction shape used by submission. Local
     %% schema alternatives must not exhaust distributed checkpoints, and a
     %% rejected field set must roll back a preceding application write.
-    ?assertMatch({ok, _, {normalized, {failed, _}}},
+    ?assertMatch({ok, _, {normalized, fail}},
         quod_lobby_tests:submit(Ctx, execute, scope(Ns, {transaction,
             {',', {assertz, invalid_form_write}, Bind(Revision, tl(Fields))}}))),
-    ?assertMatch({fail, _}, read(Ctx, Ns, invalid_form_write)),
+    ?assertMatch(fail, read(Ctx, Ns, invalid_form_write)),
     quod_lobby_tests:assert_read_has_no_io(fun() ->
         lists:foreach(fun(_) ->
             ?assertMatch({ok, [_], _},
@@ -279,7 +279,7 @@ exercise(Ctx, Ns) ->
     ?assertMatch({ok, [#{<<"V0">> := {settings_entered, <<"Edited">>, square, 75, 180}}], _},
                  read(Ctx, Ns, Bind(Revision, lists:reverse(Fields)))),
     lists:foreach(fun(Invalid) ->
-        ?assertMatch({fail, _}, read(Ctx, Ns, Bind(Revision, Invalid)))
+        ?assertMatch(fail, read(Ctx, Ns, Bind(Revision, Invalid)))
     end, [tl(Fields), Fields ++ [{field, name, <<"Duplicate">>}],
           Fields ++ [{field, unknown, 1}],
           lists:keyreplace(level, 2, Fields, {field, level, 76}),
@@ -291,11 +291,11 @@ exercise(Ctx, Ns) ->
           lists:keyreplace(name, 2, Fields, {field, name, <<>>})]),
     ?assertMatch({ok, [_], _}, read(Ctx, Ns,
         Bind(Revision, lists:keyreplace(name, 2, Fields, {field, name, <<"éééééé"/utf8>>})))),
-    ?assertMatch({fail, _}, read(Ctx, Ns, Bind(<<0:256>>, Fields))),
+    ?assertMatch(fail, read(Ctx, Ns, Bind(<<0:256>>, Fields))),
     %% Colon-valued input is data. It cannot turn a failed lookup into a
     %% foreign invocation under the authenticated human's authority.
     lists:foreach(fun(Goal) ->
-        {ok, _, {normalized, {read, Dependencies, {failed, _}}}} =
+        {ok, _, {normalized, {read, Dependencies, fail}}} =
             quod_lobby_tests:submit(Ctx, read, scope(Ns, Goal)),
         ?assertEqual(false, lists:keymember(<<"unintended">>, 1, Dependencies))
     end, [{gui_schema, {':', unintended, settings}, {0}, {1}},
@@ -315,32 +315,32 @@ exercise(Ctx, Ns) ->
     commit(Ctx, Ns, {retract, {gui_initial, settings, name, <<"Oscillator">>}}),
     {ok, [#{<<"V1">> := Defaults}], _} = read(Ctx, Ns, {gui_values, settings, {'_'}, {0}}),
     ?assert(lists:member({field, name, <<>>}, Defaults)),
-    ?assertMatch({fail, _}, read(Ctx, Ns,
+    ?assertMatch(fail, read(Ctx, Ns,
         Bind(Revision, lists:keyreplace(name, 2, Fields, {field, name, <<>>})))),
     commit(Ctx, Ns, {assertz, {attribute, name, readonly, true}}),
-    ?assertMatch({fail, _}, read(Ctx, Ns, {gui_schema, settings, {0}, {1}})),
+    ?assertMatch(fail, read(Ctx, Ns, {gui_schema, settings, {0}, {1}})),
     commit(Ctx, Ns, {retract, {attribute, name, readonly, true}}),
     commit(Ctx, Ns, {assertz, {gui_initial, settings, name, <<"Oscillator">>}}),
     %% An ambiguous property fails as a whole, never silently drops a control.
     commit(Ctx, Ns, {assertz, {attribute, level, range, {range, 0, 200, 5}}}),
-    ?assertMatch({fail, _}, read(Ctx, Ns, {gui_schema, settings, {0}, {1}})),
+    ?assertMatch(fail, read(Ctx, Ns, {gui_schema, settings, {0}, {1}})),
     commit(Ctx, Ns, {retract, {attribute, level, range, {range, 0, 200, 5}}}),
     commit(Ctx, Ns, {assertz, {attribute, tuning, enabled, false}}),
-    ?assertMatch({fail, _}, read(Ctx, Ns, Bind(Revision, Fields))),
+    ?assertMatch(fail, read(Ctx, Ns, Bind(Revision, Fields))),
     {ok, [#{<<"V0">> := DisabledRevision}], _} =
         read(Ctx, Ns, {gui_schema, settings, {0}, {'_'}}),
-    ?assertMatch({fail, _}, read(Ctx, Ns, Bind(DisabledRevision, Fields))),
+    ?assertMatch(fail, read(Ctx, Ns, Bind(DisabledRevision, Fields))),
     Frozen = lists:keyreplace(angle, 2,
         lists:keyreplace(level, 2, Fields, {field, level, 55}), {field, angle, 90}),
     ?assertMatch({ok, [_], _}, read(Ctx, Ns, Bind(DisabledRevision, Frozen))),
     commit(Ctx, Ns, conjunction([
         {retract, {gui_initial, settings, level, 55}},
         {assertz, {gui_initial, settings, level, 60}}])),
-    ?assertMatch({fail, _}, read(Ctx, Ns, Bind(DisabledRevision, Frozen))),
+    ?assertMatch(fail, read(Ctx, Ns, Bind(DisabledRevision, Frozen))),
     commit(Ctx, Ns, {retract, {attribute, tuning, enabled, false}}),
     %% Mixed unrelated kinds are not resolved by declaration order.
     commit(Ctx, Ns, {assertz, {instance_of, {':', quod, {':', gui, button}}, level}}),
-    ?assertMatch({fail, _}, read(Ctx, Ns, {gui_schema, settings, {0}, {1}})),
+    ?assertMatch(fail, read(Ctx, Ns, {gui_schema, settings, {0}, {1}})),
     commit(Ctx, Ns, {retract, {instance_of, {':', quod, {':', gui, button}}, level}}),
     %% Proof/source presentation capabilities require their existing controller;
     %% a generic submitted form must not admit an unowned editor or catalogue.
@@ -351,7 +351,7 @@ exercise(Ctx, Ns) ->
             {retract, {gui_children, tuning, [level, angle]}},
             {assertz, {gui_children, tuning, [level, angle, presentation_only]}}
             | quod_ct:source_assertions(Extra)])),
-        ?assertMatch({fail, _}, read(Ctx, Ns, {gui_schema, settings, {0}, {1}})),
+        ?assertMatch(fail, read(Ctx, Ns, {gui_schema, settings, {0}, {1}})),
         commit(Ctx, Ns, conjunction([
             {retract, {gui_children, tuning, [level, angle, presentation_only]}},
             {assertz, {gui_children, tuning, [level, angle]}}
@@ -361,7 +361,7 @@ exercise(Ctx, Ns) ->
     {gui_form, settings, DeclaredFields, {submit, apply, Callback}} = Form,
     lists:foreach(fun(InvalidForm) ->
         commit(Ctx, Ns, conjunction([{retract, Form}, {assertz, InvalidForm}])),
-        ?assertMatch({fail, _}, read(Ctx, Ns, {gui_schema, settings, {0}, {1}})),
+        ?assertMatch(fail, read(Ctx, Ns, {gui_schema, settings, {0}, {1}})),
         commit(Ctx, Ns, conjunction([{retract, InvalidForm}, {assertz, Form}]))
     end, [{gui_form, settings, DeclaredFields, {submit, apply, {unbound, {'Missing'}}}},
           {gui_form, settings, DeclaredFields, {submit, {'Button'}, Callback}},
@@ -374,7 +374,7 @@ exercise(Ctx, Ns) ->
     commit(Ctx, Ns, conjunction([{retract, Form}, {assertz, Shared}])),
     {ok, [#{<<"V0">> := SharedRevision}], _} =
         read(Ctx, Ns, {gui_schema, settings, {0}, {'_'}}),
-    ?assertMatch({fail, _}, read(Ctx, Ns, Bind(SharedRevision, Fields))),
+    ?assertMatch(fail, read(Ctx, Ns, Bind(SharedRevision, Fields))),
     ?assertMatch({ok, [#{<<"V0">> := {equal_angles, 75}}], _}, read(Ctx, Ns,
         Bind(SharedRevision, lists:keyreplace(angle, 2, Fields, {field, angle, 75})))),
     commit(Ctx, Ns, conjunction([{retract, Shared}, {assertz, Form}])),
@@ -390,11 +390,11 @@ exercise(Ctx, Ns) ->
     ?assertMatch({ok, [_], _}, read(Ctx, Ns,
         {gui_bind, Parameterized, ParameterRevision, apply, Fields, {0}})),
     commit(Ctx, Ns, {assertz, {gui_validation_context, settings, {domain_version, 2}}}),
-    ?assertMatch({fail, _}, read(Ctx, Ns, Bind(Revision, Fields))),
+    ?assertMatch(fail, read(Ctx, Ns, Bind(Revision, Fields))),
     commit(Ctx, Ns, conjunction([
         {retract, {gui_children, tuning, [level, angle]}},
         {assertz, {gui_children, tuning, [level, settings]}}])),
-    ?assertMatch({fail, _}, read(Ctx, Ns, {gui_schema, settings, {0}, {1}})).
+    ?assertMatch(fail, read(Ctx, Ns, {gui_schema, settings, {0}, {1}})).
 
 source(File) ->
     case File of

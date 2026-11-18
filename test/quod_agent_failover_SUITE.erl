@@ -237,7 +237,7 @@ exercise_host_loss(Config) ->
         ?assertEqual({ok, []}, call(N, file, list_dir, [maps:get(vault_dir, N)]))
     end, ?config(eligible, Config)),
     [Administrator | _] = Survivors,
-    ?assertMatch({ok, _, {normalized, {failed, _}}},
+    ?assertMatch({ok, _, {normalized, fail}},
         call(Administrator, ?MODULE, submit_node,
           [{node_authorized_goal, ?NS, Anchor, {assertz, unauthorized_recovery}}])),
     Fault = stop_host(Old, Config),
@@ -711,6 +711,7 @@ await_goal(Ns, Goal, Timeout) ->
 await_goal_read(Ns, Owner, Monitor, Goal, Deadline) ->
     case quod_prolog:prove_ro(Ns, Goal) of
         {ok, [Bindings], Height} -> {Bindings, Height};
+        fail -> await_goal_edge(Ns, Owner, Monitor, Goal, Deadline);
         {fail, _} -> await_goal_edge(Ns, Owner, Monitor, Goal, Deadline);
         {error, rebuilding} -> await_goal_edge(Ns, Owner, Monitor, Goal, Deadline);
         Other -> error({unexpected_goal_result, Ns, Goal, Other})
@@ -794,10 +795,12 @@ assert_old_key_fenced(Ref = {agent_instance_ref, Ns, Anchor, actor}, OldKey) ->
     {ok, Blob} = quod_wire_term:encode_canonical(Ref),
     ?assertMatch({ok, #{agent_ref_blob := Blob}}, quod_client_goal:verify(Bytes, Signature)),
     ?assert(quod_time:now_ms() < Expires),
-    ?assertMatch({ok, _, {normalized, {failed, _}}},
-                 quod_client_goal_ingress:submit(Bytes, Signature)),
+    {ok, _, {normalized, {failed, DeniedReasons}}} =
+        quod_client_goal_ingress:submit(Bytes, Signature),
+    ?assertEqual({ok, [{not_allowed, Ns}]},
+                 quod_wire_term:decode_failure_reasons(DeniedReasons)),
     ?assert(quod_time:now_ms() < Expires),
-    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {recovered_work, stale_old_host})),
+    ?assertMatch(fail, quod_prolog:prove_ro(Ns, {recovered_work, stale_old_host})),
     ok.
 
 work_values() -> [after_recovery, after_runtime_restart, after_old_host_return].

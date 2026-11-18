@@ -1,0 +1,9 @@
+{
+  "time": "2026-11-18T17:08:08.971417+00:00",
+  "tool": "developer_git_commit_proposal",
+  "repository": "/home/yan/src/erlog",
+  "result": "rejected: selected files outside the session git repositories",
+  "next_step": "Attach the existing engine repository or use a session opened in that checkout. The required Nimbalyst commit widget must still be used.",
+  "engine_head_unchanged": true,
+  "engine_index_empty": true
+}

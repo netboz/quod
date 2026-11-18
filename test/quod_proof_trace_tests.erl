@@ -74,7 +74,7 @@ failed_proof_keeps_failure_and_finishes_cleanup_without_exporting_goal_test() ->
         quod_trace_tests:with_tracer(fun() ->
             Secret = <<"trace-proof-secret-not-an-attribute">>,
             Goal = {missing_trace_predicate, Secret},
-            ?assertEqual({fail, [Goal]}, quod_prolog:prove(Ns, Goal)),
+            ?assertEqual(fail, quod_prolog:prove(Ns, Goal)),
             Names = [<<"quod.prolog.public_proof">>, <<"quod.prolog.prove">>,
                      <<"quod.prolog.authorization">>,
                      <<"quod.prolog.invocation">>,

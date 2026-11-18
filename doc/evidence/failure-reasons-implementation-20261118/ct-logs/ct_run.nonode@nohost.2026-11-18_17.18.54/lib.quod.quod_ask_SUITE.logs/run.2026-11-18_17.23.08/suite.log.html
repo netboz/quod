@@ -1,0 +1,165 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<title>Test lib.quod.quod_ask_SUITE results</title>
+<meta http-equiv="cache-control" content="no-cache"></meta>
+<meta http-equiv="content-type" content="text/html; charset=utf-8"></meta>
+<link rel="stylesheet" href="../../ct_default.css" type="text/css"></link>
+<script type="text/javascript" src="../../jquery-latest.js"></script>
+<script type="text/javascript" src="../../jquery.tablesorter.min.js"></script>
+<script type="text/javascript">
+// Parser for date format, e.g: Wed Jul 4 2012 11:24:15
+var monthNames = {};
+monthNames["Jan"] = "01"; monthNames["Feb"] = "02";
+monthNames["Mar"] = "03"; monthNames["Apr"] = "04";
+monthNames["May"] = "05"; monthNames["Jun"] = "06";
+monthNames["Jul"] = "07"; monthNames["Aug"] = "08";
+monthNames["Sep"] = "09"; monthNames["Oct"] = "10";
+monthNames["Nov"] = "11"; monthNames["Dec"] = "12";
+$.tablesorter.addParser({
+  id: 'CTDateSorter',
+  is: function(s) {
+      return false; },
+  format: function(s) {
+      if (s.length < 2) return 999999999;
+      else {
+          var date = s.match(/(\w{3})\s(\w{3})\s(\d{2})\s(\d{4})\s(\d{2}):(\d{2}):(\d{2})/);
+          var y = date[4]; var mo = monthNames[date[2]]; var d = String(date[3]);
+          var h = String(date[5]); var mi = String(date[6]); var sec = String(date[7]);
+          return (parseInt('' + y + mo + d + h + mi + sec)); }},
+  type: 'numeric' });
+// Parser for general text format
+$.tablesorter.addParser({
+  id: 'CTTextSorter',
+  is: function(s) {
+    return false; },
+  format: function(s) {
+    if (s.length < 1) return 'zzzzzzzz';
+    else if (s == "?") return 'zzzzzzz';
+    else if (s == "-") return 'zzzzzz';
+    else if (s == "FAILED") return 'A';
+    else if (s == "SKIPPED") return 'B';
+    else if (s == "OK") return 'C';
+    else return '' + s; },
+  type: 'text' });
+// Parser for numerical values
+$.tablesorter.addParser({
+  id: 'CTValSorter',
+  is: function(s) {
+    return false; },
+  format: function(s) {
+    if (s.length < 1) return '-2';
+    else if (s == "?") return '-1';
+    else if ((s.search(/(\d{1,})\s/)) >= 0) {
+      var num = s.match(/(\d{1,})\s/);
+      return (parseInt('' + num[1])); }
+    else if ((s.search(/(\d{1,})\.(\d{3})s/)) >= 0) {
+      var num = s.match(/(\d{1,})\.(\d{3})/);
+      if (num[1] == "0") return (parseInt('' + num[2]));
+      else return (parseInt('' + num[1] + num[2])); }
+    else return '' + s; },
+  type: 'numeric' });
+$(document).ready(function() {
+  $("#SortableTable").tablesorter({
+    headers: { 
+      0: { sorter: 'CTValSorter' },
+      1: { sorter: 'CTTextSorter' },
+      2: { sorter: 'CTTextSorter' },
+      3: { sorter: 'CTTextSorter' },
+      5: { sorter: 'CTValSorter' },
+      6: { sorter: 'CTTextSorter' },
+      7: { sorter: 'CTTextSorter' }
+    }
+  });
+  $("#SortableTable").trigger("update");
+  $("#SortableTable").trigger("appendCache");
+});
+</script>
+</head>
+<body>
+
+<h1>Results for <i>lib.quod.quod_ask_SUITE</i></h1>
+<h4>Test started at 2026-11-18 17:23:08</h4>
+<p><b>Host info:</b><br />
+Run by yan on nohost<br />Used Erlang v16.0.2 in "/home/yan/.asdf/installs/erlang/28.0.2"</p>
+<p><ul>
+<li><a href="suite.log">Full textual log</a></li>
+<li><a href="cover.html">Coverage log</a></li>
+<li><a href="unexpected_io.log.html">Unexpected I/O log</a></li>
+</ul></p>
+<p><i>Executing <b>46</b> test cases...</i>
+<br />
+</p>
+<table id="SortableTable">
+<thead>
+<tr><th>Num</th><th>Module</th><th>Group</th><th>Case</th><th>Log</th><th>Time</th><th>Result</th><th>Comment</th></tr>
+</thead>
+<tbody>
+<tr class="even"><td><font color="black"></font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.init_per_suite.html">init_per_suite</a></td><td><a href="quod_ask_suite.init_per_suite.html#top">&lt;</a> <a href="quod_ask_suite.init_per_suite.html#end">&gt;</a></td><td><font color="black">4.065876s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="odd"><td><font color="black">1</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_signed_transaction_savepoints.html">remote_signed_transaction_savepoints</a></td><td><a href="quod_ask_suite.remote_signed_transaction_savepoints.html#top">&lt;</a> <a href="quod_ask_suite.remote_signed_transaction_savepoints.html#end">&gt;</a></td><td><font color="black">2.384574s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="even"><td><font color="black">2</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.cut_findall_local_and_cohosted.html">cut_findall_local_and_cohosted</a></td><td><a href="quod_ask_suite.cut_findall_local_and_cohosted.html#top">&lt;</a> <a href="quod_ask_suite.cut_findall_local_and_cohosted.html#end">&gt;</a></td><td><font color="black">0.000959s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="odd"><td><font color="black">3</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.cut_findall_remote_boundaries.html">cut_findall_remote_boundaries</a></td><td><a href="quod_ask_suite.cut_findall_remote_boundaries.html#top">&lt;</a> <a href="quod_ask_suite.cut_findall_remote_boundaries.html#end">&gt;</a></td><td><font color="black">0.008438s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="even"><td><font color="black">4</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.cut_findall_signed_multiscope_savepoints.html">cut_findall_signed_multiscope_savepoints</a></td><td><a href="quod_ask_suite.cut_findall_signed_multiscope_savepoints.html#top">&lt;</a> <a href="quod_ask_suite.cut_findall_signed_multiscope_savepoints.html#end">&gt;</a></td><td><font color="black">2.931029s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="odd"><td><font color="black">5</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_plain_read_excludes_live_observer.html">remote_plain_read_excludes_live_observer</a></td><td><a href="quod_ask_suite.remote_plain_read_excludes_live_observer.html#top">&lt;</a> <a href="quod_ask_suite.remote_plain_read_excludes_live_observer.html#end">&gt;</a></td><td><font color="black">0.013727s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="even"><td><font color="black">6</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_native_read_uses_selected_observer.html">remote_native_read_uses_selected_observer</a></td><td><a href="quod_ask_suite.remote_native_read_uses_selected_observer.html#top">&lt;</a> <a href="quod_ask_suite.remote_native_read_uses_selected_observer.html#end">&gt;</a></td><td><font color="black">0.007683s</font></td><td><font color="red">FAILED</font></td><td><font color="red">{quod_ask_SUITE,remote_native_read_uses_selected_observer,<a href="quod_ask_suite.src.html#749">749</a>}</font><br /><font color="green"><font color="brown">{assertMatch,[{module,...},{...}|...]}</font></font></td></tr>
+<tr class="odd"><td><font color="black">7</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_plain_read_rejects_lying_validator.html">remote_plain_read_rejects_lying_validator</a></td><td><a href="quod_ask_suite.remote_plain_read_rejects_lying_validator.html#top">&lt;</a> <a href="quod_ask_suite.remote_plain_read_rejects_lying_validator.html#end">&gt;</a></td><td><font color="black">0.013690s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="even"><td><font color="black">8</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_scope_solutions.html">remote_scope_solutions</a></td><td><a href="quod_ask_suite.remote_scope_solutions.html#top">&lt;</a> <a href="quod_ask_suite.remote_scope_solutions.html#end">&gt;</a></td><td><font color="black">0.003553s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="odd"><td><font color="black">9</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_scope_trace_parentage.html">remote_scope_trace_parentage</a></td><td><a href="quod_ask_suite.remote_scope_trace_parentage.html#top">&lt;</a> <a href="quod_ask_suite.remote_scope_trace_parentage.html#end">&gt;</a></td><td><font color="black">0.033465s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="even"><td><font color="black">10</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.proof_policy_refusal_local_and_remote.html">proof_policy_refusal_local_and_remote</a></td><td><a href="quod_ask_suite.proof_policy_refusal_local_and_remote.html#top">&lt;</a> <a href="quod_ask_suite.proof_policy_refusal_local_and_remote.html#end">&gt;</a></td><td><font color="black">0.073967s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="odd"><td><font color="black">11</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.answer_policy_producer_consumer_and_signed_change.html">answer_policy_producer_consumer_and_signed_change</a></td><td><a href="quod_ask_suite.answer_policy_producer_consumer_and_signed_change.html#top">&lt;</a> <a href="quod_ask_suite.answer_policy_producer_consumer_and_signed_change.html#end">&gt;</a></td><td><font color="black">0.365705s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="even"><td><font color="black">12</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_scope_symbol_safety.html">remote_scope_symbol_safety</a></td><td><a href="quod_ask_suite.remote_scope_symbol_safety.html#top">&lt;</a> <a href="quod_ask_suite.remote_scope_symbol_safety.html#end">&gt;</a></td><td><font color="black">0.003136s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="odd"><td><font color="black">13</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_signed_fresh_nested_symbol.html">remote_signed_fresh_nested_symbol</a></td><td><a href="quod_ask_suite.remote_signed_fresh_nested_symbol.html#top">&lt;</a> <a href="quod_ask_suite.remote_signed_fresh_nested_symbol.html#end">&gt;</a></td><td><font color="black">0.048401s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="even"><td><font color="black">14</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_scope_chain_policy.html">remote_scope_chain_policy</a></td><td><a href="quod_ask_suite.remote_scope_chain_policy.html#top">&lt;</a> <a href="quod_ask_suite.remote_scope_chain_policy.html#end">&gt;</a></td><td><font color="black">0.004729s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="odd"><td><font color="black">15</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_scope_failure_reasons.html">remote_scope_failure_reasons</a></td><td><a href="quod_ask_suite.remote_scope_failure_reasons.html#top">&lt;</a> <a href="quod_ask_suite.remote_scope_failure_reasons.html#end">&gt;</a></td><td><font color="black">0.001692s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="even"><td><font color="black">16</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_scope_nested_failure_reasons.html">remote_scope_nested_failure_reasons</a></td><td><a href="quod_ask_suite.remote_scope_nested_failure_reasons.html#top">&lt;</a> <a href="quod_ask_suite.remote_scope_nested_failure_reasons.html#end">&gt;</a></td><td><font color="black">0.003856s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="odd"><td><font color="black">17</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_scope_deep_failure_reasons.html">remote_scope_deep_failure_reasons</a></td><td><a href="quod_ask_suite.remote_scope_deep_failure_reasons.html#top">&lt;</a> <a href="quod_ask_suite.remote_scope_deep_failure_reasons.html#end">&gt;</a></td><td><font color="black">0.004979s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="even"><td><font color="black">18</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_scope_structural_reason_depth.html">remote_scope_structural_reason_depth</a></td><td><a href="quod_ask_suite.remote_scope_structural_reason_depth.html#top">&lt;</a> <a href="quod_ask_suite.remote_scope_structural_reason_depth.html#end">&gt;</a></td><td><font color="black">0.002920s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="odd"><td><font color="black">19</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_scope_cancel.html">remote_scope_cancel</a></td><td><a href="quod_ask_suite.remote_scope_cancel.html#top">&lt;</a> <a href="quod_ask_suite.remote_scope_cancel.html#end">&gt;</a></td><td><font color="black">0.022657s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="even"><td><font color="black">20</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_scope_transport_reuse.html">remote_scope_transport_reuse</a></td><td><a href="quod_ask_suite.remote_scope_transport_reuse.html#top">&lt;</a> <a href="quod_ask_suite.remote_scope_transport_reuse.html#end">&gt;</a></td><td><font color="black">0.014546s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="odd"><td><font color="black">21</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_signed_gateway_read_execute_cursor.html">remote_signed_gateway_read_execute_cursor</a></td><td><a href="quod_ask_suite.remote_signed_gateway_read_execute_cursor.html#top">&lt;</a> <a href="quod_ask_suite.remote_signed_gateway_read_execute_cursor.html#end">&gt;</a></td><td><font color="black">0.339199s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="even"><td><font color="black">22</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_signed_read_certified_write.html">remote_signed_read_certified_write</a></td><td><a href="quod_ask_suite.remote_signed_read_certified_write.html#top">&lt;</a> <a href="quod_ask_suite.remote_signed_read_certified_write.html#end">&gt;</a></td><td><font color="black">0.172864s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="odd"><td><font color="black">23</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_exact_claim_redelivery.html">remote_exact_claim_redelivery</a></td><td><a href="quod_ask_suite.remote_exact_claim_redelivery.html#top">&lt;</a> <a href="quod_ask_suite.remote_exact_claim_redelivery.html#end">&gt;</a></td><td><font color="black">0.223425s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="even"><td><font color="black">24</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.local_write_with_foreign_read.html">local_write_with_foreign_read</a></td><td><a href="quod_ask_suite.local_write_with_foreign_read.html#top">&lt;</a> <a href="quod_ask_suite.local_write_with_foreign_read.html#end">&gt;</a></td><td><font color="black">0.056441s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="odd"><td><font color="black">25</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.read_certificate_stale_rejected.html">read_certificate_stale_rejected</a></td><td><a href="quod_ask_suite.read_certificate_stale_rejected.html#top">&lt;</a> <a href="quod_ask_suite.read_certificate_stale_rejected.html#end">&gt;</a></td><td><font color="black">0.043111s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="even"><td><font color="black">26</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_signed_origin_read_certificate_stale_rejected.html">remote_signed_origin_read_certificate_stale_rejected</a></td><td><a href="quod_ask_suite.remote_signed_origin_read_certificate_stale_rejected.html#top">&lt;</a> <a href="quod_ask_suite.remote_signed_origin_read_certificate_stale_rejected.html#end">&gt;</a></td><td><font color="black">0.039337s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="odd"><td><font color="black">27</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_signed_two_gateway_race.html">remote_signed_two_gateway_race</a></td><td><a href="quod_ask_suite.remote_signed_two_gateway_race.html#top">&lt;</a> <a href="quod_ask_suite.remote_signed_two_gateway_race.html#end">&gt;</a></td><td><font color="black">0.184409s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="even"><td><font color="black">28</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_signed_gateway_group.html">remote_signed_gateway_group</a></td><td><a href="quod_ask_suite.remote_signed_gateway_group.html#top">&lt;</a> <a href="quod_ask_suite.remote_signed_gateway_group.html#end">&gt;</a></td><td><font color="black">0.078775s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="odd"><td><font color="black">29</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_independent_routes.html">remote_independent_routes</a></td><td><a href="quod_ask_suite.remote_independent_routes.html#top">&lt;</a> <a href="quod_ask_suite.remote_independent_routes.html#end">&gt;</a></td><td><font color="black">0.381010s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="even"><td><font color="black">30</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.independent_action_multiscope_rollback.html">independent_action_multiscope_rollback</a></td><td><a href="quod_ask_suite.independent_action_multiscope_rollback.html#top">&lt;</a> <a href="quod_ask_suite.independent_action_multiscope_rollback.html#end">&gt;</a></td><td><font color="black">0.300294s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="odd"><td><font color="black">31</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.independent_action_remote_errors.html">independent_action_remote_errors</a></td><td><a href="quod_ask_suite.independent_action_remote_errors.html#top">&lt;</a> <a href="quod_ask_suite.independent_action_remote_errors.html#end">&gt;</a></td><td><font color="black">0.136822s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="even"><td><font color="black">32</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_independent_root_effect.html">remote_independent_root_effect</a></td><td><a href="quod_ask_suite.remote_independent_root_effect.html#top">&lt;</a> <a href="quod_ask_suite.remote_independent_root_effect.html#end">&gt;</a></td><td><font color="black">0.335559s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="odd"><td><font color="black">33</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.independent_action_remote_prepared_rollback.html">independent_action_remote_prepared_rollback</a></td><td><a href="quod_ask_suite.independent_action_remote_prepared_rollback.html#top">&lt;</a> <a href="quod_ask_suite.independent_action_remote_prepared_rollback.html#end">&gt;</a></td><td><font color="black">0.407078s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="even"><td><font color="black">34</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_independent_partial_outcome.html">remote_independent_partial_outcome</a></td><td><a href="quod_ask_suite.remote_independent_partial_outcome.html#top">&lt;</a> <a href="quod_ask_suite.remote_independent_partial_outcome.html#end">&gt;</a></td><td><font color="black">0.351942s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="odd"><td><font color="black">35</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_independent_branch_provenance.html">remote_independent_branch_provenance</a></td><td><a href="quod_ask_suite.remote_independent_branch_provenance.html#top">&lt;</a> <a href="quod_ask_suite.remote_independent_branch_provenance.html#end">&gt;</a></td><td><font color="black">0.329109s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="even"><td><font color="black">36</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_independent_nesting_and_auth.html">remote_independent_nesting_and_auth</a></td><td><a href="quod_ask_suite.remote_independent_nesting_and_auth.html#top">&lt;</a> <a href="quod_ask_suite.remote_independent_nesting_and_auth.html#end">&gt;</a></td><td><font color="black">0.038637s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="odd"><td><font color="black">37</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_independent_cursor_selects_only_accepted_answer.html">remote_independent_cursor_selects_only_accepted_answer</a></td><td><a href="quod_ask_suite.remote_independent_cursor_selects_only_accepted_answer.html#top">&lt;</a> <a href="quod_ask_suite.remote_independent_cursor_selects_only_accepted_answer.html#end">&gt;</a></td><td><font color="black">0.217217s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="even"><td><font color="black">38</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_signed_concurrent_gateway_groups.html">remote_signed_concurrent_gateway_groups</a></td><td><a href="quod_ask_suite.remote_signed_concurrent_gateway_groups.html#top">&lt;</a> <a href="quod_ask_suite.remote_signed_concurrent_gateway_groups.html#end">&gt;</a></td><td><font color="black">0.775217s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="odd"><td><font color="black">39</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_signed_queued_occ_abort.html">remote_signed_queued_occ_abort</a></td><td><a href="quod_ask_suite.remote_signed_queued_occ_abort.html#top">&lt;</a> <a href="quod_ask_suite.remote_signed_queued_occ_abort.html#end">&gt;</a></td><td><font color="black">0.206307s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="even"><td><font color="black">40</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_signed_gateway_group_with_root_effect.html">remote_signed_gateway_group_with_root_effect</a></td><td><a href="quod_ask_suite.remote_signed_gateway_group_with_root_effect.html#top">&lt;</a> <a href="quod_ask_suite.remote_signed_gateway_group_with_root_effect.html#end">&gt;</a></td><td><font color="black">0.106002s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="odd"><td><font color="black">41</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_bound_effect_recovers_without_activation.html">remote_bound_effect_recovers_without_activation</a></td><td><a href="quod_ask_suite.remote_bound_effect_recovers_without_activation.html#top">&lt;</a> <a href="quod_ask_suite.remote_bound_effect_recovers_without_activation.html#end">&gt;</a></td><td><font color="black">10.321038s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="even"><td><font color="black">42</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_signed_group_uses_exact_agent_request.html">remote_signed_group_uses_exact_agent_request</a></td><td><a href="quod_ask_suite.remote_signed_group_uses_exact_agent_request.html#top">&lt;</a> <a href="quod_ask_suite.remote_signed_group_uses_exact_agent_request.html#end">&gt;</a></td><td><font color="black">0.097352s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="odd"><td><font color="black">43</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_group_recovers_after_origin_crash.html">remote_group_recovers_after_origin_crash</a></td><td><a href="quod_ask_suite.remote_group_recovers_after_origin_crash.html#top">&lt;</a> <a href="quod_ask_suite.remote_group_recovers_after_origin_crash.html#end">&gt;</a></td><td><font color="black">0.617906s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="even"><td><font color="black">44</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_four_scope_chain_recovers_empty_routes.html">remote_four_scope_chain_recovers_empty_routes</a></td><td><a href="quod_ask_suite.remote_four_scope_chain_recovers_empty_routes.html#top">&lt;</a> <a href="quod_ask_suite.remote_four_scope_chain_recovers_empty_routes.html#end">&gt;</a></td><td><font color="black">0.035669s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="odd"><td><font color="black">45</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.remote_gui_opening_observer_receiver.html">remote_gui_opening_observer_receiver</a></td><td><a href="quod_ask_suite.remote_gui_opening_observer_receiver.html#top">&lt;</a> <a href="quod_ask_suite.remote_gui_opening_observer_receiver.html#end">&gt;</a></td><td><font color="black">3.643436s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="even"><td><font color="black">46</font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.node_enrollment_remote_custodian.html">node_enrollment_remote_custodian</a></td><td><a href="quod_ask_suite.node_enrollment_remote_custodian.html#top">&lt;</a> <a href="quod_ask_suite.node_enrollment_remote_custodian.html#end">&gt;</a></td><td><font color="black">30.380399s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+<tr class="odd"><td><font color="black"></font></td><td><font color="black">quod_ask_SUITE</font></td><td><font color="black"></font></td><td><a href="quod_ask_suite.end_per_suite.html">end_per_suite</a></td><td><a href="quod_ask_suite.end_per_suite.html#top">&lt;</a> <a href="quod_ask_suite.end_per_suite.html#end">&gt;</a></td><td><font color="black">0.000106s</font></td><td><font color="green">Ok</font></td><td></td></tr>
+
+</tbody>
+<tfoot>
+<tr><td></td><td><b>TOTAL</b></td><td></td><td></td><td></td><td>59.828243s<br></td><td><b>FAILED</b></td><td>45 Ok, 1 Failed of 46<br>Elapsed Time: 60.953s</td></tr>
+</tfoot>
+
+</table>
+<center>
+<br /><hr /><p>
+<a href="../../../all_runs.html">Test run history
+</a>  |  <a href="../../../index.html">Top level test index
+</a>  |  <a href="../../../suite.log.latest.html">Latest test result</a>
+</p>
+<div class="copyright">Copyright &copy; 2026 <a href="http://www.erlang.org">Open Telecom Platform</a><br />
+Updated: <!--date-->Wed Nov 18 2026 17:23:08<!--/date--><br />
+</div>
+</center>
+</body>
+</html>

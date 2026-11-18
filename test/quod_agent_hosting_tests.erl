@@ -31,12 +31,12 @@ class_owner_hosting_transitions_test_() ->
                 quod_prolog:prove_ro(Ns, {agent_hosted, actor, Node, 2, NewKey})),
             Stale = {goal, {agent_assignment, Agent, Node, 1, Node, 2,
                             crypto:strong_rand_bytes(32)}},
-            ?assertMatch({ok, _, {normalized, {failed, _}}},
+            ?assertMatch({ok, _, {normalized, fail}},
                 signed_owner_transition(Owner, Stale)),
             commit(Ns, {retract, Grant}),
             Denied = {goal, {agent_assignment, Agent, Node, 2, Node, 3,
                              crypto:strong_rand_bytes(32)}},
-            ?assertMatch({ok, _, {normalized, {failed, _}}},
+            ?assertMatch({ok, _, {normalized, fail}},
                 signed_owner_transition(Owner, Denied)),
             ?assertMatch({ok, [_], _},
                 quod_prolog:prove_ro(Ns, {agent_hosted, actor, Node, 2, NewKey})),
@@ -109,19 +109,19 @@ class_owner_signing_preserves_storage_and_policy_boundaries_test_() ->
                 %% a different native scope release this storing identity's key.
                 ?assertEqual({error, proof_unavailable}, signed_read(element(2, Node), Read)),
                 WrongKey = setelement(5, Typed, crypto:strong_rand_bytes(32)),
-                ?assertMatch({failed, _},
+                ?assertMatch(fail,
                     signed_read(Ns, {sign_agent_request, WrongKey, {0}})),
                 lists:foreach(fun(Status) ->
                     commit(Ns, {',', {retract, {agent_key, actor, Key, active}},
                         {assertz, {agent_key, actor, Key, Status}}}),
-                    ?assertMatch({failed, _}, signed_read(Ns, Read)),
+                    ?assertMatch(fail, signed_read(Ns, Read)),
                     commit(Ns, {',', {retract, {agent_key, actor, Key, Status}},
                         {assertz, {agent_key, actor, Key, active}}})
                 end, [revoked, staged]),
                 OtherHost = setelement(2, Node, <<"other-host">>),
                 commit(Ns, {',', {retract, {agent_host, actor, Node, 1, Key}},
                     {assertz, {agent_host, actor, OtherHost, 1, Key}}}),
-                ?assertMatch({failed, _}, signed_read(Ns, Read)),
+                ?assertMatch(fail, signed_read(Ns, Read)),
                 commit(Ns, {',', {retract, {agent_host, actor, OtherHost, 1, Key}},
                     {assertz, {agent_host, actor, Node, 1, Key}}}),
                 %% Admission to the original signing read grants no callback
@@ -130,14 +130,14 @@ class_owner_signing_preserves_storage_and_policy_boundaries_test_() ->
                 commit(Ns, {',', {abolish, {'/', can_invoke, 4}},
                     {',', {assertz, {can_invoke, {'_'}, {'_'}, [], {'_'}}},
                         {assertz, {can_invoke, {sign_agent_request, {'_'}, {'_'}}, Node, {'_'}, Ns}}}}),
-                ?assertMatch({source_acl, {failed, _}}, {source_acl, signed_read(Ns, Read)}),
+                ?assertMatch({source_acl, fail}, {source_acl, signed_read(Ns, Read)}),
                 commit(Ns, {assertz, Broad}),
                 Public = {agent_query, {can_sign_agent_request, {'_'}, {'_'}, {'_'}}},
                 commit(Owner, {retract, Public}),
-                ?assertMatch({owner_acl, {failed, _}}, {owner_acl, signed_read(Ns, Read)}),
+                ?assertMatch({owner_acl, fail}, {owner_acl, signed_read(Ns, Read)}),
                 commit(Owner, {assertz, Public}),
                 commit(Ns, {retract, {agent_key, actor, Key, active}}),
-                ?assertMatch({revoked_key, {failed, _}}, {revoked_key, signed_read(Ns, Read)}),
+                ?assertMatch({revoked_key, fail}, {revoked_key, signed_read(Ns, Read)}),
                 commit(Owner, {assertz, {':-', {can_sign_agent_request, {'_'}, {'_'}, {'_'}},
                     {assertz, signature_policy_write}}}),
                 ?assertEqual({error, read_only}, signed_read(Ns, Read)),
@@ -255,7 +255,7 @@ projected_work_wakes_after_real_queue_capacity_release_test_() ->
         end, lists:seq(1, 15)),
         work_status(Ns, agent_work_idle, 1),
         ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, {work_done, <<1:256>>})),
-        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {work_pending, <<1:256>>})),
+        ?assertMatch(fail, quod_prolog:prove_ro(Ns, {work_pending, <<1:256>>})),
         ?assertMatch(#{agent_work_blocked := 0, agent_work_idle := 1}, quod_runtime:stats(Ns))
     end) end}.
 
@@ -427,12 +427,13 @@ retained_request_uses_original_bytes_and_timeout_identity_test_() ->
                 end
             end,
             Expected = case Case of success -> true; _ -> false end,
-            ?assertEqual(Expected, element(1, quod_prolog:prove_ro(Ns, {ping, Case})) =:= ok),
+            ?assertEqual(Expected, case quod_prolog:prove_ro(Ns, {ping, Case}) of
+                {ok, [_], _} -> true; fail -> false end),
             case Case of
                 success ->
                     commit(Ns, {trigger_event, try_different_request}),
                     receive {agent_request_finished, Owner, Child, _, _, Different} ->
-                        ?assertMatch({ok, _, {normalized, {failed, _}}}, Different)
+                        ?assertMatch({ok, _, {normalized, fail}}, Different)
                     after 5000 -> error(different_request_result_missing) end,
                     ?assertMatch({ok, [#{'Rows' := [success]}], _},
                         quod_prolog:prove_ro(Ns, {findall, {'V'}, {ping, {'V'}}, {'Rows'}}));
@@ -576,10 +577,10 @@ fipa_request_exchange(#{namespace := SenderNs, reference := SenderRef,
                 WrongAnchor = setelement(3, ReceiverRef, <<99:256>>),
                 lists:foreach(fun({Peer, Requested}) ->
                     commit(SenderNs, {trigger_event, {start_fipa, Id, Peer, Requested}}),
-                    ?assertMatch({normalized, {failed, _}}, fipa_request_result(SenderRef)),
-                    ?assertMatch({fail, _}, quod_prolog:prove_ro(SenderNs,
+                    ?assertMatch({normalized, fail}, fipa_request_result(SenderRef)),
+                    ?assertMatch(fail, quod_prolog:prove_ro(SenderNs,
                          {fipa_conversation, actor, Id, {'_'}, {'_'}, {'_'}, {'_'}})),
-                    ?assertMatch({fail, _}, quod_prolog:prove_ro(ReceiverNs, injected))
+                    ?assertMatch(fail, quod_prolog:prove_ro(ReceiverNs, injected))
                 end, [{WrongAnchor, Action}, {ReceiverRef, {assertz, injected}}]);
             _ -> ok
         end,
@@ -675,7 +676,7 @@ fipa_request_exchange(#{namespace := SenderNs, reference := SenderRef,
                 commit(SenderNs, {retract, allow_fipa_reply}),
                 Reaction ! release,
                 ?assertMatch({normalized, {failed, _}}, fipa_request_result(ReceiverRef)),
-                ?assertMatch({fail, _}, quod_prolog:prove_ro(ReceiverNs, {reserved, object})),
+                ?assertMatch(fail, quod_prolog:prove_ro(ReceiverNs, {reserved, object})),
                 ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(ReceiverNs, {available, object})),
                 ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(ReceiverNs, Pending)),
                 ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(SenderNs, Waiting));
@@ -684,7 +685,7 @@ fipa_request_exchange(#{namespace := SenderNs, reference := SenderRef,
                 ?assertMatch({normalized, {committed, _, _}}, fipa_request_result(ReceiverRef)),
                 fipa_assert_done(SenderNs, ReceiverNs, Waiting, Pending),
                 commit(SenderNs, {trigger_event, {start_fipa, Id, ReceiverRef, Action}}),
-                ?assertMatch({normalized, {failed, _}}, fipa_request_result(SenderRef)),
+                ?assertMatch({normalized, fail}, fipa_request_result(SenderRef)),
                 fipa_assert_done(SenderNs, ReceiverNs, Waiting, Pending),
                 %% Read back through real ledger replay with A's old processes gone.
                 stop_ontology(quod_reg:where({quod_ns, SenderNs})),
@@ -854,7 +855,7 @@ fipa_assert_done(SenderNs, ReceiverNs, Waiting, Pending) ->
     ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(ReceiverNs, setelement(7, Pending, done))),
     ?assertMatch({ok, [#{'Objects' := [object]}], _}, quod_prolog:prove_ro(ReceiverNs,
        {findall, {'Object'}, {reserved, {'Object'}}, {'Objects'}})),
-    ?assertMatch({fail, _}, quod_prolog:prove_ro(SenderNs,
+    ?assertMatch(fail, quod_prolog:prove_ro(SenderNs,
        {fipa_request_completed, actor, element(3, Waiting), element(5, Waiting), element(6, Waiting)})).
 
 unexpected_child_exit_enters_ontology_reaction_test_() ->
@@ -872,7 +873,7 @@ unexpected_child_exit_enters_ontology_reaction_test_() ->
                          after 5000 -> error(missing_process_down_reaction) end,
                 %% Handler ran through real unification, with exact incarnation
                 %% guards. No event fact was asserted by lifecycle observation.
-                ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns,
+                ?assertMatch(fail, quod_prolog:prove_ro(Ns,
                     {agent_process_down, Ref, 1, Key, {'_'}})),
                 Runner ! release,
                 {Owner, Replacement} = installed(Ref, 1),
@@ -938,7 +939,7 @@ observation_during_restoration_survives_pending_installation_test_() ->
                 receive {host_projection_waiting, Reaction} -> Reaction ! release
                 after 5000 -> error(fresh_observation_lost_during_restoration) end,
                 _ = installed(Ref, 1),
-                ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns,
+                ?assertMatch(fail, quod_prolog:prove_ro(Ns,
                              {agent_process_down, Ref, 1, Key, {'_'}}))
             after
                 catch resume_resource(Runtime, Runner),
@@ -1036,7 +1037,7 @@ physical_recovery(#{namespace := Ns, reference := Ref = {agent_instance_ref, Ns,
         end,
         ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {agent_key, actor, OldKey, revoked})),
         ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {ping, durable_before_loss})),
-        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {agent_failure_report, actor,
+        ?assertMatch(fail, quod_prolog:prove_ro(Ns, {agent_failure_report, actor,
                      {'_'}, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}})),
         commit(Ns, {trigger_event, {do_work, after_automatic_move}}),
         receive {agent_request_finished, Runtime, Child, _, _, Result} ->
@@ -1073,7 +1074,7 @@ node_execution_policy_installs_through_ordinary_signed_goal_test_() ->
         end,
         ?assertMatch({ok, _, {normalized, {committed, [_], {transaction, NodeNs, NodeAnchor, _}}}},
                      Submit({assertz, {can_execute_for, Ns, Anchor, true}})),
-        ?assertMatch({ok, _, {normalized, {failed, _}}},
+        ?assertMatch({ok, _, {normalized, fail}},
                      Submit({node_authorized_goal, Ns, Anchor, true})),
         Source = filename:join(code:priv_dir(quod), "ontologies/node_instance.pl"),
         [SourceRule] = [Term || {':-', {node_authorized_goal, _, _, _}, _} = Term
@@ -1126,7 +1127,7 @@ installed_handler(#{namespace := Ns, reference := Ref = {agent_instance_ref,Ns,A
     %% material dependency, even when the installed actor and handler match.
     ?assertMatch({ok,_,{normalized,{error,_}}},node_goal(Ns,
         {',',Query,{assertz,handler_observation_leak}},quod_time:now_ms()+10000)),
-    ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,handler_observation_leak)),
+    ?assertMatch(fail,quod_prolog:prove_ro(Ns,handler_observation_leak)),
     commit(Ns,{retract,Handler}),
     ok = quod_runtime:reconcile_resource(Ns,quod_prolog:applied(Ns),agent_hosts,all,
                                          quod_time:mono_ms()+5000),
@@ -1166,23 +1167,23 @@ node_execution(#{namespace := Ns, reference := {agent_instance_ref, Ns, Anchor, 
     try
         Expiry = quod_time:now_ms() + 30000,
         Denied = node_request(Ns, Anchor, {record_ping, delegated}, Expiry),
-        ?assertMatch({ok, _, {normalized, {failed, _}}}, Denied),
-        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {ping, delegated})),
+        ?assertMatch({ok, _, {normalized, fail}}, Denied),
+        ?assertMatch(fail, quod_prolog:prove_ro(Ns, {ping, delegated})),
         Wrong = {can_execute_for, Ns, <<99:256>>, {record_ping, delegated}},
         commit(NodeNs, {assertz, Wrong}),
         WrongAnchor = node_request(Ns, Anchor, {record_ping, delegated}, Expiry),
-        ?assertMatch({ok, _, {normalized, {failed, _}}}, WrongAnchor),
+        ?assertMatch({ok, _, {normalized, fail}}, WrongAnchor),
         Grant = {can_execute_for, Ns, Anchor, {record_ping, delegated}},
         commit(NodeNs, {assertz, Grant}),
         Allowed = node_request(Ns, Anchor, {record_ping, delegated}, Expiry),
         ?assertMatch({ok, _, {normalized, {committed, [_], {transaction, Ns, Anchor, _}}}}, Allowed),
         ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {ping, delegated})),
         WrongGoal = node_request(Ns, Anchor, {record_ping, ungranted}, Expiry),
-        ?assertMatch({ok, _, {normalized, {failed, _}}}, WrongGoal),
-        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {ping, ungranted})),
+        ?assertMatch({ok, _, {normalized, fail}}, WrongGoal),
+        ?assertMatch(fail, quod_prolog:prove_ro(Ns, {ping, ungranted})),
         commit(NodeNs, {retract, Grant}),
         Withdrawn = node_request(Ns, Anchor, {record_ping, delegated}, Expiry),
-        ?assertMatch({ok, _, {normalized, {failed, _}}}, Withdrawn),
+        ?assertMatch({ok, _, {normalized, fail}}, Withdrawn),
         ?assertEqual({error, stale_node_executor}, quod_node_actor:signed_goal(
           execute, true, crypto:strong_rand_bytes(32), Expiry, {Node, <<99:256>>})),
         ?assertMatch(#{hosted_agents := 0, agent_pending_bytes := 0}, quod_runtime:stats(Ns))
@@ -1264,7 +1265,7 @@ signed_node_request_context_survives_foreign_scope_test_() ->
         {ok, WrongBytes, WrongSignature} = quod_node_actor:signed_goal(
             read, {'::', Ns, {current_request_expiry, Expiry + 1}},
             crypto:strong_rand_bytes(32), Expiry),
-        ?assertMatch({ok, _, {normalized, {read, _, {failed, _}}}},
+        ?assertMatch({ok, _, {normalized, {read, _, fail}}},
                      quod_client_goal_ingress:submit(WrongBytes, WrongSignature))
     end) end}.
 
@@ -1279,7 +1280,7 @@ failed_staged_assignment_cannot_install_hosted_process_test_() ->
         {Runtime, Agents} = quod_runtime:agents(Ns),
         ?assertEqual([Child], [P || #{pid := P, binding := #{reference :=
                               {agent_instance_ref, Ns0, _, _}}} <- Agents, Ns0 =:= Ns]),
-        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {agent_host, uncommitted, {'_'}, {'_'}, {'_'}})),
+        ?assertMatch(fail, quod_prolog:prove_ro(Ns, {agent_host, uncommitted, {'_'}, {'_'}, {'_'}})),
         ?assertMatch(#{mode := live, reconcile_failures := 0}, quod_runtime:stats(Ns))
     end) end}.
 
@@ -1308,7 +1309,7 @@ agent_queue_has_aggregate_byte_bound_and_reclaims_on_discard_test_() ->
             {NextOwner, _} = installed(OtherRef, 1),
             ?assertNotEqual(Owner, NextOwner),
             ?assertMatch(#{agent_pending_bytes := 0}, quod_runtime:stats(Ns)),
-            ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {ping, {'Anything'}}))
+            ?assertMatch(fail, quod_prolog:prove_ro(Ns, {ping, {'Anything'}}))
         after gproc:unreg(quod_reg:name({host_test, barrier})) end
     end) end}.
 
@@ -1352,7 +1353,7 @@ atomic_recovery(#{namespace := Ns, reference := Ref, node := Node, key := Key}, 
             ?assertNotEqual(Child, Replacement),
             ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(
               Ns, {agent_hosted, actor, Node, 2, NextKey})),
-            ?assertMatch({fail, _}, quod_prolog:prove_ro(
+            ?assertMatch(fail, quod_prolog:prove_ro(
               Ns, {agent_recovery_round, actor, Node, 1, Round}));
         false ->
             ?assertMatch({ok, _, _}, Result),
@@ -1360,7 +1361,7 @@ atomic_recovery(#{namespace := Ns, reference := Ref, node := Node, key := Key}, 
             ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(
               Ns, {agent_hosted, actor, Node, 1, Key}));
         rollback ->
-            ?assertMatch({ok, _, {normalized, {failed, _}}}, Result),
+            ?assertMatch({ok, _, {normalized, fail}}, Result),
             ?assertEqual(Before, quod_prolog:applied(Ns)),
             ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(
               Ns, {agent_hosted, actor, Node, 1, Key})),
@@ -1371,7 +1372,7 @@ atomic_recovery(#{namespace := Ns, reference := Ref, node := Node, key := Key}, 
       {agent_failure_report, actor, Node, 1, Round, Node, Observation, process_down}),
     case Allow of
         false -> ?assertMatch({ok, [#{}], _}, Report);
-        _ -> ?assertMatch({fail, _}, Report)
+        _ -> ?assertMatch(fail, Report)
     end.
 
 node_goal(Ns, Goal, Expiry) ->
@@ -1445,7 +1446,7 @@ host_move(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
     ?assertEqual({Owner, []}, domain_agents(Ns)),
     ?assertMatch({ok, _, {normalized, {failed, _}}},
                  quod_client_goal_ingress:submit(Bytes, Signature)),
-    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {ping, stale})),
+    ?assertMatch(fail, quod_prolog:prove_ro(Ns, {ping, stale})),
     {ok, Blob} = quod_wire_term:encode_canonical(Ref),
     {ok, NextKey} = quod_agent_vault:prepare(Blob, 2),
     commit(Ns,agent({goal, {agent_assignment, agent_ref(Ns,actor), Remote, 2, Node, 3, NextKey}})),
@@ -1485,7 +1486,7 @@ running_request_deadline_kills_worker_without_claiming_rejection_test_() ->
             erlang:trace(Child, false, [procs]),
             sys:resume(Vault)
         end,
-        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {ping, expires}))
+        ?assertMatch(fail, quod_prolog:prove_ro(Ns, {ping, expires}))
     end) end}.
 
 expired_queued_request_never_reaches_signing_test() ->
@@ -1601,7 +1602,7 @@ exchange(#{namespace := SenderNs, reference := SenderRef, node := Node, key := K
         receive {agent_request_finished, Owner, Child, _, _, Result} -> ?assertMatch({ok, _, _}, Result)
         after 10000 -> error(cross_ontology_request_timeout)
         end,
-        ?assertMatch({fail, _}, quod_prolog:prove_ro(SenderNs, {request, exchange})),
+        ?assertMatch(fail, quod_prolog:prove_ro(SenderNs, {request, exchange})),
         ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(ReceiverNs, {answered, exchange})),
         exit(Owner, kill),
         {NextOwner, NextChild} = installed(Ref, 1),
@@ -1659,7 +1660,7 @@ exercise(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
     after 10000 -> error({agent_request_timeout, quod_runtime:stats(Ns)})
     end,
     ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {ping, first})),
-    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {do_work, first})),
+    ?assertMatch(fail, quod_prolog:prove_ro(Ns, {do_work, first})),
     Monitor = monitor(process, First),
     exit(First, kill),
     receive {'DOWN', Monitor, process, First, killed} -> ok after 5000 -> error(child_still_alive) end,
@@ -1694,7 +1695,7 @@ exercise(#{namespace := Ns, reference := Ref, node := Node, key := Key}) ->
     after 10000 -> error(agent_request_after_restart_timeout)
     end,
     ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {ping, after_restart})),
-    ?assertMatch({fail, _}, quod_prolog:execute(Ns,
+    ?assertMatch(fail, quod_prolog:execute(Ns,
       agent({goal, {agent_assignment,Ref,Node,2,Node,3,Key}}))).
 
 installed(Ref, Epoch) ->

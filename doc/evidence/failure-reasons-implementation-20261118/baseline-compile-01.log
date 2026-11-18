@@ -1,0 +1,8 @@
+_build/proof-scenes-explicit-baseline/erlog_int.erl:584:1: Warning: function internal_predicate/1 is unused
+%  584| internal_predicate(Goal) ->
+%     | ^
+
+_build/proof-scenes-explicit-baseline/erlog_int.erl:591:1: Warning: function freeze_failure_term/1 is unused
+%  591| freeze_failure_term({_Variable}) -> unbound;
+%     | ^
+

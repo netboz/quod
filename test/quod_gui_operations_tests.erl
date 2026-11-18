@@ -284,15 +284,16 @@ bindings({ok,_,{normalized,Other}}) -> error({unexpected_result,Other}).
 denied(C,Ns,Goal) ->
     {Reply,_} = signed(C,scoped(Ns,Goal)),
     case Reply of
+        {ok,_,{normalized,fail}} -> ok;
         {ok,_,{normalized,{failed,_}}} -> ok;
-        {ok,_,{normalized,Result}} -> error({unexpected_acceptance,Goal,element(1,Result)})
+        {ok,_,{normalized,Result}} -> error({unexpected_acceptance,Goal,Result})
     end.
 wait_complete({ok,Evidence,{normalized,{committed,_,_}}}) ->
     Op = quod_client_goal:operation_ref(Evidence),
     ?assertMatch(#{operation_state:=terminal},quod_ct:await_operation_complete(element(2,Op),Op,10000)).
 edit(Ns,Goal) -> ?assertMatch({ok,_,_},quod_prolog:execute(Ns,Goal)).
 holds(Ns,Goal) -> ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,Goal)).
-fails(Ns,Goal) -> ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,Goal)).
+fails(Ns,Goal) -> ?assertMatch(fail,quod_prolog:prove_ro(Ns,Goal)).
 source(File) ->
     case File of
         "gui_measure.pl" -> quod_ct:gui_terms();

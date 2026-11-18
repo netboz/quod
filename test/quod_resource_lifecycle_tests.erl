@@ -121,7 +121,7 @@ advance_without_changes(Ns) ->
     Tx = quod_ct:change(Ns, quod_ct:diff_for(must_not_apply),
                         #{{agent_hosting_projection, 4} => never_present}),
     {ok, Height} = quod_simplex:append(Ns, Tx#transaction{author = Pub}),
-    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, must_not_apply)),
+    ?assertMatch(fail, quod_prolog:prove_ro(Ns, must_not_apply)),
     Height.
 
 absent_selector_is_woken_when_defined_test_() ->

@@ -1,0 +1,14 @@
+===> Verifying dependencies...
+===> Analyzing applications...
+===> Compiling erlog
+===> Compiling ranch
+===> Compiling cowlib
+===> Compiling cowboy
+    Finished `release` profile [optimized] target(s) in 0.02s
+===> Analyzing applications...
+===> Compiling quod
+===> Performing EUnit tests...
+[0;32m.[0m[0;32m.[0m
+Finished in 0.849 seconds
+[0;32m2 tests, 0 failures
+[0m

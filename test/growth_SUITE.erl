@@ -92,7 +92,7 @@ policy_upgrade_live(Config) ->
               20000)),
     %% the gate is now live: a ghost that never digested is refused (can_join :- peer_ready fails).
     {GhostPub, _} = quod_identity:generate(),
-    ?assertMatch({fail, [_ | _]},
+    ?assertMatch(fail,
                  prove(Founder, {admit, GhostPub, "127.0.0.1", 9999})),
     ?assertEqual([FPub], committee(Founder)),   %% no membership change happened
     {save_config, []}.
@@ -110,7 +110,7 @@ admit_refused_mid_catchup(Config) ->
     %% refused regardless of how far catch-up has progressed (the refusal is what we assert, not any
     %% transient join state — that would be a tautology for a mode=join node and can race the 1s status budget).
     ?assertNot(peer_ready_at(Founder, J1Pub)),
-    ?assertMatch({fail, [_ | _]},
+    ?assertMatch(fail,
                  prove(Founder, {admit, J1Pub, "127.0.0.1", J1Port})),
     {save_config, [J1]}.
 

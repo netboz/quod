@@ -1,0 +1,118 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<title>Test quod_ask_SUITE:remote_scope_symbol_safety result</title>
+<meta http-equiv="cache-control" content="no-cache"></meta>
+<meta http-equiv="content-type" content="text/html; charset=utf-8"></meta>
+<link rel="stylesheet" href="../../ct_default.css" type="text/css"></link>
+<script type="text/javascript" src="../../jquery-latest.js"></script>
+<script type="text/javascript" src="../../jquery.tablesorter.min.js"></script>
+</head>
+<body>
+
+<a name="top"></a><pre>
+=== Test case: <a href="quod_ask_suite.src.html#remote_scope_symbol_safety-1">quod_ask_SUITE:remote_scope_symbol_safety/1</a> (click for source code)
+
+=== Config value:
+
+    [{target,&lt;0.9026.0&gt;},
+     {asker,&lt;0.9028.0&gt;},
+     {third,&lt;0.9027.0&gt;},
+     {target_pub,&lt;&lt;237,27,90,93,217,215,219,230,151,120,69,93,32,153,17,102,
+                   87,160,104,68,120,126,231,87,231,79,156,212,237,0,212,188&gt;&gt;},
+     {asker_pub,&lt;&lt;51,14,149,107,34,147,31,211,230,116,122,98,164,93,96,44,41,
+                  152,167,30,150,161,175,222,8,227,34,67,255,237,55,185&gt;&gt;},
+     {target_addr,{"127.0.0.1",15970}},
+     {third_pub,&lt;&lt;158,63,130,122,24,120,174,135,22,3,47,114,242,222,227,254,
+                  24,212,141,205,60,198,81,83,102,35,170,80,237,107,51,254&gt;&gt;},
+     {third_addr,{"127.0.0.1",15972}},
+     {network_id,&lt;&lt;20,225,4,233,72,231,87,71,243,163,176,186,103,114,150,54,
+                   213,60,142,110,218,89,239,135,205,26,99,195,167,202,13,143&gt;&gt;},
+     {target_anchor,&lt;&lt;120,85,121,145,255,143,188,49,139,150,185,116,143,96,32,
+                      13,199,164,137,195,211,21,225,201,95,186,156,235,11,85,
+                      120,234&gt;&gt;},
+     {third_anchor,&lt;&lt;196,68,30,230,149,14,79,129,124,105,167,47,177,38,239,
+                     105,200,142,164,242,37,211,165,167,44,220,24,191,239,146,
+                     155,172&gt;&gt;},
+     {fourth_anchor,&lt;&lt;48,143,115,86,69,217,29,104,30,185,170,179,6,100,68,203,
+                      121,193,23,74,73,250,22,54,70,122,229,206,197,29,86,130&gt;&gt;},
+     {asker_anchor,&lt;&lt;80,163,77,250,58,118,203,252,109,216,203,191,34,27,56,
+                     164,198,5,192,140,236,143,112,221,190,14,194,90,116,253,
+                     9,107&gt;&gt;},
+     {filter_symbol_name,&lt;&lt;"quod_r4_target_only_489EDD5129CF202E"&gt;&gt;},
+     {agent_ref,{agent_instance_ref,&lt;&lt;"pets"&gt;&gt;,
+                                    &lt;&lt;80,163,77,250,58,118,203,252,109,216,203,
+                                      191,34,27,56,164,198,5,192,140,236,143,
+                                      112,221,190,14,194,90,116,253,9,107&gt;&gt;,
+                                    {human_user,test_agent}}},
+     {agent_key,{&lt;&lt;50,244,56,251,100,54,76,247,179,76,146,23,142,220,60,1,162,
+                   194,54,197,148,68,91,206,137,150,114,94,131,74,188,192&gt;&gt;,
+                 &lt;&lt;164,43,48,198,103,182,15,211,155,13,82,30,6,150,87,146,
+                   160,73,131,29,79,84,127,181,71,190,68,90,3,110,206,51&gt;&gt;}},
+     {agent_pub,&lt;&lt;50,244,56,251,100,54,76,247,179,76,146,23,142,220,60,1,162,
+                  194,54,197,148,68,91,206,137,150,114,94,131,74,188,192&gt;&gt;},
+     {client_peer,{127,0,0,1}},
+     {client_session,#{public_key =&gt;
+                           &lt;&lt;50,244,56,251,100,54,76,247,179,76,146,23,142,220,
+                             60,1,162,194,54,197,148,68,91,206,137,150,114,94,
+                             131,74,188,192&gt;&gt;,
+                       session_id =&gt;
+                           &lt;&lt;140,196,139,103,6,117,62,89,97,128,221,96,141,22,
+                             9,42,187,93,199,190,165,170,181,39,165,102,187,86,
+                             183,224,69,192&gt;&gt;,
+                       expires_ms =&gt; 1795016166094}},
+     {client_auth,&lt;86786.209.0&gt;},
+     {watchdog,&lt;0.9025.0&gt;},
+     {tc_logfile,"/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_ask_suite.remote_scope_symbol_safety.html"},
+     {tc_group_properties,[]},
+     {tc_group_path,[]},
+     {data_dir,"/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quod/test/quod_ask_SUITE_data/"},
+     {priv_dir,"/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/log_private/"}]
+
+=== Current directory is "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_16.18.34"
+
+=== Started at 2026-11-18 16:21:12
+
+<br />
+
+</pre>
+<div class="ct_error_notify"><pre><b>*** CT Error Notification 2026-11-18 16:21:12.395 ***</b><a id=e-30 class="link-to-entry" href="#e-30">&#x1f517;</a>
+quod_ask_SUITE:remote_scope_symbol_safety failed on line 1181
+Reason: {assertMatch,[{module,...},{...}|...]}
+
+<a href="#end">Full error description and stacktrace</a>
+</pre></div>
+<pre>
+<a name="end"></a>
+
+
+=== Ended at 2026-11-18 16:21:12
+=== Location: [{quod_ask_SUITE,remote_scope_symbol_safety,<a href="quod_ask_suite.src.html#1181">1181</a>},
+              {test_server,ts_tc,1796},
+              {test_server,run_test_case_eval1,1305},
+              {test_server,run_test_case_eval,1237}]
+=== === Reason: {assertMatch,
+                     [{module,quod_ask_SUITE},
+                      {line,1181},
+                      {expression,
+                          "peer : call ( Asker , quod_prolog , prove , [ ? ASKER_NS , Unknown ] , 60000 )"},
+                      {pattern,"{ fail , [ _ | _ ] }"},
+                      {value,fail}]}
+  in function  quod_ask_SUITE:remote_scope_symbol_safety/1 (/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_ask_SUITE.erl:1181)
+  in call from test_server:ts_tc/3 (test_server.erl:1796)
+  in call from test_server:run_test_case_eval1/6 (test_server.erl:1305)
+  in call from test_server:run_test_case_eval/9 (test_server.erl:1237)
+</pre>
+<center>
+<br /><hr /><p>
+<a href="../../../all_runs.html">Test run history
+</a>  |  <a href="../../../index.html">Top level test index
+</a>  |  <a href="../../../suite.log.latest.html">Latest test result</a>
+</p>
+<div class="copyright">Copyright &copy; 2026 <a href="http://www.erlang.org">Open Telecom Platform</a><br />
+Updated: <!--date-->Wed Nov 18 2026 16:21:12<!--/date--><br />
+</div>
+</center>
+</body>
+</html>

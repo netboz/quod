@@ -1,0 +1,135 @@
+[
+  {
+    "path": "_checkouts/erlog",
+    "target": "/home/yan/src/erlog",
+    "action": "remove development override"
+  },
+  {
+    "path": "_build/test/checkouts/erlog",
+    "action": "remove generated checkout beam cache"
+  },
+  {
+    "path": "_build/default/checkouts/erlog",
+    "action": "remove generated checkout beam cache"
+  },
+  {
+    "path": "_build/test/lib/accept",
+    "target": "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/accept",
+    "action": "remove stale test dependency symlink; rebar will recreate it"
+  },
+  {
+    "path": "_build/test/lib/acceptor_pool",
+    "target": "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/acceptor_pool",
+    "action": "remove stale test dependency symlink; rebar will recreate it"
+  },
+  {
+    "path": "_build/test/lib/chatterbox",
+    "target": "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/chatterbox",
+    "action": "remove stale test dependency symlink; rebar will recreate it"
+  },
+  {
+    "path": "_build/test/lib/cowboy",
+    "target": "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/cowboy",
+    "action": "remove stale test dependency symlink; rebar will recreate it"
+  },
+  {
+    "path": "_build/test/lib/cowlib",
+    "target": "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/cowlib",
+    "action": "remove stale test dependency symlink; rebar will recreate it"
+  },
+  {
+    "path": "_build/test/lib/ctx",
+    "target": "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/ctx",
+    "action": "remove stale test dependency symlink; rebar will recreate it"
+  },
+  {
+    "path": "_build/test/lib/erlang_qq",
+    "target": "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/erlang_qq",
+    "action": "remove stale test dependency symlink; rebar will recreate it"
+  },
+  {
+    "path": "_build/test/lib/erlog",
+    "target": "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/erlog",
+    "action": "remove stale test dependency symlink; rebar will recreate it"
+  },
+  {
+    "path": "_build/test/lib/getopt",
+    "target": "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/getopt",
+    "action": "remove stale test dependency symlink; rebar will recreate it"
+  },
+  {
+    "path": "_build/test/lib/gproc",
+    "target": "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/gproc",
+    "action": "remove stale test dependency symlink; rebar will recreate it"
+  },
+  {
+    "path": "_build/test/lib/grpcbox",
+    "target": "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/grpcbox",
+    "action": "remove stale test dependency symlink; rebar will recreate it"
+  },
+  {
+    "path": "_build/test/lib/hocon",
+    "target": "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/hocon",
+    "action": "remove stale test dependency symlink; rebar will recreate it"
+  },
+  {
+    "path": "_build/test/lib/hpack",
+    "target": "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/hpack",
+    "action": "remove stale test dependency symlink; rebar will recreate it"
+  },
+  {
+    "path": "_build/test/lib/opentelemetry",
+    "target": "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/opentelemetry",
+    "action": "remove stale test dependency symlink; rebar will recreate it"
+  },
+  {
+    "path": "_build/test/lib/opentelemetry_api",
+    "target": "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/opentelemetry_api",
+    "action": "remove stale test dependency symlink; rebar will recreate it"
+  },
+  {
+    "path": "_build/test/lib/opentelemetry_exporter",
+    "target": "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/opentelemetry_exporter",
+    "action": "remove stale test dependency symlink; rebar will recreate it"
+  },
+  {
+    "path": "_build/test/lib/prometheus",
+    "target": "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/prometheus",
+    "action": "remove stale test dependency symlink; rebar will recreate it"
+  },
+  {
+    "path": "_build/test/lib/prometheus_httpd",
+    "target": "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/prometheus_httpd",
+    "action": "remove stale test dependency symlink; rebar will recreate it"
+  },
+  {
+    "path": "_build/test/lib/quantile_estimator",
+    "target": "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/quantile_estimator",
+    "action": "remove stale test dependency symlink; rebar will recreate it"
+  },
+  {
+    "path": "_build/test/lib/quic",
+    "target": "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/quic",
+    "action": "remove stale test dependency symlink; rebar will recreate it"
+  },
+  {
+    "path": "_build/test/lib/ranch",
+    "target": "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/ranch",
+    "action": "remove stale test dependency symlink; rebar will recreate it"
+  },
+  {
+    "path": "_build/test/lib/ssl_verify_fun",
+    "target": "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/ssl_verify_fun",
+    "action": "remove stale test dependency symlink; rebar will recreate it"
+  },
+  {
+    "path": "_build/test/lib/tls_certificate_check",
+    "target": "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/tls_certificate_check",
+    "action": "remove stale test dependency symlink; rebar will recreate it"
+  },
+  {
+    "path": "_build/test/lib/typerefl",
+    "target": "/home/yan/src/quod_worktrees/pearl-stone/_build/default/lib/typerefl",
+    "action": "remove stale test dependency symlink; rebar will recreate it"
+  }
+]

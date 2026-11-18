@@ -38,7 +38,7 @@ permitted_recovery_helper_cannot_borrow_node_privileges_test_() ->
                   lists:foreach(fun(Implementation) ->
                       replace_recovery_helper(Source, Implementation),
                       ?assertMatch({ok, _, {normalized, {failed, _}}}, signed_node(Request)),
-                      ?assertMatch({fail, _}, quod_prolog:prove_ro(NodeNs, borrowed_node_authority)),
+                      ?assertMatch(fail, quod_prolog:prove_ro(NodeNs, borrowed_node_authority)),
                       ?assertMatch({ok, [#{'Capacity' := 17}], _},
                                    quod_prolog:prove_ro(Target, {effect_custody_limits, {'Capacity'}, unlimited}))
                   end, [{'::', NodeNs, {assertz, borrowed_node_authority}},

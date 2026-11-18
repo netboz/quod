@@ -218,7 +218,7 @@ assert_recovered(#{namespace := Ns, node := Node, assignments := Assignments}, R
                            {agent_domain_state, I, {before_loss, I}}]
                           || #{instance := I, key := Key, old_key := OldKey} <- Assignments]),
     ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, conjunction(Checks))),
-    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns,
+    ?assertMatch(fail, quod_prolog:prove_ro(Ns,
         {agent_failure_report, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}})),
     [#{instance := First, reference := Ref} | _] = Assignments,
     Child = maps:get(Ref, Installed),

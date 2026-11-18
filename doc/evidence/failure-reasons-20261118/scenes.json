@@ -1,0 +1,58 @@
+{
+  "cases": [
+    {
+      "marks": 300,
+      "mode": "valid",
+      "seconds": 0.460702,
+      "before_gc_bytes": 80899824,
+      "held_process_bytes": 71303368,
+      "reasons": 0
+    },
+    {
+      "marks": 300,
+      "mode": "refused",
+      "seconds": 0.347807,
+      "before_gc_bytes": 59419648,
+      "held_process_bytes": 13808,
+      "reasons": 0
+    },
+    {
+      "marks": 600,
+      "mode": "valid",
+      "seconds": 1.358106,
+      "before_gc_bytes": 347850936,
+      "held_process_bytes": 306588000,
+      "reasons": 0
+    },
+    {
+      "marks": 600,
+      "mode": "refused",
+      "seconds": 0.98446,
+      "before_gc_bytes": 241563480,
+      "held_process_bytes": 13808,
+      "reasons": 0
+    },
+    {
+      "marks": 1200,
+      "mode": "valid",
+      "seconds": 4.526981,
+      "before_gc_bytes": 1246410088,
+      "held_process_bytes": 1098557560,
+      "reasons": 0
+    },
+    {
+      "marks": 1200,
+      "mode": "refused",
+      "seconds": 2.793121,
+      "before_gc_bytes": 721302576,
+      "held_process_bytes": 13808,
+      "reasons": 0
+    }
+  ],
+  "rendering_eunit_seconds": 2.407,
+  "rendering_eunit_limit_seconds": 5,
+  "otp": "28",
+  "schedulers": 8,
+  "probe_label": "scenes-02",
+  "samples_per_case": 1
+}

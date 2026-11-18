@@ -2,7 +2,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -export([start/1, start/4, start/5, stop/1, preview/1, read/2, submit/3,
          signed_request/3,
-         start_namespace/2, stop_process/1, assert_read_has_no_io/1, open_cursor/2,
+         start_namespace/2, stop_process/1, assert_read_has_no_io/1, assert_read_has_no_io/2, open_cursor/2,
          complete_source/2]).
 
 cohosted_certified_progress_test_() ->
@@ -65,7 +65,7 @@ class_owner_space_creation_preserves_world_test_() ->
                 ?assertEqual(Anchor,quod_simplex:genesis_hash(Ns)),
                 ?assertEqual(Before+1,quod_prolog:applied(Ns)),
                 ?assertEqual(ClassHeight,quod_prolog:applied(<<"quod:space">>)),
-                ?assertMatch({ok,_,{normalized,{failed,_}}},submit(Ctx,execute,Edit)),
+                ?assertMatch({ok,_,{normalized,fail}},submit(Ctx,execute,Edit)),
                 ?assertEqual(Before+1,quod_prolog:applied(Ns)),
                 ?assertEqual(#{},gen_server:call(quod_reg:via({quod_runtime,Ns}),physics_worlds)),
                 [?assertEqual(<<>>,editor_source(Ctx,{ontology_ref,Ns,Anchor},{'/',Name,Arity}))
@@ -234,7 +234,7 @@ failed_hosting_selector_is_not_inactive_test_() ->
         ?assertMatch({ok,_,_},quod_ct:rp(Ns,
             {',',{abolish,{'/',agent_hosting_projection,4}},
              {assertz,{':-',{agent_hosting_projection,{'_'},{'_'},{'_'},{'_'}},fail}}})),
-        ?assertMatch({error,{resource_selection_failed,{no_solution,{agent_hosting_projection,4},[_|_]}}},
+        ?assertMatch({error,{resource_selection_failed,{no_solution,{agent_hosting_projection,4},[]}}},
             quod_runtime:reconcile_resource(Ns,quod_prolog:applied(Ns),
                 agent_hosts,all,quod_time:mono_ms()+10000))
     end) end}.
@@ -310,7 +310,7 @@ lobby_projection_recovery_test_() ->
                           {label, <<"PROLOG CONSOLE">>, <<"above">>}, depicts_nothing},
                          lists:keyfind(ConsoleModel, 2, Scene)),
             %% Expected identity is proved before any scene content is selected.
-            ?assertMatch({fail, _}, read(Ctx, {'::', Ns,
+            ?assertMatch(fail, read(Ctx, {'::', Ns,
                 {',', {current_ontology_identity, Ns, <<0:256>>},
                       space_view(Ns,personal_lobby,playing,{0})}})),
             {ok, [#{<<"V0">> := {component, workspace, form, _, Components}}], _} = read(Ctx,
@@ -497,14 +497,14 @@ modelling_and_material_libraries_test_() ->
             {ok, [#{<<"V0">> := Scene}], _} = Ask(ModelNs, {model, Parts, {0}}),
             ?assertEqual(2, length(Scene)),
             ?assertMatch({ok, [#{<<"V0">> := Scene}], _}, Ask(ModelNs, {model, Parts, {0}})),
-            ?assertMatch({fail, _}, Ask(ModelNs, {model, [{0}], {1}})),
-            ?assertMatch({fail, _}, Ask(ModelNs,
+            ?assertMatch(fail, Ask(ModelNs, {model, [{0}], {1}})),
+            ?assertMatch(fail, Ask(ModelNs,
                 {align, {plane, 1000, 600}, centre, {box, 1200, 800, 201}, front, 5, {0}})),
-            ?assertMatch({fail, _}, Ask(ModelNs,
+            ?assertMatch(fail, Ask(ModelNs,
                 {align, {plane, 0, 600}, centre, {box, 1200, 800, 200}, front, 5, {0}})),
             ?assertMatch({ok, _, _}, Ask(ModelNs,
                 {align, {torus, 110, 18}, centre, {box, 1200, 800, 200}, front, 5, {0}})),
-            ?assertMatch({fail, _}, Ask(ModelNs,
+            ?assertMatch(fail, Ask(ModelNs,
                 {align, {capsule, 460, 459}, centre, {box, 1200, 800, 200}, front, 5, {0}})),
             At = {transform, 0, 0, 0, 0, 0, 0},
             {ok, [#{<<"V0">> := A}], _} = Ask(ModelNs, {place_model, <<"a">>, At, depicts_nothing, Parts, {0}}),
@@ -561,8 +561,8 @@ modelling_and_material_libraries_test_() ->
             MatNs = <<"lobby-test-material">>,
             ?assertMatch({ok, _, _}, Ask(MatNs, {isa, northern_red_oak, wood})),
             ?assertMatch({ok, _, _}, Ask(MatNs, {isa, northern_red_oak, material})),
-            ?assertMatch({fail, _}, Ask(MatNs, {isa, bronze, wood})),
-            ?assertMatch({fail, _}, Ask(MatNs, {material_property, wood, density, {0}, {1}, {2}})),
+            ?assertMatch(fail, Ask(MatNs, {isa, bronze, wood})),
+            ?assertMatch(fail, Ask(MatNs, {material_property, wood, density, {0}, {1}, {2}})),
             {ok, [#{<<"V0">> := Converted}], _} = Ask(MatNs,
                 {property_in, northern_red_oak, density,
                  [{moisture_content, {q, 12, <<"percent">>}}], <<"g/cm3">>, {0}, {1}}),
@@ -578,11 +578,11 @@ modelling_and_material_libraries_test_() ->
             EidolonNs = <<"lobby-test-material-eidolons">>,
             {ok, [#{<<"V0">> := {recipe, EidolonNs, _, oak}}], _} = Ask(EidolonNs,
                 {class_eidolon, northern_red_oak, playing, solid, {0}}),
-            ?assertMatch({fail, _}, Ask(EidolonNs,
+            ?assertMatch(fail, Ask(EidolonNs,
                 {class_eidolon, northern_red_oak, edition, solid, {0}})),
             EnvironmentNs = <<"lobby-test-environment">>,
             ?assertMatch({ok, _, _}, Ask(EnvironmentNs, {isa, sky_sphere, environment})),
-            ?assertMatch({fail, _}, quod_prolog:prove_ro(
+            ?assertMatch(fail, quod_prolog:prove_ro(
                 <<"lobby-test-classes">>, {isa, sky_sphere, thing})),
             EnvironmentEidolonsNs = <<"lobby-test-environment-eidolons">>,
             ?assertMatch({ok, [#{<<"V0">> :=
@@ -591,7 +591,7 @@ modelling_and_material_libraries_test_() ->
                     {class_eidolon, sky_sphere, playing, panoramic, {0}})),
             ?assertMatch({ok, _, _}, Ask(EnvironmentEidolonsNs,
                 {panorama_asset, belfast_sunset_puresky, {0}, {1}})),
-            ?assertMatch({fail, _}, quod_prolog:prove_ro(
+            ?assertMatch(fail, quod_prolog:prove_ro(
                 <<"lobby-test-classes">>,
                 {panorama_asset, belfast_sunset_puresky, {'_'}, {'_'}})),
             {ontology_ref, LobbyNs, LobbyAnchor} = maps:get(lobby, Ctx),
@@ -654,7 +654,7 @@ signed_prolog_eidolon_edits_use_target_policy_test_() ->
                                          {transaction, _}}}, Edit),
             %% Compiling source is read-only. Selecting a public recipe or
             %% compiling the same explicit goal does not grant target rights.
-            ?assertMatch({fail, _}, read(Ctx, Scope(Ns, {editor_fact, saved}))),
+            ?assertMatch(fail, read(Ctx, Scope(Ns, {editor_fact, saved}))),
             Other = Ctx#{instance => <<"human_user(other_agent).">>},
             ?assertMatch({fail, _}, read(Other,
                 Scope(Tools, {prolog_source, Target, {'/', lobby_owner, 1}, {0}}))),
@@ -764,7 +764,7 @@ ontology_instances_share_selection_and_authorized_inspection_test_() ->
             assert_ontology_choices(SystemChoices, System),
             ?assertMatch({fail, _}, read(Reader,
                 editor_scope(Ns, {entity_eidolons, Target, {0}}))),
-            ?assertMatch({fail, _}, read(Ctx, {'::', Ns,
+            ?assertMatch(fail, read(Ctx, {'::', Ns,
                 {',', {current_ontology_identity, Ns, <<0:256>>},
                  {entity_eidolons, Target, {0}}}})),
             lists:foreach(fun(Style) ->
@@ -773,7 +773,7 @@ ontology_instances_share_selection_and_authorized_inspection_test_() ->
                 ?assertMatch({fail, _}, read(Reader,
                     editor_scope(Recipe, {eidolon, Style, {subject, Target, Target}, {0}}))),
                 Bad = {ontology_ref, Ns, <<0:256>>},
-                ?assertMatch({fail, _}, read(Ctx,
+                ?assertMatch(fail, read(Ctx,
                     editor_scope(Recipe, {eidolon, Style, {subject, Bad, Bad}, {0}})))
             end, [policy, interfaces, routes]),
             Policy = complete_inspection(Ctx, Target, <<"ontology_policy">>),
@@ -842,10 +842,10 @@ presentation_modes_and_ground_lens_targets_use_authorized_owner_reads_test_() ->
             lists:foreach(fun(BadSource) ->
                 Baseline = editor_source(Ctx, Target, {'/', ontology_source_mode, 1}),
                 commit_editor_goal(Ctx, compile_source_edit(Ctx, Target, {'/', ontology_source_mode, 1}, Baseline, BadSource)),
-                ?assertMatch({fail, _}, read(Ctx, Workspace))
+                ?assertMatch(fail, read(Ctx, Workspace))
             end, [<<Source/binary, "ontology_source_mode(read_only).\n">>,
                   <<"ontology_source_mode(invalid).">>, <<"ontology_source_mode(_).">>]),
-            ?assertMatch({fail, _}, read(Ctx, editor_scope(Recipe,
+            ?assertMatch(fail, read(Ctx, editor_scope(Recipe,
                 {eidolon, policy, {subject, {0}, {0}}, {1}}))),
             System = system_target(<<"quod:gui">>),
             ?assertNotEqual(nomatch, binary:match(complete_inspection(Ctx, System, <<"ontology_routes">>), <<"route_status(live,">>)),
@@ -874,7 +874,9 @@ assert_repeat_source_has_no_io(Ctx, Target, Expected) ->
         ?assertEqual(Expected, complete_source(Ctx, Target))
     end).
 
-assert_read_has_no_io(Check) ->
+assert_read_has_no_io(Check) -> assert_read_has_no_io(Check, []).
+
+assert_read_has_no_io(Check, ExtraMFAs) ->
     Parent = self(), Tag = make_ref(),
     Tracer = spawn_link(fun() -> source_trace_relay(Parent, Tag) end),
     Trace = trace:session_create(source_read_test, Tracer, []),
@@ -885,7 +887,7 @@ assert_read_has_no_io(Check) ->
             {quod_ledger_store, read_at, 3}, {dets, insert, 2}, {dets, sync, 1},
             {quod_simplex, history_view, 3}, {quod_ledger_store, open_ro_snapshot, 1},
             {quod_ledger_store, read_at, 2}, {file, write, 2}, {file, pwrite, 3},
-            {file, write_file, 2}, {file, write_file, 3}, {file, sync, 1}, {file, datasync, 1}],
+            {file, write_file, 2}, {file, write_file, 3}, {file, sync, 1}, {file, datasync, 1}] ++ ExtraMFAs,
     [trace:function(Trace, MFA, [{'_', [], [{message, {caller}}]}], [local]) || MFA <- MFAs],
     trace:process(Trace, all, true, [call]),
     try
@@ -1030,7 +1032,7 @@ public_system_ontology_source_is_readable_but_not_mutable_test_() ->
             ?assertMatch({ok, _, _}, read(Ctx,
                 editor_scope(<<"quod:gui">>,
                     {system_prolog_introspection, predicates, {0}}))),
-            ?assertMatch({fail, _}, read(Ctx, editor_scope(Tools,
+            ?assertMatch(fail, read(Ctx, editor_scope(Tools,
                 {prolog_source, {ontology_ref, <<"quod:gui">>, <<0:256>>},
                  {'/', model, 2}, {0}})))
 
@@ -1105,9 +1107,9 @@ local_inspection_cannot_fall_back_after_root_source_denial_test_() ->
         try
             ?assertMatch({ok,[#{<<"V0">>:=<<>>}],_},read(Ctx,Query)),
             {ok,_,_}=quod_prolog:execute(Root,{transaction,{',',{retract,Policy},{assertz,Denied}}}),
-            ?assertMatch({fail,_},read(Ctx,editor_scope(Root,{system_source_access,Target,{0}}))),
-            ?assertMatch({fail,_},read(Ctx,Query)),
-            ?assertMatch({fail,_},read(Ctx,editor_scope(Gui,
+            ?assertMatch(fail,read(Ctx,editor_scope(Root,{system_source_access,Target,{0}}))),
+            ?assertMatch(fail,read(Ctx,Query)),
+            ?assertMatch(fail,read(Ctx,editor_scope(Gui,
                 {view,<<"ontology_source">>,[Target],{0}})))
         after
             quod_lobby_tests:stop(Ctx),file:del_dir_r(Dir)
@@ -1118,7 +1120,7 @@ verify_system_editor(Ctx, Ns) ->
     Anchor = quod_simplex:genesis_hash(Ns),
     Target = {ontology_ref, Ns, Anchor},
     Guard = {current_ontology_identity, Ns, Anchor},
-    ?assertMatch({fail, _}, read(Ctx, {'::', Ns,
+    ?assertMatch(fail, read(Ctx, {'::', Ns,
         {current_ontology_identity, Ns, <<0:256>>}})),
     Tools = <<"quod:gui">>,
     ToolsGuard = {current_ontology_identity, Tools, quod_simplex:genesis_hash(Tools)},
@@ -1158,7 +1160,11 @@ verify_system_editor(Ctx, Ns) ->
         <<"quod:user">> -> ?assertMatch({fail, _}, read(Other, Source));
         _ -> ?assertMatch({ok, _, _}, read(Other, Source))
     end,
-    ?assertMatch({ok, _, {normalized, {failed, _}}}, submit(Other, execute, Edit)),
+    case Ns of
+        <<"quod:root">> ->
+            ?assertMatch({ok, _, {normalized, {failed, _}}}, submit(Other, execute, Edit));
+        _ -> ?assertMatch({ok, _, {normalized, fail}}, submit(Other, execute, Edit))
+    end,
     {Owner, CursorId, Evidence} = open_cursor(Ctx, Edit),
     {ok, Evidence, CursorResult} =
         quod_client_cursor:command(Owner, CursorId, accept),
@@ -1272,7 +1278,7 @@ scoped_routes_reuse_the_directory_and_preserve_private_admission_test_() ->
             ?assertMatch({ok, _, {normalized, {error, proof_unavailable}}},
                 submit(Ctx, execute, LiveWrite)),
             ?assertEqual(BeforeHeight, quod_prolog:applied(Ns)),
-            ?assertMatch({fail, _}, read(Ctx, editor_scope(Ns, forbidden_route_write))),
+            ?assertMatch(fail, read(Ctx, editor_scope(Ns, forbidden_route_write))),
             Reader = Ctx#{instance => <<"human_user(other_agent).">>},
             ?assertMatch({fail, _}, read(Reader, editor_scope(<<"quod:gui">>, {view, Lens, [Target], {0}}))),
             assert_read_has_no_io(fun() ->
@@ -1684,6 +1690,7 @@ read(Ctx, Goal) ->
         {ok, _, {normalized, {read, _, {answers, Height, Blobs}}}} ->
             {ok, [begin {ok, Pairs} = quod_client_result:decode_binding(B), maps:from_list(Pairs) end
                   || B <- Blobs], Height};
+        {ok, _, {normalized, {read, _, fail}}} -> fail;
         {ok, _, {normalized, {read, _, {failed, Reasons}}}} ->
             {ok, Decoded} = quod_wire_term:decode_failure_reasons(Reasons),
             {fail, Decoded};

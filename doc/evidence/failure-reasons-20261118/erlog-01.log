@@ -1,0 +1,85 @@
+{"cwd": "/home/yan/src/quod/_build/failure-reasons-20261118/erlog", "command": ["rebar3", "eunit"]}
+===> Verifying dependencies...
+===> Analyzing applications...
+===> Compiling proper
+===> Analyzing applications...
+===> Compiling erlog
+    ┌─ src/erlog_ets.erl:
+    │
+ 23 │  -compile(export_all).
+    │   ╰── Warning: export_all flag enabled - all functions will be exported
+
+
+     ┌─ src/erlog_io.erl:
+     │
+ 229 │  write_term1({'$VAR',N}, _, #ops{numbervars=true}=Ops)
+     │                                                   ╰── Warning: variable 'Ops' is unused
+
+
+     ┌─ src/erlog_int.erl:
+     │
+ 584 │  internal_predicate(Goal) ->
+     │  ╰── Warning: function internal_predicate/1 is unused
+
+     ┌─ src/erlog_int.erl:
+     │
+ 591 │  freeze_failure_term({_Variable}) -> unbound;
+     │  ╰── Warning: function freeze_failure_term/1 is unused
+
+
+===> Compiling test/records_test.erl failed
+test/records_test.erl:{2,14}: can't find include lib "eqc/include/eqc.hrl"; Make sure eqc is in your app file's 'applications' list
+    ┌─ test/records_test.erl:
+    │
+ 20 │      ?FORALL(Person,
+    │       ╰── undefined macro 'FORALL/3'
+
+    ┌─ test/records_test.erl:
+    │
+ 42 │      ?FORALL({Person,NewName},
+    │       ╰── undefined macro 'FORALL/3'
+
+
+    ┌─ test/erlog_test.hrl:
+    │
+ 30 │     on_output(fun(S,F) -> io:format(user, S, F) end,P).
+    │     ╰── function on_output/2 undefined
+
+
+    ┌─ test/records_test.erl:
+    │
+ 10 │      elements(["Adam", "Bob", "Charlie"]).
+    │      ╰── function elements/1 undefined
+
+    ┌─ test/records_test.erl:
+    │
+ 14 │  	    phone	= vector(1, choose(48,57)),
+    │  	         	  ╰── function vector/2 undefined, did you mean record_info/2?
+
+    ┌─ test/records_test.erl:
+    │
+ 14 │  	    phone	= vector(1, choose(48,57)),
+    │  	         	            ╰── function choose/2 undefined
+
+    ┌─ test/records_test.erl:
+    │
+ 15 │  	    address	= list(char()),
+    │  	           	  ╰── function list/1 undefined
+
+    ┌─ test/records_test.erl:
+    │
+ 15 │  	    address	= list(char()),
+    │  	           	       ╰── function char/0 undefined
+
+    ┌─ test/records_test.erl:
+    │
+ 16 │  	    comments	= binary()}.
+    │  	            	  ╰── function binary/0 undefined
+
+
+   ┌─ test/records_test.erl:
+   │
+ 5 │  -compile(export_all).
+   │   ╰── Warning: export_all flag enabled - all functions will be exported
+
+

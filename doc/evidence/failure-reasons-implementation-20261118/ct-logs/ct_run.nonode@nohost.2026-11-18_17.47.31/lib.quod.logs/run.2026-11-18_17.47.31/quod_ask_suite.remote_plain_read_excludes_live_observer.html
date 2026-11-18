@@ -1,0 +1,96 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<title>Test quod_ask_SUITE:remote_plain_read_excludes_live_observer result</title>
+<meta http-equiv="cache-control" content="no-cache"></meta>
+<meta http-equiv="content-type" content="text/html; charset=utf-8"></meta>
+<link rel="stylesheet" href="../../ct_default.css" type="text/css"></link>
+<script type="text/javascript" src="../../jquery-latest.js"></script>
+<script type="text/javascript" src="../../jquery.tablesorter.min.js"></script>
+</head>
+<body>
+
+<a name="top"></a><pre>
+=== Test case: <a href="quod_ask_suite.src.html#remote_plain_read_excludes_live_observer-1">quod_ask_SUITE:remote_plain_read_excludes_live_observer/1</a> (click for source code)
+
+=== Config value:
+
+    [{target,&lt;0.9036.0&gt;},
+     {asker,&lt;0.9038.0&gt;},
+     {third,&lt;0.9037.0&gt;},
+     {target_pub,&lt;&lt;96,177,223,72,207,72,83,169,174,58,154,217,63,1,143,98,254,
+                   14,107,217,40,113,244,131,51,254,37,197,132,53,252,229&gt;&gt;},
+     {asker_pub,&lt;&lt;119,70,218,195,208,239,157,106,165,60,35,138,28,66,19,34,
+                  172,233,84,206,241,3,33,151,252,212,120,134,19,98,127,42&gt;&gt;},
+     {target_addr,{"127.0.0.1",15970}},
+     {third_pub,&lt;&lt;16,216,190,252,228,235,74,25,95,24,86,141,83,7,71,158,80,
+                  213,149,5,231,190,103,175,236,212,17,134,2,193,84,182&gt;&gt;},
+     {third_addr,{"127.0.0.1",15972}},
+     {network_id,&lt;&lt;2,71,151,160,231,12,144,116,116,206,130,50,145,96,207,59,
+                   223,254,218,36,4,7,225,226,140,87,90,148,59,145,18,149&gt;&gt;},
+     {target_anchor,&lt;&lt;194,162,82,216,194,188,140,72,95,70,92,68,213,110,84,
+                      251,68,210,169,64,202,202,220,74,24,86,130,47,52,238,
+                      120,107&gt;&gt;},
+     {third_anchor,&lt;&lt;31,13,10,120,203,184,234,53,44,78,131,219,33,62,242,205,
+                     44,47,121,72,173,139,152,153,23,9,178,26,39,115,37,149&gt;&gt;},
+     {fourth_anchor,&lt;&lt;125,77,126,150,254,34,202,66,196,233,173,162,45,159,123,
+                      230,233,0,179,196,63,248,114,94,92,215,190,111,155,112,
+                      41,90&gt;&gt;},
+     {asker_anchor,&lt;&lt;15,154,130,136,243,79,232,131,49,61,212,188,217,63,151,
+                     61,136,179,221,30,158,241,124,244,213,63,107,242,104,100,
+                     78,156&gt;&gt;},
+     {filter_symbol_name,&lt;&lt;"quod_r4_target_only_846FF2B2AD430207"&gt;&gt;},
+     {agent_ref,{agent_instance_ref,&lt;&lt;"pets"&gt;&gt;,
+                                    &lt;&lt;15,154,130,136,243,79,232,131,49,61,212,
+                                      188,217,63,151,61,136,179,221,30,158,241,
+                                      124,244,213,63,107,242,104,100,78,156&gt;&gt;,
+                                    {human_user,test_agent}}},
+     {agent_key,{&lt;&lt;11,14,202,201,87,242,21,87,202,198,216,250,81,121,78,189,
+                   153,66,183,79,26,101,149,27,78,162,179,251,54,6,173,196&gt;&gt;,
+                 &lt;&lt;234,192,161,195,71,103,237,24,127,230,46,13,35,246,88,86,
+                   230,72,112,81,219,160,171,232,228,176,166,192,90,125,4,79&gt;&gt;}},
+     {agent_pub,&lt;&lt;11,14,202,201,87,242,21,87,202,198,216,250,81,121,78,189,
+                  153,66,183,79,26,101,149,27,78,162,179,251,54,6,173,196&gt;&gt;},
+     {client_peer,{127,0,0,1}},
+     {client_session,#{public_key =&gt;
+                           &lt;&lt;11,14,202,201,87,242,21,87,202,198,216,250,81,121,
+                             78,189,153,66,183,79,26,101,149,27,78,162,179,251,
+                             54,6,173,196&gt;&gt;,
+                       session_id =&gt;
+                           &lt;&lt;53,99,88,233,6,37,110,25,132,204,15,171,178,227,0,
+                             84,151,215,97,34,94,121,43,238,55,140,249,40,235,
+                             215,139,224&gt;&gt;,
+                       expires_ms =&gt; 1795021616263}},
+     {client_auth,&lt;86869.209.0&gt;},
+     {watchdog,&lt;0.9035.0&gt;},
+     {tc_logfile,"/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_17.47.31/lib.quod.logs/run.2026-11-18_17.47.31/quod_ask_suite.remote_plain_read_excludes_live_observer.html"},
+     {tc_group_properties,[]},
+     {tc_group_path,[]},
+     {data_dir,"/home/yan/src/quod/_build/test/lib/quod/test/quod_ask_SUITE_data/"},
+     {priv_dir,"/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_17.47.31/lib.quod.logs/run.2026-11-18_17.47.31/log_private/"}]
+
+=== Current directory is "/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_17.47.31"
+
+=== Started at 2026-11-18 17:51:57
+
+<br />
+<a name="end"></a>
+
+
+=== Ended at 2026-11-18 17:51:57
+=== successfully completed test case
+=== === Returned value: ok
+</pre>
+<center>
+<br /><hr /><p>
+<a href="../../../all_runs.html">Test run history
+</a>  |  <a href="../../../index.html">Top level test index
+</a>  |  <a href="../../../suite.log.latest.html">Latest test result</a>
+</p>
+<div class="copyright">Copyright &copy; 2026 <a href="http://www.erlang.org">Open Telecom Platform</a><br />
+Updated: <!--date-->Wed Nov 18 2026 17:51:57<!--/date--><br />
+</div>
+</center>
+</body>
+</html>

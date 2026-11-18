@@ -1,0 +1,51 @@
+=== Suite started at 2026-11-18 17:24:18
+=== Starting test, 3 test cases
+=cases         3
+=user          yan
+=host          nohost
+=hosts         nohost 
+=emulator_vsn  16.0.2
+=emulator      beam
+=otp_release   28
+=started       2026-11-18 17:24:18
+=case          ct_framework:init_per_suite
+=logfile       ct_framework.init_per_suite.html
+=group_props   [{suite,quod_ns_SUITE}]
+=started       2026-11-18 17:24:18
+=ended         2026-11-18 17:24:18
+=result        ok
+=elapsed       0.000000s
+=case          quod_ns_SUITE:t_admit_grows_committee
+=logfile       quod_ns_suite.t_admit_grows_committee.html
+=started       2026-11-18 17:24:18
+=ended         2026-11-18 17:24:20
+=result        ok
+=elapsed       2.022816s
+=case          quod_ns_SUITE:t_cannot_remove_last
+=logfile       quod_ns_suite.t_cannot_remove_last.html
+=started       2026-11-18 17:24:20
+=ended         2026-11-18 17:24:21
+=result        ok
+=elapsed       0.001140s
+=case          quod_ns_SUITE:t_gate_rejects_raw_wedge
+=logfile       quod_ns_suite.t_gate_rejects_raw_wedge.html
+=started       2026-11-18 17:24:21
+=ended         2026-11-18 17:24:21
+=result        ok
+=elapsed       0.028935s
+=case          ct_framework:end_per_suite
+=logfile       ct_framework.end_per_suite.html
+=group_props   [{suite,quod_ns_SUITE}]
+=started       2026-11-18 17:24:21
+=ended         2026-11-18 17:24:21
+=result        ok
+=elapsed       0.000000s
+=group_time    2.293s
+=== TEST COMPLETE, 3 ok, 0 failed of 3 test cases
+
+=finished      2026-11-18 17:24:21
+=failed        0
+=successful    3
+=user_skipped  0
+=auto_skipped  0
+=elapsed_time  2321487

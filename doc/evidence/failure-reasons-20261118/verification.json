@@ -1,0 +1,10 @@
+{
+  "original_engine_source_unchanged": true,
+  "tracked_quod_and_erlog_files_unchanged": true,
+  "disposable_tree_removed": true,
+  "logged_failed_fixture_directories_removed": 115,
+  "eunit_failure_log_links_verified": 341,
+  "ct_failures_inventoried": 34,
+  "remaining_private_octet_strings": 0,
+  "measurement_runner_parses": true
+}

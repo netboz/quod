@@ -50,7 +50,7 @@ signup_terms_only_test_() ->
                     [{source_file, <<"user_instance.pl">>} | Options],
                     [{terms, lists:delete({hud_allowance, my_hud, 12}, Facts) ++ Policy},
                      {external_predicate_modules, [quod_agent_predicates]}]],
-                [?assertMatch({ok, _, {normalized, {read, _, {failed, _}}}}, Check(O)) || O <- Invalid],
+                [?assertMatch({ok, _, {normalized, {read, _, fail}}}, Check(O)) || O <- Invalid],
                 %% The same authored clauses must pass the actual creation
                 %% boundary, not only the Prolog policy check above.
                 ?assertMatch({ok, _}, quod_ontology:validate_action({create_ontology, Name, Options}))
@@ -175,7 +175,7 @@ cancellation_during_target_proof_preserves_the_original_identity_test_() ->
                 {personal_instruction, maps:get(human, Ctx), {'_'}, {'_'}, {'_'}, {'_'}, Bytes, {'_'}})),
             ?assertMatch({ok, _, {operation_pending, Op}}, lookup(Ctx, Bytes)),
             ?assertMatch({ok, _, {operation_pending, Op}}, instruct(Ctx, submit, Instruction)),
-            ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, forbidden_later)),
+            ?assertMatch(fail,quod_prolog:prove_ro(Ns,forbidden_later)),
             receive {fipa_completion_prepared, _, _} -> error(target_was_resubmitted) after 0 -> ok end
         after exit(Caller, kill), demonitor(Monitor, [flush]), gproc:unreg(quod_reg:name({host_test, barrier})) end
     end) end}.
@@ -195,12 +195,12 @@ retained_but_unsubmitted_instruction_is_not_replayed_test_() ->
         {UKey, _} = maps:get(human_pair, Ctx),
         {ok, _, _} = quod_prolog:execute(Ns, {retract, {agent_key, me, UKey, active}}),
         ?assertMatch({ok, _, {normalized, {failed, _}}}, submit({Bytes, Signature})),
-        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, forbidden_later)),
+        ?assertMatch(fail,quod_prolog:prove_ro(Ns,forbidden_later)),
         {ok, _, _} = quod_prolog:execute(Ns, {assertz, {agent_key, me, UKey, active}}),
         restart_runtime(Ns, Agent),
         ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns,
             {personal_instruction, maps:get(human, Ctx), {'_'}, {'_'}, UBytes, USig, Bytes, Signature})),
-        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, forbidden_later)),
+        ?assertMatch(fail,quod_prolog:prove_ro(Ns,forbidden_later)),
         ?assertMatch({ok, _, {operation_pending, _}}, lookup(Ctx, Bytes))
     end) end}.
 
@@ -252,8 +252,8 @@ interrupted_instruction(Ctx = #{namespace := Ns, agent := Agent, actor_pid := Ac
                 after 5000 -> error(completion_not_processed) end,
                 restart_runtime(Ns, Agent)
         end,
-        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, forbidden_later)),
-        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns,
+        ?assertMatch(fail,quod_prolog:prove_ro(Ns,forbidden_later)),
+        ?assertMatch(fail, quod_prolog:prove_ro(Ns,
             {personal_instruction, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}}))
     after
         trace:session_destroy(Trace), quod_reg:unsubscribe({agent, Agent}),
@@ -287,8 +287,8 @@ unavailable_actor_does_not_dispatch_on_restart_test_() ->
         {Runtime, _} = installed(Agent),
         _ = quod_runtime:stats(Ns),
         ?assert(is_process_alive(Runtime)),
-        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, forbidden_later)),
-        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns,
+        ?assertMatch(fail,quod_prolog:prove_ro(Ns,forbidden_later)),
+        ?assertMatch(fail, quod_prolog:prove_ro(Ns,
                      {personal_instruction, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}}))
     end) end}.
 
@@ -306,7 +306,7 @@ unauthorized_and_staged_signing_are_denied_test_() ->
         ?assertNotMatch({ok, _, {normalized, {committed, _, _}}}, submit(request(Ctx, execute, Staged))),
         {ok, _, _} = quod_prolog:execute(Ns, {assertz, {agent_hosting_suspended, personal}}),
         ?assertEqual({error, instruction_not_authorized}, instruct(Ctx, submit, {UBytes, USig})),
-        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, forbidden))
+        ?assertMatch(fail,quod_prolog:prove_ro(Ns,forbidden))
     end) end}.
 
 revocation_preserves_authorized_result_recovery_test_() ->
@@ -327,7 +327,7 @@ revocation_preserves_authorized_result_recovery_test_() ->
         ?assertNotMatch({ok, _, {operation_outcome, _, _}}, lookup(Ctx, Bytes)),
         NewDevice = Ctx#{human_pair => NewPair, session => session(NewPair)},
         ?assertMatch({ok, _, {operation_outcome, _, #{bindings := [{<<"V0">>, original}]}}}, lookup(NewDevice, Bytes)),
-        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, forbidden))
+        ?assertMatch(fail,quod_prolog:prove_ro(Ns,forbidden))
     end) end}.
 
 another_human_cannot_read_or_sign_the_instruction_test_() ->
@@ -361,8 +361,8 @@ human_revocation_between_signing_and_custody_refuses_dispatch_test_() ->
         receive {agent_instruction_result, Ref, Result} ->
             ?assertMatch({error, {instruction_not_submitted, instruction_refused}}, Result)
         after 5000 -> error(revocation_not_observed) end,
-        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, forbidden)),
-        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns,
+        ?assertMatch(fail,quod_prolog:prove_ro(Ns,forbidden)),
+        ?assertMatch(fail, quod_prolog:prove_ro(Ns,
             {personal_instruction, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}}))
     end) end}.
 
@@ -394,7 +394,7 @@ endpoint_refusal_preserves_prior_operations_test_() ->
                     ?assertEqual({error, {request_not_submitted, instruction_refused}}, Reply),
                     ?assertEqual({409, #{error => instruction_refused, submitted => false}},
                                  quod_client_http:signed_goal_result(Reply)),
-                    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, original_work));
+                    ?assertMatch(fail, quod_prolog:prove_ro(Ns, original_work));
                 retained ->
                     ?assertMatch({ok, _, {operation_pending, _}}, Reply),
                     ?assertMatch({202, #{terminal := false}}, quod_client_http:signed_goal_result(Reply)),
@@ -431,7 +431,7 @@ authorization_does_not_reparse_retained_history_test_() ->
          end || I <- lists:seq(1, 12)],
         assert_no_authority_decoding(Ns, Check),
         {ok, _, _} = quod_prolog:execute(Ns, {retract, {agent_key, me, UKey, active}}),
-        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {can_invoke, Work, Agent, [Ns], Ns})),
+        ?assertMatch(fail, quod_prolog:prove_ro(Ns, {can_invoke, Work, Agent, [Ns], Ns})),
         {ok, _, _} = quod_prolog:execute(Ns, {assertz, {agent_key, me, UKey, active}}),
         Check()
     end) end}.
@@ -533,7 +533,7 @@ exercise(Ctx = #{namespace := Ns, human := Human, agent := Agent}) ->
     Goal = {',', {current_principal, {'Actor'}},
             {',', {'=', {'Actor'}, Agent}, {assertz, {acted, {'Actor'}}}}},
     {Instruction, TargetBytes} = instruction(Ctx, Goal),
-    ?assertMatch({ok, _, {normalized, {failed, _}}}, submit(request(Ctx, execute, Goal))),
+    ?assertMatch({ok, _, {normalized, fail}}, submit(request(Ctx, execute, Goal))),
     Reply = instruct(Ctx, submit, Instruction),
     ?assertMatch({ok, _, {normalized, {committed, _, _}}}, Reply),
     {ok, #{agent_ref_blob := ActorBlob}, {normalized, {committed, [Binding], _}}} = Reply,
@@ -602,7 +602,7 @@ foreign_instruction(Ctx = #{namespace := Ns, agent := Agent, directory := Dir, i
         ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Target, {created, Agent})),
         %% U's instruction and A's signature do not replace target admission.
         {ok, _, _} = quod_prolog:execute(Target, {retract, allow_personal}),
-        ?assertMatch({fail, _}, quod_prolog:prove_ro(Target, {can_invoke, element(3, Work), Agent, [Ns], Target})),
+        ?assertMatch(fail, quod_prolog:prove_ro(Target, {can_invoke, element(3, Work), Agent, [Ns], Target})),
         {Denied, _} = instruction(Ctx, Goal),
         ?assertMatch({ok, _, {normalized, {failed, _}}}, instruct(Ctx, submit, Denied)),
         ?assertMatch({ok, [#{'Rows' := [Agent]}], _}, quod_prolog:prove_ro(Target,

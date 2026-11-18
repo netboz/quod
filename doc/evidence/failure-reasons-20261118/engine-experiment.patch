@@ -1,0 +1,49 @@
+--- original/src/erlog_int.erl
++++ experiment/src/erlog_int.erl
+@@ -551,17 +551,17 @@
+     try get_procedure(functor(G), Db) of
+ 	built_in ->
+             observe({native, erlog_bips, prove_goal, functor(G)}, St),
+-            erlog_bips:prove_goal(G, Next, predicate_failure_boundary(G, St));
++            erlog_bips:prove_goal(G, Next, St);
+ 	{code,{Mod,Func}} ->
+             observe({native, Mod, Func, functor(G)}, St),
+-            Mod:Func(G, Next, predicate_failure_boundary(G, St));
+-	{clauses,Cs} -> prove_goal_clauses(G, Cs, Next, predicate_failure_boundary(G, St));
++            Mod:Func(G, Next, St);
++	{clauses,Cs} -> prove_goal_clauses(G, Cs, Next, St);
+ 	undefined ->
+ 	    case get_prolog_flag(unknown, St) of
+ 		error ->			%Throw error
+ 		    existence_error(procedure, pred_ind(functor(G)), St);
+ 		_ ->				%Fail or warning
+-		    ?FAIL(add_predicate_failure_reason(G, St))
++		    ?FAIL(St)
+ 	    end
+     catch
+ 	throw:{erlog_error,E} ->
+@@ -576,23 +576,7 @@
+ %%
+ %% The two diagnostic built-ins do not describe application-level failures and
+ %% therefore do not frame themselves.
+-predicate_failure_boundary({fail_with_reason,_Reason}, St) ->
+-    St;
+-predicate_failure_boundary({get_fail_reasons,_Reasons}, St) ->
+-    St;
+-predicate_failure_boundary(Goal,
+-			   #est{cps=Cps}=St) ->
+-    case internal_predicate(Goal) of
+-	true -> St;
+-	false ->
+-	    St#est{cps=[#cp{type=predicate_failure,data=Goal}|Cps]}
+-    end.
+-
+-add_predicate_failure_reason(Goal, St) ->
+-    case internal_predicate(Goal) of
+-	true -> St;
+-	false -> add_failure_reason(freeze_failure_term(Goal), St)
+-    end.
++add_predicate_failure_reason(_Goal, St) -> St.
+ 
+ %% '$'-prefixed predicates are interpreter/application plumbing, not calls a
+ %% Prolog author can usefully diagnose. Their enclosing public predicate still

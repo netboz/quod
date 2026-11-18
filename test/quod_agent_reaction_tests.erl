@@ -97,8 +97,8 @@ ordinary_owned_reactions_use_signed_goal_admission_test_() ->
               commit(Ns, {trigger_event, {inherited_ping, final}}),
               ?assertMatch({ok, _, _}, finished(Ref)),
               ?assertEqual([inherited, Ref, final], pings(Ns)),
-              ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, forbidden_guard_write)),
-              ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, forbidden_goal_write)),
+              ?assertMatch(fail, quod_prolog:prove_ro(Ns, forbidden_guard_write)),
+              ?assertMatch(fail, quod_prolog:prove_ro(Ns, forbidden_goal_write)),
               ?assertEqual(1, maps:get(reaction_failures, quod_runtime:stats(Ns)))
           end,
           [{instance_of, special, actor}, {isa, special, left}, {isa, special, right},

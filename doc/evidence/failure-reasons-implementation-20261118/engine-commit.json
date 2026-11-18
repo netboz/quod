@@ -1,0 +1,13 @@
+{
+  "commit": "5dad08cdc95f5100f8885caa65038b0c6ee832f9",
+  "parent": "79b3874617a4eb9f76d5089a3fc908667e605e8a",
+  "repository": "/home/yan/src/erlog",
+  "branch": "quod",
+  "method": "Nimbalyst developer_git_commit_proposal",
+  "changed_files": 8,
+  "remote_observed_before_push": "79b3874617a4eb9f76d5089a3fc908667e605e8a",
+  "quod_pin_prepared": true,
+  "push_approved": true,
+  "pushed": true,
+  "remote_branch": "refs/heads/quod"
+}

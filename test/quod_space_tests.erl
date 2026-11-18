@@ -273,15 +273,18 @@ denied(Ns, Goal, Reason) ->
     assert_denied(quod_client_goal_ingress:submit(Bytes, Sig), Reason).
 
 assert_denied(Result, Reason) ->
-    ?assertMatch({ok, _, {normalized, {failed, _}}}, Result),
-    {ok, _, {normalized, {failed, Blob}}} = Result,
-    {ok, Reasons} = quod_wire_term:decode_failure_reasons(Blob),
+    Reasons = case Result of
+        {ok, _, {normalized, fail}} -> [];
+        {ok, _, {normalized, {failed, Blob}}} ->
+            {ok, Decoded} = quod_wire_term:decode_failure_reasons(Blob), Decoded;
+        Other -> error({expected_logical_failure, Other})
+    end,
     case Reason of none -> ?assert(is_list(Reasons));
                    _ -> ?assertMatch({true, _}, {lists:member(Reason, Reasons), Reasons}) end.
 
 edit(Ns, Goal) -> ?assertMatch({ok, _, _}, quod_ct:rp(Ns, Goal)).
 holds(Ns, Goal) -> ?assertMatch({ok,_,{normalized,{read,_,{answers,_,[_|_]}}}},read(Ns,Goal)).
-fails(Ns, Goal) -> ?assertMatch({ok,_,{normalized,{read,_,{failed,_}}}},read(Ns,Goal)).
+fails(Ns, Goal) -> ?assertMatch({ok,_,{normalized,{read,_,fail}}},read(Ns,Goal)).
 read(Ns,Goal) ->
     {Numbered,_,_}=erlog_int:term_instance({'::',Ns,Goal},0),
     {ok,Bytes,Sig}=quod_node_actor:signed_goal(read,Numbered,crypto:strong_rand_bytes(32),quod_time:now_ms()+20000),

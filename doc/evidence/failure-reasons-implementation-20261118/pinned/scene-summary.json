@@ -1,0 +1,187 @@
+{
+  "groups": [
+    {
+      "mode": "valid",
+      "marks": 300,
+      "seconds": {
+        "min": 0.32032,
+        "median": 0.332206,
+        "max": 0.354028
+      },
+      "first_seconds": 0.354028,
+      "repeat_seconds": {
+        "min": 0.32032,
+        "median": 0.32626299999999997,
+        "max": 0.332206
+      },
+      "held_process_bytes": {
+        "min": 16583688,
+        "median": 16583688,
+        "max": 16583688
+      },
+      "allocated_words": {
+        "min": 76244656,
+        "median": 76297994,
+        "max": 76298536
+      },
+      "reductions": {
+        "min": 52685763,
+        "median": 52726275,
+        "max": 52740291
+      }
+    },
+    {
+      "mode": "valid",
+      "marks": 600,
+      "seconds": {
+        "min": 0.834646,
+        "median": 0.84577,
+        "max": 0.8914
+      },
+      "first_seconds": 0.8914,
+      "repeat_seconds": {
+        "min": 0.834646,
+        "median": 0.8402080000000001,
+        "max": 0.84577
+      },
+      "held_process_bytes": {
+        "min": 34386808,
+        "median": 34386808,
+        "max": 34386808
+      },
+      "allocated_words": {
+        "min": 152454718,
+        "median": 152455260,
+        "max": 152461458
+      },
+      "reductions": {
+        "min": 165771542,
+        "median": 165791890,
+        "max": 165844385
+      }
+    },
+    {
+      "mode": "valid",
+      "marks": 1200,
+      "seconds": {
+        "min": 2.312152,
+        "median": 2.345937,
+        "max": 2.353037
+      },
+      "first_seconds": 2.353037,
+      "repeat_seconds": {
+        "min": 2.312152,
+        "median": 2.3290445,
+        "max": 2.345937
+      },
+      "held_process_bytes": {
+        "min": 71303368,
+        "median": 71303368,
+        "max": 71303368
+      },
+      "allocated_words": {
+        "min": 304947430,
+        "median": 304948774,
+        "max": 304949316
+      },
+      "reductions": {
+        "min": 573124887,
+        "median": 573222282,
+        "max": 573228370
+      }
+    },
+    {
+      "mode": "refused",
+      "marks": 300,
+      "seconds": {
+        "min": 0.292945,
+        "median": 0.296643,
+        "max": 0.297372
+      },
+      "first_seconds": 0.297372,
+      "repeat_seconds": {
+        "min": 0.292945,
+        "median": 0.294794,
+        "max": 0.296643
+      },
+      "held_process_bytes": {
+        "min": 88688,
+        "median": 88688,
+        "max": 88688
+      },
+      "allocated_words": {
+        "min": 75718804,
+        "median": 75719346,
+        "max": 75725265
+      },
+      "reductions": {
+        "min": 37846232,
+        "median": 37848620,
+        "max": 37910684
+      }
+    },
+    {
+      "mode": "refused",
+      "marks": 600,
+      "seconds": {
+        "min": 0.66021,
+        "median": 0.66209,
+        "max": 0.667982
+      },
+      "first_seconds": 0.66021,
+      "repeat_seconds": {
+        "min": 0.66209,
+        "median": 0.665036,
+        "max": 0.667982
+      },
+      "held_process_bytes": {
+        "min": 230544,
+        "median": 230544,
+        "max": 230544
+      },
+      "allocated_words": {
+        "min": 151162758,
+        "median": 151169220,
+        "max": 151206208
+      },
+      "reductions": {
+        "min": 105254533,
+        "median": 105257167,
+        "max": 105336449
+      }
+    },
+    {
+      "mode": "refused",
+      "marks": 1200,
+      "seconds": {
+        "min": 1.662581,
+        "median": 1.689611,
+        "max": 1.698678
+      },
+      "first_seconds": 1.662581,
+      "repeat_seconds": {
+        "min": 1.689611,
+        "median": 1.6941445,
+        "max": 1.698678
+      },
+      "held_process_bytes": {
+        "min": 372400,
+        "median": 372400,
+        "max": 372400
+      },
+      "allocated_words": {
+        "min": 302096721,
+        "median": 302097262,
+        "max": 302103127
+      },
+      "reductions": {
+        "min": 329905312,
+        "median": 330133586,
+        "max": 330147702
+      }
+    }
+  ],
+  "engine_paths": [
+    "engine=\"/home/yan/src/quod/_build/test/lib/erlog/ebin/erlog_int.beam\" otp=\"28\" schedulers=8"
+  ]
+}

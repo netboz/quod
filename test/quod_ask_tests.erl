@@ -384,7 +384,7 @@ fresh_ledgers_single_target_uses_vector_receipt_test_() ->
           quod_applied_certificate:operation_certificate_binding(Certificate)),
         ?assertMatch({ok, #{status := committed}}, quod_prolog:local_outcome(C, Ref)),
         ?assertMatch({ok, [_], _}, prove(C, s7_single_vector_live)),
-        ?assertMatch({fail, _}, prove(B, s7_single_vector_live)),
+        ?assertMatch(fail, prove(B, s7_single_vector_live)),
         ?assertEqual(Owners, [{Ns, quod_reg:where({quod_simplex, Ns}),
                                   quod_reg:where({quod_prolog, Ns})} || Ns <- Namespaces])
       end}
@@ -637,7 +637,7 @@ signed_read_dependencies_test_() ->
             end,[<<"chain_c::true.">>,<<"(chain_c::true, fail).">>,
                   <<"((chain_c::true, fail); true).">>,
                   <<"chain_c::assertz(read_must_not_write).">>]),
-            ?assertMatch({fail,_},prove(C,read_must_not_write)),
+            ?assertMatch(fail,prove(C,read_must_not_write)),
             Delivered = trace:delivered(Trace,all),
             receive {trace_delivered,all,Delivered} -> ok
             after 5000 -> error(read_trace_not_delivered) end,
@@ -678,8 +678,8 @@ t_independent_signed_routes(#{chain_b := B, chain_c := C, animals := A}) ->
                      quod_prolog:execute(B, {independent, Inner}))
     end, [true, {assertz, s6_unsigned},
           {',', {assertz, s6_unsigned}, {'::', chain_c, {assertz, s6_unsigned}}}]),
-    ?assertMatch({fail, _}, prove(B, s6_unsigned)),
-    ?assertMatch({fail, _}, prove(C, s6_unsigned)).
+    ?assertMatch(fail, prove(B, s6_unsigned)),
+    ?assertMatch(fail, prove(C, s6_unsigned)).
 
 t_independent_retained_branch_routes(#{chain_b := B, chain_c := C}) ->
     %% F1 must COMMIT the retained material in the ordinary atomic lane.
@@ -698,11 +698,11 @@ t_independent_retained_branch_routes(#{chain_b := B, chain_c := C}) ->
     ?assertMatch({ok, [_], _}, prove(C, s6_descendant)),
     ?assertEqual({error, independent_mixed_writes}, independent_signed(B,
       <<"independent((chain_c::assertz(s6_late), assertz(s6_late))), assertz(s6_outside).">>)),
-    ?assertMatch({fail, _}, independent_signed(B,
+    ?assertMatch(fail, independent_signed(B,
       <<"independent((assertz(s6_total_fail), chain_c::assertz(s6_total_fail))), fail.">>)),
     lists:foreach(fun(Fact) ->
-        ?assertMatch({fail, _}, prove(B, Fact)),
-        ?assertMatch({fail, _}, prove(C, Fact))
+        ?assertMatch(fail, prove(B, Fact)),
+        ?assertMatch(fail, prove(C, Fact))
     end, [s6_f2, s6_late, s6_outside, s6_total_fail]),
     ?assertMatch({ok, [_], _}, prove(B, s6_f3)),
     ?assertMatch({ok, [_], _}, prove(C, s6_f3)).
@@ -866,7 +866,7 @@ t_cut_follow_dedup_does_not_cross_invocations(
 
 t_grounded_ask(#{pets := P}) ->
     ?assertMatch({ok, [#{}], _}, prove(P, {'::', animals, {diet, dog, meat}})),
-    ?assertMatch({fail, [_ | _]},
+    ?assertMatch(fail,
                  prove(P, {'::', animals, {diet, dog, grass}})).
 
 t_self_ask(#{animals := A}) ->
@@ -943,7 +943,7 @@ t_transaction_restores_foreign_branch_before_alternative(
     First = {',', {'::', chain_b, {assertz, tx_hidden}}, fail},
     Goal = {transaction, {';', First, {'::', chain_b, tx_second}}},
     assert_foreign_transaction(prove(P, Goal), <<"chain_b">>),
-    ?assertMatch({fail, _}, prove(B, tx_hidden)),
+    ?assertMatch(fail, prove(B, tx_hidden)),
     ?assertMatch({ok, [#{}], _}, prove(B, tx_kept)).
 
 %% The transaction belongs to A, but the choice point and temporary write are
@@ -954,7 +954,7 @@ t_origin_transaction_is_inherited_by_selected_branch(
   #{pets := P, chain_b := B}) ->
     Goal = {transaction, {'::', chain_b, origin_tx_branch}},
     ?assertMatch({ok, [#{}], _}, prove(P, Goal)),
-    ?assertMatch({fail, _}, prove(B, origin_tx_hidden)).
+    ?assertMatch(fail, prove(B, origin_tx_hidden)).
 
 %% The transaction begins inside B and selects C. B restores itself through
 %% Erlog's local token; the origin controller restores C before B continues.
@@ -962,7 +962,7 @@ t_selected_scope_transaction_restores_descendant(
   #{pets := P, chain_c := C}) ->
     assert_foreign_transaction(
       prove(P, {'::', chain_b, tx_via_c}), <<"chain_c">>),
-    ?assertMatch({fail, _}, prove(C, c_tx_hidden)),
+    ?assertMatch(fail, prove(C, c_tx_hidden)),
     ?assertMatch({ok, [#{}], _}, prove(C, c_tx_kept)).
 
 %% B owns the transaction, selects C, and C calls back into a fresh logical B
@@ -973,7 +973,7 @@ t_selected_transaction_survives_reentrant_callback(
     ?assertMatch(
        {ok, [#{}], _},
        prove(P, {'::', chain_b, tx_reentry_via_c})),
-    ?assertMatch({fail, _}, prove(B, tx_reentry_hidden)).
+    ?assertMatch(fail, prove(B, tx_reentry_hidden)).
 
 %% Local alternatives after a foreign call do not represent distinct foreign
 %% states. Their local writes must still roll back independently, and a later
@@ -982,17 +982,17 @@ t_local_choicepoints_preserve_foreign_rollback(
   #{pets := P, chain_b := B, chain_c := C}) ->
     assert_foreign_transaction(
       prove(P, {'::', chain_b, tx_many_local}), <<"chain_c">>),
-    ?assertMatch({fail, _}, prove(B, {local_scratch, {'_'}})),
-    ?assertMatch({fail, _}, prove(B, many_local_hidden)),
-    ?assertMatch({fail, _}, prove(C, many_foreign_hidden)),
+    ?assertMatch(fail, prove(B, {local_scratch, {'_'}})),
+    ?assertMatch(fail, prove(B, many_local_hidden)),
+    ?assertMatch(fail, prove(C, many_foreign_hidden)),
     ?assertMatch({ok, [#{}], _}, prove(C, many_foreign_kept)).
 
 t_shared_batch_nested_rollback(#{pets := P, chain_b := B, chain_c := C}) ->
     assert_foreign_transaction(
       prove(P, {'::', chain_b, tx_shared_batch}), <<"chain_c">>),
     lists:foreach(fun(Fact) ->
-        ?assertMatch({fail, _}, prove(B, Fact)),
-        ?assertMatch({fail, _}, prove(C, Fact))
+        ?assertMatch(fail, prove(B, Fact)),
+        ?assertMatch(fail, prove(C, Fact))
     end, [batch_outer, batch_inner, batch_foreign, batch_child, batch_cut_removed]),
     ?assertMatch({ok, [#{}], _}, prove(C, batch_cut_kept)).
 
@@ -1004,8 +1004,8 @@ t_failed_transaction_restores_all_selected_scopes(
         {',', {'::', chain_b, {assertz, b_total_rollback}},
          {',', {'::', chain_c, {assertz, c_total_rollback}}, fail}},
     ?assertMatch({ok, [#{}], _}, prove(P, {';', {transaction, Writes}, true})),
-    ?assertMatch({fail, _}, prove(B, b_total_rollback)),
-    ?assertMatch({fail, _}, prove(C, c_total_rollback)).
+    ?assertMatch(fail, prove(B, b_total_rollback)),
+    ?assertMatch(fail, prove(C, c_total_rollback)).
 
 %% A scope worker may service a second invocation while the first is suspended
 %% in a foreign call. The second invocation is unrelated and must not inherit
@@ -1117,12 +1117,12 @@ t_read_only_tree_rejects_first_write(#{animals := A, pets := P}) ->
     ?assertEqual(
        {error, read_only},
        quod_prolog:prove_ro(P, {assertz, LocalMarker})),
-    ?assertMatch({fail, [_ | _]}, prove(P, LocalMarker)),
+    ?assertMatch(fail, prove(P, LocalMarker)),
     ForeignMarker = {read_only_foreign_write, blocked},
     ?assertEqual(
        {error, read_only},
        quod_prolog:prove_ro(P, {'::', animals, {assertz, ForeignMarker}})),
-    ?assertMatch({fail, [_ | _]}, prove(A, ForeignMarker)).
+    ?assertMatch(fail, prove(A, ForeignMarker)).
 
 t_scope_session_binding(#{animals := A}) ->
     Engine = quod_reg:where({quod_prolog, A}),
@@ -1376,30 +1376,25 @@ t_permission_gate(#{pets := P, private := Private}) ->
     Denied = {'::', private, {hidden, {'X'}}},
     ?assertMatch({fail, [_ | _]}, prove(P, Denied)),
     {fail, Reasons} = prove(P, Denied),
-    %% the refusal is the root cause, under the automatic failing-call frame
-    ?assert(lists:member({not_allowed, Private}, Reasons)),
+    ?assertEqual([{not_allowed, Private}], Reasons),
 
     %% ...so a caller may inspect it and take another branch: the whole point of
     %% not making denial fatal. `(Denied ; Fallback)` runs Fallback.
     ?assertMatch({ok, [#{'X' := 42}], _},
                  prove(P, {';', Denied, {'::', private, {secret, {'X'}}}})),
 
-    %% and a fallback may branch on WHY it failed, like any other reason: the
-    %% refusal sits under the automatic failing-call frame, same as any
-    %% fail_with_reason/1 root cause.
-    %% (the frame freezes its unbound argument as the ground `unbound` value)
+    %% The fallback matches the explicit policy refusal with its arguments.
     Recover = {';', Denied,
-               {get_fail_reasons, [{'Frame'}, {not_allowed, Private}]}},
-    ?assertMatch({ok, [#{'Frame' := {'::', private, {hidden, unbound}}}], _},
-                 prove(P, Recover)).
+               {get_fail_reasons, [{not_allowed, Private}]}},
+    ?assertMatch({ok, [#{}], _}, prove(P, Recover)).
 
 t_failure_reasons_cross_local_ask(#{pets := P}) ->
     Remote = {'::', private, {blocked, bob}},
     Recover = {';', Remote,
                {get_fail_reasons,
-                [{'Outer'}, {blocked, bob}, {impossible_to_link, bob}]}},
+                [{impossible_to_link, bob}]}},
     ?assertMatch(
-       {ok, [#{'Outer' := Remote}], _},
+       {ok, [#{}], _},
        prove(P, Recover)).
 
 %% An unsigned foreign write whose source contributes only an authorization

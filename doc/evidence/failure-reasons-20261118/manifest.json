@@ -1,0 +1,8 @@
+{
+  "quod_commit": "a55a3f0889d269ba48fd864ded281ea6799deb51",
+  "erlog_commit": "79b3874617a4eb9f76d5089a3fc908667e605e8a",
+  "erlog_original_sha256": "bc15ba1b92616bb2ceff70ffae5fa22a8000bd482f422ebb289d2335656e6f33",
+  "erlog_experimental_sha256": "814e477d62e7b76e11f4ef8eaf87027d7a6a6b5c40f862509e8285bcce92e70e",
+  "uptime": "16:04:22 up 2 days,  4:18,  1 user,  load average: 0.62, 1.77, 2.43",
+  "work": "/home/yan/src/quod/_build/failure-reasons-20261118"
+}

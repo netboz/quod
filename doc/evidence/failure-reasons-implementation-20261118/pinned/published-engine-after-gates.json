@@ -1,0 +1,8 @@
+{
+  "commit": "5dad08cdc95f5100f8885caa65038b0c6ee832f9",
+  "generated_app_metadata_changed": [
+    "ebin/erlog.app"
+  ],
+  "all_authored_source_hashes_match": true,
+  "beam_sha256": "5136085ca09f474c47bfdf3cb8b96e114cafa28d692bf9533dfa0767d0a522b6"
+}

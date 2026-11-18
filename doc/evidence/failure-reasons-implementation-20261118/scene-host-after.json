@@ -1,0 +1,32 @@
+{
+  "time": "2026-11-18T17:03:16.024350+00:00",
+  "cpu_count": 8,
+  "load_average": [
+    1.93115234375,
+    2.166015625,
+    2.4150390625
+  ],
+  "processes": [
+    "    PID COMMAND         %CPU",
+    "2159038 chrome          12.8",
+    " 196464 chrome           9.4",
+    "2265610 chrome           7.1",
+    "1618969 chrome           7.0",
+    "2102493 chrome           6.0",
+    "2159142 chrome           5.6",
+    "   5163 chrome           5.5",
+    "   1878 Hyprland         4.9",
+    "1488420 chrome           4.4",
+    "   5269 chrome           4.1",
+    "2088695 chrome           3.7",
+    "   9122 nimbalyst        3.4",
+    "  69709 qemu-system-x86  3.2",
+    "   8922 nimbalyst        1.8",
+    "   8868 nimbalyst        1.8",
+    "   4347 steam            1.2",
+    "2158698 codex            0.6",
+    "   5277 chrome           0.6",
+    "   1759 pipewire-pulse   0.5",
+    "   2060 Xwayland         0.5"
+  ]
+}

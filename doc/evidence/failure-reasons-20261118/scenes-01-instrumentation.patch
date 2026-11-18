@@ -1,0 +1,14 @@
+--- scenes-01/measure_explicit_failure_scenes.erl
++++ scenes-02/measure_explicit_failure_scenes.erl
+@@ -44,9 +44,9 @@
+     BeforeGC = process_info(self(), memory),
+     erlang:garbage_collect(),
+     AfterGC = process_info(self(), memory),
+-    io:format("SCENE marks=~p mode=~p seconds=~p before_gc=~p held_bytes=~p reasons=~p words=~p~n",
++    io:format("SCENE marks=~p mode=~p seconds=~p before_gc=~p held_bytes=~p reasons=~p~n",
+               [Count, Mode, Micros/1000000, BeforeGC, AfterGC,
+-               length(Final#est.fail_reasons), erts_debug:size(get(measured_result))]),
++               length(Final#est.fail_reasons)]),
+     #est{db=#db{ref=Ref}} = Committed,
+     quod_erlog_db_mvcc:delete(Ref),
+     ok.

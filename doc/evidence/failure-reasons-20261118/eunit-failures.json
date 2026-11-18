@@ -1,0 +1,2048 @@
+[
+  {
+    "number": 1,
+    "case": "quod_agent_vault_tests:custody_and_signing_through_signed_ingress_and_foreign_scope_test/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 20392
+  },
+  {
+    "number": 2,
+    "case": "quod_ask_tests:-ask_test_/0-fun-33-/0:315",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 20399
+  },
+  {
+    "number": 3,
+    "case": "quod_ask_tests:-ask_test_/0-fun-26-/0:324",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 20406
+  },
+  {
+    "number": 4,
+    "case": "quod_ask_tests:-ask_test_/0-fun-25-/0:325",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 20413
+  },
+  {
+    "number": 5,
+    "case": "quod_ask_tests:-ask_test_/0-fun-24-/0:327",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 20420
+  },
+  {
+    "number": 6,
+    "case": "quod_ask_tests:-ask_test_/0-fun-23-/0:328",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 20427
+  },
+  {
+    "number": 7,
+    "case": "quod_ask_tests:-ask_test_/0-fun-22-/0:329",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 20434
+  },
+  {
+    "number": 8,
+    "case": "quod_ask_tests:-ask_test_/0-fun-21-/0:330",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 20441
+  },
+  {
+    "number": 9,
+    "case": "quod_ask_tests:-ask_test_/0-fun-20-/0:331",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 20448
+  },
+  {
+    "number": 10,
+    "case": "quod_ask_tests:-ask_test_/0-fun-14-/0:337",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 20455
+  },
+  {
+    "number": 11,
+    "case": "quod_ask_tests:-ask_test_/0-fun-9-/0:342",
+    "group": "automatic frames matched by fallback",
+    "log_line": 20462
+  },
+  {
+    "number": 12,
+    "case": "quod_ask_tests:-ask_test_/0-fun-7-/0:344",
+    "group": "automatic frames matched by fallback",
+    "log_line": 20469
+  },
+  {
+    "number": 13,
+    "case": "quod_ask_tests:-fresh_ledgers_single_target_uses_vector_receipt_test_/0-fun-12-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 20476
+  },
+  {
+    "number": 14,
+    "case": "quod_ask_tests:-signed_read_dependencies_test_/0-fun-5-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 20483
+  },
+  {
+    "number": 15,
+    "case": "quod_ask_tests:-independent_integration_test_/0-fun-3-/0:653",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 20490
+  },
+  {
+    "number": 16,
+    "case": "quod_ask_tests:-independent_integration_test_/0-fun-2-/0:654",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 20497
+  },
+  {
+    "number": 17,
+    "case": "quod_client_goal_ingress_tests:-signed_local_read_test_/0-fun-14-/0:170",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 20504
+  },
+  {
+    "number": 18,
+    "case": "quod_physics_tests:-m3a_shared_component_test_/0-fun-49-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 20597
+  },
+  {
+    "number": 19,
+    "case": "quod_physics_tests:-m3a_shared_projection_test_/0-fun-25-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 20606
+  },
+  {
+    "number": 20,
+    "case": "quod_physics_tests:-root_body_appearance_frame_test_/0-fun-5-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 20615
+  },
+  {
+    "number": 21,
+    "case": "quod_physics_tests:-first_host_and_complete_configuration_commit_together_test_/0-fun-4-/0: gallery-first-physics",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 20624
+  },
+  {
+    "number": 22,
+    "case": "quod_physics_tests:-first_host_and_complete_configuration_commit_together_test_/0-fun-4-/0: workshop-first-physics",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 20633
+  },
+  {
+    "number": 23,
+    "case": "quod_physics_tests:-m3a_frame_failure_isolates_world_test_/0-fun-26-/0: member",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 20642
+  },
+  {
+    "number": 24,
+    "case": "quod_physics_tests:-live_source_authority_replacement_test_/0-fun-12-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 20651
+  },
+  {
+    "number": 25,
+    "case": "quod_physics_tests:-live_source_lifecycle_test_/0-fun-21-/0: live-workshop",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 20763
+  },
+  {
+    "number": 26,
+    "case": "quod_physics_tests:-live_source_lifecycle_test_/0-fun-21-/0: live-observatory",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 20881
+  },
+  {
+    "number": 27,
+    "case": "quod_physics_tests:-live_source_missing_space_admission_test_/0-fun-9-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 20999
+  },
+  {
+    "number": 28,
+    "case": "quod_physics_tests:-live_source_withdrawal_after_reclassification_test_/0-fun-12-/0: space",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 21008
+  },
+  {
+    "number": 29,
+    "case": "quod_physics_tests:-live_source_withdrawal_after_reclassification_test_/0-fun-12-/0: untyped",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 21017
+  },
+  {
+    "number": 30,
+    "case": "quod_physics_tests:-supported_geometry_signed_edit_test_/0-fun-11-/0: box",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 21026
+  },
+  {
+    "number": 31,
+    "case": "quod_physics_tests:-supported_geometry_signed_edit_test_/0-fun-11-/0: ball",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 21143
+  },
+  {
+    "number": 32,
+    "case": "quod_physics_tests:-supported_geometry_signed_edit_test_/0-fun-11-/0: capsule",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 21258
+  },
+  {
+    "number": 33,
+    "case": "quod_physics_tests:-supported_geometry_signed_edit_test_/0-fun-11-/0: convex",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 21376
+  },
+  {
+    "number": 34,
+    "case": "quod_physics_tests:-supported_geometry_signed_edit_test_/0-fun-11-/0: dynamic_ball",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 21491
+  },
+  {
+    "number": 35,
+    "case": "quod_physics_tests:-supported_geometry_signed_edit_test_/0-fun-11-/0: controlled_capsule",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 21608
+  },
+  {
+    "number": 36,
+    "case": "quod_physics_tests:-supported_geometry_signed_edit_test_/0-fun-11-/0: dynamic_convex",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 21725
+  },
+  {
+    "number": 37,
+    "case": "quod_physics_tests:-supported_geometry_signed_edit_test_/0-fun-11-/0: parts",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 21841
+  },
+  {
+    "number": 38,
+    "case": "quod_physics_tests:-supported_geometry_signed_edit_test_/0-fun-11-/0: surface",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 21956
+  },
+  {
+    "number": 39,
+    "case": "quod_physics_tests:-numeric_geometry_and_hinge_refusals_test_/0-fun-27-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 22073
+  },
+  {
+    "number": 40,
+    "case": "quod_physics_tests:-system_physics_world_policy_test_/0-fun-13-/0: physics-policy-earth",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 22082
+  },
+  {
+    "number": 41,
+    "case": "quod_physics_tests:-system_physics_world_policy_test_/0-fun-13-/0: physics-policy-moon",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 22203
+  },
+  {
+    "number": 42,
+    "case": "quod_physics_tests:-signed_live_body_predicate_test_/0-fun-13-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 22324
+  },
+  {
+    "number": 43,
+    "case": "quod_physics_tests:-hot_control_policy_reasons_test_/0-fun-12-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 22445
+  },
+  {
+    "number": 44,
+    "case": "quod_physics_tests:-signed_motion_query_owner_test_/0-fun-18-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 22606
+  },
+  {
+    "number": 45,
+    "case": "quod_physics_tests:-signed_control_releases_only_successful_proof_test_/0-fun-25-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 22741
+  },
+  {
+    "number": 46,
+    "case": "quod_physics_tests:-grounded_jump_and_ceiling_test_/0-fun-16-/0: floor",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 22939
+  },
+  {
+    "number": 47,
+    "case": "quod_physics_tests:-grounded_jump_and_ceiling_test_/0-fun-16-/0: ceiling",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 23149
+  },
+  {
+    "number": 48,
+    "case": "quod_physics_tests:-grounded_jump_and_ceiling_test_/0-fun-16-/0: air",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 23350
+  },
+  {
+    "number": 49,
+    "case": "quod_physics_tests:-signed_landing_reposition_and_feedback_test_/0-fun-15-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 23557
+  },
+  {
+    "number": 50,
+    "case": "quod_physics_tests:-retained_activation_before_first_send_is_resolve_only_after_owner_loss_test_/0-fun-9-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 23760
+  },
+  {
+    "number": 51,
+    "case": "quod_physics_tests:-explicit_activation_cancellation_test_/0-fun-1-/0: never_submitted",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 24003
+  },
+  {
+    "number": 52,
+    "case": "quod_physics_tests:-explicit_activation_cancellation_test_/0-fun-1-/0: prepared_before_cancellation",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 24373
+  },
+  {
+    "number": 53,
+    "case": "quod_physics_tests:-explicit_activation_cancellation_test_/0-fun-1-/0: activation_wins",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 24746
+  },
+  {
+    "number": 54,
+    "case": "quod_physics_tests:-explicit_activation_cancellation_test_/0-fun-1-/0: disabled",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 25117
+  },
+  {
+    "number": 55,
+    "case": "quod_physics_tests:-obstructed_door_signed_transition_test_/0-fun-12-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 25490
+  },
+  {
+    "number": 56,
+    "case": "quod_physics_tests:-pending_custody_and_delayed_sample_cannot_finish_new_close_test_/0-fun-16-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 25734
+  },
+  {
+    "number": 57,
+    "case": "quod_physics_tests:-signed_chair_push_checkpoint_and_recovery_test_/0-fun-36-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 27092
+  },
+  {
+    "number": 58,
+    "case": "quod_physics_tests:-chair_edit_races_prepared_checkpoint_test_/0-fun-9-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 27303
+  },
+  {
+    "number": 59,
+    "case": "quod_physics_tests:-chair_unknown_checkpoint_custody_is_not_resubmitted_test_/0-fun-16-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 27312
+  },
+  {
+    "number": 60,
+    "case": "quod_physics_tests:-authored_nonbox_edit_invalidates_rest_checkpoint_test_/0-fun-9-/0: ball",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 27321
+  },
+  {
+    "number": 61,
+    "case": "quod_physics_tests:-authored_nonbox_edit_invalidates_rest_checkpoint_test_/0-fun-9-/0: compound",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 27330
+  },
+  {
+    "number": 62,
+    "case": "quod_physics_tests:-hinged_receiver_completion_is_atomic_test_/0-fun-1-/0: commit",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 27339
+  },
+  {
+    "number": 63,
+    "case": "quod_physics_tests:-hinged_receiver_completion_is_atomic_test_/0-fun-1-/0: denied",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 27348
+  },
+  {
+    "number": 64,
+    "case": "quod_physics_tests:-hinged_receiver_completion_is_atomic_test_/0-fun-1-/0: rollback",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 27357
+  },
+  {
+    "number": 65,
+    "case": "quod_physics_tests:-hinged_receiver_completion_is_atomic_test_/0-fun-1-/0: conflict",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 27366
+  },
+  {
+    "number": 66,
+    "case": "quod_physics_tests:-shared_fixed_support_moves_atomically_test_/0-fun-12-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 27375
+  },
+  {
+    "number": 67,
+    "case": "quod_physics_tests:-hinged_command_edit_fences_signed_sample_test_/0-fun-8-/0: before_store",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 27500
+  },
+  {
+    "number": 68,
+    "case": "quod_physics_tests:-hinged_command_edit_fences_signed_sample_test_/0-fun-8-/0: after_store",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 28868
+  },
+  {
+    "number": 69,
+    "case": "quod_physics_tests:-authored_hinged_obstruction_and_permissions_test_/0-fun-9-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 29192
+  },
+  {
+    "number": 70,
+    "case": "quod_physics_tests:-finished_hinged_group_move_can_close_again_test_/0-fun-9-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 29313
+  },
+  {
+    "number": 71,
+    "case": "quod_prolog_tests:-native_execution_uses_ordinary_acl_and_commit_test_/0-fun-8-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 29322
+  },
+  {
+    "number": 72,
+    "case": "quod_prolog_tests:-native_async_execute_rejects_a_replaced_target_test_/0-fun-3-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 29331
+  },
+  {
+    "number": 73,
+    "case": "quod_prolog_tests:-native_caller_loss_cancels_its_proof_without_stopping_the_engine_test_/0-fun-4-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 29340
+  },
+  {
+    "number": 74,
+    "case": "quod_prolog_tests:-owned_async_execute_preserves_absolute_deadline_test_/0-fun-5-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 29349
+  },
+  {
+    "number": 75,
+    "case": "quod_prolog_tests:-t_unknown_fails/1-fun-2-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 29358
+  },
+  {
+    "number": 76,
+    "case": "quod_prolog_tests:-t_explicit_failure_reason_and_internal_bare_fail/1-fun-2-/0",
+    "group": "explicit list differs",
+    "log_line": 29365
+  },
+  {
+    "number": 77,
+    "case": "quod_prolog_tests:-t_occ_reject/1-fun-3-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 29372
+  },
+  {
+    "number": 78,
+    "case": "quod_prolog_tests:-t_policy_self_seal/1-fun-5-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 29379
+  },
+  {
+    "number": 79,
+    "case": "quod_prolog_tests:-t_batch_apply/1-fun-8-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 29386
+  },
+  {
+    "number": 80,
+    "case": "quod_prolog_tests:-t_same_block_read_after_write/1-fun-4-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 29393
+  },
+  {
+    "number": 81,
+    "case": "quod_prolog_tests:-outcome_unknown_timeout_test_/0-fun-11-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 29400
+  },
+  {
+    "number": 82,
+    "case": "quod_prolog_tests:-unavailable_append_reply_waits_for_outcome_unknown_test_/0-fun-12-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 29407
+  },
+  {
+    "number": 83,
+    "case": "quod_prolog_tests:-t_signed_operation_uses_the_same_content_verdict_path/1-fun-8-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 29414
+  },
+  {
+    "number": 84,
+    "case": "quod_prolog_tests:-t_live_reject_emits_event/1-fun-5-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 29421
+  },
+  {
+    "number": 85,
+    "case": "quod_runtime_tests:-subscribed_reaction_observes_event_only_atomic_resolve_once_test_/0-fun-9-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 29428
+  },
+  {
+    "number": 86,
+    "case": "quod_runtime_tests:-local_explicit_event_repeats_without_mutating_facts_test_/0-fun-7-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 29435
+  },
+  {
+    "number": 87,
+    "case": "quod_runtime_tests:-failed_resource_is_not_installed_by_later_events_test_/0-fun-9-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 29442
+  },
+  {
+    "number": 88,
+    "case": "quod_transaction_predicates_tests:failure_reasons_survive_rollback_test/0",
+    "group": "explicit list differs",
+    "log_line": 29451
+  },
+  {
+    "number": 89,
+    "case": "quod_agent_custody_tests:-prepared_observation_commits_custody_report_and_assignment_once_test_/0-fun-1-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 29459
+  },
+  {
+    "number": 90,
+    "case": "quod_agent_custody_tests:-unavailable_custody_still_records_the_observation_test_/0-fun-1-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 29468
+  },
+  {
+    "number": 91,
+    "case": "quod_agent_custody_tests:-recovery_acl_external_query_is_rejected_test_/0-fun-1-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 29477
+  },
+  {
+    "number": 92,
+    "case": "quod_agent_custody_tests:-worker_refuses_custody_for_wrong_target_anchor_test_/0-fun-4-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 29486
+  },
+  {
+    "number": 93,
+    "case": "quod_agent_hosting_tests:-class_owner_hosting_transitions_test_/0-fun-19-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 29592
+  },
+  {
+    "number": 94,
+    "case": "quod_agent_hosting_tests:-class_owner_signing_preserves_storage_and_policy_boundaries_test_/0-fun-15-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 29795
+  },
+  {
+    "number": 95,
+    "case": "quod_agent_hosting_tests:-projected_work_wakes_after_real_queue_capacity_release_test_/0-fun-6-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 29804
+  },
+  {
+    "number": 96,
+    "case": "quod_agent_hosting_tests:-hosted_reactions_and_incarnation_recovery_test_/0-fun-0-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 29813
+  },
+  {
+    "number": 97,
+    "case": "quod_agent_hosting_tests:-hosted_agents_exchange_committed_events_test_/0-fun-0-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 29822
+  },
+  {
+    "number": 98,
+    "case": "quod_agent_hosting_tests:-retained_request_uses_original_bytes_and_timeout_identity_test_/0-fun-8-/0: success",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 29831
+  },
+  {
+    "number": 99,
+    "case": "quod_agent_hosting_tests:-retained_request_uses_original_bytes_and_timeout_identity_test_/0-fun-8-/0: stale_key",
+    "group": "test helper calls element on plain failure",
+    "log_line": 29928
+  },
+  {
+    "number": 100,
+    "case": "quod_agent_hosting_tests:-retained_request_uses_original_bytes_and_timeout_identity_test_/0-fun-8-/0: timeout",
+    "group": "test helper calls element on plain failure",
+    "log_line": 29955
+  },
+  {
+    "number": 101,
+    "case": "quod_agent_hosting_tests:-fipa_action_and_reply_commit_together_test_/0-fun-0-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 29982
+  },
+  {
+    "number": 102,
+    "case": "quod_agent_hosting_tests:-fipa_rejected_reply_rolls_back_domain_action_test_/0-fun-0-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 29991
+  },
+  {
+    "number": 103,
+    "case": "quod_agent_hosting_tests:-fipa_unstarted_request_survives_restart_without_event_replay_test_/0-fun-0-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 30000
+  },
+  {
+    "number": 104,
+    "case": "quod_agent_hosting_tests:-fipa_request_continues_after_restart_during_proof_test_/0-fun-0-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 30009
+  },
+  {
+    "number": 105,
+    "case": "quod_agent_hosting_tests:-fipa_request_continues_after_key_rotation_during_proof_test_/0-fun-0-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 30018
+  },
+  {
+    "number": 106,
+    "case": "quod_agent_hosting_tests:-fipa_request_continues_after_runtime_loss_with_durable_custody_test_/0-fun-0-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 30027
+  },
+  {
+    "number": 107,
+    "case": "quod_agent_hosting_tests:-fipa_competing_completions_commit_once_test_/0-fun-0-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 30036
+  },
+  {
+    "number": 108,
+    "case": "quod_agent_hosting_tests:-unexpected_child_exit_enters_ontology_reaction_test_/0-fun-3-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 30045
+  },
+  {
+    "number": 109,
+    "case": "quod_agent_hosting_tests:-observation_during_restoration_survives_pending_installation_test_/0-fun-3-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 30054
+  },
+  {
+    "number": 110,
+    "case": "quod_agent_hosting_tests:-physical_loss_drives_signed_policy_and_host_activation_test_/0-fun-3-/0: graceful",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 30063
+  },
+  {
+    "number": 111,
+    "case": "quod_agent_hosting_tests:-physical_loss_drives_signed_policy_and_host_activation_test_/0-fun-3-/0: abrupt",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 30092
+  },
+  {
+    "number": 112,
+    "case": "quod_agent_hosting_tests:-node_execution_policy_installs_through_ordinary_signed_goal_test_/0-fun-6-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 30101
+  },
+  {
+    "number": 113,
+    "case": "quod_agent_hosting_tests:-installed_handler_observation_uses_actual_owner_test_/0-fun-1-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 30220
+  },
+  {
+    "number": 114,
+    "case": "quod_agent_hosting_tests:-node_executor_requires_exact_delegation_at_execution_test_/0-fun-0-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 30229
+  },
+  {
+    "number": 115,
+    "case": "quod_agent_hosting_tests:-signed_node_request_context_survives_foreign_scope_test_/0-fun-3-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 30352
+  },
+  {
+    "number": 116,
+    "case": "quod_agent_hosting_tests:-failed_staged_assignment_cannot_install_hosted_process_test_/0-fun-6-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 30470
+  },
+  {
+    "number": 117,
+    "case": "quod_agent_hosting_tests:-agent_queue_has_aggregate_byte_bound_and_reclaims_on_discard_test_/0-fun-9-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 30479
+  },
+  {
+    "number": 118,
+    "case": "quod_agent_hosting_tests:-atomic_recovery_commits_one_diff_and_restores_projection_test_/0-fun-1-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 30488
+  },
+  {
+    "number": 119,
+    "case": "quod_agent_hosting_tests:-failed_atomic_recovery_does_not_commit_its_report_test_/0-fun-1-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 30497
+  },
+  {
+    "number": 120,
+    "case": "quod_agent_hosting_tests:-host_move_withdraws_child_and_revokes_released_signature_test_/0-fun-0-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 30711
+  },
+  {
+    "number": 121,
+    "case": "quod_agent_hosting_tests:-running_request_deadline_kills_worker_without_claiming_rejection_test_/0-fun-4-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 30720
+  },
+  {
+    "number": 122,
+    "case": "quod_agent_reaction_tests:-ordinary_owned_reactions_use_signed_goal_admission_test_/0-fun-12-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 30729
+  },
+  {
+    "number": 123,
+    "case": "quod_agent_recovery_tests:-host_loss_drains_more_than_executor_capacity_without_collapsing_test_/0-fun-2-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 30738
+  },
+  {
+    "number": 124,
+    "case": "quod_agent_recovery_tests:-runtime_restart_after_host_loss_recovers_through_expired_contact_test_/0-fun-8-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 30767
+  },
+  {
+    "number": 125,
+    "case": "quod_class_permissions_tests:signed_foreign_guard/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 30796
+  },
+  {
+    "number": 126,
+    "case": "quod_class_permissions_tests:signed_boundaries/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 30926
+  },
+  {
+    "number": 127,
+    "case": "quod_constructor_tests:signed_qualified_class/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 31040
+  },
+  {
+    "number": 128,
+    "case": "quod_constructor_tests:signed_owner/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 31160
+  },
+  {
+    "number": 129,
+    "case": "quod_controller_tests:-preferences_use_existing_instruction_and_form_test_/0-fun-13-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 31281
+  },
+  {
+    "number": 130,
+    "case": "quod_controller_tests:-shared_mapping_rejects_conflicts_and_unknown_outputs_test_/0-fun-4-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 31290
+  },
+  {
+    "number": 131,
+    "case": "quod_create_root_tests:-t_create_root/1-fun-7-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 31299
+  },
+  {
+    "number": 132,
+    "case": "quod_e2e_tests:-t_write_read/1-fun-6-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 31306
+  },
+  {
+    "number": 133,
+    "case": "quod_e2e_tests:-t_prolog_restart_rebuild/1-fun-3-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 31313
+  },
+  {
+    "number": 134,
+    "case": "quod_e2e_tests:-t_failing_proofs_no_ets_leak/1-fun-4-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 31320
+  },
+  {
+    "number": 135,
+    "case": "quod_gui_components_tests:-remaining_controls_preserve_binding_and_atomic_refusal_test_/0-fun-12-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 31327
+  },
+  {
+    "number": 136,
+    "case": "quod_gui_components_tests:-composition_uses_inherited_defaults_and_only_binds_inputs_test_/0-fun-19-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 31472
+  },
+  {
+    "number": 137,
+    "case": "quod_gui_components_tests:-input_variants_keep_typed_binding_and_rollback_test_/0-fun-17-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 31652
+  },
+  {
+    "number": 138,
+    "case": "quod_gui_components_tests:-elaborate_form_uses_one_vocabulary_projection_test_/0-fun-12-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 31867
+  },
+  {
+    "number": 139,
+    "case": "quod_gui_components_tests:-forms_use_the_same_signed_ontology_path_test_/0-fun-2-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 32290
+  },
+  {
+    "number": 140,
+    "case": "quod_gui_examples_tests:examples/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 32464
+  },
+  {
+    "number": 141,
+    "case": "quod_gui_examples_tests:world_library/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 32698
+  },
+  {
+    "number": 142,
+    "case": "quod_gui_examples_tests:-voxel_form_creates_user_owned_terrain_and_rejects_a_dig_stale_submission_test_/0-fun-24-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 32835
+  },
+  {
+    "number": 143,
+    "case": "quod_gui_hud_tests:-hud_composes_standing_context_and_contributions_test_/0-fun-30-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 33128
+  },
+  {
+    "number": 144,
+    "case": "quod_gui_hud_tests:-hud_space_owner_authority_and_storing_acl_test_/0-fun-3-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 33137
+  },
+  {
+    "number": 145,
+    "case": "quod_gui_menu_tests:-icon_bytes_are_public_signed_facts_test_/0-fun-12-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 33146
+  },
+  {
+    "number": 146,
+    "case": "quod_gui_menu_tests:-release_terms_use_the_existing_signed_edit_gate_test_/0-fun-5-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 33294
+  },
+  {
+    "number": 147,
+    "case": "quod_gui_menu_tests:-interior_walls_use_the_shared_extent_test_/0-fun-12-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 33303
+  },
+  {
+    "number": 148,
+    "case": "quod_gui_menu_tests:-one_thing_is_read_in_another_mode_test_/0-fun-9-/0",
+    "group": "test helper handles only reasoned failure",
+    "log_line": 33312
+  },
+  {
+    "number": 149,
+    "case": "quod_gui_menu_tests:-overflow_nests_under_more_and_keeps_pins_test_/0-fun-22-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 33356
+  },
+  {
+    "number": 150,
+    "case": "quod_gui_operations_tests:-prebound_creation_output_is_refused_test_/0-fun-1-/0",
+    "group": "test helper calls element on plain failure",
+    "log_line": 33365
+  },
+  {
+    "number": 151,
+    "case": "quod_gui_operations_tests:-execution_preserves_authored_output_aliases_test_/0-fun-5-/0",
+    "group": "test helper calls element on plain failure",
+    "log_line": 33403
+  },
+  {
+    "number": 152,
+    "case": "quod_gui_operations_tests:-offered_creation_and_instance_operation_test_/0-fun-14-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 33441
+  },
+  {
+    "number": 153,
+    "case": "quod_gui_operations_tests:-binding_refuses_invalid_or_changed_contract_test_/0-fun-5-/0",
+    "group": "test helper calls element on plain failure",
+    "log_line": 33450
+  },
+  {
+    "number": 154,
+    "case": "quod_gui_operations_tests:-foreign_recipe_compiles_at_owner_and_executes_at_storage_test_/0-fun-6-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 33492
+  },
+  {
+    "number": 155,
+    "case": "quod_gui_operations_tests:-discovery_is_read_only_even_in_execute_test_/0-fun-3-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 33501
+  },
+  {
+    "number": 156,
+    "case": "quod_gui_question_tests:-native_scope_is_read_only_and_keeps_original_request_test_/0-fun-10-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 33510
+  },
+  {
+    "number": 157,
+    "case": "quod_gui_question_tests:-native_presentation_uses_original_scope_and_closed_effect_codec_test_/0-fun-23-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 33641
+  },
+  {
+    "number": 158,
+    "case": "quod_gui_question_tests:-live_opening_commits_question_hud_and_presentation_together_test_/0-fun-38-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 33769
+  },
+  {
+    "number": 159,
+    "case": "quod_gui_question_tests:-accepted_question_transitions_use_signed_atomic_owners_test_/0-fun-60-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 33892
+  },
+  {
+    "number": 160,
+    "case": "quod_gui_question_tests:-committed_answer_automatically_completes_test_/0-fun-24-/0",
+    "group": "normalized plain failure asserted as reasoned",
+    "log_line": 34072
+  },
+  {
+    "number": 161,
+    "case": "quod_gui_stage1_tests:-authored_creation_recovery_test_/0-fun-10-/0: ordinary",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 34673
+  },
+  {
+    "number": 162,
+    "case": "quod_gui_stage1_tests:-authored_creation_recovery_test_/0-fun-10-/0: atomic",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 34682
+  },
+  {
+    "number": 163,
+    "case": "quod_gui_stage1_tests:-non_space_binding_and_updates_test_/0-fun-5-/0",
+    "group": "plain failure asserted as reasoned",
+    "log_line": 34691
+  },
+  {
+    "number": 164,
+    "case": "quod_lifecycle_single_path_tests:-terms_creation_preserves_clauses_test_/0-fun-7-/0",
+    "group": "effect journal treats absence as unavailable",
+    "log_line": 34700
+  },
+  {
+    "number": 165,
+    "case": "quod_lifecycle_single_path_tests:-creation_clauses_regression_test_/0-fun-1-/0: prepared clauses survive journal restart",
+    "group": "effect journal treats absence as unavailable",
+    "log_line": 34715
+  },
+  {
+    "number": 166,
+    "case": "quod_lifecycle_single_path_tests:-creation_clauses_regression_test_/0-fun-1-/0: root entry ACL remains required",
+    "group": "effect journal treats absence as unavailable",
+    "log_line": 34742
+  },
+  {
+    "number": 167,
+    "case": "quod_lifecycle_single_path_tests:-creation_clauses_regression_test_/0-fun-1-/0: failed policy prepares nothing",
+    "group": "effect journal treats absence as unavailable",
+    "log_line": 34757
+  },
+  {
+    "number": 168,
+    "case": "quod_lifecycle_single_path_tests:-creation_clauses_regression_test_/0-fun-1-/0: false postcondition refuses",
+    "group": "effect journal treats absence as unavailable",
+    "log_line": 34772
+  },
+  {
+    "number": 169,
+    "case": "quod_lifecycle_single_path_tests:-material_admission_uses_committed_root_policy_test_/0-fun-13-/0",
+    "group": "effect journal treats absence as unavailable",
+    "log_line": 34787
+  },
+  {
+    "number": 170,
+    "case": "quod_lifecycle_single_path_tests:-default_lobby_physics_startup_test_/0-fun-30-/0",
+    "group": "setup: already_started",
+    "log_line": 34822
+  },
+  {
+    "number": 171,
+    "case": "quod_lifecycle_single_path_tests:-m1a_guarded_source_test_/0-fun-4-/0",
+    "group": "setup: already_started",
+    "log_line": 34848
+  },
+  {
+    "number": 172,
+    "case": "quod_lifecycle_single_path_tests:-m1a_signup_terms_test_/0-fun-7-/0",
+    "group": "setup: already_started",
+    "log_line": 34873
+  },
+  {
+    "number": 173,
+    "case": "quod_lifecycle_single_path_tests:-m1a_seven_foundations_test_/0-fun-6-/0",
+    "group": "setup: already_started",
+    "log_line": 34898
+  },
+  {
+    "number": 174,
+    "case": "quod_lifecycle_single_path_tests:-automatic_founder_enrollment_and_restart_test_/0-fun-9-/0",
+    "group": "setup: already_started",
+    "log_line": 34923
+  },
+  {
+    "number": 175,
+    "case": "quod_lifecycle_single_path_tests:-node_enrollment_crash_custody_test_/0-fun-1-/0: before_send",
+    "group": "setup: already_started",
+    "log_line": 34949
+  },
+  {
+    "number": 176,
+    "case": "quod_lifecycle_single_path_tests:-node_enrollment_crash_custody_test_/0-fun-1-/0: after_commit",
+    "group": "setup: already_started",
+    "log_line": 34974
+  },
+  {
+    "number": 177,
+    "case": "quod_lifecycle_single_path_tests:-node_enrollment_crash_custody_test_/0-fun-1-/0: after_allocation",
+    "group": "setup: already_started",
+    "log_line": 34999
+  },
+  {
+    "number": 178,
+    "case": "quod_lifecycle_single_path_tests:-node_enrollment_crash_custody_test_/0-fun-1-/0: known_refusal",
+    "group": "setup: already_started",
+    "log_line": 35024
+  },
+  {
+    "number": 179,
+    "case": "quod_lifecycle_single_path_tests:-node_enrollment_crash_custody_test_/0-fun-1-/0: malformed_template",
+    "group": "setup: already_started",
+    "log_line": 35049
+  },
+  {
+    "number": 180,
+    "case": "quod_lifecycle_single_path_tests:-node_enrollment_crash_custody_test_/0-fun-1-/0: admission_refusal",
+    "group": "setup: already_started",
+    "log_line": 35074
+  },
+  {
+    "number": 181,
+    "case": "quod_lifecycle_single_path_tests:-node_enrollment_crash_custody_test_/0-fun-1-/0: auth_restart",
+    "group": "setup: already_started",
+    "log_line": 35099
+  },
+  {
+    "number": 182,
+    "case": "quod_lobby_tests:-cohosted_certified_progress_test_/0-fun-3-/0",
+    "group": "setup: already_started",
+    "log_line": 35124
+  },
+  {
+    "number": 183,
+    "case": "quod_lobby_tests:-class_owner_space_creation_preserves_world_test_/0-fun-10-/0",
+    "group": "setup: already_started",
+    "log_line": 35149
+  },
+  {
+    "number": 184,
+    "case": "quod_lobby_tests:-inactive_physics_source_authoring_preserves_world_test_/0-fun-19-/0",
+    "group": "setup: already_started",
+    "log_line": 35175
+  },
+  {
+    "number": 185,
+    "case": "quod_lobby_tests:-failed_hosting_selector_is_not_inactive_test_/0-fun-3-/0",
+    "group": "setup: already_started",
+    "log_line": 35201
+  },
+  {
+    "number": 186,
+    "case": "quod_lobby_tests:-lobby_projection_recovery_test_/0-fun-19-/0",
+    "group": "setup: already_started",
+    "log_line": 35223
+  },
+  {
+    "number": 187,
+    "case": "quod_lobby_tests:-first_scene_waits_for_new_lobby_route/1-fun-5-/0",
+    "group": "setup: already_started",
+    "log_line": 35248
+  },
+  {
+    "number": 188,
+    "case": "quod_lobby_tests:-first_scene_waits_for_new_lobby_route/1-fun-5-/0",
+    "group": "setup: already_started",
+    "log_line": 35274
+  },
+  {
+    "number": 189,
+    "case": "quod_lobby_tests:-local_subclass_inherits_eidolons_controls_and_workspace_test_/0-fun-16-/0",
+    "group": "setup: already_started",
+    "log_line": 35300
+  },
+  {
+    "number": 190,
+    "case": "quod_lobby_tests:-modelling_and_material_libraries_test_/0-fun-38-/0",
+    "group": "setup: already_started",
+    "log_line": 35326
+  },
+  {
+    "number": 191,
+    "case": "quod_lobby_tests:-signed_prolog_eidolon_edits_use_target_policy_test_/0-fun-16-/0",
+    "group": "setup: already_started",
+    "log_line": 35352
+  },
+  {
+    "number": 192,
+    "case": "quod_lobby_tests:-complete_source_cursor_retains_current_snapshot_test_/0-fun-13-/0",
+    "group": "setup: already_started",
+    "log_line": 35378
+  },
+  {
+    "number": 193,
+    "case": "quod_lobby_tests:-ontology_instances_share_selection_and_authorized_inspection_test_/0-fun-28-/0",
+    "group": "setup: already_started",
+    "log_line": 35404
+  },
+  {
+    "number": 194,
+    "case": "quod_lobby_tests:-presentation_modes_and_ground_lens_targets_use_authorized_owner_reads_test_/0-fun-8-/0",
+    "group": "setup: already_started",
+    "log_line": 35430
+  },
+  {
+    "number": 195,
+    "case": "quod_lobby_tests:-public_system_ontology_source_is_readable_but_not_mutable_test_/0-fun-30-/0",
+    "group": "setup: already_started",
+    "log_line": 35456
+  },
+  {
+    "number": 196,
+    "case": "quod_lobby_tests:-system_ontology_editing_uses_universal_scope_identity_test_/0-fun-10-/0",
+    "group": "setup: already_started",
+    "log_line": 35482
+  },
+  {
+    "number": 197,
+    "case": "quod_lobby_tests:-local_inspection_cannot_fall_back_after_root_source_denial_test_/0-fun-5-/0",
+    "group": "setup: already_started",
+    "log_line": 35508
+  },
+  {
+    "number": 198,
+    "case": "quod_lobby_tests:-non_system_read_only_source_uses_the_same_recipe_test_/0-fun-5-/0",
+    "group": "setup: already_started",
+    "log_line": 35534
+  },
+  {
+    "number": 199,
+    "case": "quod_lobby_tests:-scoped_routes_reuse_the_directory_and_preserve_private_admission_test_/0-fun-18-/0",
+    "group": "setup: already_started",
+    "log_line": 35560
+  },
+  {
+    "number": 200,
+    "case": "quod_lobby_tests:-shared_class_edits_and_subclass_selection_use_live_definitions_test_/0-fun-14-/0",
+    "group": "setup: already_started",
+    "log_line": 35586
+  },
+  {
+    "number": 201,
+    "case": "quod_lobby_tests:-large_signed_source_edit_does_not_return_inspection_scratch_test_/0-fun-5-/0",
+    "group": "setup: already_started",
+    "log_line": 35612
+  },
+  {
+    "number": 202,
+    "case": "quod_node_context_tests:-permitted_recovery_helper_cannot_borrow_node_privileges_test_/0-fun-10-/0",
+    "group": "setup: already_started",
+    "log_line": 35638
+  },
+  {
+    "number": 203,
+    "case": "quod_ontology_acl_acceptance_tests:run/0: module 'quod_ontology_acl_acceptance_tests'",
+    "group": "setup: already_started",
+    "log_line": 35660
+  },
+  {
+    "number": 204,
+    "case": "quod_operation_claim_tests:direct_multi_claim_cannot_bypass_slice8_authority_gate_test/0",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 35684
+  },
+  {
+    "number": 205,
+    "case": "quod_operation_format_tests:real_qej1_with_signed_submission_is_refused_by_name_test/0",
+    "group": "setup: already_started",
+    "log_line": 35805
+  },
+  {
+    "number": 206,
+    "case": "quod_operation_receipt_tests:-remote_receipt_recovers_claim_bindings_test_/0-fun-1-/0: applied",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 35830
+  },
+  {
+    "number": 207,
+    "case": "quod_operation_receipt_tests:-remote_receipt_recovers_claim_bindings_test_/0-fun-1-/0: {rejected,conflict_retry}",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 35856
+  },
+  {
+    "number": 208,
+    "case": "quod_operation_receipt_tests:-remote_receipt_decode_is_a_fail_closed_boundary_test_/0-fun-1-/0: malformed",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 35882
+  },
+  {
+    "number": 209,
+    "case": "quod_operation_receipt_tests:-remote_receipt_decode_is_a_fail_closed_boundary_test_/0-fun-1-/0: uncorrelated",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 35889
+  },
+  {
+    "number": 210,
+    "case": "quod_operation_receipt_tests:-remote_receipt_decode_is_a_fail_closed_boundary_test_/0-fun-1-/0: valid_unavailable",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 35896
+  },
+  {
+    "number": 211,
+    "case": "quod_operation_receipt_tests:-remote_receipt_decode_is_a_fail_closed_boundary_test_/0-fun-1-/0: expired",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 35903
+  },
+  {
+    "number": 212,
+    "case": "quod_operation_receipt_tests:remote_receipt_checks_correlation_once_test/0",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 35910
+  },
+  {
+    "number": 213,
+    "case": "quod_outcome_endpoint_tests:-fixture_observations_end_with_owner_test_/0-fun-7-/0: normal",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 35957
+  },
+  {
+    "number": 214,
+    "case": "quod_outcome_endpoint_tests:-fixture_observations_end_with_owner_test_/0-fun-7-/0: exception",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 36055
+  },
+  {
+    "number": 215,
+    "case": "quod_outcome_endpoint_tests:operation_applied_pins_history_and_waits_for_durable_publication_test/0",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 36153
+  },
+  {
+    "number": 216,
+    "case": "quod_outcome_endpoint_tests:operation_applied_signs_historical_not_current_committee_test/0",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 36251
+  },
+  {
+    "number": 217,
+    "case": "quod_outcome_endpoint_tests:operation_collector_uses_the_real_endpoint_and_exact_result_test/0",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 36349
+  },
+  {
+    "number": 218,
+    "case": "quod_outcome_result_tests:-lost_reply_recovers_selected_bindings_test_/0-fun-1-/0: ordinary",
+    "group": "setup: already_started",
+    "log_line": 36356
+  },
+  {
+    "number": 219,
+    "case": "quod_outcome_result_tests:-lost_reply_recovers_selected_bindings_test_/0-fun-1-/0: foreign",
+    "group": "setup: already_started",
+    "log_line": 36378
+  },
+  {
+    "number": 220,
+    "case": "quod_outcome_result_tests:-lost_reply_recovers_selected_bindings_test_/0-fun-1-/0: atomic",
+    "group": "setup: already_started",
+    "log_line": 36400
+  },
+  {
+    "number": 221,
+    "case": "quod_personal_agent_tests:-signup_terms_only_test_/0-fun-9-/0",
+    "group": "setup: already_started",
+    "log_line": 36422
+  },
+  {
+    "number": 222,
+    "case": "quod_personal_agent_tests:-class_owner_setup_form_test_/0-fun-19-/0",
+    "group": "setup: already_started",
+    "log_line": 36444
+  },
+  {
+    "number": 223,
+    "case": "quod_personal_agent_tests:-immediate_instruction_uses_distinct_actor_test_/0-fun-0-/0",
+    "group": "setup: already_started",
+    "log_line": 36466
+  },
+  {
+    "number": 224,
+    "case": "quod_personal_agent_tests:-foreign_and_atomic_instruction_results_test_/0-fun-2-/0: foreign",
+    "group": "setup: already_started",
+    "log_line": 36488
+  },
+  {
+    "number": 225,
+    "case": "quod_personal_agent_tests:-foreign_and_atomic_instruction_results_test_/0-fun-2-/0: atomic",
+    "group": "setup: already_started",
+    "log_line": 36510
+  },
+  {
+    "number": 226,
+    "case": "quod_personal_agent_tests:-interrupted_instruction_never_dispatches_test_/0-fun-2-/0: cancel",
+    "group": "setup: already_started",
+    "log_line": 36532
+  },
+  {
+    "number": 227,
+    "case": "quod_personal_agent_tests:-interrupted_instruction_never_dispatches_test_/0-fun-2-/0: deadline",
+    "group": "setup: already_started",
+    "log_line": 36554
+  },
+  {
+    "number": 228,
+    "case": "quod_personal_agent_tests:-interrupted_instruction_never_dispatches_test_/0-fun-2-/0: host_restart",
+    "group": "setup: already_started",
+    "log_line": 36576
+  },
+  {
+    "number": 229,
+    "case": "quod_personal_agent_tests:-cancellation_during_target_proof_preserves_the_original_identity_test_/0-fun-6-/0",
+    "group": "setup: already_started",
+    "log_line": 36598
+  },
+  {
+    "number": 230,
+    "case": "quod_personal_agent_tests:-retained_but_unsubmitted_instruction_is_not_replayed_test_/0-fun-7-/0",
+    "group": "setup: already_started",
+    "log_line": 36620
+  },
+  {
+    "number": 231,
+    "case": "quod_personal_agent_tests:-unavailable_actor_does_not_dispatch_on_restart_test_/0-fun-5-/0",
+    "group": "setup: already_started",
+    "log_line": 36642
+  },
+  {
+    "number": 232,
+    "case": "quod_personal_agent_tests:-unauthorized_and_staged_signing_are_denied_test_/0-fun-6-/0",
+    "group": "setup: already_started",
+    "log_line": 36664
+  },
+  {
+    "number": 233,
+    "case": "quod_personal_agent_tests:-revocation_preserves_authorized_result_recovery_test_/0-fun-8-/0",
+    "group": "setup: already_started",
+    "log_line": 36686
+  },
+  {
+    "number": 234,
+    "case": "quod_personal_agent_tests:-another_human_cannot_read_or_sign_the_instruction_test_/0-fun-3-/0",
+    "group": "setup: already_started",
+    "log_line": 36708
+  },
+  {
+    "number": 235,
+    "case": "quod_personal_agent_tests:-human_revocation_between_signing_and_custody_refuses_dispatch_test_/0-fun-4-/0",
+    "group": "setup: already_started",
+    "log_line": 36730
+  },
+  {
+    "number": 236,
+    "case": "quod_personal_agent_tests:-endpoint_refusal_preserves_prior_operations_test_/0-fun-11-/0: fresh",
+    "group": "setup: already_started",
+    "log_line": 36752
+  },
+  {
+    "number": 237,
+    "case": "quod_personal_agent_tests:-endpoint_refusal_preserves_prior_operations_test_/0-fun-11-/0: retained",
+    "group": "setup: already_started",
+    "log_line": 36774
+  },
+  {
+    "number": 238,
+    "case": "quod_personal_agent_tests:-authorization_does_not_reparse_retained_history_test_/0-fun-10-/0",
+    "group": "setup: already_started",
+    "log_line": 36796
+  },
+  {
+    "number": 239,
+    "case": "quod_physics_control_tests:-signed_binding_switch_and_release_test_/0-fun-12-/0",
+    "group": "setup: already_started",
+    "log_line": 36818
+  },
+  {
+    "number": 240,
+    "case": "quod_physics_control_tests:-binding_permission_and_geometry_guards_test_/0-fun-8-/0",
+    "group": "setup: already_started",
+    "log_line": 36840
+  },
+  {
+    "number": 241,
+    "case": "quod_physics_control_tests:-exclusive_control_and_no_body_mutation_test_/0-fun-7-/0",
+    "group": "setup: already_started",
+    "log_line": 36862
+  },
+  {
+    "number": 242,
+    "case": "quod_physics_control_tests:-ambiguous_body_ownership_test_/0-fun-2-/0",
+    "group": "setup: already_started",
+    "log_line": 36884
+  },
+  {
+    "number": 243,
+    "case": "quod_physics_control_tests:-subclass_agent_binding_test_/0-fun-2-/0",
+    "group": "setup: already_started",
+    "log_line": 36906
+  },
+  {
+    "number": 244,
+    "case": "quod_predicate_removal_tests:-signed_definition_removal_test_/0-fun-5-/0",
+    "group": "setup: already_started",
+    "log_line": 36928
+  },
+  {
+    "number": 245,
+    "case": "quod_predicate_removal_tests:-signed_origin_removal_recovery_test_/0-fun-2-/0",
+    "group": "setup: already_started",
+    "log_line": 36950
+  },
+  {
+    "number": 246,
+    "case": "quod_predicate_removal_tests:-signed_denial_atomic_rollback_and_conflict_test_/0-fun-2-/0",
+    "group": "setup: already_started",
+    "log_line": 36972
+  },
+  {
+    "number": 247,
+    "case": "quod_predicate_withdrawal_tests:-signed_contents_and_selected_editor_withdraw_test_/0-fun-24-/0: module 'quod_predicate_withdrawal_tests'",
+    "group": "setup: already_started",
+    "log_line": 36994
+  },
+  {
+    "number": 248,
+    "case": "quod_prolog_scope_target_tests:signed_scope_authentication_is_verified_and_bound_test/0",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 37020
+  },
+  {
+    "number": 249,
+    "case": "quod_prolog_scope_target_tests:signed_scope_waits_when_network_identity_is_temporarily_unavailable_test/0",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 37046
+  },
+  {
+    "number": 250,
+    "case": "quod_prolog_scope_target_tests:expired_signed_scope_is_refused_before_execution_test/0",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 37053
+  },
+  {
+    "number": 251,
+    "case": "quod_proof_trace_tests:ordinary_proof_spans_preserve_spawn_parent_and_stage_boundaries_test/0",
+    "group": "setup: identity_mismatch",
+    "log_line": 37060
+  },
+  {
+    "number": 252,
+    "case": "quod_proof_trace_tests:failed_proof_keeps_failure_and_finishes_cleanup_without_exporting_goal_test/0",
+    "group": "setup: identity_mismatch",
+    "log_line": 37098
+  },
+  {
+    "number": 253,
+    "case": "quod_proof_trace_tests:single_write_apply_and_publication_trace_boundaries_test/0",
+    "group": "setup: identity_mismatch",
+    "log_line": 37136
+  },
+  {
+    "number": 254,
+    "case": "quod_proof_trace_tests:shared_batch_is_applied_once_with_two_other_request_links_test/0",
+    "group": "setup: identity_mismatch",
+    "log_line": 37174
+  },
+  {
+    "number": 255,
+    "case": "quod_proof_trace_tests:sampled_batch_request_is_not_hidden_by_an_earlier_unsampled_request_test/0",
+    "group": "setup: identity_mismatch",
+    "log_line": 37212
+  },
+  {
+    "number": 256,
+    "case": "quod_proof_trace_tests:uncorrelated_apply_does_not_create_request_spans_test/0",
+    "group": "setup: identity_mismatch",
+    "log_line": 37250
+  },
+  {
+    "number": 257,
+    "case": "quod_reaction_authority_tests:-editable_lobby_notification_cannot_borrow_node_authority_test_/0-fun-8-/0",
+    "group": "setup: already_started",
+    "log_line": 37288
+  },
+  {
+    "number": 258,
+    "case": "quod_reaction_authority_tests:-owned_notification_runs_only_as_the_hosted_agent_test_/0-fun-7-/0",
+    "group": "setup: already_started",
+    "log_line": 37314
+  },
+  {
+    "number": 259,
+    "case": "quod_replay_completion_tests:-replay_completion_test_/0-fun-1-/0: member_idle",
+    "group": "setup: already_started",
+    "log_line": 37336
+  },
+  {
+    "number": 260,
+    "case": "quod_replay_completion_tests:-replay_completion_test_/0-fun-1-/0: member_multi_window",
+    "group": "setup: already_started",
+    "log_line": 37358
+  },
+  {
+    "number": 261,
+    "case": "quod_replay_completion_tests:-replay_completion_test_/0-fun-1-/0: observer_multi_window",
+    "group": "setup: already_started",
+    "log_line": 37380
+  },
+  {
+    "number": 262,
+    "case": "quod_replay_completion_tests:-replay_completion_test_/0-fun-1-/0: observer_live_feed",
+    "group": "setup: already_started",
+    "log_line": 37402
+  },
+  {
+    "number": 263,
+    "case": "quod_replay_completion_tests:-replay_completion_test_/0-fun-1-/0: initial_unconfirmed",
+    "group": "setup: already_started",
+    "log_line": 37424
+  },
+  {
+    "number": 264,
+    "case": "quod_replay_completion_tests:-replay_completion_test_/0-fun-1-/0: projection_failure",
+    "group": "setup: already_started",
+    "log_line": 37446
+  },
+  {
+    "number": 265,
+    "case": "quod_replay_completion_tests:-replay_completion_test_/0-fun-1-/0: network_dependency",
+    "group": "setup: already_started",
+    "log_line": 37468
+  },
+  {
+    "number": 266,
+    "case": "quod_replay_completion_tests:-replay_completion_test_/0-fun-1-/0: stale_worker",
+    "group": "setup: already_started",
+    "log_line": 37490
+  },
+  {
+    "number": 267,
+    "case": "quod_replay_completion_tests:-replay_completion_test_/0-fun-1-/0: stale_prolog_ack",
+    "group": "setup: already_started",
+    "log_line": 37512
+  },
+  {
+    "number": 268,
+    "case": "quod_replay_completion_tests:-replay_completion_test_/0-fun-1-/0: prefix_not_dispatched",
+    "group": "setup: already_started",
+    "log_line": 37534
+  },
+  {
+    "number": 269,
+    "case": "quod_replay_completion_tests:-replay_completion_test_/0-fun-1-/0: overtaken_by_live",
+    "group": "setup: already_started",
+    "log_line": 37556
+  },
+  {
+    "number": 270,
+    "case": "quod_replay_completion_tests:-replay_completion_test_/0-fun-1-/0: successor_interval",
+    "group": "setup: already_started",
+    "log_line": 37578
+  },
+  {
+    "number": 271,
+    "case": "quod_replay_completion_tests:-replay_completion_test_/0-fun-1-/0: empty_and_duplicate",
+    "group": "setup: already_started",
+    "log_line": 37600
+  },
+  {
+    "number": 272,
+    "case": "quod_replay_completion_tests:-replay_completion_test_/0-fun-1-/0: ordinary_progress_no_ack_loop",
+    "group": "setup: already_started",
+    "log_line": 37622
+  },
+  {
+    "number": 273,
+    "case": "quod_replay_completion_tests:-replay_completion_test_/0-fun-1-/0: prolog_restart",
+    "group": "setup: already_started",
+    "log_line": 37644
+  },
+  {
+    "number": 274,
+    "case": "quod_replay_completion_tests:-replay_completion_test_/0-fun-1-/0: snapshot_reader_reaped",
+    "group": "setup: already_started",
+    "log_line": 37666
+  },
+  {
+    "number": 275,
+    "case": "quod_resource_lifecycle_tests:-unchanged_notices_and_unrelated_changes_do_no_resource_work_test_/0-fun-4-/0",
+    "group": "setup: already_started",
+    "log_line": 37688
+  },
+  {
+    "number": 276,
+    "case": "quod_resource_lifecycle_tests:-scoped_request_keeps_the_full_inventory_dependency_test_/0-fun-4-/0",
+    "group": "setup: already_started",
+    "log_line": 37710
+  },
+  {
+    "number": 277,
+    "case": "quod_resource_lifecycle_tests:-committed_height_wakes_context_dependent_selection_test_/0-fun-7-/0",
+    "group": "setup: already_started",
+    "log_line": 37732
+  },
+  {
+    "number": 278,
+    "case": "quod_resource_lifecycle_tests:-committed_height_does_not_wake_predicate_only_selection_test_/0-fun-2-/0",
+    "group": "setup: already_started",
+    "log_line": 37754
+  },
+  {
+    "number": 279,
+    "case": "quod_resource_lifecycle_tests:-queued_height_advance_supersedes_selection_before_installation_test_/0-fun-7-/0",
+    "group": "setup: already_started",
+    "log_line": 37776
+  },
+  {
+    "number": 280,
+    "case": "quod_resource_lifecycle_tests:-absent_selector_is_woken_when_defined_test_/0-fun-5-/0",
+    "group": "setup: already_started",
+    "log_line": 37798
+  },
+  {
+    "number": 281,
+    "case": "quod_resource_lifecycle_tests:-failed_selection_preserves_host_and_empty_selection_removes_it_test_/0-fun-5-/0",
+    "group": "setup: already_started",
+    "log_line": 37820
+  },
+  {
+    "number": 282,
+    "case": "quod_resource_lifecycle_tests:-negative_and_reflective_dependencies_wake_the_real_owner_test_/0-fun-5-/0: negative read",
+    "group": "setup: already_started",
+    "log_line": 37842
+  },
+  {
+    "number": 283,
+    "case": "quod_resource_lifecycle_tests:-negative_and_reflective_dependencies_wake_the_real_owner_test_/0-fun-5-/0: absent predicate",
+    "group": "setup: already_started",
+    "log_line": 37864
+  },
+  {
+    "number": 284,
+    "case": "quod_resource_lifecycle_tests:-negative_and_reflective_dependencies_wake_the_real_owner_test_/0-fun-5-/0: predicate property",
+    "group": "setup: already_started",
+    "log_line": 37886
+  },
+  {
+    "number": 285,
+    "case": "quod_resource_lifecycle_tests:-negative_and_reflective_dependencies_wake_the_real_owner_test_/0-fun-5-/0: predicate enumeration",
+    "group": "setup: already_started",
+    "log_line": 37908
+  },
+  {
+    "number": 286,
+    "case": "quod_resource_lifecycle_tests:-selection_errors_retain_the_reads_that_can_repair_them_test_/0-fun-4-/0",
+    "group": "setup: already_started",
+    "log_line": 37930
+  },
+  {
+    "number": 287,
+    "case": "quod_resource_lifecycle_tests:-unreported_selector_death_keeps_a_repair_dependency_test_/0-fun-6-/0",
+    "group": "setup: already_started",
+    "log_line": 37952
+  },
+  {
+    "number": 288,
+    "case": "quod_resource_lifecycle_tests:-unstarted_expired_selection_keeps_a_repair_dependency_test_/0-fun-6-/0",
+    "group": "setup: already_started",
+    "log_line": 37974
+  },
+  {
+    "number": 289,
+    "case": "quod_resource_lifecycle_tests:-foreign_scope_cannot_supply_node_or_root_resource_policy_test_/0-fun-5-/0",
+    "group": "setup: already_started",
+    "log_line": 37996
+  },
+  {
+    "number": 290,
+    "case": "quod_resource_lifecycle_tests:-foreign_resource_deadline_cannot_withdraw_root_limits_test_/0-fun-5-/0",
+    "group": "setup: already_started",
+    "log_line": 38018
+  },
+  {
+    "number": 291,
+    "case": "quod_resource_lifecycle_tests:-change_while_selected_result_waits_cannot_leave_obsolete_inventory_test_/0-fun-6-/0",
+    "group": "setup: already_started",
+    "log_line": 38040
+  },
+  {
+    "number": 292,
+    "case": "quod_resource_lifecycle_tests:-identity_withdrawal_completes_pending_agent_retirement_test_/0-fun-6-/0",
+    "group": "setup: already_started",
+    "log_line": 38062
+  },
+  {
+    "number": 293,
+    "case": "quod_retained_dtx_renewal_tests:-stale_alternative_resolve_retires_without_signing_test_/0-fun-0-/0",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 38084
+  },
+  {
+    "number": 294,
+    "case": "quod_retained_dtx_renewal_tests:-unrelated_resolve_commit_renews_live_retained_resolve_test_/0-fun-0-/0",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 38110
+  },
+  {
+    "number": 295,
+    "case": "quod_retained_dtx_renewal_tests:-exact_resolve_digests_drain_without_renewal_test_/0-fun-0-/0",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 38136
+  },
+  {
+    "number": 296,
+    "case": "quod_retained_dtx_renewal_tests:-stale_signature_only_invariant_has_bounded_diagnostic_test_/0-fun-0-/0",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 38162
+  },
+  {
+    "number": 297,
+    "case": "quod_retained_dtx_renewal_tests:-diagnostic_namespace_bounds_test_/0-fun-1-/0: namespace_255",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 38188
+  },
+  {
+    "number": 298,
+    "case": "quod_retained_dtx_renewal_tests:-diagnostic_namespace_bounds_test_/0-fun-1-/0: oversized_printable",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 38214
+  },
+  {
+    "number": 299,
+    "case": "quod_retained_dtx_renewal_tests:-diagnostic_namespace_bounds_test_/0-fun-1-/0: oversized_nonprintable",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 38240
+  },
+  {
+    "number": 300,
+    "case": "quod_retained_dtx_vote_order_tests:-publication_order_test_/0-fun-1-/0: live",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 38266
+  },
+  {
+    "number": 301,
+    "case": "quod_retained_dtx_vote_order_tests:-publication_order_test_/0-fun-1-/0: catchup",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 38279
+  },
+  {
+    "number": 302,
+    "case": "quod_retained_dtx_vote_order_tests:-publication_order_test_/0-fun-1-/0: catchup_paused",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 38292
+  },
+  {
+    "number": 303,
+    "case": "quod_root_resource_lifecycle_tests:-root_policy_restores_journal_before_node_and_after_owner_restart_test_/0-fun-19-/0",
+    "group": "setup: already_started",
+    "log_line": 38305
+  },
+  {
+    "number": 304,
+    "case": "quod_root_resource_lifecycle_tests:-invalid_committed_limits_withdraw_and_resume_from_dependency_notices_test_/0-fun-13-/0",
+    "group": "setup: already_started",
+    "log_line": 38327
+  },
+  {
+    "number": 305,
+    "case": "quod_root_resource_lifecycle_tests:-interrupted_committed_limits_withdraw_until_a_real_change_test_/0-fun-12-/0",
+    "group": "setup: already_started",
+    "log_line": 38349
+  },
+  {
+    "number": 306,
+    "case": "quod_show_as_tests:-inside_show_as_changes_only_what_i_see_test_/0-fun-12-/0",
+    "group": "setup: already_started",
+    "log_line": 38371
+  },
+  {
+    "number": 307,
+    "case": "quod_show_as_tests:-outside_show_as_changes_only_what_i_see_test_/0-fun-9-/0",
+    "group": "setup: already_started",
+    "log_line": 38393
+  },
+  {
+    "number": 308,
+    "case": "quod_show_as_tests:-infinite_space_offers_no_walls_test_/0-fun-5-/0",
+    "group": "setup: already_started",
+    "log_line": 38415
+  },
+  {
+    "number": 309,
+    "case": "quod_show_as_tests:-new_eidolon_appears_by_itself_test_/0-fun-9-/0",
+    "group": "setup: already_started",
+    "log_line": 38437
+  },
+  {
+    "number": 310,
+    "case": "quod_show_as_tests:-reflected_ontology_opens_without_walls_test_/0-fun-3-/0",
+    "group": "setup: already_started",
+    "log_line": 38459
+  },
+  {
+    "number": 311,
+    "case": "quod_show_as_tests:-open_world_view_refreshes_on_my_choice_test_/0-fun-3-/0",
+    "group": "setup: already_started",
+    "log_line": 38481
+  },
+  {
+    "number": 312,
+    "case": "quod_source_view_tests:-committed_signed_read_preserves_bindings_and_scope_restrictions_test_/0-fun-13-/0",
+    "group": "setup: already_started",
+    "log_line": 38503
+  },
+  {
+    "number": 313,
+    "case": "quod_source_view_tests:class_owned_scene/0",
+    "group": "setup: already_started",
+    "log_line": 38529
+  },
+  {
+    "number": 314,
+    "case": "quod_source_view_tests:-source_authorization_is_retained_and_withdrawn_test_/0-fun-11-/0",
+    "group": "setup: already_started",
+    "log_line": 38553
+  },
+  {
+    "number": 315,
+    "case": "quod_source_view_tests:-long_namespace_source_view_keeps_authorization_test_/0-fun-9-/0",
+    "group": "setup: already_started",
+    "log_line": 38579
+  },
+  {
+    "number": 316,
+    "case": "quod_space_creation_tests:-signed_empty_space_results_and_recovery_test_/0-fun-10-/0: ordinary",
+    "group": "setup: already_started",
+    "log_line": 38605
+  },
+  {
+    "number": 317,
+    "case": "quod_space_creation_tests:-signed_empty_space_results_and_recovery_test_/0-fun-10-/0: foreign",
+    "group": "setup: already_started",
+    "log_line": 38627
+  },
+  {
+    "number": 318,
+    "case": "quod_space_creation_tests:-signed_empty_space_results_and_recovery_test_/0-fun-10-/0: atomic",
+    "group": "setup: already_started",
+    "log_line": 38649
+  },
+  {
+    "number": 319,
+    "case": "quod_space_creation_tests:-explicit_and_near_agent_placement_test_/0-fun-3-/0",
+    "group": "setup: already_started",
+    "log_line": 38671
+  },
+  {
+    "number": 320,
+    "case": "quod_space_creation_tests:-viewer_pose_placement_test_/0-fun-3-/0",
+    "group": "setup: already_started",
+    "log_line": 38693
+  },
+  {
+    "number": 321,
+    "case": "quod_space_creation_tests:-explicit_owner_and_class_defaults_test_/0-fun-1-/0",
+    "group": "setup: already_started",
+    "log_line": 38715
+  },
+  {
+    "number": 322,
+    "case": "quod_space_creation_tests:-invalid_dimensions_roll_back_through_signed_actor_test_/0-fun-2-/0",
+    "group": "setup: already_started",
+    "log_line": 38737
+  },
+  {
+    "number": 323,
+    "case": "quod_space_creation_tests:-authorization_and_lookup_failures_never_fall_back_test_/0-fun-7-/0",
+    "group": "setup: already_started",
+    "log_line": 38759
+  },
+  {
+    "number": 324,
+    "case": "quod_space_creation_tests:-existing_occupants_and_creation_commit_together_test_/0-fun-10-/0: local",
+    "group": "setup: already_started",
+    "log_line": 38781
+  },
+  {
+    "number": 325,
+    "case": "quod_space_creation_tests:-existing_occupants_and_creation_commit_together_test_/0-fun-10-/0: foreign",
+    "group": "setup: already_started",
+    "log_line": 38803
+  },
+  {
+    "number": 326,
+    "case": "quod_space_creation_tests:-atomic_completion_wait_includes_complete_record_test_/0-fun-6-/0",
+    "group": "setup: already_started",
+    "log_line": 38825
+  },
+  {
+    "number": 327,
+    "case": "quod_space_tests:-class_owner_creation_and_action_chain_test_/0-fun-5-/0",
+    "group": "setup: already_started",
+    "log_line": 38847
+  },
+  {
+    "number": 328,
+    "case": "quod_space_tests:-ordinary_travel_atomic_test_/0-fun-2-/0",
+    "group": "setup: already_started",
+    "log_line": 38869
+  },
+  {
+    "number": 329,
+    "case": "quod_space_tests:-space_semantics_and_recovery_test_/0-fun-5-/0",
+    "group": "setup: already_started",
+    "log_line": 38891
+  },
+  {
+    "number": 330,
+    "case": "quod_space_tests:-competing_exclusive_admissions_test_/0-fun-12-/0: gallery",
+    "group": "setup: already_started",
+    "log_line": 38913
+  },
+  {
+    "number": 331,
+    "case": "quod_space_tests:-competing_exclusive_admissions_test_/0-fun-12-/0: catalogue",
+    "group": "setup: already_started",
+    "log_line": 38935
+  },
+  {
+    "number": 332,
+    "case": "quod_space_tests:-distinct_owner_authorization_test_/0-fun-3-/0: gallery",
+    "group": "setup: already_started",
+    "log_line": 38957
+  },
+  {
+    "number": 333,
+    "case": "quod_space_tests:-distinct_owner_authorization_test_/0-fun-3-/0: catalogue",
+    "group": "setup: already_started",
+    "log_line": 38979
+  },
+  {
+    "number": 334,
+    "case": "quod_space_tests:-ordinary_placement_rollback_and_recovery_test_/0-fun-4-/0",
+    "group": "setup: already_started",
+    "log_line": 39001
+  },
+  {
+    "number": 335,
+    "case": "quod_space_tests:-ordinary_placement_committed_permissions_test_/0-fun-2-/0",
+    "group": "setup: already_started",
+    "log_line": 39023
+  },
+  {
+    "number": 336,
+    "case": "quod_space_tests:-ordinary_placement_policy_conflicts_test_/0-fun-4-/0: source",
+    "group": "setup: already_started",
+    "log_line": 39045
+  },
+  {
+    "number": 337,
+    "case": "quod_space_tests:-ordinary_placement_policy_conflicts_test_/0-fun-4-/0: destination",
+    "group": "setup: already_started",
+    "log_line": 39067
+  },
+  {
+    "number": 338,
+    "case": "quod_space_tests:-same_ontology_ordinary_placement_test_/0-fun-1-/0",
+    "group": "setup: already_started",
+    "log_line": 39089
+  },
+  {
+    "number": 339,
+    "case": "quod_space_tests:-ordinary_placement_and_shared_display_projection_test_/0-fun-13-/0",
+    "group": "setup: already_started",
+    "log_line": 39111
+  },
+  {
+    "number": 340,
+    "case": "quod_space_tests:-physical_placement_requires_its_body_pose_test_/0-fun-1-/0",
+    "group": "setup: already_started",
+    "log_line": 39133
+  },
+  {
+    "number": 341,
+    "case": "quod_suffix_material_tests:-suffix_checks_finality_without_reauthenticating_content_test_/0-fun-8-/0",
+    "group": "later fixture/network contamination; isolated checks passed",
+    "log_line": 39155
+  }
+]

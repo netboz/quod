@@ -1,0 +1,543 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<title>Test simplex_SUITE:over_fault_restart_recovers result</title>
+<meta http-equiv="cache-control" content="no-cache"></meta>
+<meta http-equiv="content-type" content="text/html; charset=utf-8"></meta>
+<link rel="stylesheet" href="../../ct_default.css" type="text/css"></link>
+<script type="text/javascript" src="../../jquery-latest.js"></script>
+<script type="text/javascript" src="../../jquery.tablesorter.min.js"></script>
+</head>
+<body>
+
+<a name="top"></a><pre>
+=== Test case: <a href="simplex_suite.src.html#over_fault_restart_recovers-1">simplex_SUITE:over_fault_restart_recovers/1</a> (click for source code)
+
+=== Config value:
+
+    [{nodes,
+         [{&lt;0.10362.0&gt;,
+           &lt;&lt;91,208,233,184,87,199,181,171,64,96,181,236,8,16,175,226,55,119,
+             111,8,3,24,44,195,209,175,176,93,34,246,74,233&gt;&gt;},
+          {&lt;0.10363.0&gt;,
+           &lt;&lt;203,53,161,202,14,16,27,157,135,158,144,116,2,80,21,117,71,36,78,
+             230,13,63,206,188,63,4,60,239,208,193,24,252&gt;&gt;},
+          {&lt;0.10364.0&gt;,
+           &lt;&lt;142,41,102,252,158,183,35,120,19,8,83,38,68,85,168,247,84,124,69,
+             48,221,50,199,49,10,11,55,212,54,236,237,172&gt;&gt;},
+          {&lt;0.10365.0&gt;,
+           &lt;&lt;127,220,254,137,191,193,17,13,38,17,54,157,174,41,71,227,134,
+             239,80,124,38,22,163,108,65,234,191,4,197,15,255,97&gt;&gt;}]},
+     {identities,
+         #{&lt;&lt;91,208,233,184,87,199,181,171,64,96,181,236,8,16,175,226,55,119,
+             111,8,3,24,44,195,209,175,176,93,34,246,74,233&gt;&gt; =&gt;
+               #{key =&gt;
+                     {'ECPrivateKey',1,
+                         [REDACTED_GENERATED_TEST_PRIVATE_KEY]
+
+,
+                         {namedCurve,{1,3,101,112}},
+                         &lt;&lt;91,208,233,184,87,199,181,171,64,96,181,236,8,16,
+                           175,226,55,119,111,8,3,24,44,195,209,175,176,93,34,
+                           246,74,233&gt;&gt;,
+                         asn1_NOVALUE},
+                 pubkey =&gt;
+                     &lt;&lt;91,208,233,184,87,199,181,171,64,96,181,236,8,16,175,
+                       226,55,119,111,8,3,24,44,195,209,175,176,93,34,246,74,
+                       233&gt;&gt;},
+           &lt;&lt;127,220,254,137,191,193,17,13,38,17,54,157,174,41,71,227,134,239,
+             80,124,38,22,163,108,65,234,191,4,197,15,255,97&gt;&gt; =&gt;
+               #{key =&gt;
+                     {'ECPrivateKey',1,
+                         [REDACTED_GENERATED_TEST_PRIVATE_KEY]
+
+,
+                         {namedCurve,{1,3,101,112}},
+                         &lt;&lt;127,220,254,137,191,193,17,13,38,17,54,157,174,41,
+                           71,227,134,239,80,124,38,22,163,108,65,234,191,4,
+                           197,15,255,97&gt;&gt;,
+                         asn1_NOVALUE},
+                 pubkey =&gt;
+                     &lt;&lt;127,220,254,137,191,193,17,13,38,17,54,157,174,41,71,
+                       227,134,239,80,124,38,22,163,108,65,234,191,4,197,15,
+                       255,97&gt;&gt;},
+           &lt;&lt;142,41,102,252,158,183,35,120,19,8,83,38,68,85,168,247,84,124,69,
+             48,221,50,199,49,10,11,55,212,54,236,237,172&gt;&gt; =&gt;
+               #{key =&gt;
+                     {'ECPrivateKey',1,
+                         [REDACTED_GENERATED_TEST_PRIVATE_KEY]
+
+,
+                         {namedCurve,{1,3,101,112}},
+                         &lt;&lt;142,41,102,252,158,183,35,120,19,8,83,38,68,85,168,
+                           247,84,124,69,48,221,50,199,49,10,11,55,212,54,236,
+                           237,172&gt;&gt;,
+                         asn1_NOVALUE},
+                 pubkey =&gt;
+                     &lt;&lt;142,41,102,252,158,183,35,120,19,8,83,38,68,85,168,247,
+                       84,124,69,48,221,50,199,49,10,11,55,212,54,236,237,172&gt;&gt;},
+           &lt;&lt;203,53,161,202,14,16,27,157,135,158,144,116,2,80,21,117,71,36,
+             78,230,13,63,206,188,63,4,60,239,208,193,24,252&gt;&gt; =&gt;
+               #{key =&gt;
+                     {'ECPrivateKey',1,
+                         [REDACTED_GENERATED_TEST_PRIVATE_KEY]
+
+,
+                         {namedCurve,{1,3,101,112}},
+                         &lt;&lt;203,53,161,202,14,16,27,157,135,158,144,116,2,80,21,
+                           117,71,36,78,230,13,63,206,188,63,4,60,239,208,193,
+                           24,252&gt;&gt;,
+                         asn1_NOVALUE},
+                 pubkey =&gt;
+                     &lt;&lt;203,53,161,202,14,16,27,157,135,158,144,116,2,80,21,
+                       117,71,36,78,230,13,63,206,188,63,4,60,239,208,193,
+                       24,252&gt;&gt;}}},
+     {watchdog,&lt;0.10361.0&gt;},
+     {tc_logfile,
+         "/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_17.47.31/lib.quod.logs/run.2026-11-18_17.47.31/simplex_suite.over_fault_restart_recovers.html"},
+     {tc_group_properties,[]},
+     {tc_group_path,[]},
+     {data_dir,
+         "/home/yan/src/quod/_build/test/lib/quod/test/simplex_SUITE_data/"},
+     {priv_dir,
+         "/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_17.47.31/lib.quod.logs/run.2026-11-18_17.47.31/log_private/"}]
+
+=== Current directory is "/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_17.47.31"
+
+=== Started at 2026-11-18 17:55:08
+
+<br />
+=SUPERVISOR REPORT==== 18-Nov-2026::17:55:09.197612 ===
+    supervisor: {local,httpd_acceptor_sup_14568default}
+    errorContext: start_error
+    reason: {listen,eaddrinuse}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor,start_link,
+                       [httpd_14568default,ip_comm,any,14568,inet,
+                        httpd_conf_14568default,15000]}},
+               {restart_type,transient},
+               {significant,false},
+               {shutdown,brutal_kill},
+               {child_type,worker}]
+
+
+=SUPERVISOR REPORT==== 18-Nov-2026::17:55:09.197731 ===
+    supervisor: {local,httpd_instance_sup_14568default}
+    errorContext: start_error
+    reason: {shutdown,
+                {failed_to_start_child,
+                    {httpd_acceptor_sup,any,14568,default},
+                    {listen,eaddrinuse}}}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor_sup,start_link,
+                       [[any,14568,
+                         [{ipfamily,inet},
+                          {bind_address,any},
+                          {modules,[prometheus_httpd]},
+                          {port,14568},
+                          {server_name,"Prometheus.io metrics."},
+                          {document_root,
+                              "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"},
+                          {server_root,
+                              "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"}],
+                         15000,undefined]]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,infinity},
+               {child_type,supervisor}]
+
+
+=WARNING REPORT==== 18-Nov-2026::17:55:09.197902 ===
+quod: prometheus_httpd start: {error,
+                               {{shutdown,
+                                 {failed_to_start_child,
+                                  {httpd_acceptor_sup,any,14568,default},
+                                  {shutdown,
+                                   {failed_to_start_child,
+                                    {httpd_acceptor_sup,any,14568,default},
+                                    {listen,eaddrinuse}}}}},
+                                {child,undefined,
+                                 {httpd_instance_sup,any,14568,default},
+                                 {httpd_instance_sup,start_link,
+                                  [[{bind_address,any},
+                                    {ipfamily,inet},
+                                    {modules,[prometheus_httpd]},
+                                    {port,14568},
+                                    {server_name,"Prometheus.io metrics."},
+                                    {document_root,
+                                     "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"},
+                                    {server_root,
+                                     "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"}],
+                                   15000,[]]},
+                                 permanent,false,infinity,supervisor,
+                                 [httpd_instance_sup]}}}
+
+=SUPERVISOR REPORT==== 18-Nov-2026::17:55:10.293390 ===
+    supervisor: {local,httpd_acceptor_sup_14568default}
+    errorContext: start_error
+    reason: {listen,eaddrinuse}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor,start_link,
+                       [httpd_14568default,ip_comm,any,14568,inet,
+                        httpd_conf_14568default,15000]}},
+               {restart_type,transient},
+               {significant,false},
+               {shutdown,brutal_kill},
+               {child_type,worker}]
+
+
+=SUPERVISOR REPORT==== 18-Nov-2026::17:55:10.293520 ===
+    supervisor: {local,httpd_instance_sup_14568default}
+    errorContext: start_error
+    reason: {shutdown,
+                {failed_to_start_child,
+                    {httpd_acceptor_sup,any,14568,default},
+                    {listen,eaddrinuse}}}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor_sup,start_link,
+                       [[any,14568,
+                         [{ipfamily,inet},
+                          {bind_address,any},
+                          {modules,[prometheus_httpd]},
+                          {port,14568},
+                          {server_name,"Prometheus.io metrics."},
+                          {document_root,
+                              "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"},
+                          {server_root,
+                              "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"}],
+                         15000,undefined]]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,infinity},
+               {child_type,supervisor}]
+
+
+=WARNING REPORT==== 18-Nov-2026::17:55:10.293686 ===
+quod: prometheus_httpd start: {error,
+                               {{shutdown,
+                                 {failed_to_start_child,
+                                  {httpd_acceptor_sup,any,14568,default},
+                                  {shutdown,
+                                   {failed_to_start_child,
+                                    {httpd_acceptor_sup,any,14568,default},
+                                    {listen,eaddrinuse}}}}},
+                                {child,undefined,
+                                 {httpd_instance_sup,any,14568,default},
+                                 {httpd_instance_sup,start_link,
+                                  [[{bind_address,any},
+                                    {ipfamily,inet},
+                                    {modules,[prometheus_httpd]},
+                                    {port,14568},
+                                    {server_name,"Prometheus.io metrics."},
+                                    {document_root,
+                                     "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"},
+                                    {server_root,
+                                     "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"}],
+                                   15000,[]]},
+                                 permanent,false,infinity,supervisor,
+                                 [httpd_instance_sup]}}}
+
+=SUPERVISOR REPORT==== 18-Nov-2026::17:55:11.344683 ===
+    supervisor: {local,httpd_acceptor_sup_14568default}
+    errorContext: start_error
+    reason: {listen,eaddrinuse}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor,start_link,
+                       [httpd_14568default,ip_comm,any,14568,inet,
+                        httpd_conf_14568default,15000]}},
+               {restart_type,transient},
+               {significant,false},
+               {shutdown,brutal_kill},
+               {child_type,worker}]
+
+
+=SUPERVISOR REPORT==== 18-Nov-2026::17:55:11.344799 ===
+    supervisor: {local,httpd_instance_sup_14568default}
+    errorContext: start_error
+    reason: {shutdown,
+                {failed_to_start_child,
+                    {httpd_acceptor_sup,any,14568,default},
+                    {listen,eaddrinuse}}}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor_sup,start_link,
+                       [[any,14568,
+                         [{ipfamily,inet},
+                          {bind_address,any},
+                          {modules,[prometheus_httpd]},
+                          {port,14568},
+                          {server_name,"Prometheus.io metrics."},
+                          {document_root,
+                              "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"},
+                          {server_root,
+                              "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"}],
+                         15000,undefined]]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,infinity},
+               {child_type,supervisor}]
+
+
+=WARNING REPORT==== 18-Nov-2026::17:55:11.344963 ===
+quod: prometheus_httpd start: {error,
+                               {{shutdown,
+                                 {failed_to_start_child,
+                                  {httpd_acceptor_sup,any,14568,default},
+                                  {shutdown,
+                                   {failed_to_start_child,
+                                    {httpd_acceptor_sup,any,14568,default},
+                                    {listen,eaddrinuse}}}}},
+                                {child,undefined,
+                                 {httpd_instance_sup,any,14568,default},
+                                 {httpd_instance_sup,start_link,
+                                  [[{bind_address,any},
+                                    {ipfamily,inet},
+                                    {modules,[prometheus_httpd]},
+                                    {port,14568},
+                                    {server_name,"Prometheus.io metrics."},
+                                    {document_root,
+                                     "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"},
+                                    {server_root,
+                                     "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"}],
+                                   15000,[]]},
+                                 permanent,false,infinity,supervisor,
+                                 [httpd_instance_sup]}}}
+
+=SUPERVISOR REPORT==== 18-Nov-2026::17:55:12.366992 ===
+    supervisor: {local,httpd_acceptor_sup_14568default}
+    errorContext: start_error
+    reason: {listen,eaddrinuse}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor,start_link,
+                       [httpd_14568default,ip_comm,any,14568,inet,
+                        httpd_conf_14568default,15000]}},
+               {restart_type,transient},
+               {significant,false},
+               {shutdown,brutal_kill},
+               {child_type,worker}]
+
+
+=SUPERVISOR REPORT==== 18-Nov-2026::17:55:12.367121 ===
+    supervisor: {local,httpd_instance_sup_14568default}
+    errorContext: start_error
+    reason: {shutdown,
+                {failed_to_start_child,
+                    {httpd_acceptor_sup,any,14568,default},
+                    {listen,eaddrinuse}}}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor_sup,start_link,
+                       [[any,14568,
+                         [{ipfamily,inet},
+                          {bind_address,any},
+                          {modules,[prometheus_httpd]},
+                          {port,14568},
+                          {server_name,"Prometheus.io metrics."},
+                          {document_root,
+                              "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"},
+                          {server_root,
+                              "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"}],
+                         15000,undefined]]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,infinity},
+               {child_type,supervisor}]
+
+
+=WARNING REPORT==== 18-Nov-2026::17:55:12.367326 ===
+quod: prometheus_httpd start: {error,
+                               {{shutdown,
+                                 {failed_to_start_child,
+                                  {httpd_acceptor_sup,any,14568,default},
+                                  {shutdown,
+                                   {failed_to_start_child,
+                                    {httpd_acceptor_sup,any,14568,default},
+                                    {listen,eaddrinuse}}}}},
+                                {child,undefined,
+                                 {httpd_instance_sup,any,14568,default},
+                                 {httpd_instance_sup,start_link,
+                                  [[{bind_address,any},
+                                    {ipfamily,inet},
+                                    {modules,[prometheus_httpd]},
+                                    {port,14568},
+                                    {server_name,"Prometheus.io metrics."},
+                                    {document_root,
+                                     "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"},
+                                    {server_root,
+                                     "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"}],
+                                   15000,[]]},
+                                 permanent,false,infinity,supervisor,
+                                 [httpd_instance_sup]}}}
+
+=SUPERVISOR REPORT==== 18-Nov-2026::17:55:17.958346 ===
+    supervisor: {local,httpd_acceptor_sup_14568default}
+    errorContext: start_error
+    reason: {listen,eaddrinuse}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor,start_link,
+                       [httpd_14568default,ip_comm,any,14568,inet,
+                        httpd_conf_14568default,15000]}},
+               {restart_type,transient},
+               {significant,false},
+               {shutdown,brutal_kill},
+               {child_type,worker}]
+
+
+=SUPERVISOR REPORT==== 18-Nov-2026::17:55:17.958461 ===
+    supervisor: {local,httpd_instance_sup_14568default}
+    errorContext: start_error
+    reason: {shutdown,
+                {failed_to_start_child,
+                    {httpd_acceptor_sup,any,14568,default},
+                    {listen,eaddrinuse}}}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor_sup,start_link,
+                       [[any,14568,
+                         [{ipfamily,inet},
+                          {bind_address,any},
+                          {modules,[prometheus_httpd]},
+                          {port,14568},
+                          {server_name,"Prometheus.io metrics."},
+                          {document_root,
+                              "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"},
+                          {server_root,
+                              "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"}],
+                         15000,undefined]]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,infinity},
+               {child_type,supervisor}]
+
+
+=WARNING REPORT==== 18-Nov-2026::17:55:17.958631 ===
+quod: prometheus_httpd start: {error,
+                               {{shutdown,
+                                 {failed_to_start_child,
+                                  {httpd_acceptor_sup,any,14568,default},
+                                  {shutdown,
+                                   {failed_to_start_child,
+                                    {httpd_acceptor_sup,any,14568,default},
+                                    {listen,eaddrinuse}}}}},
+                                {child,undefined,
+                                 {httpd_instance_sup,any,14568,default},
+                                 {httpd_instance_sup,start_link,
+                                  [[{bind_address,any},
+                                    {ipfamily,inet},
+                                    {modules,[prometheus_httpd]},
+                                    {port,14568},
+                                    {server_name,"Prometheus.io metrics."},
+                                    {document_root,
+                                     "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"},
+                                    {server_root,
+                                     "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"}],
+                                   15000,[]]},
+                                 permanent,false,infinity,supervisor,
+                                 [httpd_instance_sup]}}}
+
+=SUPERVISOR REPORT==== 18-Nov-2026::17:55:19.112045 ===
+    supervisor: {local,httpd_acceptor_sup_14568default}
+    errorContext: start_error
+    reason: {listen,eaddrinuse}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor,start_link,
+                       [httpd_14568default,ip_comm,any,14568,inet,
+                        httpd_conf_14568default,15000]}},
+               {restart_type,transient},
+               {significant,false},
+               {shutdown,brutal_kill},
+               {child_type,worker}]
+
+
+=SUPERVISOR REPORT==== 18-Nov-2026::17:55:19.112170 ===
+    supervisor: {local,httpd_instance_sup_14568default}
+    errorContext: start_error
+    reason: {shutdown,
+                {failed_to_start_child,
+                    {httpd_acceptor_sup,any,14568,default},
+                    {listen,eaddrinuse}}}
+    offender: [{pid,undefined},
+               {id,{httpd_acceptor_sup,any,14568,default}},
+               {mfargs,
+                   {httpd_acceptor_sup,start_link,
+                       [[any,14568,
+                         [{ipfamily,inet},
+                          {bind_address,any},
+                          {modules,[prometheus_httpd]},
+                          {port,14568},
+                          {server_name,"Prometheus.io metrics."},
+                          {document_root,
+                              "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"},
+                          {server_root,
+                              "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"}],
+                         15000,undefined]]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,infinity},
+               {child_type,supervisor}]
+
+
+=WARNING REPORT==== 18-Nov-2026::17:55:19.112349 ===
+quod: prometheus_httpd start: {error,
+                               {{shutdown,
+                                 {failed_to_start_child,
+                                  {httpd_acceptor_sup,any,14568,default},
+                                  {shutdown,
+                                   {failed_to_start_child,
+                                    {httpd_acceptor_sup,any,14568,default},
+                                    {listen,eaddrinuse}}}}},
+                                {child,undefined,
+                                 {httpd_instance_sup,any,14568,default},
+                                 {httpd_instance_sup,start_link,
+                                  [[{bind_address,any},
+                                    {ipfamily,inet},
+                                    {modules,[prometheus_httpd]},
+                                    {port,14568},
+                                    {server_name,"Prometheus.io metrics."},
+                                    {document_root,
+                                     "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"},
+                                    {server_root,
+                                     "/home/yan/src/quod/_build/default/lib/prometheus_httpd/priv"}],
+                                   15000,[]]},
+                                 permanent,false,infinity,supervisor,
+                                 [httpd_instance_sup]}}}
+
+<a name="end"></a>
+
+
+=== Ended at 2026-11-18 17:55:22
+=== successfully completed test case
+=== === Returned value: ok
+</pre>
+<center>
+<br /><hr /><p>
+<a href="../../../all_runs.html">Test run history
+</a>  |  <a href="../../../index.html">Top level test index
+</a>  |  <a href="../../../suite.log.latest.html">Latest test result</a>
+</p>
+<div class="copyright">Copyright &copy; 2026 <a href="http://www.erlang.org">Open Telecom Platform</a><br />
+Updated: <!--date-->Wed Nov 18 2026 17:55:08<!--/date--><br />
+</div>
+</center>
+</body>
+</html>

@@ -1,0 +1,15 @@
+diff --git a/rebar.lock b/rebar.lock
+index 5dd9325b..3862c6ad 100644
+--- a/rebar.lock
++++ b/rebar.lock
+@@ -9,10 +9,6 @@
+   {git,"https://github.com/k32/erlang_qq.git",
+        {ref,"21fe46d8c03ce2f65733aadf3ad97b7bb7edea28"}},
+   2},
+- {<<"erlog">>,
+-  {git,"https://github.com/netboz/erlog.git",
+-          {ref,"79b3874617a4eb9f76d5089a3fc908667e605e8a"}},
+-  0},
+  {<<"getopt">>,{pkg,<<"getopt">>,<<"1.0.3">>},1},
+  {<<"gproc">>,{pkg,<<"gproc">>,<<"0.9.1">>},0},
+  {<<"grpcbox">>,{pkg,<<"grpcbox">>,<<"0.18.0">>},1},

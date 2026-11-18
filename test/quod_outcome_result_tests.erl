@@ -73,7 +73,7 @@ recover_bindings(Lane) ->
             ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Writer, Saved)),
             commit(Writer, {',', {retract, {created, Reference}},
                            {retract, {instance_of, artifact, Id}}}),
-            ?assertMatch({fail, _}, quod_prolog:prove_ro(Writer, {created, Reference})),
+            ?assertMatch(fail, quod_prolog:prove_ro(Writer, {created, Reference})),
             assert_no_generation(fun() ->
                 restart_outcome_owner(Ns),
                 case Lane of foreign -> restart_outcome_owner(Other); _ -> ok end

@@ -52,7 +52,7 @@ committed_signed_read_preserves_bindings_and_scope_restrictions_test_() ->
                     {context_violation,{'$quod_ontology_routes',1},query,operation_guard}},
                   {{limit_reaction_expiry, 1000},
                     {context_violation,{limit_reaction_expiry,1},reaction,operation_guard}}]),
-            ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx, {'::', Owner, leaked})),
+            ?assertMatch(fail, quod_lobby_tests:read(Ctx, {'::', Owner, leaked})),
             scene_commit(Ctx, Owner, {'$quod_retract_exact', Grant}),
             ?assertMatch({read, _, {fail, _}}, Read(Query))
         after
@@ -133,7 +133,7 @@ class_owned_scene() ->
         ?assertMatch({ok, [#{}], _}, quod_lobby_tests:read(Ctx,
             {'::', Store, {client_entity_scene, item, playing, hidden}})),
         HiddenRead = quod_lobby_tests:read(Ctx, Query),
-        ?assertMatch({fail, _}, HiddenRead),
+        ?assertMatch(fail, HiddenRead),
         scene_commit(Ctx, Store, {retract, {entity_scene, item, playing, hidden}}),
         Read(<<"Updated">>),
         %% Revoking class-owner access must not select the ancestor's scene.

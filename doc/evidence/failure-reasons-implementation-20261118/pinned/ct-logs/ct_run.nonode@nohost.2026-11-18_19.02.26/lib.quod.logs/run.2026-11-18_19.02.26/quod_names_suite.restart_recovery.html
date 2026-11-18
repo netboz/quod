@@ -1,0 +1,161 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<title>Test quod_names_SUITE:restart_recovery result</title>
+<meta http-equiv="cache-control" content="no-cache"></meta>
+<meta http-equiv="content-type" content="text/html; charset=utf-8"></meta>
+<link rel="stylesheet" href="../../ct_default.css" type="text/css"></link>
+<script type="text/javascript" src="../../jquery-latest.js"></script>
+<script type="text/javascript" src="../../jquery.tablesorter.min.js"></script>
+</head>
+<body>
+
+<a name="top"></a><pre>
+=== Test case: <a href="quod_names_suite.src.html#restart_recovery-1">quod_names_SUITE:restart_recovery/1</a> (click for source code)
+
+=== Config value:
+
+    [{target,&lt;0.9073.0&gt;},
+     {asker,&lt;0.9074.0&gt;},
+     {target_pub,&lt;&lt;76,216,160,237,212,202,146,45,229,45,223,219,14,188,27,235,
+                   13,147,197,66,63,67,19,210,174,207,216,204,223,197,234,203&gt;&gt;},
+     {target_key,{&lt;&lt;76,216,160,237,212,202,146,45,229,45,223,219,14,188,27,235,
+                    13,147,197,66,63,67,19,210,174,207,216,204,223,197,234,203&gt;&gt;,
+                  &lt;&lt;91,37,20,58,206,246,45,118,70,223,55,73,134,177,131,160,
+                    195,206,226,224,32,134,191,10,81,251,72,131,72,113,29,43&gt;&gt;}},
+     {asker_pub,&lt;&lt;1,216,0,19,230,10,27,133,28,19,242,171,21,188,73,199,213,
+                  248,219,88,245,190,33,150,229,188,72,229,246,217,154,200&gt;&gt;},
+     {target_addr,{"127.0.0.1",15990}},
+     {asker_addr,{"127.0.0.1",15991}},
+     {names_anchor,&lt;&lt;168,122,76,131,28,24,41,87,83,57,206,88,99,32,147,190,41,
+                     253,233,54,150,19,106,38,101,164,236,109,22,39,61,52&gt;&gt;},
+     {names_source,"/home/yan/src/quod/_build/test/lib/quod/priv/ontologies/quod_names.pl"},
+     {names_count,1506173},
+     {agent_genesis,"/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_19.02.26/lib.quod.logs/run.2026-11-18_19.02.26/log_private/naming_agent.pl"},
+     {watchdog,&lt;0.9072.0&gt;},
+     {tc_logfile,"/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_19.02.26/lib.quod.logs/run.2026-11-18_19.02.26/quod_names_suite.restart_recovery.html"},
+     {tc_group_properties,[]},
+     {tc_group_path,[]},
+     {data_dir,"/home/yan/src/quod/_build/test/lib/quod/test/quod_names_SUITE_data/"},
+     {priv_dir,"/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_19.02.26/lib.quod.logs/run.2026-11-18_19.02.26/log_private/"}]
+
+=== Current directory is "/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_19.02.26"
+
+=== Started at 2026-11-18 19:07:54
+
+<br />
+=SUPERVISOR REPORT==== 18-Nov-2026::19:07:54.898652 ===
+    supervisor: {via,gproc,{n,l,{quod_ns,&lt;&lt;"quod:names"&gt;&gt;}}}
+    errorContext: child_terminated
+    reason: killed
+    offender: [{pid,&lt;0.271.0&gt;},
+               {id,quod_prolog},
+               {mfargs,{quod_prolog,start_link,
+                                    [&lt;&lt;"quod:names"&gt;&gt;,
+                                     #{mode =&gt; create,seed_peers =&gt; [],
+                                       role =&gt; member,
+                                       node_id =&gt;
+                                           &lt;&lt;76,216,160,237,212,202,146,45,229,
+                                             45,223,219,14,188,27,235,13,147,
+                                             197,66,63,67,19,210,174,207,216,
+                                             204,223,197,234,203&gt;&gt;,
+                                       genesis_file =&gt;
+                                           "/home/yan/src/quod/_build/test/lib/quod/priv/ontologies/quod_names.pl",
+                                       data_dir =&gt;
+                                           "/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_19.02.26/lib.quod.logs/run.2026-11-18_19.02.26/log_private/names_target_quod:names"}]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,5000},
+               {child_type,worker}]
+
+
+=CRASH REPORT==== 18-Nov-2026::19:07:54.899097 ===
+  crasher:
+    initial call: quod_prolog:init/1
+    pid: &lt;0.671.0&gt;
+    registered_name: []
+    exception exit: genesis_unavailable
+      in function  gen_server:init_it/6 (gen_server.erl:2257)
+    ancestors: [&lt;0.242.0&gt;,&lt;0.189.0&gt;,&lt;0.175.0&gt;,&lt;0.174.0&gt;]
+    message_queue_len: 0
+    messages: []
+    links: [&lt;0.242.0&gt;]
+    dictionary: []
+    trap_exit: false
+    status: running
+    heap_size: 987
+    stack_size: 29
+    reductions: 259
+  neighbours:
+
+
+=SUPERVISOR REPORT==== 18-Nov-2026::19:07:54.899276 ===
+    supervisor: {via,gproc,{n,l,{quod_ns,&lt;&lt;"quod:names"&gt;&gt;}}}
+    errorContext: start_error
+    reason: genesis_unavailable
+    offender: [{pid,undefined},
+               {id,quod_prolog},
+               {mfargs,{quod_prolog,start_link,
+                                    [&lt;&lt;"quod:names"&gt;&gt;,
+                                     #{mode =&gt; create,seed_peers =&gt; [],
+                                       role =&gt; member,
+                                       node_id =&gt;
+                                           &lt;&lt;76,216,160,237,212,202,146,45,229,
+                                             45,223,219,14,188,27,235,13,147,
+                                             197,66,63,67,19,210,174,207,216,
+                                             204,223,197,234,203&gt;&gt;,
+                                       genesis_file =&gt;
+                                           "/home/yan/src/quod/_build/test/lib/quod/priv/ontologies/quod_names.pl",
+                                       data_dir =&gt;
+                                           "/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_19.02.26/lib.quod.logs/run.2026-11-18_19.02.26/log_private/names_target_quod:names"}]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,5000},
+               {child_type,worker}]
+
+
+=SUPERVISOR REPORT==== 18-Nov-2026::19:07:54.899379 ===
+    supervisor: {via,gproc,{n,l,{quod_ns,&lt;&lt;"quod:names"&gt;&gt;}}}
+    errorContext: child_terminated
+    reason: killed
+    offender: [{pid,&lt;0.243.0&gt;},
+               {id,quod_simplex},
+               {mfargs,{quod_simplex,start_link,
+                                     [&lt;&lt;"quod:names"&gt;&gt;,
+                                      #{mode =&gt; create,seed_peers =&gt; [],
+                                        role =&gt; member,
+                                        node_id =&gt;
+                                            &lt;&lt;76,216,160,237,212,202,146,45,
+                                              229,45,223,219,14,188,27,235,13,
+                                              147,197,66,63,67,19,210,174,207,
+                                              216,204,223,197,234,203&gt;&gt;,
+                                        genesis_file =&gt;
+                                            "/home/yan/src/quod/_build/test/lib/quod/priv/ontologies/quod_names.pl",
+                                        data_dir =&gt;
+                                            "/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_19.02.26/lib.quod.logs/run.2026-11-18_19.02.26/log_private/names_target_quod:names"}]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,5000},
+               {child_type,worker}]
+
+
+<a name="end"></a>
+
+
+=== Ended at 2026-11-18 19:07:55
+=== successfully completed test case
+=== === Returned value: ok
+</pre>
+<center>
+<br /><hr /><p>
+<a href="../../../all_runs.html">Test run history
+</a>  |  <a href="../../../index.html">Top level test index
+</a>  |  <a href="../../../suite.log.latest.html">Latest test result</a>
+</p>
+<div class="copyright">Copyright &copy; 2026 <a href="http://www.erlang.org">Open Telecom Platform</a><br />
+Updated: <!--date-->Wed Nov 18 2026 19:07:54<!--/date--><br />
+</div>
+</center>
+</body>
+</html>

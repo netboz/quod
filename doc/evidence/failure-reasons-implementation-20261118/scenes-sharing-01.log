@@ -1,0 +1,48 @@
+engine="/home/yan/src/quod/_build/test/checkouts/erlog/ebin/erlog_int.beam" otp="28" schedulers=8
+SCENE {"reductions":52653507,"seconds":0.315267,"mode":"valid","allocated_words":"unmeasured","before_gc_bytes":27998752,"held_process_bytes":19900216,"marks":300,"measurement":"timing","reasons":0,"sample":1}
+SCENE {"reductions":52649261,"seconds":0.313507,"mode":"valid","allocated_words":"unmeasured","before_gc_bytes":19129184,"held_process_bytes":16583688,"marks":300,"measurement":"timing","reasons":0,"sample":2}
+SCENE {"reductions":52654017,"seconds":0.301257,"mode":"valid","allocated_words":"unmeasured","before_gc_bytes":19129184,"held_process_bytes":16583688,"marks":300,"measurement":"timing","reasons":0,"sample":3}
+engine="/home/yan/src/quod/_build/test/checkouts/erlog/ebin/erlog_int.beam" otp="28" schedulers=8
+SCENE {"reductions":37849353,"seconds":0.270467,"mode":"refused","allocated_words":"unmeasured","before_gc_bytes":22445712,"held_process_bytes":88688,"marks":300,"measurement":"timing","reasons":0,"sample":1}
+SCENE {"reductions":37831545,"seconds":0.271056,"mode":"refused","allocated_words":"unmeasured","before_gc_bytes":22445712,"held_process_bytes":88688,"marks":300,"measurement":"timing","reasons":0,"sample":2}
+SCENE {"reductions":37831385,"seconds":0.268368,"mode":"refused","allocated_words":"unmeasured","before_gc_bytes":22445712,"held_process_bytes":88688,"marks":300,"measurement":"timing","reasons":0,"sample":3}
+engine="/home/yan/src/quod/_build/test/checkouts/erlog/ebin/erlog_int.beam" otp="28" schedulers=8
+SCENE {"reductions":165661297,"seconds":0.776812,"mode":"valid","allocated_words":"unmeasured","before_gc_bytes":47928168,"held_process_bytes":34386808,"marks":600,"measurement":"timing","reasons":0,"sample":1}
+SCENE {"reductions":165699988,"seconds":0.769175,"mode":"valid","allocated_words":"unmeasured","before_gc_bytes":47928168,"held_process_bytes":34386808,"marks":600,"measurement":"timing","reasons":0,"sample":2}
+SCENE {"reductions":165735416,"seconds":0.828402,"mode":"valid","allocated_words":"unmeasured","before_gc_bytes":47928168,"held_process_bytes":34386808,"marks":600,"measurement":"timing","reasons":0,"sample":3}
+engine="/home/yan/src/quod/_build/test/checkouts/erlog/ebin/erlog_int.beam" otp="28" schedulers=8
+SCENE {"reductions":105208349,"seconds":0.622998,"mode":"refused","allocated_words":"unmeasured","before_gc_bytes":32774552,"held_process_bytes":230544,"marks":600,"measurement":"timing","reasons":0,"sample":1}
+SCENE {"reductions":105209402,"seconds":0.601451,"mode":"refused","allocated_words":"unmeasured","before_gc_bytes":32774552,"held_process_bytes":230544,"marks":600,"measurement":"timing","reasons":0,"sample":2}
+SCENE {"reductions":105300693,"seconds":0.593596,"mode":"refused","allocated_words":"unmeasured","before_gc_bytes":32774552,"held_process_bytes":230544,"marks":600,"measurement":"timing","reasons":0,"sample":3}
+engine="/home/yan/src/quod/_build/test/checkouts/erlog/ebin/erlog_int.beam" otp="28" schedulers=8
+SCENE {"reductions":572998554,"seconds":2.167035,"mode":"valid","allocated_words":"unmeasured","before_gc_bytes":67416696,"held_process_bytes":71303368,"marks":1200,"measurement":"timing","reasons":0,"sample":1}
+SCENE {"reductions":573106704,"seconds":2.159567,"mode":"valid","allocated_words":"unmeasured","before_gc_bytes":80899824,"held_process_bytes":71303368,"marks":1200,"measurement":"timing","reasons":0,"sample":2}
+SCENE {"reductions":573103136,"seconds":2.132578,"mode":"valid","allocated_words":"unmeasured","before_gc_bytes":80899824,"held_process_bytes":71303368,"marks":1200,"measurement":"timing","reasons":0,"sample":3}
+engine="/home/yan/src/quod/_build/test/checkouts/erlog/ebin/erlog_int.beam" otp="28" schedulers=8
+SCENE {"reductions":329807391,"seconds":1.516544,"mode":"refused","allocated_words":"unmeasured","before_gc_bytes":67416696,"held_process_bytes":372400,"marks":1200,"measurement":"timing","reasons":0,"sample":1}
+SCENE {"reductions":329814092,"seconds":1.492548,"mode":"refused","allocated_words":"unmeasured","before_gc_bytes":67416696,"held_process_bytes":372400,"marks":1200,"measurement":"timing","reasons":0,"sample":2}
+SCENE {"reductions":329808392,"seconds":1.48044,"mode":"refused","allocated_words":"unmeasured","before_gc_bytes":67416696,"held_process_bytes":372400,"marks":1200,"measurement":"timing","reasons":0,"sample":3}
+engine="/home/yan/src/quod/_build/test/checkouts/erlog/ebin/erlog_int.beam" otp="28" schedulers=8
+SCENE {"reductions":76685697,"seconds":1.982409,"mode":"valid","allocated_words":76252679,"before_gc_bytes":19129184,"held_process_bytes":19900216,"marks":300,"measurement":"allocation","reasons":0,"sample":1}
+SCENE {"reductions":76670407,"seconds":2.079997,"mode":"valid","allocated_words":76246476,"before_gc_bytes":19129184,"held_process_bytes":19900216,"marks":300,"measurement":"allocation","reasons":0,"sample":2}
+SCENE {"reductions":76675899,"seconds":1.967212,"mode":"valid","allocated_words":76245934,"before_gc_bytes":19129184,"held_process_bytes":19900216,"marks":300,"measurement":"allocation","reasons":0,"sample":3}
+engine="/home/yan/src/quod/_build/test/checkouts/erlog/ebin/erlog_int.beam" otp="28" schedulers=8
+SCENE {"reductions":54306542,"seconds":1.471388,"mode":"refused","allocated_words":75733282,"before_gc_bytes":19129184,"held_process_bytes":88688,"marks":300,"measurement":"allocation","reasons":0,"sample":1}
+SCENE {"reductions":54298270,"seconds":1.461384,"mode":"refused","allocated_words":75727360,"before_gc_bytes":19129184,"held_process_bytes":88688,"marks":300,"measurement":"allocation","reasons":0,"sample":2}
+SCENE {"reductions":54300382,"seconds":1.472426,"mode":"refused","allocated_words":75726818,"before_gc_bytes":19129184,"held_process_bytes":88688,"marks":300,"measurement":"allocation","reasons":0,"sample":3}
+engine="/home/yan/src/quod/_build/test/checkouts/erlog/ebin/erlog_int.beam" otp="28" schedulers=8
+SCENE {"reductions":243839269,"seconds":5.997552,"mode":"valid","allocated_words":152504324,"before_gc_bytes":41051016,"held_process_bytes":34386808,"marks":600,"measurement":"allocation","reasons":0,"sample":1}
+SCENE {"reductions":243833321,"seconds":5.982757,"mode":"valid","allocated_words":152498123,"before_gc_bytes":41051016,"held_process_bytes":34386808,"marks":600,"measurement":"allocation","reasons":0,"sample":2}
+SCENE {"reductions":243831297,"seconds":5.922732,"mode":"valid","allocated_words":152497581,"before_gc_bytes":41051016,"held_process_bytes":34386808,"marks":600,"measurement":"allocation","reasons":0,"sample":3}
+engine="/home/yan/src/quod/_build/test/checkouts/erlog/ebin/erlog_int.beam" otp="28" schedulers=8
+SCENE {"reductions":153101535,"seconds":3.928728,"mode":"refused","allocated_words":151212125,"before_gc_bytes":41051016,"held_process_bytes":230544,"marks":600,"measurement":"allocation","reasons":0,"sample":1}
+SCENE {"reductions":153096931,"seconds":3.898683,"mode":"refused","allocated_words":151206205,"before_gc_bytes":41051016,"held_process_bytes":230544,"marks":600,"measurement":"allocation","reasons":0,"sample":2}
+SCENE {"reductions":153093839,"seconds":3.914369,"mode":"refused","allocated_words":151205663,"before_gc_bytes":41051016,"held_process_bytes":230544,"marks":600,"measurement":"allocation","reasons":0,"sample":3}
+engine="/home/yan/src/quod/_build/test/checkouts/erlog/ebin/erlog_int.beam" otp="28" schedulers=8
+SCENE {"reductions":850332579,"seconds":20.056574,"mode":"valid","allocated_words":305036040,"before_gc_bytes":80899824,"held_process_bytes":71303368,"marks":1200,"measurement":"allocation","reasons":0,"sample":1}
+SCENE {"reductions":850143032,"seconds":20.00188,"mode":"valid","allocated_words":304949473,"before_gc_bytes":67416696,"held_process_bytes":71303368,"marks":1200,"measurement":"allocation","reasons":0,"sample":2}
+SCENE {"reductions":850148932,"seconds":19.97324,"mode":"valid","allocated_words":304948930,"before_gc_bytes":67416696,"held_process_bytes":71303368,"marks":1200,"measurement":"allocation","reasons":0,"sample":3}
+engine="/home/yan/src/quod/_build/test/checkouts/erlog/ebin/erlog_int.beam" otp="28" schedulers=8
+SCENE {"reductions":485154925,"seconds":11.963341,"mode":"refused","allocated_words":302191770,"before_gc_bytes":80899824,"held_process_bytes":372400,"marks":1200,"measurement":"allocation","reasons":0,"sample":1}
+SCENE {"reductions":484956968,"seconds":11.909832,"mode":"refused","allocated_words":302105291,"before_gc_bytes":67416696,"held_process_bytes":372400,"marks":1200,"measurement":"allocation","reasons":0,"sample":2}
+SCENE {"reductions":484958160,"seconds":11.892586,"mode":"refused","allocated_words":302104749,"before_gc_bytes":67416696,"held_process_bytes":372400,"marks":1200,"measurement":"allocation","reasons":0,"sample":3}

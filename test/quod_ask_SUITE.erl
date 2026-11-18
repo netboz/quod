@@ -400,7 +400,7 @@ remote_signed_transaction_savepoints(Config) ->
     lists:foreach(fun({Peer, Ns}) ->
         RemoveAtom = peer:call(Peer, erlang, binary_to_existing_atom, [Removed, utf8]),
         KeepAtom = peer:call(Peer, erlang, binary_to_existing_atom, [Kept, utf8]),
-        ?assertMatch({fail, _}, peer:call(Peer, quod_prolog, prove, [Ns, {RemoveAtom, {'X'}}])),
+        ?assertMatch(fail, peer:call(Peer, quod_prolog, prove, [Ns, {RemoveAtom, {'X'}}])),
         ?assertMatch({ok, [_], _}, peer:call(Peer, quod_prolog, prove, [Ns, {KeepAtom, 3}]))
     end, [{?config(target, Config), ?NS}, {?config(third, Config), ?THIRD_NS}]).
 
@@ -446,8 +446,8 @@ cut_findall_signed_multiscope_savepoints(Config) ->
     ?assertEqual({ok, [{<<"X">>, rolled_back}]}, quod_durable_term:decode_result(RollbackBinding)),
     lists:foreach(fun({Peer, Ns}) ->
         ?assertMatch({ok, [_], _}, peer:call(Peer, quod_prolog, prove, [Ns, {cut_keep, 1}])),
-        ?assertMatch({fail, _}, peer:call(Peer, quod_prolog, prove, [Ns, {cut_keep, 2}])),
-        ?assertMatch({fail, _}, peer:call(Peer, quod_prolog, prove, [Ns, {cut_remove, {'X'}}]))
+        ?assertMatch(fail, peer:call(Peer, quod_prolog, prove, [Ns, {cut_keep, 2}])),
+        ?assertMatch(fail, peer:call(Peer, quod_prolog, prove, [Ns, {cut_remove, {'X'}}]))
     end, [{?config(target, Config), ?NS}, {?config(third, Config), ?THIRD_NS}]).
 
 init_per_suite(Config) ->
@@ -551,7 +551,7 @@ init_per_suite(Config) ->
             "_Chain, _Ns).\n",
             PetsBin,
             "\nrecover_third_failure :- animals::via_third_failure ; "
-            "get_fail_reasons([_, _, _, _, third_declined]).\n"]),
+            "get_fail_reasons([third_declined]).\n"]),
     Asker = start_node(asker, ?ASKER_PORT, AskerKey, ?ASKER_NS,
                        AskerGenesis,
                        [TargetAddr], DirectoryAllow, Config),
@@ -746,11 +746,11 @@ remote_native_read_uses_selected_observer(Config) ->
     ?assertEqual(ObserverBefore+1,maps:get(proves,peer:call(Observer,quod_prolog,stats,[?NS]))),
     ?assertMatch(#{proves := TargetBefore},peer:call(Target,quod_prolog,stats,[?NS])),
     %% Observer service does not acquire a plan signer.
-    ?assertMatch({fail,_},Read(Identity,{current_executor_key,Key})),
+    ?assertEqual({fail,[]},Read(Identity,{current_executor_key,Key})),
     ?assertEqual({ok,{via_fourth,ok}},Read(Identity,{via_fourth,ok})),
     ?assertMatch({error,_},Read(Identity,{assertz,native_scope_write})),
     ?assertMatch({error,_},Read({?NS,<<0:256>>},true)),
-    ?assertMatch({fail,_},peer:call(Observer,quod_prolog,prove_ro,[?NS,native_scope_write])),
+    ?assertMatch(fail,peer:call(Observer,quod_prolog,prove_ro,[?NS,native_scope_write])),
     assert_fact_absent(Asker,?ASKER_NS,signed_pets_mark,987654321).
 
 
@@ -1178,7 +1178,7 @@ remote_scope_symbol_safety(Config) ->
                  peer:call(Target, quod_wire_term, decode,
                            [{0, <<"asker_only_symbol">>}])),
     Unknown = {'::', ?NS, {asker_only_predicate, x}},
-    ?assertMatch({fail, [_ | _]},
+    ?assertMatch(fail,
                  peer:call(Asker, quod_prolog, prove,
                            [?ASKER_NS, Unknown], 60000)).
 
@@ -1270,9 +1270,9 @@ remote_scope_failure_reasons(Config) ->
     Remote = {'::', ?NS, {blocked, bob}},
     Recover = {';', Remote,
                {get_fail_reasons,
-                [{'Outer'}, {blocked, bob}, {impossible_to_link, bob}]}},
+                [{impossible_to_link, bob}]}},
     ?assertMatch(
-       {ok, [#{'Outer' := Remote}], _},
+       {ok, [#{}], _},
        peer:call(Asker, quod_prolog, prove,
                  [?ASKER_NS, Recover], 60000)).
 
@@ -1300,9 +1300,9 @@ remote_scope_deep_failure_reasons(Config) ->
     {fail, Reasons} = peer:call(
                         Asker, quod_prolog, prove,
                         [?ASKER_NS, Remote], 60000),
-    ?assert(length(Reasons) > 64),
-    ?assertEqual(Remote, hd(Reasons)),
-    ?assertEqual({'$quod_symbol', <<"deep_bottom">>}, lists:last(Reasons)),
+    %% Every explicit entry survives, in newest-first order, beyond the old quota.
+    ?assertEqual([{'$quod_symbol', <<"deep_bottom">>} |
+                  [{reason, N} || N <- lists:seq(1, 70)]], Reasons),
     assert_foreign_current_keeps_symbol_opaque(
       Asker, ?config(target, Config), ?NS,
       ?config(target_pub, Config), ?config(target_addr, Config),
@@ -1335,8 +1335,7 @@ remote_scope_structural_reason_depth(Config) ->
                         [?ASKER_NS, Remote], 60000),
     Reason = lists:foldl(
                fun(_, Acc) -> [Acc] end, Bottom, lists:seq(1, 70)),
-    ?assertEqual(Remote, hd(Reasons)),
-    ?assert(lists:member(Reason, Reasons)),
+    ?assertEqual([Reason], Reasons),
     ?assertNot(lists:member(fail_reasons_truncated, Reasons)),
     ?assert(quod_wire_term:valid_failure_reason_stack(Reasons)).
 
@@ -2088,8 +2087,8 @@ remote_independent_branch_provenance(Config) ->
       submit_signed_execute(Config,
         <<"((animals::independent((assertz(s6_unwound), third::assertz(s6_unwound))), fail); true).">>)),
     lists:foreach(fun(Fact) ->
-        ?assertMatch({fail, _}, peer:call(Target, quod_prolog, prove, [?NS, Fact])),
-        ?assertMatch({fail, _}, peer:call(Third, quod_prolog, prove, [?THIRD_NS, Fact]))
+        ?assertMatch(fail, peer:call(Target, quod_prolog, prove, [?NS, Fact])),
+        ?assertMatch(fail, peer:call(Third, quod_prolog, prove, [?THIRD_NS, Fact]))
     end, [s6_f2]),
     ?assertMatch({ok, [_], _}, peer:call(Target, quod_prolog, prove, [?NS, s6_f3])),
     ?assertMatch({ok, [_], _}, peer:call(Third, quod_prolog, prove, [?THIRD_NS, s6_f3])).
@@ -2110,7 +2109,7 @@ remote_independent_nesting_and_auth(Config) ->
     ?assertEqual({error, invalid_signature}, peer:call(
       ?config(asker, Config), quod_client_goal_ingress, submit,
       [execute, maps:get(session_id, Session), Bytes, <<0:512>>, ?config(client_peer, Config)])),
-    ?assertMatch({fail, _}, peer:call(
+    ?assertMatch(fail, peer:call(
       ?config(target, Config), quod_prolog, prove, [?NS, s6_invalid_auth])).
 
 remote_independent_cursor_selects_only_accepted_answer(Config) ->
@@ -3359,7 +3358,7 @@ key_before(TargetPub) ->
     end.
 
 deep_failure_rules() ->
-    [[io_lib:format("deep_failure(~B) :- deep_failure(~B).~n", [N, N - 1])
+    [[io_lib:format("deep_failure(~B) :- (fail_with_reason(reason(~B)); deep_failure(~B)).~n", [N, N, N - 1])
       || N <- lists:seq(70, 1, -1)],
      "deep_failure(0) :- fail_with_reason(deep_bottom).\n",
      %% Build the nested reasons at proof time, so the test exercises the

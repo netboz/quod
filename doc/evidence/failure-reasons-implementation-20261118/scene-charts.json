@@ -1,0 +1,104 @@
+{
+  "items": [
+    {
+      "description": "Proof time (seconds) for valid scenes. Medians of three proofs; error bars span the observed minimum and maximum.",
+      "chart": {
+        "chartType": "bar",
+        "xAxisKey": "case",
+        "yAxisKey": "value",
+        "data": [
+          {
+            "case": "300: Baseline",
+            "value": 0.444801,
+            "lower": 0.018284999999999996,
+            "upper": 0.0010279999999999734
+          },
+          {
+            "case": "300: Sharing",
+            "value": 0.313507,
+            "lower": 0.012249999999999983,
+            "upper": 0.0017600000000000393
+          },
+          {
+            "case": "600: Baseline",
+            "value": 1.374236,
+            "lower": 0.047978000000000076,
+            "upper": 0.015268999999999977
+          },
+          {
+            "case": "600: Sharing",
+            "value": 0.776812,
+            "lower": 0.007636999999999894,
+            "upper": 0.051590000000000025
+          },
+          {
+            "case": "1200: Baseline",
+            "value": 4.512436,
+            "lower": 0.0027999999999996916,
+            "upper": 0.03143399999999996
+          },
+          {
+            "case": "1200: Sharing",
+            "value": 2.159567,
+            "lower": 0.02698899999999993,
+            "upper": 0.007467999999999808
+          }
+        ],
+        "errorBars": {
+          "errorKeyLower": "lower",
+          "errorKeyUpper": "upper"
+        }
+      }
+    },
+    {
+      "description": "Held process memory (MB) for valid scenes. Medians of three proofs; error bars span the observed minimum and maximum.",
+      "chart": {
+        "chartType": "bar",
+        "xAxisKey": "case",
+        "yAxisKey": "value",
+        "data": [
+          {
+            "case": "300: Baseline",
+            "value": 85.563832,
+            "lower": 0.0,
+            "upper": 0.0
+          },
+          {
+            "case": "300: Sharing",
+            "value": 16.583688,
+            "lower": 0.0,
+            "upper": 3.316528
+          },
+          {
+            "case": "600: Baseline",
+            "value": 306.588,
+            "lower": 0.0,
+            "upper": 0.0
+          },
+          {
+            "case": "600: Sharing",
+            "value": 34.386808,
+            "lower": 0.0,
+            "upper": 0.0
+          },
+          {
+            "case": "1200: Baseline",
+            "value": 1098.55756,
+            "lower": 0.0,
+            "upper": 0.0
+          },
+          {
+            "case": "1200: Sharing",
+            "value": 71.303368,
+            "lower": 0.0,
+            "upper": 0.0
+          }
+        ],
+        "errorBars": {
+          "errorKeyLower": "lower",
+          "errorKeyUpper": "upper"
+        }
+      }
+    }
+  ]
+}

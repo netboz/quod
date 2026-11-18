@@ -1,0 +1,131 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<title>Test quod_simplex_SUITE:t_join_anchor_validation result</title>
+<meta http-equiv="cache-control" content="no-cache"></meta>
+<meta http-equiv="content-type" content="text/html; charset=utf-8"></meta>
+<link rel="stylesheet" href="../../ct_default.css" type="text/css"></link>
+<script type="text/javascript" src="../../jquery-latest.js"></script>
+<script type="text/javascript" src="../../jquery.tablesorter.min.js"></script>
+</head>
+<body>
+
+<a name="top"></a><pre>
+=== Test case: <a href="quod_simplex_suite.src.html#t_join_anchor_validation-1">quod_simplex_SUITE:t_join_anchor_validation/1</a> (click for source code)
+
+=== Config value:
+
+    [{watchdog,&lt;0.10163.0&gt;},
+     {tc_logfile,"/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_17.47.31/lib.quod.logs/run.2026-11-18_17.47.31/quod_simplex_suite.t_join_anchor_validation.html"},
+     {tc_group_properties,[{suite,quod_simplex_SUITE}]},
+     {tc_group_path,[]},
+     {data_dir,"/home/yan/src/quod/_build/test/lib/quod/test/quod_simplex_SUITE_data/"},
+     {priv_dir,"/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_17.47.31/lib.quod.logs/run.2026-11-18_17.47.31/log_private/"}]
+
+=== Current directory is "/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_17.47.31"
+
+=== Started at 2026-11-18 17:54:48
+
+<br />
+
+</pre>
+<div class="sasl"><pre><b>*** System report during quod_simplex_SUITE:t_join_anchor_validation/1 2026-11-18 17:54:48.584 ***</b><a id=e-48 class="link-to-entry" href="#e-48">&#x1f517;</a>
+=ERROR REPORT==== 18-Nov-2026::17:54:48.584574 ===
+** State machine {n,l,{quod_simplex,&lt;&lt;"simplex:1922"&gt;&gt;}} terminating
+** When server state  = {undefined,undefined}
+** Reason for termination = error:{bad_config,genesis_anchor_mismatch}
+** Callback modules = [quod_simplex]
+** Callback mode = state_functions
+** Stacktrace =
+**  [{quod_simplex,require_configured_anchor,2,
+                   [{file,"/home/yan/src/quod/src/quod_simplex.erl"},
+                    {line,3678}]},
+     {quod_simplex,recover_existing_storage,3,
+                   [{file,"/home/yan/src/quod/src/quod_simplex.erl"},
+                    {line,3557}]},
+     {quod_simplex,restore_storage,2,
+                   [{file,"/home/yan/src/quod/src/quod_simplex.erl"},
+                    {line,3497}]},
+     {quod_simplex,init_store,3,
+                   [{file,"/home/yan/src/quod/src/quod_simplex.erl"},
+                    {line,3233}]},
+     {gen_statem,init_it,6,[{file,"gen_statem.erl"},{line,3323}]},
+     {proc_lib,init_p_do_apply,3,[{file,"proc_lib.erl"},{line,333}]}]
+
+
+</pre></div>
+<pre>
+
+</pre>
+<div class="sasl"><pre><b>*** System report during quod_simplex_SUITE:t_join_anchor_validation/1 2026-11-18 17:54:48.584 ***</b><a id=e-49 class="link-to-entry" href="#e-49">&#x1f517;</a>
+=CRASH REPORT==== 18-Nov-2026::17:54:48.584746 ===
+  crasher:
+    initial call: quod_simplex:init/1
+    pid: &lt;0.10310.0&gt;
+    registered_name: []
+    exception error: {bad_config,genesis_anchor_mismatch}
+      in function  quod_simplex:require_configured_anchor/2 (/home/yan/src/quod/src/quod_simplex.erl:3678)
+      in call from quod_simplex:recover_existing_storage/3 (/home/yan/src/quod/src/quod_simplex.erl:3557)
+      in call from quod_simplex:restore_storage/2 (/home/yan/src/quod/src/quod_simplex.erl:3497)
+      in call from quod_simplex:init_store/3 (/home/yan/src/quod/src/quod_simplex.erl:3233)
+      in call from gen_statem:init_it/6 (gen_statem.erl:3323)
+    ancestors: [&lt;0.10299.0&gt;]
+    message_queue_len: 0
+    messages: []
+    links: [&lt;0.10299.0&gt;]
+    dictionary: [{'$logger_metadata$',#{}},{'$__current_otel_ctx',undefined}]
+    trap_exit: false
+    status: running
+    heap_size: 987
+    stack_size: 29
+    reductions: 7733
+  neighbours:
+
+
+</pre></div>
+<pre>
+
+</pre>
+<div class="sasl"><pre><b>*** System report during quod_simplex_SUITE:t_join_anchor_validation/1 2026-11-18 17:54:48.585 ***</b><a id=e-50 class="link-to-entry" href="#e-50">&#x1f517;</a>
+=CRASH REPORT==== 18-Nov-2026::17:54:48.584980 ===
+  crasher:
+    initial call: quod_simplex:init/1
+    pid: &lt;0.10316.0&gt;
+    registered_name: []
+    exception exit: {bad_config,join_requires_genesis_hash}
+      in function  gen_statem:init_result/8 (gen_statem.erl:3367)
+    ancestors: [&lt;0.10299.0&gt;]
+    message_queue_len: 0
+    messages: []
+    links: [&lt;0.10299.0&gt;]
+    dictionary: []
+    trap_exit: false
+    status: running
+    heap_size: 376
+    stack_size: 29
+    reductions: 142
+  neighbours:
+
+
+</pre></div>
+<pre>
+<a name="end"></a>
+
+
+=== Ended at 2026-11-18 17:54:48
+=== successfully completed test case
+=== === Returned value: ok
+</pre>
+<center>
+<br /><hr /><p>
+<a href="../../../all_runs.html">Test run history
+</a>  |  <a href="../../../index.html">Top level test index
+</a>  |  <a href="../../../suite.log.latest.html">Latest test result</a>
+</p>
+<div class="copyright">Copyright &copy; 2026 <a href="http://www.erlang.org">Open Telecom Platform</a><br />
+Updated: <!--date-->Wed Nov 18 2026 17:54:48<!--/date--><br />
+</div>
+</center>
+</body>
+</html>

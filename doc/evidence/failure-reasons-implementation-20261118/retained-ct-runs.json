@@ -1,0 +1,22 @@
+[
+  {
+    "run": "ct_run.nonode@nohost.2026-11-18_17.18.54",
+    "gate": "focused-ct-01",
+    "files": 152
+  },
+  {
+    "run": "ct_run.nonode@nohost.2026-11-18_17.25.02",
+    "gate": "focused-ct-02",
+    "files": 41
+  },
+  {
+    "run": "ct_run.nonode@nohost.2026-11-18_17.28.23",
+    "gate": "native-read-ct-01",
+    "files": 21
+  },
+  {
+    "run": "ct_run.nonode@nohost.2026-11-18_17.47.31",
+    "gate": "server-01-ct",
+    "files": 218
+  }
+]

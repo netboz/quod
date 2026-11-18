@@ -34,7 +34,7 @@ terms_creation_preserves_clauses_test_() ->
                 %% the immutable clause that was already prepared and admitted.
                 ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, {same_value, first, first})),
                 ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, {same_value, second, second})),
-                ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {same_value, first, second})),
+                ?assertMatch(fail, quod_prolog:prove_ro(Ns, {same_value, first, second})),
                 ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns))
             after quod_reg:unsubscribe({runtime, Ns}) end,
             %% A bound name and list are still required; rule data cannot make
@@ -180,11 +180,11 @@ default_lobby_physics_startup_test_() ->
             Other = found_lobby_user(Classes, Network, Node),
             Start = Scoped({physics_initialize, personal_lobby, Node, Key}),
             ?assertMatch({ok, _, {normalized, {failed, _}}}, submit_lobby(Other, execute, Start)),
-            ?assertMatch({ok, _, {normalized, {failed, _}}}, submit_lobby(User, execute,
+            ?assertMatch({ok, _, {normalized, fail}}, submit_lobby(User, execute,
                 {'::', Ns, {',', {current_ontology_identity, Ns, <<0:256>>}, {physics_initialize, personal_lobby, Node, Key}}})),
             ?assertMatch({ok, _, {normalized, {committed, _, _}}}, submit_lobby(User, execute,
                 Scoped({retract, {physics_initial_host, personal_lobby, Node}}))),
-            ?assertMatch({ok, _, {normalized, {failed, _}}}, submit_lobby(User, execute, Start)),
+            ?assertMatch({ok, _, {normalized, fail}}, submit_lobby(User, execute, Start)),
             ?assertMatch({ok, _, {normalized, {committed, _, _}}}, submit_lobby(User, execute,
                 Scoped({assertz, {physics_initial_host, personal_lobby, Node}}))),
             true = quod_reg:subscribe({physics, Ns}),
@@ -194,7 +194,7 @@ default_lobby_physics_startup_test_() ->
                 ?assertMatch(#{phase := active, navigation_ready := true}, gen_server:call(Pid, status)),
                 {ok, _, {normalized, {read, _, {answers, _, [Ready]}}}} = submit_lobby(User, read, Prepare),
                 ?assertEqual({ok, [{<<"V0">>, ready}]}, quod_client_result:decode_binding(Ready)),
-                ?assertMatch({ok, _, {normalized, {failed, _}}}, submit_lobby(User, execute, Start)),
+                ?assertMatch({ok, _, {normalized, fail}}, submit_lobby(User, execute, Start)),
                 ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns,
                     {physics_control, personal_lobby, Owner, 1, {controlled, pilot, eye}})),
                 ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns,
@@ -364,7 +364,7 @@ effect_limits_are_committed_root_policy(#{root_config := Config, actor_keypair :
         commit_root({set_effect_custody_limits, unlimited, unlimited}),
         ok = wait_effect_limits({unlimited, unlimited}, 300),
         ?assertMatch(
-           {fail, _},
+           fail,
            quod_prolog:execute(
              ?ROOT_NS, {set_effect_custody_limits, -1, unlimited}))
     after
@@ -415,15 +415,16 @@ setup(Mode) ->
       quod, namespace_static_content, #{?ROOT_NS => RootConfig}),
     {ok, Manager} = quod_namespace_manager:start_link(),
     unlink(Manager),
+    Base = #{dir => Dir, saved => Saved, manager => Manager,
+             ns_sup => NsSup, brahms_sup => BrahmsSup, journal => Journal,
+             router => Router, foreign_log => ForeignLog,
+             root_config => RootConfig, actor_keypair => {Pub, Seed}},
+    try
     true = quod_reg:subscribe({runtime,?ROOT_NS}),
     try
         {ok,_}=quod_namespace_manager:start_content(?ROOT_NS,RootConfig),
         ok=await_enrolled_identity({?ROOT_NS,quod_simplex:genesis_hash(?ROOT_NS)},quod_time:mono_ms()+3000)
     after quod_reg:unsubscribe({runtime,?ROOT_NS}) end,
-    Base = #{dir => Dir, saved => Saved, manager => Manager,
-             ns_sup => NsSup, brahms_sup => BrahmsSup, journal => Journal,
-             router => Router, foreign_log => ForeignLog,
-             root_config => RootConfig, actor_keypair => {Pub, Seed}},
     case Mode of
     genesis -> Base;
     _ ->
@@ -463,6 +464,10 @@ setup(Mode) ->
       actor_instance_text => ActorInstanceText,
       actor_keypair => {Pub, Seed}}
     end
+    end
+    catch Class:Reason:Stack ->
+        cleanup(Base),
+        erlang:raise(Class, Reason, Stack)
     end.
 
 m1a_guarded_source_test_() ->
@@ -722,7 +727,7 @@ m2_spaces(User=#{reference:=Owner={agent_instance_ref,Ns,Anchor,me}}, Other) ->
     {ok,FailureReasons}=quod_wire_term:decode_failure_reasons(EncodedReasons),
     ?assert(lists:member(m2_after_foreign_ack,FailureReasons)),
     ?assertEqual(Baseline,m2_state([Ns,Foreign])),
-    ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,m2_local_staging)),
+    ?assertMatch(fail, quod_prolog:prove_ro(Ns,m2_local_staging)),
     io:format("M2 production placement/recovery qualified: ~p ~p~n",[S1,ForeignSpace]), S1.
 
 m3a_travel(User=#{reference:={agent_instance_ref,Ns,_,me}},Other,S1) ->
@@ -1009,7 +1014,7 @@ m1a_signup_denials(Network, UserClass, NodeClient) ->
         keypair=>Pair,network=>Network,parser_version=>3},
     Name = signup_namespace(Token),
     [begin
-        ?assertMatch({ok,_,{normalized,{failed,_}}}, submit_lobby(Applicant,execute,{signup,Token,Wrong,{0}})),
+        ?assertMatch({ok,_,{normalized,fail}}, submit_lobby(Applicant,execute,{signup,Token,Wrong,{0}})),
         ?assertEqual({ok,not_hosted},quod_ontology:local_state(Wrong))
      end || Wrong <- [<<"quod:reserved-signup-test">>,signup_namespace(crypto:strong_rand_bytes(32))]],
     [ ?assertMatch({ok,_,{normalized,{failed,_}}},submit_lobby(Applicant,execute,Bad))
@@ -1020,9 +1025,9 @@ m1a_signup_denials(Network, UserClass, NodeClient) ->
     {ok,Evidence,{normalized,{committed,_,_}}} = submit_lobby(NodeClient,execute,{retract,Policy}),
     m1a_complete(Evidence),
     try
-        ?assertMatch({ok,_,{normalized,{failed,_}}},submit_lobby(Applicant,execute,{signup,Token,Name,{0}})),
+        ?assertMatch({ok,_,{normalized,fail}},submit_lobby(Applicant,execute,{signup,Token,Name,{0}})),
         ?assertEqual({ok,not_hosted},quod_ontology:local_state(Name)),
-        ?assertMatch({fail,_},quod_prolog:prove_ro(<<"quod:user">>,{enrollment_receipt,Public,Token,{'_'}})),
+        ?assertMatch(fail, quod_prolog:prove_ro(<<"quod:user">>,{enrollment_receipt,Public,Token,{'_'}})),
         ?assertEqual(false,desired_has_content(Name))
     after
         {ok,Restore,{normalized,{committed,_,_}}} = submit_lobby(NodeClient,execute,{assertz,Policy}),
@@ -1057,7 +1062,7 @@ m1a_setup(User = #{reference := Owner = {agent_instance_ref, Ns, Anchor, me}}) -
         m1a_read(User, {gui_operation_view, Subject, setup, {0}}),
     {prepared_key, Key, Receipt} = Custody,
     Fields = [{field, setup_key, Key}, {field, setup_receipt, Receipt}],
-    ?assertMatch({ok, _, {normalized, {failed, _}}}, submit_lobby(User, execute,
+    ?assertMatch({ok, _, {normalized, fail}}, submit_lobby(User, execute,
         {gui_operation, setelement(3, Subject, <<0:256>>), setup, Revision, Button, Fields, {0}})),
     Request = lobby_user_request(User, execute,
         {gui_operation, Subject, setup, Revision, Button, Fields, {0}}),
@@ -1076,7 +1081,7 @@ m1a_setup(User = #{reference := Owner = {agent_instance_ref, Ns, Anchor, me}}) -
     Class = m2_space_class(),
     ?assert(lists:member(Class,m1a_read(User,{gui_operation_classes,{0}}))),
     ?assertMatch({menu,_},m1a_read(User,{client_menu,Class,{0}})),
-    ?assertMatch({ok,_,{normalized,{read,_,{failed,_}}}},submit_lobby(User,read,
+    ?assertMatch({ok,_,{normalized,{read,_,fail}}},submit_lobby(User,read,
         {client_menu,setelement(3,Class,<<0:256>>),{0}})),
     {ok,_,{normalized,{read,NavigationReads,{answers,_,[_]}}}} =
         submit_lobby(User,read,{'::',<<"quod:user">>,{account_navigation,{0}}}),
@@ -1102,8 +1107,8 @@ m1a_setup(User = #{reference := Owner = {agent_instance_ref, Ns, Anchor, me}}) -
             resolve_lobby_request(element(1, Request), element(2, Request)))
     end,
     quod_outcome_result_tests:assert_unchanged_reads([Ns], Resolve, 0),
-    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {signup_origin, {'_'}, {'_'}, {'_'}})),
-    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {instance_of, {':',quod,{':',space,physical_space}}, Space})),
+    ?assertMatch(fail, quod_prolog:prove_ro(Ns, {signup_origin, {'_'}, {'_'}, {'_'}})),
+    ?assertMatch(fail, quod_prolog:prove_ro(Ns, {instance_of, {':',quod,{':',space,physical_space}}, Space})),
     User#{setup_request=>Request,setup_result=>Result,setup_custody=>Custody}.
 
 m1a_private(First, Second, UserClass, Catalogue, PublicReader) ->
@@ -1135,7 +1140,7 @@ m1a_private(First, Second, UserClass, Catalogue, PublicReader) ->
     Unrelated = m1a_actor_context(Second),
     [m1a_failed_personal(Unrelated,{'::',Ns,{',',{current_ontology_identity,Ns,Anchor},G}})
         || G <- Goals ++ Writes],
-    ?assertMatch({ok, _, {normalized, {read, _, {failed, _}}}}, submit_lobby(Second, read,
+    ?assertMatch({ok, _, {normalized, {read, _, fail}}}, submit_lobby(Second, read,
         {'::', ?ROOT_NS, {system_source_access, {ontology_ref, <<"quod:user">>, UserClass}, {0}}})),
     [ ?assertMatch({ok, _, {normalized, {read, _, {failed, _}}}}, submit_lobby(Second, read,
         {'::', <<"quod:gui">>, {prolog_source, {ontology_ref, Private, History}, {0}}}))
@@ -1313,7 +1318,11 @@ m1a_personal(C, Goal) ->
     case Outcome of {committed,_,_} -> m1a_complete(Evidence); _ -> ok end,
     {Outcome, Bytes}.
 m1a_failed_personal(C, Goal) ->
-    {{failed,_}, _} = m1a_personal(C,Goal), ok.
+    case m1a_personal(C,Goal) of
+        {fail, _} -> ok;
+        {{failed,_}, _} -> ok;
+        Other -> error({expected_logical_failure, Other})
+    end.
 m1a_output({committed,[Binding],_}) ->
     {ok,[{_,Value}]} = quod_client_result:decode_binding(Binding), Value.
 m1a_frame(Socket, Type) ->
@@ -1622,7 +1631,7 @@ enrollment_crash_custody(Stage) ->
                 ?assertMatch({refused, {?NODE_NS, PolicyAnchor}}, quod_node_actor:enroll()),
                 ?assertMatch({pending, #{rejected := enrollment}},
                     quod_identity:load_node_actor_pointer(Dir)),
-                ?assertMatch({fail, _}, quod_prolog:prove_ro(?NODE_NS,
+                ?assertMatch(fail, quod_prolog:prove_ro(?NODE_NS,
                     {node_identity_allocation, Key, {'_'}, {'_'}})),
                 %% A known refusal may recover when admission becomes ready;
                 %% no clock advance or expiry of an uncertain write is used.
@@ -1679,7 +1688,7 @@ enrollment_crash_custody(Stage) ->
                 ?assertEqual(unresolved, quod_node_actor:enroll()),
                 ?assertEqual(unresolved, quod_node_actor:enroll()),
                 ?assertEqual({ok, Before}, file:read_file(filename:join(Dir, "node.actor"))),
-                ?assertMatch({fail, _}, quod_prolog:prove_ro(?NODE_NS,
+                ?assertMatch(fail, quod_prolog:prove_ro(?NODE_NS,
                     {node_identity_allocation, Key, {'_'}, {'_'}}));
             _ ->
                 {ok, NextManager} = quod_namespace_manager:start_link(),
@@ -1977,7 +1986,7 @@ signed_agent_create_uses_the_same_goal_path(_Fixture) ->
             ?assertEqual(Before, {quod_prolog:applied(?ROOT_NS), quod_prolog:applied(AgentNs)}),
             ?assertMatch(#{reservations := 0}, quod_effect_journal:stats())
         end, [single, atomic, independent]),
-        ?assertMatch({fail, _}, quod_prolog:prove_ro(AgentNs, {budget_side_effect, {'_'}})),
+        ?assertMatch(fail, quod_prolog:prove_ro(AgentNs, {budget_side_effect, {'_'}})),
         commit_root({set_effect_custody_limits, 64, unlimited}),
         wait_effect_limits({64, unlimited}, 300),
         GoalText = iolist_to_binary(
@@ -2068,7 +2077,7 @@ hosting_action_checks_policy_and_conflicts(
     %% No silent identity/visibility replacement, and malformed inputs cannot
     %% enter the committed projection and strand its existing valid work.
     [begin
-        ?assertMatch({fail, _}, quod_prolog:execute(ActorNs, Bad))
+        ?assertMatch(fail, quod_prolog:execute(ActorNs, Bad))
      end || Bad <- [{host_ontology, NodeRef, Ns, <<1:256>>, private},
                     {host_ontology, NodeRef, Ns, Anchor, discoverable},
                     {host_ontology, NodeRef, <<>>, Anchor, private},
@@ -2105,10 +2114,10 @@ hosting_action_checks_policy_and_conflicts(
        {retract, {hosts_ontology, NodeRef, DelegatedNs, Anchor, private}})),
     ok = wait_desired_absent(DelegatedNs, 300),
     RollbackNs = unique_ns(<<"rollback-hosting-action">>),
-    ?assertMatch({fail, _}, quod_prolog:execute(ActorNs,
+    ?assertMatch(fail, quod_prolog:execute(ActorNs,
        {transaction, {',', {host_ontology, NodeRef, RollbackNs, Anchor, private}, fail}})),
     ?assertEqual(false, desired_has_content(RollbackNs)),
-    ?assertMatch({fail, _}, quod_prolog:prove_ro(ActorNs,
+    ?assertMatch(fail, quod_prolog:prove_ro(ActorNs,
        {hosts_ontology, NodeRef, RollbackNs, Anchor, private})),
     ?assertMatch({ok, [_], _}, quod_prolog:execute(ActorNs, {retract, Host})),
     ok = wait_desired_absent(Ns, 300).
@@ -2246,7 +2255,7 @@ node_enrollment_uses_signed_atomic_creation(
         ok = await_enrolled_identity({Name, Anchor}),
         ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Name,
             {agent_key, me, Public, active})),
-        ?assertMatch({fail, _}, quod_prolog:prove_ro(?ROOT_NS,
+        ?assertMatch(fail, quod_prolog:prove_ro(?ROOT_NS,
             {peer_admitted, Public, {'_'}, {'_'}, Public})),
         %% A caller duplicate returns the original allocation, never a second
         %% genesis. Runtime recovery separately retains the original request.
@@ -2257,7 +2266,7 @@ node_enrollment_uses_signed_atomic_creation(
             {node_identity_allocation, Public, Ref, Host})),
         {Bad, BadSig} = lobby_user_request(Applicant, execute,
             {'::', ?ROOT_NS, {create_ontology, <<"node:unauthorized">>, [], {0}}}),
-        ?assertMatch({ok, _, {normalized, {failed, _}}},
+        ?assertMatch({ok, _, {normalized, fail}},
                      quod_client_goal_ingress:submit(Bad, BadSig))
     after
         stop_process(Auth),
@@ -2461,7 +2470,7 @@ prepared_source_is_used_exactly_once(#{dir := Dir}) ->
     ok = wait_ready(Ns, 300),
     ?assertMatch({ok, [#{}], _},
                  quod_prolog:prove_ro(Ns, {prepared_value, original})),
-    ?assertMatch({fail, _},
+    ?assertMatch(fail,
                  quod_prolog:prove_ro(Ns, {prepared_value, changed})).
 
 %% Fixed incarnation and current genesis block grammar. The local prepared
@@ -2574,7 +2583,7 @@ prepared_genesis_survives_journal_restart(#{dir := Dir}) ->
     ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)),
     ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, {prepared_identity, first, first})),
     ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, {prepared_identity, second, second})),
-    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {prepared_identity, first, second})),
+    ?assertMatch(fail, quod_prolog:prove_ro(Ns, {prepared_identity, first, second})),
     ?assertMatch({ok, [#{'Incarnation' := Incarnation}], _},
                  quod_prolog:prove_ro(Ns, {consensus_incarnation, {'Incarnation'}})),
     ?assertEqual(crypto:hash(sha256, Bytes), quod_effect:prepared_digest(Effect)),
@@ -2701,9 +2710,32 @@ effect_execution_uses_its_generic_descriptor(_Fixture) ->
     Create = {create_ontology, Ns, []},
     {ok, Structural} = quod_ontology:validate_action(Create),
     {ok, Prepared} = quod_ontology:prepare_action(Structural),
+    %% The real journal executes initial absence once, using its descriptor.
+    Effect = release_test_effect(deliberately_unrelated_audit_label,
+                                 {ontology_hosted, Ns}, Prepared),
+    Id = quod_effect:effect_id(Effect),
+    ?assertEqual(ok, quod_effect_journal:await(Id, 5000)),
+    ok = wait_ready(Ns, 300),
+    ?assertMatch({ok, #{state := applied, result := ok}},
+                 quod_effect_journal:status(Id)),
+    %% A duplicate applied notice and repeated waiter must not execute again,
+    %% replay history, rebuild projections, or write/sync unchanged state.
+    quod_lobby_tests:assert_read_has_no_io(fun() ->
+        quod_effect_journal:release_applied(2, [Effect]),
+        ?assertEqual(ok, quod_effect_journal:await(Id, 5000)),
+        ?assertEqual(ok, quod_effect_journal:await(Id, 5000))
+    end, [{quod_ontology, execute_prepared, 1}]),
+    %% A different effect reaches the already-configured manager with an
+    %% unsatisfied postcondition. Duplicate creation cannot count as success.
+    Duplicate = release_test_effect(duplicate_with_absent_postcondition,
+                                    false, Prepared),
+    ?assertEqual({error, {operator_error, incompatible_local_state}},
+                 quod_effect_journal:await(quod_effect:effect_id(Duplicate), 5000)),
+    ?assertEqual(quod_ontology:prepared_anchor(Prepared),
+                 quod_simplex:genesis_hash(Ns)).
+
+release_test_effect(AuditLabel, Desired, Prepared) ->
     {ok, Executor} = application:get_env(quod, node_pubkey),
-    AuditLabel = deliberately_unrelated_audit_label,
-    Desired = {ontology_hosted, Ns},
     {ok, Effect} = quod_ontology:prepared_effect(
                      AuditLabel, Prepared, Executor, {node, Executor}),
     {ok, GoalBlob} = quod_durable_term:encode_goal(AuditLabel),
@@ -2717,17 +2749,12 @@ effect_execution_uses_its_generic_descriptor(_Fixture) ->
                             goal = GoalBlob, result = ResultBlob,
                             diff = [], read_check = #{}, effects = [Effect],
                             author = Executor}),
-    Ref = {transaction, ?ROOT_NS, RootAnchor,
-           Change#transaction.tx_id},
+    Ref = {transaction, ?ROOT_NS, RootAnchor, Change#transaction.tx_id},
     {ok, Reservation} = quod_effect_journal:reserve(self()),
-    ok = quod_effect_journal:stage(
-           Reservation, AuditLabel, Desired, Effect, Prepared),
+    ok = quod_effect_journal:stage(Reservation, AuditLabel, Desired, Effect, Prepared),
     ok = quod_effect_journal:bind_transaction(Effect, Change, Ref),
     quod_effect_journal:release_applied(2, [Effect]),
-    ok = wait_ready(Ns, 300),
-    ok = wait_effect_target_state(Ns, applied, 300),
-    ?assertMatch({ok, #{state := applied, result := ok}},
-                 quod_effect_journal:status(quod_effect:effect_id(Effect))).
+    Effect.
 
 stopped_ontology_resumes_same_anchor(_Fixture) ->
     Ns = unique_ns(<<"resume-anchor">>),
@@ -2759,10 +2786,19 @@ wrong_anchor_is_not_a_satisfied_effect(_Fixture) ->
          {node, Executor}, {Ns, Wrong},
          crypto:hash(sha256, <<"wrong-anchor-request">>),
          crypto:hash(sha256, <<"wrong-anchor-prepared">>)},
-    ?assertEqual(
-       incompatible,
-       quod_effect_journal:test_desired_state(
-         ?ROOT_NS, {ontology_hosted, Ns}, Effect)).
+    Check = fun(Control, Desired, E) ->
+        quod_effect_journal:test_desired_state(Control, Desired, E)
+    end,
+    ?assertEqual(incompatible, Check(?ROOT_NS, {ontology_hosted, Ns}, Effect)),
+    Exact = setelement(9, Effect, {Ns, Actual}),
+    ?assertEqual(satisfied, Check(?ROOT_NS, {ontology_hosted, Ns}, Exact)),
+    ?assertEqual(absent, Check(?ROOT_NS, false, Exact)),
+    ?assertEqual(absent, Check(?ROOT_NS, {fail_with_reason, explicit_absence}, Exact)),
+    ?assertMatch({unavailable, _}, Check(unique_ns(<<"unavailable-control">>), true, Exact)),
+    quod_lobby_tests:assert_read_has_no_io(fun() ->
+        ?assertEqual(satisfied, Check(?ROOT_NS, {ontology_hosted, Ns}, Exact)),
+        ?assertEqual(satisfied, Check(?ROOT_NS, {ontology_hosted, Ns}, Exact))
+    end).
 
 structural_validation_is_total(_Fixture) ->
     ?assertEqual({error, invalid_action},
@@ -2792,7 +2828,7 @@ current_principal_is_engine_owned(_Fixture) ->
        quod_prolog:prove_ro(?NODE_NS,
                            {current_principal, {node, NodeKey}})),
     ?assertMatch(
-       {fail, _},
+       fail,
        quod_prolog:prove_ro(
          ?ROOT_NS,
          {current_principal, {node, crypto:strong_rand_bytes(32)}})).
@@ -2910,7 +2946,6 @@ agent_is_gated_by_root_creation_policy(_Fixture) ->
     {ok, NodeKey} = application:get_env(quod, node_pubkey),
     {PublicKey, _} = KeyPair = quod_identity:generate(),
     Agent = provision_agent(PublicKey, false),
-    AgentRef = maps:get(reference, Agent),
     DeniedNs = unique_ns(<<"denied-agent">>),
     Peer = {127, 0, 0, 2},
     {ok, AuthPid} = quod_client_auth:start_link(
@@ -2927,16 +2962,10 @@ agent_is_gated_by_root_creation_policy(_Fixture) ->
                                       NetworkId, PublicKey, KeyPair,
                                       Agent, execute, SessionExpires,
                                       GoalText),
-        {ok, _, {normalized, {failed, ReasonsBlob}}} =
+        {ok, _, {normalized, fail}} =
             quod_client_goal_ingress:submit(
               execute, SessionId, RequestBytes, Signature, Peer),
-        {ok, Reasons} = quod_wire_term:decode_failure_reasons(ReasonsBlob),
-        ?assert(
-           lists:any(
-             fun({can_create_ontology, Ref, _, _})
-                   when Ref =:= AgentRef -> true;
-                (_) -> false
-             end, Reasons))
+        ?assertEqual({ok, not_hosted}, quod_ontology:local_state(DeniedNs))
     after
         stop_process(AuthPid)
     end.
@@ -3007,7 +3036,7 @@ collisions_preserve_existing_state(_Fixture) ->
     ?assertEqual(Desired0,
                  application:get_env(quod, namespace_desired, #{})),
     ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {kept, true})),
-    ?assertMatch({fail, _},
+    ?assertMatch(fail,
                  quod_prolog:prove_ro(Ns, {replacement, forbidden})).
 
 failed_admission_rolls_back(#{dir := Dir, manager := Manager}) ->
@@ -3053,7 +3082,6 @@ failed_root_policy_does_not_read_or_stage(_Fixture) ->
     {ok, NodeKey} = application:get_env(quod, node_pubkey),
     {PublicKey, _} = KeyPair = quod_identity:generate(),
     Agent = provision_agent(PublicKey, false),
-    AgentRef = maps:get(reference, Agent),
     Peer = {127, 0, 0, 3},
     {ok, AuthPid} = quod_client_auth:start_link(
                       #{network_id => NetworkId, node_key => NodeKey,
@@ -3074,21 +3102,9 @@ failed_root_policy_does_not_read_or_stage(_Fixture) ->
                                       NetworkId, PublicKey, KeyPair,
                                       Agent, execute, SessionExpires,
                                       RoutedGoal),
-        {ok, _, {normalized, {failed, ReasonsBlob}}} =
+        {ok, _, {normalized, fail}} =
             quod_client_goal_ingress:submit(
               execute, SessionId, RequestBytes, Signature, Peer),
-        {ok, Reasons} = quod_wire_term:decode_failure_reasons(ReasonsBlob),
-        ?assert(
-           lists:any(
-             fun({can_create_ontology, Ref, _, _})
-                   when Ref =:= AgentRef -> true;
-                (_) -> false
-             end, Reasons)),
-        ?assertNot(
-           lists:any(
-             fun({ontology_creation_failed, {source_file_error, _}}) -> true;
-                (_) -> false
-             end, Reasons)),
         ?assertEqual(BeforeHeight,
                      maps:get(committed, quod_simplex:stats(?ROOT_NS))),
         ?assertEqual(BeforeRows, quod_effect_journal:rows()),
@@ -3180,10 +3196,10 @@ aborted_hosting_fact_changes_nothing(
     {ok, NodeRef} = quod_agent_ref:materialize_principal(Principal),
     Host = {hosts_ontology, NodeRef, Ns, Anchor, private},
     ?assertMatch(
-       {fail, _},
+       fail,
        quod_prolog:execute(ActorNs, {transaction, {',', {assertz, Host}, fail}})),
     ?assertEqual(false, desired_has_content(Ns)),
-    ?assertMatch({fail, _}, quod_prolog:prove_ro(ActorNs, Host)).
+    ?assertMatch(fail, quod_prolog:prove_ro(ActorNs, Host)).
 
 retracted_hosting_fact_removes_restart_intent(
   #{actor_ns := ActorNs, actor_principal := Principal}) ->

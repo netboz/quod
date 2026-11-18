@@ -223,7 +223,7 @@ joiner_promoted_to_voter(Config) ->
     %% never digested — cold, dead, or still mid-catch-up (`follows/4` keeps it silent until it is settled).
     %% A failed proof commits nothing, so slot numbering below is unaffected.
     {GhostPub, _} = quod_identity:generate(),
-    ?assertMatch({fail, [_ | _]},
+    ?assertMatch(fail,
                  prove(Founder, {admit, GhostPub, "127.0.0.1", 9999})),
 
     %% the founder admits the joiner (slot 4) — retried until the joiner's periodic digests (it has been
@@ -383,7 +383,7 @@ runtime_join_action_catches_up(Config) ->
              binary:encode_hex(<<(First bxor 1), Rest/binary>>),
              [{seed, "127.0.0.1", ?FOUNDER_PORT}]},
         ?assertMatch(
-           {fail, [_ | _]},
+           fail,
            peer:call(ActionNode, quod_prolog, execute,
                      [NodeNs, WrongAction])),
         {save_config, [{founder2, Founder}, {joiner2, Joiner}]}

@@ -23,9 +23,9 @@ native_scope_is_read_only_and_keeps_original_request_test_() ->
                          Read(Identity,{current_request_operation,{0}})),
             %% The original signed execute bytes authenticate this native read;
             %% they do not cause its embedded assertz goal to execute.
-            ?assertMatch({fail,_},read(Ctx,Ns,{saved,ok})),
+            ?assertMatch(fail,read(Ctx,Ns,{saved,ok})),
             ?assertMatch({error,_},Read(Identity,{assertz,native_scope_write})),
-            ?assertMatch({fail,_},read(Ctx,Ns,native_scope_write)),
+            ?assertMatch(fail,read(Ctx,Ns,native_scope_write)),
             ?assertMatch({error,_},Read({Ns,<<0:256>>},{current_ontology_identity,Ns,Anchor})),
             ?assertEqual({error,invalid_native_request},quod_ask:native_read(Node,Identity,true,
                 setelement(2,Auth,<<0:256>>),quod_time:mono_ms()+10000)),
@@ -172,7 +172,7 @@ native_presentation_uses_original_scope_and_closed_effect_codec_test_() ->
             #{<<"token">> := ShortToken} = gui_reply(Hud,<<"gui_expired">>),
             ?assertEqual(ok,gui_result(Lost)),
             ?assertEqual(ok,quod_gui_presentation:release(ShortEffect,ShortPrepared)),
-            ?assertMatch({fail,_},read(Ctx,HumanNs,{saved,ok})),
+            ?assertMatch(fail,read(Ctx,HumanNs,{saved,ok})),
             ?assertMatch({ok,[#{<<"V0">> := []}],_},read(Ctx,HumanNs,gui({gui_pending_questions,{0}}))),
             ?assertEqual({error,invalid_presentation_binding},quod_gui_presentation:release(setelement(8,Effect,{node,Node}),Prepared))
         after
@@ -263,10 +263,10 @@ live_opening_commits_question_hud_and_presentation_together_test_() ->
                 Rollback = gui_async(fun() -> quod_lobby_tests:submit(HumanCtx,execute,
                     {',',gui({gui_open,Source,{0}}),fail}) end),
                 _ = gui_reply(Hud,<<"gui_prepare">>),
-                ?assertMatch({ok,_,{normalized,{failed,_}}},gui_result(Rollback)),
+                ?assertMatch({ok,_,{normalized,fail}},gui_result(Rollback)),
                 ?assertMatch({ok,[#{<<"V0">> := []}],_},read(HumanCtx,HumanNs,gui({gui_pending_questions,{0}}))),
                 [#{state := applied}] = quod_effect_journal:rows(),
-                ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{gui_question,{'_'},{'_'},{'_'},{'_'},{'_'},{'_'}})),
+                ?assertMatch(fail,quod_prolog:prove_ro(Ns,{gui_question,{'_'},{'_'},{'_'},{'_'},{'_'},{'_'}})),
                 Hud ! {automatic,false}, _ = gui_socket_state(Hud),
                 Refusal = gui_async(fun() -> quod_lobby_tests:submit(HumanCtx,execute,
                     gui({gui_open,Source,{0}})) end),
@@ -337,7 +337,7 @@ live_opening_commits_question_hud_and_presentation_together_test_() ->
                 ?assertMatch({ok,_,{normalized,{committed,_,_}}},node_request(Ctx,execute,scope(Ns,{retract,Handler}))),
                 fail(HumanCtx,gui({gui_open,Source,{0}})),
                 ?assertMatch({ok,[#{<<"V0">> := []}],_},read(HumanCtx,HumanNs,gui({gui_pending_questions,{0}}))),
-                ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{gui_question,{'_'},{'_'},{'_'},{'_'},{'_'},{'_'}})),
+                ?assertMatch(fail,quod_prolog:prove_ro(Ns,{gui_question,{'_'},{'_'},{'_'},{'_'},{'_'},{'_'}})),
                 ?assertEqual(3,length([ok || #{state := applied} <- quod_effect_journal:rows()]))
             after
                 Hud ! stop,
@@ -522,7 +522,7 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
             %% was accepted before that permission was withdrawn.
             Policy = {gui_question_policy, settings, Human, Actor},
             commit(Ctx, scope(AppNs, {retract, Policy})),
-            ?assertMatch({fail, _}, read(Ctx, ResponderNs, gui(FormQuery))),
+            ?assertMatch(fail, read(Ctx, ResponderNs, gui(FormQuery))),
             commit(Ctx, scope(AppNs, {assertz, Policy})),
             commit(Ctx, scope(AppNs, {assertz, {attribute, name, help, <<"New help">>}})),
             {ok, [#{<<"V0">> := {question_form, Source, Actor, Revision, awaiting,
@@ -551,7 +551,7 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
             ?assertMatch({ok, [#{<<"V0">> := {question_form, Source, Actor, Revision,
                 {submitted, Submission, apply, Fields}, _}}], _},
                 read(Ctx, ResponderNs, gui(FormQuery))),
-            ?assertMatch({fail, _}, read(Ctx, ResponderNs, {gui_submitted, Question, Submission})),
+            ?assertMatch(fail, read(Ctx, ResponderNs, {gui_submitted, Question, Submission})),
             fail(Ctx, scope(ResponderNs, gui(Submit))),
             ?assertMatch({ok, _, {normalized, {error, proof_unavailable}}},
                 quod_lobby_tests:submit(Ctx, execute, scope(ResponderNs, gui({gui_cancel, question_ref(ResponderNs,Question)})))),
@@ -571,10 +571,10 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
             fail(ActorCtx, gui({gui_complete, question_ref(ResponderNs,Question)})),
             ?assertMatch({ok, _, {normalized, {committed, _, _}}}, complete(ActorCtx, Bytes)),
             ?assertMatch({ok, [_], _}, read(Ctx, AppNs, {saved, <<"Entered">>, square, 75, 180})),
-            ?assertMatch({fail, _}, read(Ctx, ResponderNs, Submitted)),
-            ?assertMatch({fail, _}, read(Ctx, ResponderNs, gui(setelement(5, View, {'_'})))),
-            ?assertMatch({fail, _}, read(Ctx, ResponderNs, gui(FormQuery))),
-            ?assertMatch({fail, _}, read(Ctx, HumanNs, {gui_pending, HumanInstance, Reference})),
+            ?assertMatch(fail, read(Ctx, ResponderNs, Submitted)),
+            ?assertMatch(fail, read(Ctx, ResponderNs, gui(setelement(5, View, {'_'})))),
+            ?assertMatch(fail, read(Ctx, ResponderNs, gui(FormQuery))),
+            ?assertMatch(fail, read(Ctx, HumanNs, {gui_pending, HumanInstance, Reference})),
             assert_no_guards(Ctx, AppNs, ResponderNs),
             ?assertMatch({ok, [#{<<"V0">> := []}], _},
                 read(Ctx, HumanNs, gui({gui_pending_questions, {0}}))),
@@ -588,8 +588,8 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
             OtherRow = setelement(2, Awaiting, OtherQ),
             seed(Ctx, ResponderNs, HumanNs, HumanInstance, OtherRef, OtherRow),
             commit(Ctx, scope(ResponderNs, gui({gui_cancel, question_ref(ResponderNs,OtherQ)}))),
-            ?assertMatch({fail, _}, read(Ctx, ResponderNs, OtherRow)),
-            ?assertMatch({fail, _}, read(Ctx, HumanNs, {gui_pending, HumanInstance, OtherRef})),
+            ?assertMatch(fail, read(Ctx, ResponderNs, OtherRow)),
+            ?assertMatch(fail, read(Ctx, HumanNs, {gui_pending, HumanInstance, OtherRef})),
             assert_no_guards(Ctx, AppNs, ResponderNs),
             fail(Ctx, scope(ResponderNs, gui({gui_cancel, question_ref(ResponderNs,OtherQ)}))),
             %% Namespace equality cannot substitute for the exact source history.
@@ -599,7 +599,7 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
                 setelement(3, Source, <<0:256>>)),
             seed(Ctx, ResponderNs, HumanNs, HumanInstance, WrongRef, WrongRow),
             fail(Ctx, scope(ResponderNs, gui(setelement(2, Submit, question_ref(ResponderNs,WrongQ))))),
-            ?assertMatch({fail, _}, read(Ctx, ResponderNs, gui(setelement(2, FormQuery, question_ref(ResponderNs,WrongQ))))),
+            ?assertMatch(fail, read(Ctx, ResponderNs, gui(setelement(2, FormQuery, question_ref(ResponderNs,WrongQ))))),
             ?assertMatch({ok, [_], _}, read(Ctx, ResponderNs, WrongRow)),
             commit(Ctx, scope(ResponderNs, gui({gui_cancel, question_ref(ResponderNs,WrongQ)}))),
             %% Simultaneous submitted operations race through the production
@@ -631,7 +631,7 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
                 {ok, _, {normalized, {committed, _, _}}} ->
                     ?assertMatch({ok, _, {normalized, {committed, _, _}}},
                         complete(ActorCtx, completion_bytes(Ctx, ResponderNs, CancelQ)));
-                _ -> ?assertMatch({fail, _}, read(Ctx, ResponderNs,
+                _ -> ?assertMatch(fail, read(Ctx, ResponderNs,
                     {gui_question, CancelQ, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}}))
             end,
             ?assertMatch({ok, [#{<<"V0">> := []}], _},
@@ -647,12 +647,12 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
                 commit(Ctx, scope(ResponderNs, gui({gui_submit, question_ref(ResponderNs,Q), Revision, apply, UniqueFields}))),
                 Original = completion_bytes(Ctx, ResponderNs, Q),
                 commit(Ctx, scope(AppNs, {assertz, Failure})),
-                ?assertMatch({ok, _, {normalized, {failed, _}}}, complete(ActorCtx, Original)),
+                ?assertMatch({ok, _, {normalized, fail}}, complete(ActorCtx, Original)),
                 ?assertMatch({ok, [_], _}, read(Ctx, ResponderNs,
                     {gui_question, Q, Source, Human, responder, Revision,
                      {submitted, {'_'}, apply, UniqueFields, Original}})),
                 ?assertMatch({ok, [_], _}, read(Ctx, HumanNs, {gui_pending, HumanInstance, Ref})),
-                ?assertMatch({fail, _}, read(Ctx, AppNs, {saved, <<Id:32>>, {'_'}, {'_'}, {'_'}})),
+                ?assertMatch(fail, read(Ctx, AppNs, {saved, <<Id:32>>, {'_'}, {'_'}, {'_'}})),
                 assert_no_guards(Ctx, AppNs, ResponderNs),
                 commit(Ctx, scope(AppNs, {retract, Failure}))
             end, [{6, reject_save}, {7, reject_after_consume}]),
@@ -676,8 +676,8 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
             ?assertMatch({fail, _}, read(OtherHumanCtx, ResponderNs,
                 gui({gui_question_status, question_ref(ResponderNs,ExpiredQ), expired}))),
             commit(Ctx, scope(ResponderNs, gui({gui_cancel, question_ref(ResponderNs,ExpiredQ)}))),
-            ?assertMatch({fail, _}, read(Ctx, ResponderNs, ExpiredRow)),
-            ?assertMatch({fail, _}, read(Ctx, HumanNs, {gui_pending, HumanInstance, ExpiredRef})),
+            ?assertMatch(fail, read(Ctx, ResponderNs, ExpiredRow)),
+            ?assertMatch(fail, read(Ctx, HumanNs, {gui_pending, HumanInstance, ExpiredRef})),
             assert_no_guards(Ctx, AppNs, ResponderNs)
         after
             quod_lobby_tests:stop_process(Application),
@@ -687,8 +687,8 @@ accepted_question_transitions_use_signed_atomic_owners_test_() ->
     end}.
 
 assert_no_guards(Ctx, AppNs, ResponderNs) ->
-    ?assertMatch({fail, _}, read(Ctx, AppNs, {gui_application_active, {'_'}})),
-    ?assertMatch({fail, _}, read(Ctx, ResponderNs, {gui_retiring, {'_'}, {'_'}})).
+    ?assertMatch(fail, read(Ctx, AppNs, {gui_application_active, {'_'}})),
+    ?assertMatch(fail, read(Ctx, ResponderNs, {gui_retiring, {'_'}, {'_'}})).
 
 concurrent_submissions(Ctx, Goals) ->
     Parent = self(),
@@ -749,7 +749,11 @@ await_operation(Operation) ->
         _ -> ok
     end.
 fail(Ctx, Goal) ->
-    ?assertMatch({ok, _, {normalized, {failed, _}}}, quod_lobby_tests:submit(Ctx, execute, Goal)).
+    case quod_lobby_tests:submit(Ctx, execute, Goal) of
+        {ok, _, {normalized, fail}} -> ok;
+        {ok, _, {normalized, {failed, _}}} -> ok;
+        Other -> error({expected_logical_failure, Other})
+    end.
 
 assertions(Terms) -> conjunction(quod_ct:source_assertions(Terms)).
 conjunction([Goal]) -> Goal;
@@ -838,7 +842,7 @@ committed_answer_automatically_completes_test_() ->
                 ?assertMatch({ok,_,_},quod_ct:rp(Ns,
                     {transaction,{',',{assertz,SeedEntry},{retract,BroadEntry}}})),
                 SignRead = {',',{agent_hosted,actor,Node,1,Key},{sign_agent_request,Typed,{0}}},
-                ?assertMatch({ok,_,{normalized,{read,_,{failed,_}}}},
+                ?assertMatch({ok,_,{normalized,{read,_,fail}}},
                              node_request(Ctx,read,scope(Ns,SignRead))),
                 %% The reference and accepted row become visible together.
                 ?assertMatch({ok, _, {normalized, {committed, _, _}}}, node_request(Ctx, execute,
@@ -851,12 +855,12 @@ committed_answer_automatically_completes_test_() ->
                 after 10000 -> error(gui_completion_missing) end,
                 ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(AppNs,
                     {saved, <<"Automatic">>, square, 75, 180})),
-                ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, Row)),
+                ?assertMatch(fail, quod_prolog:prove_ro(Ns, Row)),
                 %% Consumption withdraws the signature grant as part of the
                 %% same transaction; expired saved work gets no fresh signature.
-                ?assertMatch({ok,_,{normalized,{read,_,{failed,_}}}},
+                ?assertMatch({ok,_,{normalized,{read,_,fail}}},
                              node_request(Ctx,read,scope(Ns,SignRead))),
-                ?assertMatch({fail, _}, quod_prolog:prove_ro(HumanNs,
+                ?assertMatch(fail, quod_prolog:prove_ro(HumanNs,
                     {gui_pending, person, Reference})),
                 %% Even an administratively forged row cannot authorize
                 %% another goal, nor a variable-bearing completion template.
@@ -870,7 +874,7 @@ committed_answer_automatically_completes_test_() ->
                                  node_request(Ctx,execute,scope(Ns,{assertz,BadRow}))),
                     BadRead = {',',{agent_hosted,actor,Node,1,Key},
                                   {sign_agent_request,BadTyped,{0}}},
-                    ?assertMatch({ok,_,{normalized,{read,_,{failed,_}}}},
+                    ?assertMatch({ok,_,{normalized,{read,_,fail}}},
                                  node_request(Ctx,read,scope(Ns,BadRead))),
                     ok = quod_runtime:reconcile_resource(Ns,quod_prolog:applied(Ns),
                         agent_hosts,all,quod_time:mono_ms()+5000),
@@ -886,7 +890,7 @@ committed_answer_automatically_completes_test_() ->
                     scope(Ns,{trigger_event,{gui_submitted,Q,fixture_submission}}))),
                 ?assertMatch({ok,_,{normalized,{committed,_,_}}},
                              node_request(Ctx,execute,scope(Ns,{assertz,BroadEntry}))),
-                ?assertMatch({ok,_,{normalized,{read,_,{failed,_}}}},
+                ?assertMatch({ok,_,{normalized,{read,_,fail}}},
                              node_request(Ctx,read,scope(Ns,{ping,unauthorized}))),
                 ?assertMatch({ok,_,{normalized,{committed,_,_}}},node_request(Ctx,execute,
                     scope(Ns,{assertz,{can_request_agent_signature,Node,actor,{'_'}}}))),

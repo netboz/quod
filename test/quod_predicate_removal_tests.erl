@@ -60,7 +60,11 @@ signed_denial_atomic_rollback_and_conflict_test_() ->
             Locked = quod_agent_hosting_tests:start_ontology(Denied, Dir, Identity, [],
                 [{can_invoke, {current_predicate, {'_'}}, Node, {'_'}, {'_'}}, {likes, locked, value}]),
             try
-                denied(Denied, {abolish, {'/', likes, 2}}),
+                {DeniedBytes, DeniedSig} = sign(execute, Denied, {abolish, {'/', likes, 2}}),
+                {ok, _, {normalized, {failed, DeniedReasons}}} =
+                    quod_client_goal_ingress:submit(DeniedBytes, DeniedSig),
+                ?assertEqual({ok, [{not_allowed, Denied}]},
+                             quod_wire_term:decode_failure_reasons(DeniedReasons)),
                 holds(Denied, {current_predicate, {'/', likes, 2}}),
                 Both = conjunction([{abolish, {'/', likes, 2}},
                                     {'::', Other, {abolish, {'/', likes, 2}}}]),
@@ -145,14 +149,14 @@ committed(Ns, Goal) ->
     {Bytes, Sig, Result}.
 denied(Ns, Goal) ->
     {Bytes, Sig} = sign(execute, Ns, Goal),
-    ?assertMatch({ok, _, {normalized, {failed, _}}}, quod_client_goal_ingress:submit(Bytes, Sig)).
+    ?assertMatch({ok, _, {normalized, fail}}, quod_client_goal_ingress:submit(Bytes, Sig)).
 holds(Ns, Goal) ->
     {Bytes, Sig} = sign(read, Ns, Goal),
     ?assertMatch({ok, _, {normalized, {read, _, {answers, _, [_ | _]}}}},
         quod_client_goal_ingress:submit(Bytes, Sig)).
 absent(Ns, Goal) ->
     {Bytes, Sig} = sign(read, Ns, Goal),
-    ?assertMatch({ok, _, {normalized, {read, _, {failed, _}}}},
+    ?assertMatch({ok, _, {normalized, {read, _, fail}}},
         quod_client_goal_ingress:submit(Bytes, Sig)).
 conjunction([G]) -> G;
 conjunction([G | Rest]) -> {',', G, conjunction(Rest)}.

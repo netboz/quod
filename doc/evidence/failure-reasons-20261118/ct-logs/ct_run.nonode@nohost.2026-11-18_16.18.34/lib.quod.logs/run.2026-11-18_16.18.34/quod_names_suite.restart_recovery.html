@@ -1,0 +1,162 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<title>Test quod_names_SUITE:restart_recovery result</title>
+<meta http-equiv="cache-control" content="no-cache"></meta>
+<meta http-equiv="content-type" content="text/html; charset=utf-8"></meta>
+<link rel="stylesheet" href="../../ct_default.css" type="text/css"></link>
+<script type="text/javascript" src="../../jquery-latest.js"></script>
+<script type="text/javascript" src="../../jquery.tablesorter.min.js"></script>
+</head>
+<body>
+
+<a name="top"></a><pre>
+=== Test case: <a href="quod_names_suite.src.html#restart_recovery-1">quod_names_SUITE:restart_recovery/1</a> (click for source code)
+
+=== Config value:
+
+    [{target,&lt;0.9237.0&gt;},
+     {asker,&lt;0.9238.0&gt;},
+     {target_pub,&lt;&lt;41,35,102,162,160,141,191,163,244,139,124,207,237,89,14,
+                   234,150,5,39,135,184,209,97,8,236,147,34,100,175,104,69,194&gt;&gt;},
+     {target_key,{&lt;&lt;41,35,102,162,160,141,191,163,244,139,124,207,237,89,14,
+                    234,150,5,39,135,184,209,97,8,236,147,34,100,175,104,69,194&gt;&gt;,
+                  &lt;&lt;210,238,4,65,43,59,140,109,3,255,152,12,23,33,173,249,1,
+                    140,83,215,43,122,211,180,53,54,188,214,157,59,204,251&gt;&gt;}},
+     {asker_pub,&lt;&lt;245,240,12,234,230,7,180,6,215,22,32,88,173,243,143,56,149,
+                  53,7,105,131,58,212,127,152,169,168,84,192,89,138,192&gt;&gt;},
+     {target_addr,{"127.0.0.1",15990}},
+     {asker_addr,{"127.0.0.1",15991}},
+     {names_anchor,&lt;&lt;42,64,166,167,99,207,226,225,206,48,60,138,67,0,162,248,
+                     75,243,93,126,39,179,21,211,232,209,117,204,229,128,73,
+                     255&gt;&gt;},
+     {names_source,"/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quod/priv/ontologies/quod_names.pl"},
+     {names_count,1506173},
+     {agent_genesis,"/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/log_private/naming_agent.pl"},
+     {watchdog,&lt;0.9236.0&gt;},
+     {tc_logfile,"/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_names_suite.restart_recovery.html"},
+     {tc_group_properties,[]},
+     {tc_group_path,[]},
+     {data_dir,"/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quod/test/quod_names_SUITE_data/"},
+     {priv_dir,"/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/log_private/"}]
+
+=== Current directory is "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_16.18.34"
+
+=== Started at 2026-11-18 16:22:21
+
+<br />
+=SUPERVISOR REPORT==== 18-Nov-2026::16:22:21.218021 ===
+    supervisor: {via,gproc,{n,l,{quod_ns,&lt;&lt;"quod:names"&gt;&gt;}}}
+    errorContext: child_terminated
+    reason: killed
+    offender: [{pid,&lt;0.272.0&gt;},
+               {id,quod_prolog},
+               {mfargs,{quod_prolog,start_link,
+                                    [&lt;&lt;"quod:names"&gt;&gt;,
+                                     #{mode =&gt; create,seed_peers =&gt; [],
+                                       role =&gt; member,
+                                       data_dir =&gt;
+                                           "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/log_private/names_target_quod:names",
+                                       node_id =&gt;
+                                           &lt;&lt;41,35,102,162,160,141,191,163,244,
+                                             139,124,207,237,89,14,234,150,5,
+                                             39,135,184,209,97,8,236,147,34,
+                                             100,175,104,69,194&gt;&gt;,
+                                       genesis_file =&gt;
+                                           "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quod/priv/ontologies/quod_names.pl"}]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,5000},
+               {child_type,worker}]
+
+
+=CRASH REPORT==== 18-Nov-2026::16:22:21.218445 ===
+  crasher:
+    initial call: quod_prolog:init/1
+    pid: &lt;0.663.0&gt;
+    registered_name: []
+    exception exit: genesis_unavailable
+      in function  gen_server:init_it/6 (gen_server.erl:2257)
+    ancestors: [&lt;0.242.0&gt;,&lt;0.189.0&gt;,&lt;0.175.0&gt;,&lt;0.174.0&gt;]
+    message_queue_len: 0
+    messages: []
+    links: [&lt;0.242.0&gt;]
+    dictionary: []
+    trap_exit: false
+    status: running
+    heap_size: 233
+    stack_size: 29
+    reductions: 159
+  neighbours:
+
+
+=SUPERVISOR REPORT==== 18-Nov-2026::16:22:21.218571 ===
+    supervisor: {via,gproc,{n,l,{quod_ns,&lt;&lt;"quod:names"&gt;&gt;}}}
+    errorContext: start_error
+    reason: genesis_unavailable
+    offender: [{pid,undefined},
+               {id,quod_prolog},
+               {mfargs,{quod_prolog,start_link,
+                                    [&lt;&lt;"quod:names"&gt;&gt;,
+                                     #{mode =&gt; create,seed_peers =&gt; [],
+                                       role =&gt; member,
+                                       data_dir =&gt;
+                                           "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/log_private/names_target_quod:names",
+                                       node_id =&gt;
+                                           &lt;&lt;41,35,102,162,160,141,191,163,244,
+                                             139,124,207,237,89,14,234,150,5,
+                                             39,135,184,209,97,8,236,147,34,
+                                             100,175,104,69,194&gt;&gt;,
+                                       genesis_file =&gt;
+                                           "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quod/priv/ontologies/quod_names.pl"}]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,5000},
+               {child_type,worker}]
+
+
+=SUPERVISOR REPORT==== 18-Nov-2026::16:22:21.218663 ===
+    supervisor: {via,gproc,{n,l,{quod_ns,&lt;&lt;"quod:names"&gt;&gt;}}}
+    errorContext: child_terminated
+    reason: killed
+    offender: [{pid,&lt;0.243.0&gt;},
+               {id,quod_simplex},
+               {mfargs,{quod_simplex,start_link,
+                                     [&lt;&lt;"quod:names"&gt;&gt;,
+                                      #{mode =&gt; create,seed_peers =&gt; [],
+                                        role =&gt; member,
+                                        data_dir =&gt;
+                                            "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/log_private/names_target_quod:names",
+                                        node_id =&gt;
+                                            &lt;&lt;41,35,102,162,160,141,191,163,
+                                              244,139,124,207,237,89,14,234,
+                                              150,5,39,135,184,209,97,8,236,
+                                              147,34,100,175,104,69,194&gt;&gt;,
+                                        genesis_file =&gt;
+                                            "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quod/priv/ontologies/quod_names.pl"}]}},
+               {restart_type,permanent},
+               {significant,false},
+               {shutdown,5000},
+               {child_type,worker}]
+
+
+<a name="end"></a>
+
+
+=== Ended at 2026-11-18 16:22:21
+=== successfully completed test case
+=== === Returned value: ok
+</pre>
+<center>
+<br /><hr /><p>
+<a href="../../../all_runs.html">Test run history
+</a>  |  <a href="../../../index.html">Top level test index
+</a>  |  <a href="../../../suite.log.latest.html">Latest test result</a>
+</p>
+<div class="copyright">Copyright &copy; 2026 <a href="http://www.erlang.org">Open Telecom Platform</a><br />
+Updated: <!--date-->Wed Nov 18 2026 16:22:21<!--/date--><br />
+</div>
+</center>
+</body>
+</html>

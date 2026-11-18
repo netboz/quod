@@ -1,0 +1,37 @@
+=== Suite started at 2026-11-18 17:28:23
+=== Starting test, 1 test cases
+=cases         1
+=user          yan
+=host          nohost
+=hosts         nohost 
+=emulator_vsn  16.0.2
+=emulator      beam
+=otp_release   28
+=started       2026-11-18 17:28:23
+=case          quod_ask_SUITE:init_per_suite
+=logfile       quod_ask_suite.init_per_suite.html
+=started       2026-11-18 17:28:23
+=ended         2026-11-18 17:28:27
+=result        ok
+=elapsed       4.107024s
+=case          quod_ask_SUITE:remote_native_read_uses_selected_observer
+=logfile       quod_ask_suite.remote_native_read_uses_selected_observer.html
+=started       2026-11-18 17:28:27
+=ended         2026-11-18 17:28:27
+=result        ok
+=elapsed       0.044322s
+=case          quod_ask_SUITE:end_per_suite
+=logfile       quod_ask_suite.end_per_suite.html
+=started       2026-11-18 17:28:27
+=ended         2026-11-18 17:28:27
+=result        ok
+=elapsed       0.002259s
+=group_time    4.203s
+=== TEST COMPLETE, 1 ok, 0 failed of 1 test cases
+
+=finished      2026-11-18 17:28:27
+=failed        0
+=successful    1
+=user_skipped  0
+=auto_skipped  0
+=elapsed_time  4275557

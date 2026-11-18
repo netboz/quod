@@ -1,0 +1,86 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<title>Test join_SUITE:self_seeded_joiner_catches_up result</title>
+<meta http-equiv="cache-control" content="no-cache"></meta>
+<meta http-equiv="content-type" content="text/html; charset=utf-8"></meta>
+<link rel="stylesheet" href="../../ct_default.css" type="text/css"></link>
+<script type="text/javascript" src="../../jquery-latest.js"></script>
+<script type="text/javascript" src="../../jquery.tablesorter.min.js"></script>
+</head>
+<body>
+
+<a name="top"></a><pre>
+=== Test case: <a href="join_suite.src.html#self_seeded_joiner_catches_up-1">join_SUITE:self_seeded_joiner_catches_up/1</a> (click for source code)
+
+=== Config value:
+
+    [{founder,&lt;0.8693.0&gt;},
+     {joiner,&lt;0.8694.0&gt;},
+     {fkey,{&lt;&lt;17,227,130,34,26,255,139,66,77,245,140,161,120,247,110,95,176,5,
+              224,148,145,232,176,197,212,26,215,234,185,38,141,15&gt;&gt;,
+            &lt;&lt;131,56,46,77,172,145,244,231,29,127,51,103,50,4,181,215,120,
+              226,18,123,93,155,186,16,44,28,8,223,237,240,154,251&gt;&gt;}},
+     {fpub,&lt;&lt;17,227,130,34,26,255,139,66,77,245,140,161,120,247,110,95,176,5,
+             224,148,145,232,176,197,212,26,215,234,185,38,141,15&gt;&gt;},
+     {faddr,{"127.0.0.1",15840}},
+     {jkey,{&lt;&lt;22,202,178,177,211,226,169,210,193,114,119,148,105,62,91,174,238,
+              89,225,112,206,115,154,241,47,2,106,104,5,147,79,182&gt;&gt;,
+            &lt;&lt;190,242,163,162,106,211,137,125,18,219,113,140,104,197,128,217,
+              22,241,12,45,166,161,141,73,135,79,166,212,203,251,238,147&gt;&gt;}},
+     {jaddr,{"127.0.0.1",15841}},
+     {jextra,#{mode =&gt; join,
+               seed_peers =&gt; [{"127.0.0.1",15841},{"127.0.0.1",15840}],
+               genesis_hash =&gt;
+                   &lt;&lt;53,50,79,146,192,24,75,180,125,184,93,214,59,137,39,109,
+                     13,14,106,50,235,69,62,85,11,163,241,164,18,235,157,14&gt;&gt;}},
+     {watchdog,&lt;0.8692.0&gt;},
+     {tc_logfile,"/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_17.18.54/lib.quod.join_SUITE.logs/run.2026-11-18_17.19.41/join_suite.self_seeded_joiner_catches_up.html"},
+     {tc_group_properties,[]},
+     {tc_group_path,[]},
+     {data_dir,"/home/yan/src/quod/_build/test/lib/quod/test/join_SUITE_data/"},
+     {priv_dir,"/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_17.18.54/lib.quod.join_SUITE.logs/run.2026-11-18_17.19.41/log_private/"}]
+
+=== Current directory is "/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_17.18.54"
+
+=== Started at 2026-11-18 17:19:51
+
+<br />
+Could not find element saved_config in Config.
+
+
+</pre>
+<div class="ct_error_notify"><pre><b>*** CT Error Notification 2026-11-18 17:19:51.843 ***</b><a id=e-2 class="link-to-entry" href="#e-2">&#x1f517;</a>
+join_SUITE:self_seeded_joiner_catches_up failed on line 268
+Reason: {badmatch,undefined}
+
+<a href="#end">Full error description and stacktrace</a>
+</pre></div>
+<pre>
+<a name="end"></a>
+
+
+=== Ended at 2026-11-18 17:19:51
+=== Location: [{join_SUITE,self_seeded_joiner_catches_up,<a href="join_suite.src.html#268">268</a>},
+              {test_server,ts_tc,1796},
+              {test_server,run_test_case_eval1,1305},
+              {test_server,run_test_case_eval,1237}]
+=== === Reason: no match of right hand side value undefined
+  in function  join_SUITE:self_seeded_joiner_catches_up/1 (/home/yan/src/quod/test/join_SUITE.erl:268)
+  in call from test_server:ts_tc/3 (test_server.erl:1796)
+  in call from test_server:run_test_case_eval1/6 (test_server.erl:1305)
+  in call from test_server:run_test_case_eval/9 (test_server.erl:1237)
+</pre>
+<center>
+<br /><hr /><p>
+<a href="../../../all_runs.html">Test run history
+</a>  |  <a href="../../../index.html">Top level test index
+</a>  |  <a href="../../../suite.log.latest.html">Latest test result</a>
+</p>
+<div class="copyright">Copyright &copy; 2026 <a href="http://www.erlang.org">Open Telecom Platform</a><br />
+Updated: <!--date-->Wed Nov 18 2026 17:19:51<!--/date--><br />
+</div>
+</center>
+</body>
+</html>

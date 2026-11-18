@@ -538,9 +538,9 @@ custody_and_signing_through_signed_ingress_and_foreign_scope_test() ->
             {ok, Decoded} = quod_durable_term:decode_result(Bindings),
             ?assert(quod_identity:verify(proplists:get_value(<<"S">>, Decoded), Bytes, Pub)),
             ?assertMatch(<<_:256>>, proplists:get_value(<<"K">>, Decoded)),
-            ?assertMatch({fail, _}, quod_prolog:prove_ro(<<"agents">>,
+            ?assertMatch(fail, quod_prolog:prove_ro(<<"agents">>,
                 {agent_host, first_agent, {'_'}, {'_'}, {'_'}})),
-            ?assertMatch({fail, _}, quod_prolog:prove_ro(<<"agents">>,
+            ?assertMatch(fail, quod_prolog:prove_ro(<<"agents">>,
                 {agent_key, first_agent, {'_'}, active})),
             with_provider(Config, fun(Port, Options, Client, _Other) ->
                 {ok, Socket} = provider_connect(Port, Options, Client),

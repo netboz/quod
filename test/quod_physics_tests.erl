@@ -13,7 +13,7 @@ m3a_shared_component_test_() ->
         commit(Ns,{assertz,Ambiguous}),
         assert_reason({ambiguous_physics_admission,S1},door_action(Ns,inside(Ns,inner,S0,T1))),
         ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,space({space_assignment,entity_ref(Ns,inner),0,none}))),
-        ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_frame_member,room,S1,{'_'},{'_'},{'_'}})),
+        ?assertMatch(fail,quod_prolog:prove_ro(Ns,{physics_frame_member,room,S1,{'_'},{'_'},{'_'}})),
         commit(Ns,{retract,Ambiguous}),
         m3a_component_commit(Ns,inside(Ns,inner,S0,T1)),
         m3a_component_commit(Source,inside(Source,nested,S1,T2)),
@@ -32,7 +32,7 @@ m3a_shared_component_test_() ->
         %% Ordinary containment remains in the child; the root owns only the
         %% explicit domain binding, not another placement or source entity.
         ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,space({space_assignment,entity_ref(Source,obstacle),1,S2}))),
-        ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{space_placement,room,Leaf,{'_'}})),
+        ?assertMatch(fail,quod_prolog:prove_ro(Ns,{space_placement,room,Leaf,{'_'}})),
         ContactExpected = #{fence => quod_physics:fence(Before),structure => 2,
                             incarnation => maps:get(run_token,Before)},
         {ok,ContactRef,InitialContact} = quod_physics:watch(Pid,ContactExpected,none),
@@ -106,8 +106,8 @@ m3a_shared_component_test_() ->
         assert_reason({incompatible_physics_run,independent},
             door_action(Ns,inside(Ns,independent,S0,{transform,700,900,1100,13,29,61}))),
         ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,space({space_assignment,entity_ref(Ns,independent),0,none}))),
-        ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_frame_member,room,Independent,{'_'},{'_'},{'_'}})),
-        ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_definition_delegate,independent,{'_'},{'_'},{'_'}})),
+        ?assertMatch(fail,quod_prolog:prove_ro(Ns,{physics_frame_member,room,Independent,{'_'},{'_'},{'_'}})),
+        ?assertMatch(fail,quod_prolog:prove_ro(Ns,{physics_definition_delegate,independent,{'_'},{'_'},{'_'}})),
         m3a_same_world(Ns,IndependentWorld,IndependentPid,{IndependentSpec,IndependentNative}),
         %% A selected body from that separate native world cannot silently
         %% turn into an authored/static pose in this world's scene adapter.
@@ -122,7 +122,7 @@ m3a_shared_component_test_() ->
         m3a_component_grants(Ns,S0,Bounded,Principal,World),
         ?assertMatch({ok,_,{normalized,{failed,_}}},door_action(Source,inside(Source,bounded,S0,{transform,1700,1900,2100,19,41,73}))),
         ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,space({space_assignment,entity_ref(Source,bounded),0,none}))),
-        ?assertMatch({fail,_},quod_prolog:prove_ro(Source,{physics_definition_delegate,bounded,{'_'},{'_'},{'_'}})),
+        ?assertMatch(fail,quod_prolog:prove_ro(Source,{physics_definition_delegate,bounded,{'_'},{'_'},{'_'}})),
         %% Authenticated controls and the samples share the composed domain.
         %% Restart replaces only its run incarnation, never body identities.
         commit(Ns,list_conjunction([{assertz,{can_push_physics_body,room,Principal,4}},
@@ -152,7 +152,7 @@ m3a_shared_component_test_() ->
         ?assertEqual(OldGeneration+1,maps:get(generation,Recovered)),
         ?assertEqual(maps:get(bodies,Reframed),maps:get(bodies,Recovered)),
         ?assertEqual({error,unavailable},quod_physics:snapshot(Restarted,Expected)),
-        ?assertMatch({ok,_,{normalized,{failed,_}}},Command(3,Zero)),
+        ?assertMatch({ok,_,{normalized,fail}},Command(3,Zero)),
         ?assertEqual(#{},maps:get(inputs,gen_server:call(Restarted,status))),
         m3a_same_world(Ns,IndependentWorld,IndependentPid,{IndependentSpec,IndependentNative}),
         quod_physics:unwatch(Pid,Ref),
@@ -274,11 +274,11 @@ m3a_shared_projection_test_() ->
             %% descendants retain their ordinary source-owned placements.
             m3a_component_commit(Ns,unplaced(Ns,inner)),
             await_structure(Ns,Pid,World,4),
-            ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_frame_member,room,{'_'},{'_'},{'_'},{'_'}})),
-            ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_body_definition,room,4,{'_'},{'_'},{'_'},{'_'}})),
+            ?assertMatch(fail,quod_prolog:prove_ro(Ns,{physics_frame_member,room,{'_'},{'_'},{'_'},{'_'}})),
+            ?assertMatch(fail,quod_prolog:prove_ro(Ns,{physics_body_definition,room,4,{'_'},{'_'},{'_'},{'_'}})),
             ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,space({space_assignment,entity_ref(Source,obstacle),1,S2}))),
             ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,space({space_assignment,entity_ref(Source,nested),1,S1}))),
-            ?assertMatch({fail,_},quod_prolog:prove_ro(Source,{physics_definition_delegate,{'_'},World,{'_'},{'_'}})),
+            ?assertMatch(fail,quod_prolog:prove_ro(Source,{physics_definition_delegate,{'_'},World,{'_'},{'_'}})),
             ok=quod_ct:write_evidence_json("QUOD_M3A_EVIDENCE","recursive-projection",
                 #{schema => <<"m3a-server-projection-v1">>,outer => m3a_projection_receipt(Projection),
                   source_update => m3a_projection_receipt(Changed),revoked_source => Denied,
@@ -296,7 +296,7 @@ root_body_appearance_frame_test_() ->
         Mark={mark,<<"appearance">>,<<"group">>,[],{body_frame_pose,4,2},
               no_surface,unlabelled,{depicts,Source,element(3,Subject),obstacle}},
         ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_view_bodies,[Mark],room})),
-        ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_view_bodies,
+        ?assertMatch(fail,quod_prolog:prove_ro(Ns,{physics_view_bodies,
             [setelement(8,Mark,{depicts,Source,element(3,Subject),other_entity})],room})),
         {ok,_,{normalized,{read,_,{answers,_,[Binding]}}}}=
             body_read(Ns,{physics_scene_frames,room,[Mark],{0}}),
@@ -422,8 +422,8 @@ first_physical_configuration(#{namespace := Ns,node := Node,reference := Agent,k
         quod_client_goal_ingress:submit(ReadBytes,ReadSignature),
     ?assertEqual({ok,[{<<"V0">>,Key}]},quod_durable_term:decode_result(Prepared)),
     ?assertEqual(#{},worlds(Ns)),
-    ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,space({space_instance,entity_ref(Ns,room),physical_space}))),
-    ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{agent_host,actor,{'_'},{'_'},{'_'}})),
+    ?assertMatch(fail,quod_prolog:prove_ro(Ns,space({space_instance,entity_ref(Ns,room),physical_space}))),
+    ?assertMatch(fail,quod_prolog:prove_ro(Ns,{agent_host,actor,{'_'},{'_'},{'_'}})),
     Rows = first_physics_rows(Ns,Anchor,Node,Gravity),
     %% Authored intent precedes runtime initialization, as in ordinary founding.
     commit(Ns,list_conjunction([quod_ct:source_assertion(R) || R <- Rows])),
@@ -485,7 +485,7 @@ first_physical_configuration(#{namespace := Ns,node := Node,reference := Agent,k
     after gproc:unreg(quod_reg:name({host_test,local_proof})) end.
 
 assert_unconfigured(Ns) ->
-    [?assertMatch({fail,_},quod_prolog:prove_ro(Ns,Goal)) || Goal <-
+    [?assertMatch(fail,quod_prolog:prove_ro(Ns,Goal)) || Goal <-
         [{agent_host,actor,{'_'},{'_'},{'_'}},{agent_key,actor,{'_'},active},
          {space_assignment_state,{'_'},{'_'},{'_'}},
          {physics_control,room,{'_'},{'_'},{'_'}},
@@ -729,7 +729,7 @@ m3a_frame_failure_isolates_world_test_() ->
             ?assertMatch({ok,_,{normalized,{committed,_,_}}},Broken), await_live_receipt(Broken),
             case Failure of
                 export -> ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,Member));
-                member -> ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,Member))
+                member -> ?assertMatch(fail,quod_prolog:prove_ro(Ns,Member))
             end,
             Selection = reconcile_physics(Ns),
             HealthyResult = quod_physics:snapshot(Second,HealthyExpected),
@@ -911,7 +911,7 @@ live_source_authority_replacement_test_() ->
             {can_invoke,{physics_activate,{'_'},{'_'},{'_'}},Authority,{'_'},Ns},
             {can_request_agent_signature,Node,other,{'_'}}]])),
         Switch = {physics_assign_authority,room,actor,other},
-        ?assertMatch({ok,_,{normalized,{failed,_}}},door_action(Ns,Switch)),
+        ?assertMatch({ok,_,{normalized,fail}},door_action(Ns,Switch)),
         ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_space,room,enabled,actor})),
         ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,
             {physics_definition_delegate,obstacle,World,maps:get(authority,Before),1})),
@@ -980,7 +980,7 @@ live_source_lifecycle_test_() ->
             ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{space_placement,room,Subject,1})),
             %% Receiver denial rolls back the staged source shape as well.
             commit(Ns,{retract,{can_refresh_physics_definition,room,Principal,Subject}}),
-            ?assertMatch({ok,_,{normalized,{failed,_}}},door_action(Source,
+            ?assertMatch({ok,_,{normalized,fail}},door_action(Source,
                 {physics_edit_definition,obstacle,1,{geometry,{ball,750},1}})),
             ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,
                 {physics_definition,obstacle,1,{geometry,{box,250,1000,250},1}})),
@@ -1007,7 +1007,7 @@ live_source_lifecycle_test_() ->
             ?assertEqual(false,lists:keyfind(4,1,maps:get(bodies,Removed))),
             ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,
                 {',',{space_assignment_state,obstacle,2,none},{physics_definition,obstacle,3,none}})),
-            ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{space_placement,room,Subject,{'_'}})),
+            ?assertMatch(fail,quod_prolog:prove_ro(Ns,{space_placement,room,Subject,{'_'}})),
             %% Recreate under the same entity, but never reuse its retired body.
             ?assertMatch({ok,_,{normalized,{committed,_,_}}},door_action(Source,
                 {physics_edit_definition,obstacle,3,{geometry,{capsule,500,250},1}})),
@@ -1216,19 +1216,19 @@ live_source_missing_space_admission_test_() ->
             #{namespace := Ns,source := Source,destination := Destination}) ->
         commit(Ns,{retract,{instance_of,space_class(physical_space),room}}),
         Height = quod_prolog:applied(Source),
-        ?assertMatch({fail,_},quod_prolog:prove_ro(Source,space({space_instance,Destination,space}))),
+        ?assertMatch(fail,quod_prolog:prove_ro(Source,space({space_instance,Destination,space}))),
         Placement = inside(Source,obstacle,Destination,{transform,0,0,0,0,0,0}),
-        ?assertMatch({ok,_,{normalized,{failed,_}}},door_action(Source,Placement)),
+        ?assertMatch({ok,_,{normalized,fail}},door_action(Source,Placement)),
         ?assertEqual(Height,quod_prolog:applied(Source)),
         ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,space({space_assignment,entity_ref(Source,obstacle),0,none}))),
-        ?assertMatch({fail,_},quod_prolog:prove_ro(Source,{physics_definition_delegate,obstacle,{'_'},{'_'},{'_'}})),
+        ?assertMatch(fail,quod_prolog:prove_ro(Source,{physics_definition_delegate,obstacle,{'_'},{'_'},{'_'}})),
         ?assertEqual(#{},worlds(Ns)),
         %% Repeat with physics enabled, so missing membership is the only
         %% withdrawn prerequisite. Restoring it must admit the same action.
         commit(Ns,quod_ct:source_assertion({instance_of,space_class(physical_space),room})),
         enable(F),
         commit(Ns,{retract,{instance_of,space_class(physical_space),room}}),
-        ?assertMatch({ok,_,{normalized,{failed,_}}},door_action(Source,Placement)),
+        ?assertMatch({ok,_,{normalized,fail}},door_action(Source,Placement)),
         commit(Ns,quod_ct:source_assertion({instance_of,space_class(physical_space),room})),
         Accepted = door_action(Source,Placement),
         ?assertMatch({normalized,{committed,_,_}},brief(Accepted))
@@ -1260,10 +1260,10 @@ live_source_withdrawal_after_reclassification_test_() ->
             Released = door_action(Source,Withdraw),
             ?assertMatch({ok,_,{normalized,{committed,_,_}}},Released), await_live_receipt(Released),
             ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Source,space({space_assignment,entity_ref(Source,obstacle),2,none}))),
-            ?assertMatch({fail,_},quod_prolog:prove_ro(Source,
+            ?assertMatch(fail,quod_prolog:prove_ro(Source,
                 {physics_definition_delegate,obstacle,{'_'},{'_'},{'_'}})),
-            ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{space_placement,room,Subject,{'_'}})),
-            ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,
+            ?assertMatch(fail,quod_prolog:prove_ro(Ns,{space_placement,room,Subject,{'_'}})),
+            ?assertMatch(fail,quod_prolog:prove_ro(Ns,
                 {physics_body_definition,room,{'_'},{'_'},{'_'},{'_'},{live,Subject,{'_'},{'_'},{'_'}}})),
             Restore = case Class of space -> [{retract,{instance_of,space_class(space),room}}]; untyped -> [] end,
             commit(Ns,list_conjunction(Restore ++
@@ -1340,7 +1340,7 @@ supported_geometry_signed_edit_test_() ->
             {ok,Before,_} = quod_physics:snapshot(Pid,Expected),
             {2,1,world,_,Rotation,_} = lists:keyfind(2,1,maps:get(poses,Before)),
             Move = {physics_move_body,room,2,1,1,{vector,4000,3000,0}},
-            ?assertMatch({ok,_,{normalized,{failed,_}}},door_action(Ns,Move)),
+            ?assertMatch({ok,_,{normalized,fail}},door_action(Ns,Move)),
             commit(Ns,{assertz,{can_edit_physics,room,Principal}}),
             MoveResult = door_action(Ns,Move),
             ?assertMatch({ok,_,{normalized,{committed,_,_}}},MoveResult),
@@ -1349,7 +1349,7 @@ supported_geometry_signed_edit_test_() ->
             {2,2,world,Position,Rotation,_} = lists:keyfind(2,1,maps:get(poses,After)),
             ?assertEqual({4.0,3.0,0.0},Position),
             ?assertEqual({error,unavailable},quod_physics:snapshot(Pid,Expected)),
-            ?assertMatch({ok,_,{normalized,{failed,_}}},door_action(Ns,Move)),
+            ?assertMatch({ok,_,{normalized,fail}},door_action(Ns,Move)),
             await_source_receipt(MoveResult),
             assert_no_physics_io(fun() ->
                 reconcile(Ns), reconcile(Ns),
@@ -1397,13 +1397,13 @@ numeric_geometry_and_hinge_refusals_test_() ->
         ?assertEqual(((1 bsl 53)-1) bsl 971,Max),
         [?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_milli_integer,X}))
             || X <- [-Max,0,Max]],
-        [?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_milli_integer,X}))
+        [?assertMatch(fail,quod_prolog:prove_ro(Ns,{physics_milli_integer,X}))
             || X <- [-Max-1,Max+1]],
         ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_positive_scalar,Max})),
-        ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_positive_scalar,Max+1})),
+        ?assertMatch(fail,quod_prolog:prove_ro(Ns,{physics_positive_scalar,Max+1})),
         ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
             {physics_motion_capabilities,[{jump,Max}],[]})),
-        [?assertMatch({fail,_},quod_prolog:prove_ro(Ns,
+        [?assertMatch(fail,quod_prolog:prove_ro(Ns,
             {physics_motion_capabilities,[{jump,X}],[]})) || X <- [0,Max+1]],
         ?assertEqual(1.7976931348623157e308,float(Max)),
         ?assert(is_float(Max/1000)), ?assert(is_float(-Max/1000000)),
@@ -1560,14 +1560,14 @@ system_physics_world_policy_test_() ->
             #{World := #{spec := #{gravity := InstalledGravity}}} = worlds(Ns),
             ?assertEqual(Gravity / 1000, InstalledGravity),
             Goal = {physics_body_state, room, 1, {0}},
-            ?assertMatch({ok, _, {normalized,{read,_,{failed, _}}}}, body_read(Ns, Goal)),
+            ?assertMatch({ok, _, {normalized,{read,_,fail}}}, body_read(Ns, Goal)),
             case Permission of
                 allowed ->
                     commit(Ns, {assertz, {can_read_physics_body, room, Principal, 1}}),
                     ?assertMatch({ok, _, {normalized,{read,_,{answers, _, [_]}}}}, body_read(Ns, Goal));
                 denied ->
                     commit(Ns, {assertz, {can_read_physics_body, another_space, Principal, 1}}),
-                    ?assertMatch({ok, _, {normalized,{read,_,{failed, _}}}}, body_read(Ns, Goal))
+                    ?assertMatch({ok, _, {normalized,{read,_,fail}}}, body_read(Ns, Goal))
             end,
             %% A real instance-property edit reaches the retained resource selector.
             %% Gravity requires a replacement run; the world identity stays fixed.
@@ -1598,7 +1598,7 @@ signed_live_body_predicate_test_() ->
         {Pid,World} = enable(F),
         Goal = {physics_body_state,room,1,{0}},
         commit(Ns,{assertz,{can_invoke,{physics_body_state,{'_'},{'_'},{'_'}},Human,{'_'},Ns}}),
-        ?assertMatch({ok,_,{normalized,{read,_,{failed,_}}}},body_read(Ns,Goal)),
+        ?assertMatch({ok,_,{normalized,{read,_,fail}}},body_read(Ns,Goal)),
         commit(Ns,{assertz,{can_read_physics_body,room,Human,1}}),
         reconcile(Ns),
         #{World := #{spec := Spec}} = worlds(Ns),
@@ -1623,7 +1623,7 @@ signed_live_body_predicate_test_() ->
         ?assertMatch({ok,_,{normalized,{read,_,{error,_}}}},
                      body_read(Ns,{'$quod_sample_physics',forged,{physics_body_state,room,1},Frame,1,none,{0}})),
         commit(Ns,{retract,{can_read_physics_body,room,Human,1}}),
-        ?assertMatch({ok,_,{normalized,{read,_,{failed,_}}}},body_read(Ns,Goal))
+        ?assertMatch({ok,_,{normalized,{read,_,fail}}},body_read(Ns,Goal))
     end) end}.
 
 body_read(Ns,Goal) ->
@@ -1642,6 +1642,8 @@ assert_reason(Reason,{ok,_,{normalized,{failed,Blob}}}) ->
 
 assert_reason_count(Reason, Count, {ok,E,{normalized,{read,_,Outcome}}}) ->
     assert_reason_count(Reason,Count,{ok,E,{normalized,Outcome}});
+assert_reason_count(_Reason, Count, {ok,_,{normalized,fail}}) ->
+    ?assertEqual(0, Count);
 assert_reason_count(Reason, Count, {ok,_,{normalized,{failed,Blob}}}) ->
     {ok,Reasons} = quod_wire_term:decode_failure_reasons(Blob),
     ?assertEqual(Count,length([R || R <- Reasons,R =:= Reason])).
@@ -1693,9 +1695,8 @@ hot_control_policy_reasons_test_() ->
             {physics_agent_configuration,room,Human,pilot,eye,setelement(3,Definition,99)})),
         Go = {physics_control_input,room,Frame,1,1,{drive,{vector,0,0,0},{angular,0,0,0}},{0}},
         [begin
-            {ok,_,{normalized,{failed,Reasons}}} = control_goal({'::',Ns,setelement(6,Go,Input)}),
-            {ok,Decoded} = quod_wire_term:decode_failure_reasons(Reasons),
-            ?assertEqual([],[R || R = {coordinate_allowance,_} <- Decoded])
+            ?assertMatch({ok,_,{normalized,fail}},
+                control_goal({'::',Ns,setelement(6,Go,Input)}))
         end || Input <- [{drive,{vector,2001,0,0},{angular,0,0,0}},
                          {drive,{vector,0,0,0},{angular,0,1601,0}},
                          {push,{body,3,1},{vector,5001,0,0}}, {jump,4000}]],
@@ -1711,7 +1712,7 @@ hot_control_policy_reasons_test_() ->
         Body = {physics_body_definition, room, 2, 1, controlled, {vector,-3000,1000,0}, {owned, {box,500,1000,500}, 1}},
         [?assertEqual(ok,begin
             commit(Ns,{'$quod_retract_exact',Fact}),
-            ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,Fact)),
+            ?assertMatch(fail,quod_prolog:prove_ro(Ns,Fact)),
             Result = control_goal({'::',Ns,Go}),
             case Result of
                 {ok,_,{normalized,{failed,_}}} -> assert_reason({ambiguous_agent,pilot},Result);
@@ -1777,10 +1778,8 @@ hot_control_policy_reasons_test_() ->
             {assertz,setelement(4,QueryPolicy,{query_allowances,2,0,8,128,2000,1000})}}),
         ?assertMatch({ok,_,{normalized,{read,_,{answers,_,[_]}}}},body_read(Ns,
             setelement(4,Query,{travel,{vector,1000,0,0},{angular,0,0,0}}))),
-        {ok,_,{normalized,{read,_,{failed,QueryReasons}}}} = body_read(Ns,
-            setelement(4,Query,{travel,{vector,2001,0,0},{angular,0,0,0}})),
-        {ok,DecodedQueryReasons} = quod_wire_term:decode_failure_reasons(QueryReasons),
-        ?assertEqual([],[R || R = {coordinate_allowance,_} <- DecodedQueryReasons]),
+        ?assertMatch({ok,_,{normalized,{read,_,fail}}}, body_read(Ns,
+            setelement(4,Query,{travel,{vector,2001,0,0},{angular,0,0,0}}))),
         Allowances = {physics_allowances,room,{limits,64,64,256,1000000,{geometry,256,4096,4096}},16667,-9810,10000},
         commit(Ns,{retract,Allowances}),
         commit(Ns,{assertz,{can_view_physics,room,Human}}),
@@ -1869,7 +1868,7 @@ signed_motion_query_owner_test_() ->
         Goal = {physics_motion_query,room,2,{travel,{vector,5000,0,2000},{angular,0,0,0}},{0}},
         commit(Ns,{',',{assertz,{can_invoke,{physics_motion_query,{'_'},{'_'},{'_'},{'_'}},Human,{'_'},Ns}},
             {assertz,{physics_query_allowances,room,Human,{query_allowances,2,0,8,128,20000,3141}}}}),
-        ?assertMatch({ok,_,{normalized,{read,_,{failed,_}}}},body_read(Ns,Goal)),
+        ?assertMatch({ok,_,{normalized,{read,_,fail}}},body_read(Ns,Goal)),
         commit(Ns,{assertz,{can_query_physics_motion,room,Human,2,{'_'}}}),
         reconcile(Ns),
         ?assertMatch({ok,_,{normalized,{read,_,{answers,_,[_]}}}},body_read(Ns,Goal)),
@@ -1894,7 +1893,7 @@ signed_motion_query_owner_test_() ->
         ?assertMatch({error,unavailable},quod_physics:motion_query(Pid,Expected#{structure => 0},{2,1},Query,Limits,1000)),
         ?assertMatch({ok,_,{normalized,{read,_,{answers,_,[_]}}}},body_read(Ns,Goal)),
         commit(Ns,{retract,{can_query_physics_motion,room,Human,2,{'_'}}}),
-        ?assertMatch({ok,_,{normalized,{read,_,{failed,_}}}},body_read(Ns,Goal))
+        ?assertMatch({ok,_,{normalized,{read,_,fail}}},body_read(Ns,Goal))
     end,fun(Rules) ->
         [case Rule of
             {physics_body_definition, room, 2, 1, _, _, {owned, _, _}} ->
@@ -1919,7 +1918,7 @@ signed_control_releases_only_successful_proof_test_() ->
         Go = Command(10,Drive),
         ?assertMatch({ok,_,{normalized,{read,_,{error,_}}}},body_read(Ns,Go)),
         ?assertMatch({ok,_,{normalized,{error,_}}},door_action(Ns,Go)),
-        ?assertMatch({ok,_,{normalized,{failed,_}}},control_goal({'::',Ns,{',',Go,fail}})),
+        ?assertMatch({ok,_,{normalized,fail}},control_goal({'::',Ns,{',',Go,fail}})),
         ?assertMatch(#{inputs := M} when map_size(M) =:= 0,gen_server:call(Pid,status)),
         ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},control_goal(
             {';', {',',{'::',Ns,Go},fail},true})),
@@ -1928,7 +1927,7 @@ signed_control_releases_only_successful_proof_test_() ->
         %% operation in another ontology's proof scope.
         ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},control_goal(
             {'\\+', {',',{'::',Ns,Go},fail}})),
-        ?assertMatch({ok,_,{normalized,{failed,_}}},control_goal(
+        ?assertMatch({ok,_,{normalized,fail}},control_goal(
             {'::',Ns,{physics_test_cut,Go}})),
         ?assertMatch(#{inputs := M} when map_size(M) =:= 0,gen_server:call(Pid,status)),
         %% A control proof promises one indivisible live operation. A second
@@ -1952,7 +1951,7 @@ signed_control_releases_only_successful_proof_test_() ->
         commit(Ns,{retract,{can_control_physics_agent,room,Human,pilot}}),
         {Pid,World} = installed(Ns),
         ?assertMatch(#{inputs := #{Human := #{sequence := 14,result := suspended}}},gen_server:call(Pid,status)),
-        ?assertMatch({ok,_,{normalized,{failed,_}}},control_goal({'::',Ns,Command(15,Drive)})),
+        ?assertMatch({ok,_,{normalized,fail}},control_goal({'::',Ns,Command(15,Drive)})),
         commit(Ns,{assertz,{can_control_physics_agent,room,Human,pilot}}),
         {Pid,World} = installed(Ns),
         assert_reason(stale_registration,control_goal({'::',Ns,Go})),
@@ -2002,7 +2001,7 @@ grounded_jump_and_ceiling_test_() ->
         quod_physics:ack(Pid,Ref,maps:get(tick,Initial),maps:get(origin_sequence,Initial)),
         Command = fun(Seq,Input) -> control_goal({'::',Ns,
             {physics_control_input,room,Frame,1,Seq,Input,{0}}}) end,
-        ?assertMatch({ok,_,{normalized,{failed,_}}},Command(0,{jump,4001})),
+        ?assertMatch({ok,_,{normalized,fail}},Command(0,{jump,4001})),
         ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},Command(1,{jump,4000})),
         {First,Result} = input_frame(Pid,Ref,Human,1),
         case Terrain of
@@ -2205,7 +2204,7 @@ signed_landing_reposition_and_feedback_test_() ->
         quod_physics:ack(Pid,Ref,maps:get(tick,Initial),maps:get(origin_sequence,Initial)),
         Command = fun(Seq,Input) -> control_goal({'::',Ns,
             {physics_control_input,room,Frame,1,Seq,Input,{0}}}) end,
-        ?assertMatch({ok,_,{normalized,{failed,_}}},Command(0,{snap,2000})),
+        ?assertMatch({ok,_,{normalized,fail}},Command(0,{snap,2000})),
         ?assertMatch({ok,_,{normalized,{answers,_,[_]}}},Command(1,{teleport,{vector,2000,2000,0}})),
         {Occupied,{occupied,3,_}} = input_frame(Pid,Ref,Human,1),
         ?assertMatch({2,1,world,{0.0,_,0.0},_,_},lists:keyfind(2,1,maps:get(poses,Occupied))),
@@ -3914,7 +3913,7 @@ retained_activation_before_first_send_is_resolve_only_after_owner_loss_test_() -
             {_,World} = installed(Ns),
             ?assertEqual(none,quod_agent_vault:retained(Scope)),
             %% Late delivery cannot resurrect the retired original request.
-            ?assertMatch({ok,_,{normalized,{failed,_}}},quod_client_goal_ingress:submit(C,CSig))
+            ?assertMatch({ok,_,{normalized,fail}},quod_client_goal_ingress:submit(C,CSig))
         after sys:remove(Vault,Observe) end
     end) end}.
 
@@ -4090,13 +4089,13 @@ cancelled_activation(Scenario) ->
                   after 10000 -> error(stored_request_not_recovered) end,
         ?assertMatch({ok,[#{}],_},quod_prolog:prove_ro(Ns,
                       {physics_activation_status,room,Request,pending})),
-        ?assertMatch({ok,_,{normalized,{failed,_}}},submit_fixture(F,
+        ?assertMatch({ok,_,{normalized,fail}},submit_fixture(F,
                       {physics_cancel_activation,room,0,Request})),
         commit(Ns,{assertz,{can_cancel_physics_activation,room,Actor}}),
-        [?assertMatch({ok,_,{normalized,{failed,_}}},submit_fixture(F,Goal)) || Goal <-
+        [?assertMatch({ok,_,{normalized,fail}},submit_fixture(F,Goal)) || Goal <-
             [{physics_cancel_activation,room,{'G'},Request},
              {physics_cancel_activation,room,0,{'Request'}}]],
-        ?assertMatch({ok,_,{normalized,{failed,_}}},submit_fixture(F,
+        ?assertMatch({ok,_,{normalized,fail}},submit_fixture(F,
             {physics_cancel_activation,room,0,{request,<<78:256>>,0,Bytes,Signature}})),
         Parent = self(), Tag = make_ref(),
         Proof = case Scenario of
@@ -4119,7 +4118,7 @@ cancelled_activation(Scenario) ->
                 never_submitted ->
                     %% With the owner paused, generation/prior still match:
                     %% only the durable cancellation fence forbids resurrection.
-                    ?assertMatch({ok,_,{normalized,{failed,_}}},submit_fixture(F,
+                    ?assertMatch({ok,_,{normalized,fail}},submit_fixture(F,
                         {physics_store_request,room,0,none,OldToken,Bytes,Signature}));
                 disabled ->
                     commit(Ns,{',',{retract,{physics_space,room,disabled,actor}},
@@ -4129,7 +4128,7 @@ cancelled_activation(Scenario) ->
             Result
         after sys:resume(Runtime) end,
         case Scenario of
-            activation_wins -> ?assertMatch({ok,_,{normalized,{failed,_}}},Cancelled);
+            activation_wins -> ?assertMatch({ok,_,{normalized,fail}},Cancelled);
             _ ->
                 ?assertMatch({ok,_,{normalized,{committed,_,_}}},Cancelled),
                 ?assertMatch({ok,[#{}],_},quod_prolog:prove_ro(Ns,
@@ -4419,7 +4418,7 @@ obstructed_door_signed_transition_test_() ->
                      quod_client_goal_ingress:resolve_operation(Bytes,Signature)),
         %% The same operation resolves to the original result; no second event.
         ?assertMatch({ok,_,_},quod_client_goal_ingress:submit(Bytes,Signature)),
-        ?assertMatch({ok,_,{normalized,{failed,_}}},door_action(Ns,{physics_finish_hinged,Sample,{blocked,3}})),
+        ?assertMatch({ok,_,{normalized,fail}},door_action(Ns,{physics_finish_hinged,Sample,{blocked,3}})),
         reconcile(Ns),
         #{World := #{pid := Pid,spec := Spec}} = worlds(Ns),
         {ok,Frame,Before} = quod_physics:snapshot(Pid,#{fence => quod_physics:fence(Spec),structure => 2,tick => -1}),
@@ -4808,7 +4807,7 @@ pending_custody_and_delayed_sample_cannot_finish_new_close_test_() ->
             lists:foreach(fun(Bad) ->
                 {B,SG} = sign_fixture(F,{physics_finish_hinged,Bad,{blocked,3}},Expiry),
                 {SB,SS} = sign_fixture(F,{physics_store_hinged_request,Bad,{blocked,3},B,SG},Expiry),
-                ?assertMatch({ok,_,{normalized,{failed,_}}},quod_client_goal_ingress:submit(SB,SS))
+                ?assertMatch({ok,_,{normalized,fail}},quod_client_goal_ingress:submit(SB,SS))
             end,Invalid),
             {Bytes,Sig} = sign_fixture(F,{physics_finish_hinged,Sample,{blocked,3}},Expiry),
             Store = {physics_store_hinged_request,Sample,{blocked,3},Bytes,Sig},
@@ -4825,7 +4824,7 @@ pending_custody_and_delayed_sample_cannot_finish_new_close_test_() ->
                 {physics_move_body,room,3,1,2,{vector,1500,1500,-500}})),
             %% Edit after store but before the original proof: no transaction
             %% entered ordering, so exact resolution must remain unknown.
-            ?assertMatch({ok,_,{normalized,{failed,_}}},quod_client_goal_ingress:submit(Bytes,Sig)),
+            ?assertMatch({ok,_,{normalized,fail}},quod_client_goal_ingress:submit(Bytes,Sig)),
             ?assertMatch({ok,_,{operation_pending,_}},quod_client_goal_ingress:resolve_operation(Bytes,Sig)),
             ?assertMatch({ok,_,{normalized,{committed,_,_}}},door_action(Ns,{physics_cancel_hinged,room,10,R})),
             ?assertNotMatch({ok,_,{normalized,{committed,_,_}}},
@@ -5155,16 +5154,16 @@ signed_chair_push_checkpoint_and_recovery_test_() ->
             Send = fun(Fence,Seq,Input) -> control_goal({'::',Ns,
                 {physics_control_input,room,Fence,1,Seq,Input,{0}}}) end,
             OldCommand = fun(Seq,Input) -> Send(OldFrame,Seq,Input) end,
-            ?assertMatch({ok,_,{normalized,{failed,_}}},OldCommand(0,{push,{body,3,0},{vector,1000,0,0}})),
-            ?assertMatch({ok,_,{normalized,{failed,_}}},OldCommand(0,{push,{body,3,1},{vector,5001,0,0}})),
+            ?assertMatch({ok,_,{normalized,fail}},OldCommand(0,{push,{body,3,0},{vector,1000,0,0}})),
+            ?assertMatch({ok,_,{normalized,fail}},OldCommand(0,{push,{body,3,1},{vector,5001,0,0}})),
             commit(Ns,{retract,{can_push_physics_body,room,{'_'},3}}), reconcile(Ns),
-            ?assertMatch({ok,_,{normalized,{failed,_}}},OldCommand(0,Push)),
+            ?assertMatch({ok,_,{normalized,fail}},OldCommand(0,Push)),
             commit(Ns,{assertz,{can_push_physics_body,room,{'_'},3}}), reconcile(Ns),
             assert_reason(stale_registration,OldCommand(1,Push)),
             {ok,Ref,Initial} = quod_physics:watch(Pid,Expected,none),
             Frame = setelement(3,OldFrame,maps:get(registration,Initial)),
             Command = fun(Seq,Input) -> Send(Frame,Seq,Input) end,
-            ?assertMatch({ok,_,{normalized,{failed,_}}},control_goal({'::',Ns,
+            ?assertMatch({ok,_,{normalized,fail}},control_goal({'::',Ns,
                 {',',{physics_control_input,room,Frame,1,1,Push,{0}},fail}})),
             ?assertMatch(#{inputs := M} when map_size(M) =:= 0,gen_server:call(Pid,status)),
             quod_physics:ack(Pid,Ref,maps:get(tick,Initial),maps:get(origin_sequence,Initial)),
@@ -5201,7 +5200,7 @@ signed_chair_push_checkpoint_and_recovery_test_() ->
                 quod_prolog:prove_ro(Ns,{physics_rest_request,room,3,{'C'}}),
             ?assertMatch({ok,_,{operation_outcome,_,#{status := committed}}},
                 quod_client_goal_ingress:resolve_operation(Bytes,Signature)),
-            ?assertMatch({ok,_,{normalized,{failed,_}}},submit_fixture(F,{physics_finish_rest,Sample})),
+            ?assertMatch({ok,_,{normalized,fail}},submit_fixture(F,{physics_finish_rest,Sample})),
             Before = gen_server:call(Pid,status),
             assert_no_physics_io(fun() ->
                 [reconcile(Ns) || _ <- lists:seq(1,3)],
@@ -5230,7 +5229,7 @@ signed_chair_push_checkpoint_and_recovery_test_() ->
             %% Editing owns the baseline and checkpoint invalidation in one commit.
             ?assertMatch({ok,_,{normalized,{committed,_,_}}},door_action(Ns,
                 {physics_move_body,room,3,1,1,{vector,4000,500,0}})),
-            ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_checkpoint,room,CP})),
+            ?assertMatch(fail,quod_prolog:prove_ro(Ns,{physics_checkpoint,room,CP})),
             {Next,World} = installed(Ns),
             {ok,_,{0,0,0},{3,2,world,{EditX,_,_},_,_}} = quod_physics:body_state(Next,Fresh#{structure => 2},{3,2},1000),
             ?assert(abs(EditX-4.0) < 0.001)
@@ -5316,7 +5315,7 @@ chair_edit_races_prepared_checkpoint_test_() ->
                 %% The client failure can precede terminal publication. Wait
                 %% on applied progress; never infer rejection from that reply.
                 await_checkpoint_rejection(Ns,Bytes,Signature,quod_time:mono_ms()+10000),
-                ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_checkpoint,room,{'_'}})),
+                ?assertMatch(fail,quod_prolog:prove_ro(Ns,{physics_checkpoint,room,{'_'}})),
                 ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_rest_request,room,3,Custody})),
                 %% The cancelled request cannot be resampled or replayed on restart.
                 Monitor = monitor(process,Pid), exit(Pid,kill),
@@ -5355,7 +5354,7 @@ chair_unknown_checkpoint_custody_is_not_resubmitted_test_() ->
         reconcile(Ns),
         receive {physics_status,_,Pid,World,_,{unavailable,{observation,{rest,3},unresolved}}} -> ok
         after 10000 -> error(unknown_checkpoint_not_held) end,
-        ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_checkpoint,room,{'_'}})),
+        ?assertMatch(fail,quod_prolog:prove_ro(Ns,{physics_checkpoint,room,{'_'}})),
         assert_no_physics_io(fun() -> [reconcile(Ns) || _ <- lists:seq(1,3)] end),
         {ok,[#{'C' := Original}],_} = quod_prolog:prove_ro(Ns,{physics_rest_request,room,3,{'C'}}),
         Monitor = monitor(process,Pid), exit(Pid,kill),
@@ -5364,7 +5363,7 @@ chair_unknown_checkpoint_custody_is_not_resubmitted_test_() ->
         receive {physics_status,_,Next,World,_,{unavailable,{observation,{rest,3},unresolved}}} -> ok
         after 10000 -> error(recovered_unknown_not_held) end,
         ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_rest_request,room,3,Original})),
-        ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_checkpoint,room,{'_'}})),
+        ?assertMatch(fail,quod_prolog:prove_ro(Ns,{physics_checkpoint,room,{'_'}})),
         %% An authored edit fences the old finish even if its backend outcome
         %% stays unknown. A distinct request must be able to checkpoint the edit.
         ?assertMatch({ok,_,{normalized,{committed,_,_}}},door_action(Ns,
@@ -5429,7 +5428,7 @@ authored_nonbox_edit_invalidates_rest_checkpoint_test_() ->
                 ?assertMatch({rest_v1,3,1,_,_,_,_},rest_checkpoint_fact(Ns)),
                 ?assertMatch({ok,_,{normalized,{committed,_,_}}},door_action(Ns,
                     {physics_move_body,room,3,1,1,{vector,4000,500,0}})),
-                ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_checkpoint,room,{'_'}})),
+                ?assertMatch(fail,quod_prolog:prove_ro(Ns,{physics_checkpoint,room,{'_'}})),
                 ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_body_definition, room, 3, 2, dynamic, {pose,{vector,4000,500,0},{rotation,0,785,0}}, {owned, Shape, 1}}))
             after catch quod_reg:unsubscribe({runtime,Ns}) end
         end,fun(Rules) -> [case R of {physics_body_definition, room, 3, 1, dynamic, _, {owned, _, 1}} ->
@@ -5736,8 +5735,8 @@ await_hinged_outcome(Ns,Bytes,Sig,Deadline) ->
 
 assert_hinged_unfinished(Ns,Receiver,R) ->
     ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_hinged,room,10,1,{closing,R}})),
-    ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_checkpoint,room,{'_'}})),
-    ?assertMatch({fail,_},quod_prolog:prove_ro(Receiver,{received_hinged,R})).
+    ?assertMatch(fail,quod_prolog:prove_ro(Ns,{physics_checkpoint,room,{'_'}})),
+    ?assertMatch(fail,quod_prolog:prove_ro(Receiver,{received_hinged,R})).
 
 shared_fixed_support_moves_atomically_test_() ->
     {timeout,90,fun() -> with_door(fun(F = #{namespace := Ns}) ->
@@ -5746,7 +5745,7 @@ shared_fixed_support_moves_atomically_test_() ->
         Body = {physics_body_definition,room,20,2,dynamic,{vector,0,1500,0},{owned,{ball,100},1}},
         commit(Ns,list_conjunction([{assertz,Body},{assertz,{physics_joint,room,Joint}}])),
         Move = {physics_move_hinged,room,10,0,2,{pose,{vector,3000,1500,0},{rotation,0,200,0}}},
-        ?assertMatch({ok,_,{normalized,{failed,_}}},door_action(Ns,Move)),
+        ?assertMatch({ok,_,{normalized,fail}},door_action(Ns,Move)),
         ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_structure,room,2})),
         ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,Body)),
         ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,
@@ -5796,8 +5795,8 @@ hinged_command_edit_fences_signed_sample_test_() ->
             commit(Ns,{',',{retract,{physics_hinged_control,room,10,hinged_command(0)}},
                           {assertz,{physics_hinged_control,room,10,hinged_command(100)}}}),
             {Submission,Signature} = case Stage of before_store -> {Store,StoreSig}; after_store -> {Bytes,Sig} end,
-            ?assertMatch({ok,_,{normalized,{failed,_}}},quod_client_goal_ingress:submit(Submission,Signature)),
-            ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_checkpoint,room,{'_'}})),
+            ?assertMatch({ok,_,{normalized,fail}},quod_client_goal_ingress:submit(Submission,Signature)),
+            ?assertMatch(fail,quod_prolog:prove_ro(Ns,{physics_checkpoint,room,{'_'}})),
             ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,{physics_hinged,room,10,1,{closing,R}})),
             ?assertMatch({ok,_,{normalized,{committed,_,_}}},door_action(Ns,{physics_cancel_hinged,room,10,R}))
         after sys:resume(Pid) end
@@ -5813,19 +5812,19 @@ authored_hinged_obstruction_and_permissions_test_() ->
             Close = {can_close_physics_hinged,room,10,{'_'}},
             Cancel = {can_cancel_physics_hinged,room,10,{'_'}},
             commit(Ns,{retract,Close}),
-            ?assertMatch({ok,_,{normalized,{failed,_}}},
+            ?assertMatch({ok,_,{normalized,fail}},
                 door_action(Ns,{physics_close_hinged,room,10,0,<<166:256>>})),
             commit(Ns,{assertz,Close}),
             ?assertMatch({ok,_,{normalized,{committed,_,_}}},
                 door_action(Ns,{physics_close_hinged,room,10,0,<<166:256>>})),
             _ = await_hinged_ops(Ns,{close,1,<<166:256>>},{blocked,3}),
-            ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{hinged_result,{'_'},{'_'}})),
+            ?assertMatch(fail,quod_prolog:prove_ro(Ns,{hinged_result,{'_'},{'_'}})),
             ok = sys:suspend(Pid),
             try
                 ?assertMatch({ok,_,{normalized,{committed,_,_}}},
                     door_action(Ns,{physics_close_hinged,room,10,1,<<167:256>>})),
                 R = {close,2,<<167:256>>},commit(Ns,{retract,Cancel}),
-                ?assertMatch({ok,_,{normalized,{failed,_}}},
+                ?assertMatch({ok,_,{normalized,fail}},
                     door_action(Ns,{physics_cancel_hinged,room,10,R})),
                 commit(Ns,{assertz,Cancel}),
                 ?assertMatch({ok,_,{normalized,{committed,_,_}}},
@@ -5851,7 +5850,7 @@ finished_hinged_group_move_can_close_again_test_() ->
             ?assertMatch({ok,_,{normalized,{committed,_,_}}},
                 door_action(Ns,{physics_move_hinged,room,10,1,2,Pose})),
             {Pid,World} = installed_structure(Ns,3),
-            ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{physics_checkpoint,room,{'_'}})),
+            ?assertMatch(fail,quod_prolog:prove_ro(Ns,{physics_checkpoint,room,{'_'}})),
             %% A group edit invalidates the physical checkpoint, not the
             %% recorded completion of the original custodied operation.
             ?assertMatch({normalized,{committed,_,_}},

@@ -1,0 +1,2345 @@
+=== Suite started at 2026-11-18 16:18:34
+=== Starting test, 150 test cases
+=cases         150
+=user          yan
+=host          nohost
+=hosts         nohost 
+=emulator_vsn  16.0.2
+=emulator      beam
+=otp_release   28
+=started       2026-11-18 16:18:34
+=case          feed_SUITE:init_per_suite
+=logfile       feed_suite.init_per_suite.html
+=started       2026-11-18 16:18:34
+=ended         2026-11-18 16:18:36
+=result        ok
+=elapsed       2.387444s
+=case          feed_SUITE:follower_follows_live
+=logfile       feed_suite.follower_follows_live.html
+=started       2026-11-18 16:18:36
+=ended         2026-11-18 16:18:37
+=result        ok
+=elapsed       0.186979s
+=case          feed_SUITE:follower_recovers_gap_via_anti_entropy
+=logfile       feed_suite.follower_recovers_gap_via_anti_entropy.html
+=started       2026-11-18 16:18:37
+=ended         2026-11-18 16:18:43
+=result        ok
+=elapsed       5.848638s
+=case          feed_SUITE:end_per_suite
+=logfile       feed_suite.end_per_suite.html
+=started       2026-11-18 16:18:43
+=ended         2026-11-18 16:18:43
+=result        ok
+=elapsed       0.000057s
+=group_time    8.493s
+=case          growth_SUITE:init_per_suite
+=logfile       growth_suite.init_per_suite.html
+=started       2026-11-18 16:18:43
+=ended         2026-11-18 16:18:44
+=result        ok
+=elapsed       1.022358s
+=case          growth_SUITE:policy_upgrade_live
+=logfile       growth_suite.policy_upgrade_live.html
+=started       2026-11-18 16:18:44
+=ended         2026-11-18 16:18:44
+=result        failed: {{assertMatch,
+                            [{module,growth_SUITE},
+                             {line,95},
+                             {expression,
+                                 "prove ( Founder , { admit , GhostPub , \"127.0.0.1\" , 9999 } )"},
+                             {pattern,"{ fail , [ _ | _ ] }"},
+                             {value,fail}]},
+                        [{growth_SUITE,policy_upgrade_live,1,
+                             [{file,
+                                  "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/growth_SUITE.erl"},
+                              {line,95}]},
+                         {test_server,ts_tc,3,
+                             [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                             [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                             [{file,"test_server.erl"},{line,1237}]}]}, [{growth_SUITE,
+                                                                          policy_upgrade_live,
+                                                                          95},
+                                                                         {test_server,
+                                                                          ts_tc,
+                                                                          1796},
+                                                                         {test_server,
+                                                                          run_test_case_eval1,
+                                                                          1305},
+                                                                         {test_server,
+                                                                          run_test_case_eval,
+                                                                          1237}]
+=elapsed       0.036450s
+=== *** FAILED test case 3 of 150 ***
+=case          growth_SUITE:admit_refused_mid_catchup
+=logfile       growth_suite.admit_refused_mid_catchup.html
+=started       2026-11-18 16:18:44
+=ended         2026-11-18 16:18:55
+=result        failed: {{assertMatch,
+                            [{module,growth_SUITE},
+                             {line,113},
+                             {expression,
+                                 "prove ( Founder , { admit , J1Pub , \"127.0.0.1\" , J1Port } )"},
+                             {pattern,"{ fail , [ _ | _ ] }"},
+                             {value,fail}]},
+                        [{growth_SUITE,admit_refused_mid_catchup,1,
+                             [{file,
+                                  "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/growth_SUITE.erl"},
+                              {line,113}]},
+                         {test_server,ts_tc,3,
+                             [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                             [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                             [{file,"test_server.erl"},{line,1237}]}]}, [{growth_SUITE,
+                                                                          admit_refused_mid_catchup,
+                                                                          113},
+                                                                         {test_server,
+                                                                          ts_tc,
+                                                                          1796},
+                                                                         {test_server,
+                                                                          run_test_case_eval1,
+                                                                          1305},
+                                                                         {test_server,
+                                                                          run_test_case_eval,
+                                                                          1237}]
+=elapsed       11.258916s
+=== *** FAILED test case 4 of 150 ***
+=case          growth_SUITE:grow_to_two
+=logfile       growth_suite.grow_to_two.html
+=started       2026-11-18 16:18:55
+=ended         2026-11-18 16:18:55
+=result        failed: {test_case_failed,
+                           "missing saved_config from the previous ordered case (chain broken)"}, [{growth_SUITE,
+                                                                                                    grow_to_two,
+                                                                                                    121},
+                                                                                                   {test_server,
+                                                                                                    ts_tc,
+                                                                                                    1796},
+                                                                                                   {test_server,
+                                                                                                    run_test_case_eval1,
+                                                                                                    1305},
+                                                                                                   {test_server,
+                                                                                                    run_test_case_eval,
+                                                                                                    1237}]
+=elapsed       0.000030s
+=== *** FAILED test case 5 of 150 ***
+=case          growth_SUITE:grow_to_three
+=logfile       growth_suite.grow_to_three.html
+=started       2026-11-18 16:18:55
+=ended         2026-11-18 16:18:55
+=result        failed: {test_case_failed,
+                           "missing saved_config from the previous ordered case (chain broken)"}, [{growth_SUITE,
+                                                                                                    grow_to_three,
+                                                                                                    136},
+                                                                                                   {test_server,
+                                                                                                    ts_tc,
+                                                                                                    1796},
+                                                                                                   {test_server,
+                                                                                                    run_test_case_eval1,
+                                                                                                    1305},
+                                                                                                   {test_server,
+                                                                                                    run_test_case_eval,
+                                                                                                    1237}]
+=elapsed       0.000024s
+=== *** FAILED test case 6 of 150 ***
+=case          growth_SUITE:grow_to_four
+=logfile       growth_suite.grow_to_four.html
+=started       2026-11-18 16:18:55
+=ended         2026-11-18 16:18:55
+=result        failed: {test_case_failed,
+                           "missing saved_config from the previous ordered case (chain broken)"}, [{growth_SUITE,
+                                                                                                    grow_to_four,
+                                                                                                    150},
+                                                                                                   {test_server,
+                                                                                                    ts_tc,
+                                                                                                    1796},
+                                                                                                   {test_server,
+                                                                                                    run_test_case_eval1,
+                                                                                                    1305},
+                                                                                                   {test_server,
+                                                                                                    run_test_case_eval,
+                                                                                                    1237}]
+=elapsed       0.000031s
+=== *** FAILED test case 7 of 150 ***
+=case          growth_SUITE:rotation_sweep
+=logfile       growth_suite.rotation_sweep.html
+=started       2026-11-18 16:18:55
+=ended         2026-11-18 16:18:55
+=result        failed: {test_case_failed,
+                           "missing saved_config from the previous ordered case (chain broken)"}, [{growth_SUITE,
+                                                                                                    rotation_sweep,
+                                                                                                    165},
+                                                                                                   {test_server,
+                                                                                                    ts_tc,
+                                                                                                    1796},
+                                                                                                   {test_server,
+                                                                                                    run_test_case_eval1,
+                                                                                                    1305},
+                                                                                                   {test_server,
+                                                                                                    run_test_case_eval,
+                                                                                                    1237}]
+=elapsed       0.000024s
+=== *** FAILED test case 8 of 150 ***
+=case          growth_SUITE:byzantine_on_grown_committee
+=logfile       growth_suite.byzantine_on_grown_committee.html
+=started       2026-11-18 16:18:55
+=ended         2026-11-18 16:18:55
+=result        failed: {test_case_failed,
+                           "missing saved_config from the previous ordered case (chain broken)"}, [{growth_SUITE,
+                                                                                                    byzantine_on_grown_committee,
+                                                                                                    191},
+                                                                                                   {test_server,
+                                                                                                    ts_tc,
+                                                                                                    1796},
+                                                                                                   {test_server,
+                                                                                                    run_test_case_eval1,
+                                                                                                    1305},
+                                                                                                   {test_server,
+                                                                                                    run_test_case_eval,
+                                                                                                    1237}]
+=elapsed       0.000027s
+=== *** FAILED test case 9 of 150 ***
+=case          growth_SUITE:dead_member_removed
+=logfile       growth_suite.dead_member_removed.html
+=started       2026-11-18 16:18:55
+=ended         2026-11-18 16:18:55
+=result        failed: {test_case_failed,
+                           "missing saved_config from the previous ordered case (chain broken)"}, [{growth_SUITE,
+                                                                                                    dead_member_removed,
+                                                                                                    234},
+                                                                                                   {test_server,
+                                                                                                    ts_tc,
+                                                                                                    1796},
+                                                                                                   {test_server,
+                                                                                                    run_test_case_eval1,
+                                                                                                    1305},
+                                                                                                   {test_server,
+                                                                                                    run_test_case_eval,
+                                                                                                    1237}]
+=elapsed       0.000024s
+=== *** FAILED test case 10 of 150 ***
+=case          growth_SUITE:demote_to_observer
+=logfile       growth_suite.demote_to_observer.html
+=started       2026-11-18 16:18:55
+=ended         2026-11-18 16:18:55
+=result        failed: {test_case_failed,
+                           "missing saved_config from the previous ordered case (chain broken)"}, [{growth_SUITE,
+                                                                                                    demote_to_observer,
+                                                                                                    264},
+                                                                                                   {test_server,
+                                                                                                    ts_tc,
+                                                                                                    1796},
+                                                                                                   {test_server,
+                                                                                                    run_test_case_eval1,
+                                                                                                    1305},
+                                                                                                   {test_server,
+                                                                                                    run_test_case_eval,
+                                                                                                    1237}]
+=elapsed       0.000023s
+=== *** FAILED test case 11 of 150 ***
+=case          growth_SUITE:end_per_suite
+=logfile       growth_suite.end_per_suite.html
+=started       2026-11-18 16:18:55
+=ended         2026-11-18 16:18:55
+=result        ok
+=elapsed       0.000041s
+=group_time    12.552s
+=case          join_SUITE:init_per_suite
+=logfile       join_suite.init_per_suite.html
+=started       2026-11-18 16:18:55
+=ended         2026-11-18 16:18:57
+=result        ok
+=elapsed       2.205167s
+=case          join_SUITE:joiner_catches_up
+=logfile       join_suite.joiner_catches_up.html
+=started       2026-11-18 16:18:57
+=ended         2026-11-18 16:18:58
+=result        ok
+=elapsed       0.302824s
+=case          join_SUITE:joiner_resumes_after_restart
+=logfile       join_suite.joiner_resumes_after_restart.html
+=started       2026-11-18 16:18:58
+=ended         2026-11-18 16:19:00
+=result        ok
+=elapsed       2.279767s
+=case          join_SUITE:joiner_promoted_to_voter
+=logfile       join_suite.joiner_promoted_to_voter.html
+=started       2026-11-18 16:19:00
+=ended         2026-11-18 16:19:00
+=result        failed: {{assertMatch,
+                            [{module,join_SUITE},
+                             {line,226},
+                             {expression,
+                                 "prove ( Founder , { admit , GhostPub , \"127.0.0.1\" , 9999 } )"},
+                             {pattern,"{ fail , [ _ | _ ] }"},
+                             {value,fail}]},
+                        [{join_SUITE,joiner_promoted_to_voter,1,
+                             [{file,
+                                  "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/join_SUITE.erl"},
+                              {line,226}]},
+                         {test_server,ts_tc,3,
+                             [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                             [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                             [{file,"test_server.erl"},{line,1237}]}]}, [{join_SUITE,
+                                                                          joiner_promoted_to_voter,
+                                                                          226},
+                                                                         {test_server,
+                                                                          ts_tc,
+                                                                          1796},
+                                                                         {test_server,
+                                                                          run_test_case_eval1,
+                                                                          1305},
+                                                                         {test_server,
+                                                                          run_test_case_eval,
+                                                                          1237}]
+=elapsed       0.001390s
+=== *** FAILED test case 14 of 150 ***
+=case          join_SUITE:runtime_join_action_catches_up
+=logfile       join_suite.runtime_join_action_catches_up.html
+=started       2026-11-18 16:19:00
+=ended         2026-11-18 16:19:00
+=result        failed: {{badmatch,undefined},
+                        [{join_SUITE,runtime_join_action_catches_up,1,
+                             [{file,
+                                  "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/join_SUITE.erl"},
+                              {line,296}]},
+                         {test_server,ts_tc,3,
+                             [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                             [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                             [{file,"test_server.erl"},{line,1237}]}]}, [{join_SUITE,
+                                                                          runtime_join_action_catches_up,
+                                                                          296},
+                                                                         {test_server,
+                                                                          ts_tc,
+                                                                          1796},
+                                                                         {test_server,
+                                                                          run_test_case_eval1,
+                                                                          1305},
+                                                                         {test_server,
+                                                                          run_test_case_eval,
+                                                                          1237}]
+=elapsed       0.000026s
+=== *** FAILED test case 15 of 150 ***
+=case          join_SUITE:self_seeded_joiner_catches_up
+=logfile       join_suite.self_seeded_joiner_catches_up.html
+=started       2026-11-18 16:19:00
+=ended         2026-11-18 16:19:00
+=result        failed: {{badmatch,undefined},
+                        [{join_SUITE,self_seeded_joiner_catches_up,1,
+                             [{file,
+                                  "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/join_SUITE.erl"},
+                              {line,268}]},
+                         {test_server,ts_tc,3,
+                             [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                             [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                             [{file,"test_server.erl"},{line,1237}]}]}, [{join_SUITE,
+                                                                          self_seeded_joiner_catches_up,
+                                                                          268},
+                                                                         {test_server,
+                                                                          ts_tc,
+                                                                          1796},
+                                                                         {test_server,
+                                                                          run_test_case_eval1,
+                                                                          1305},
+                                                                         {test_server,
+                                                                          run_test_case_eval,
+                                                                          1237}]
+=elapsed       0.000025s
+=== *** FAILED test case 16 of 150 ***
+=case          join_SUITE:end_per_suite
+=logfile       join_suite.end_per_suite.html
+=started       2026-11-18 16:19:00
+=ended         2026-11-18 16:19:00
+=result        ok
+=elapsed       0.000007s
+=group_time    4.925s
+=case          ct_framework:init_per_suite
+=logfile       ct_framework.init_per_suite.html
+=group_props   [{suite,quod_agent_failover_SUITE}]
+=started       2026-11-18 16:19:00
+=ended         2026-11-18 16:19:00
+=result        ok
+=elapsed       0.000000s
+=case          quod_agent_failover_SUITE:validator_host_loss_recovers_state
+=logfile       quod_agent_failover_suite.validator_host_loss_recovers_state.html
+=started       2026-11-18 16:19:00
+=ended         2026-11-18 16:19:10
+=result        failed: {{assertMatch,
+                         [{module,quod_agent_failover_SUITE},
+                          {line,240},
+                          {expression,
+                           "call ( Administrator , ? MODULE , submit_node , [ { node_authorized_goal , ? NS , Anchor , { assertz , unauthorized_recovery } } ] )"},
+                          {pattern,
+                           "{ ok , _ , { normalized , { failed , _ } } }"},
+                          {value,
+                           {ok,
+                            #{request =>
+                               #{mode => execute,
+                                 not_after_ms => 1795015180415,
+                                 agent_namespace => <<"failover-node-2">>,
+                                 agent_genesis_anchor =>
+                                  <<255,179,35,135,236,174,66,22,108,250,87,51,
+                                    38,2,35,92,200,71,230,160,86,165,130,72,
+                                    241,98,107,117,169,32,133,89>>,
+                                 signing_public_key =>
+                                  <<204,101,186,182,124,137,90,58,171,25,60,
+                                    178,162,196,85,217,217,215,114,129,27,195,
+                                    215,240,160,133,15,178,101,182,139,77>>,
+                                 network_identity =>
+                                  <<179,163,75,12,147,101,80,25,82,174,70,128,
+                                    65,24,49,111,95,33,27,40,209,206,46,13,70,
+                                    29,100,173,167,130,137,24>>,
+                                 parser_version => 3,
+                                 operation_id =>
+                                  <<123,42,60,58,174,2,17,36,45,92,96,207,74,
+                                    55,181,198,170,253,46,63,19,0,112,132,71,
+                                    116,232,14,250,136,112,15>>,
+                                 agent_instance_text =>
+                                  <<"'\\x70\\\\x68\\\\x79\\\\x73\\\\x69\\\\x63\\\\x61\\\\x6C\\\\x5F\\\\x6E\\\\x6F\\\\x64\\\\x65\\'.">>,
+                                 goal_text =>
+                                  <<"node_authorized_goal(<<\"agent:failover\">>, <<\"(\\xFC\\ISK{\\xE1\\\\x9A\\V\\x98\\w?\\xE3\\\\xCE\\\\x13\\\\x80\\]\\x12\\\\x96\\\\xE3\\\\xD\\\\x82\\[\\xF0\\\\xF1\\\\xE8\\\\x8\\u\\xD8\\\\xCD\\\\xC7\\V\">>, assertz(unauthorized_recovery)).">>},
+                              signature =>
+                               <<101,211,152,180,158,48,93,244,12,4,21,91,132,
+                                 139,112,243,142,166,54,128,91,184,173,112,177,
+                                 3,247,142,95,22,15,133,53,176,97,225,33,202,
+                                 111,20,145,181,1,226,130,74,249,212,208,209,9,
+                                 118,211,51,92,93,76,69,45,96,80,245,117,4>>,
+                              request_digest =>
+                               <<160,196,219,125,247,202,231,219,39,106,16,203,
+                                 79,203,210,216,113,91,163,199,232,170,126,251,
+                                 159,31,168,171,102,21,192,115>>,
+                              agent_ref_blob =>
+                               <<131,104,2,97,4,108,0,0,0,4,104,2,97,0,109,0,0,
+                                 0,18,97,103,101,110,116,95,105,110,115,116,97,
+                                 110,99,101,95,114,101,102,104,2,97,1,109,0,0,
+                                 0,15,102,97,105,108,111,118,101,114,45,110,
+                                 111,100,101,45,50,104,2,97,1,109,0,0,0,32,255,
+                                 179,35,135,236,174,66,22,108,250,87,51,38,2,
+                                 35,92,200,71,230,160,86,165,130,72,241,98,107,
+                                 117,169,32,133,89,104,2,97,0,109,0,0,0,13,112,
+                                 104,121,115,105,99,97,108,95,110,111,100,101,
+                                 106>>,
+                              goal =>
+                               {{'$quod_symbol',<<"node_authorized_goal">>},
+                                <<"agent:failover">>,
+                                <<40,252,73,83,75,123,225,154,86,152,119,63,
+                                  227,206,19,128,93,18,150,227,13,130,91,240,
+                                  241,232,8,117,216,205,199,86>>,
+                                {{'$quod_symbol',<<"assertz">>},
+                                 {'$quod_symbol',
+                                  <<"unauthorized_recovery">>}}},
+                              variables => [],
+                              operation_ref =>
+                               {operation,<<"failover-node-2">>,
+                                <<255,179,35,135,236,174,66,22,108,250,87,51,
+                                  38,2,35,92,200,71,230,160,86,165,130,72,241,
+                                  98,107,117,169,32,133,89>>,
+                                <<131,104,2,97,4,108,0,0,0,4,104,2,97,0,109,0,
+                                  0,0,18,97,103,101,110,116,95,105,110,115,116,
+                                  97,110,99,101,95,114,101,102,104,2,97,1,109,
+                                  0,0,0,15,102,97,105,108,111,118,101,114,45,
+                                  110,111,100,101,45,50,104,2,97,1,109,0,0,0,
+                                  32,255,179,35,135,236,174,66,22,108,250,87,
+                                  51,38,2,35,92,200,71,230,160,86,165,130,72,
+                                  241,98,107,117,169,32,133,89,104,2,97,0,109,
+                                  0,0,0,13,112,104,121,115,105,99,97,108,95,
+                                  110,111,100,101,106>>,
+                                <<123,42,60,58,174,2,17,36,45,92,96,207,74,55,
+                                  181,198,170,253,46,63,19,0,112,132,71,116,
+                                  232,14,250,136,112,15>>},
+                              request_bytes =>
+                               <<113,117,111,100,46,97,103,101,110,116,46,103,
+                                 111,97,108,46,118,49,0,179,163,75,12,147,101,
+                                 80,25,82,174,70,128,65,24,49,111,95,33,27,40,
+                                 209,206,46,13,70,29,100,173,167,130,137,24,
+                                 204,101,186,182,124,137,90,58,171,25,60,178,
+                                 162,196,85,217,217,215,114,129,27,195,215,240,
+                                 160,133,15,178,101,182,139,77,123,42,60,58,
+                                 174,2,17,36,45,92,96,207,74,55,181,198,170,
+                                 253,46,63,19,0,112,132,71,116,232,14,250,136,
+                                 112,15,0,15,102,97,105,108,111,118,101,114,45,
+                                 110,111,100,101,45,50,255,179,35,135,236,174,
+                                 66,22,108,250,87,51,38,2,35,92,200,71,230,160,
+                                 86,165,130,72,241,98,107,117,169,32,133,89,0,
+                                 0,0,68,39,92,120,55,48,92,92,120,54,56,92,92,
+                                 120,55,57,92,92,120,55,51,92,92,120,54,57,92,
+                                 92,120,54,51,92,92,120,54,49,92,92,120,54,67,
+                                 92,92,120,53,70,92,92,120,54,69,92,92,120,54,
+                                 70,92,92,120,54,52,92,92,120,54,53,92,39,46,1,
+                                 3,0,0,1,161,239,62,0,127,0,0,0,193,110,111,
+                                 100,101,95,97,117,116,104,111,114,105,122,101,
+                                 100,95,103,111,97,108,40,60,60,34,97,103,101,
+                                 110,116,58,102,97,105,108,111,118,101,114,34,
+                                 62,62,44,32,60,60,34,40,92,120,70,67,92,73,83,
+                                 75,123,92,120,69,49,92,92,120,57,65,92,86,92,
+                                 120,57,56,92,119,63,92,120,69,51,92,92,120,67,
+                                 69,92,92,120,49,51,92,92,120,56,48,92,93,92,
+                                 120,49,50,92,92,120,57,54,92,92,120,69,51,92,
+                                 92,120,68,92,92,120,56,50,92,91,92,120,70,48,
+                                 92,92,120,70,49,92,92,120,69,56,92,92,120,56,
+                                 92,117,92,120,68,56,92,92,120,67,68,92,92,120,
+                                 67,55,92,86,34,62,62,44,32,97,115,115,101,114,
+                                 116,122,40,117,110,97,117,116,104,111,114,105,
+                                 122,101,100,95,114,101,99,111,118,101,114,121,
+                                 41,41,46>>,
+                              goal_blob =>
+                               <<131,104,2,97,4,108,0,0,0,4,104,2,97,0,109,0,
+                                 0,0,20,110,111,100,101,95,97,117,116,104,111,
+                                 114,105,122,101,100,95,103,111,97,108,104,2,
+                                 97,1,109,0,0,0,14,97,103,101,110,116,58,102,
+                                 97,105,108,111,118,101,114,104,2,97,1,109,0,
+                                 0,0,32,40,252,73,83,75,123,225,154,86,152,
+                                 119,63,227,206,19,128,93,18,150,227,13,130,
+                                 91,240,241,232,8,117,216,205,199,86,104,2,97,
+                                 4,108,0,0,0,2,104,2,97,0,109,0,0,0,7,97,115,
+                                 115,101,114,116,122,104,2,97,0,109,0,0,0,21,
+                                 117,110,97,117,116,104,111,114,105,122,101,
+                                 100,95,114,101,99,111,118,101,114,121,106,106>>},
+                            {normalized,fail}}}]},
+                        [{quod_agent_failover_SUITE,exercise_host_loss,1,
+                          [{file,
+                            "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_agent_failover_SUITE.erl"},
+                           {line,240}]},
+                         {quod_agent_failover_SUITE,
+                          validator_host_loss_recovers_state,1,
+                          [{file,
+                            "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_agent_failover_SUITE.erl"},
+                           {line,220}]},
+                         {test_server,ts_tc,3,
+                          [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                          [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                          [{file,"test_server.erl"},{line,1237}]}]}, [{quod_agent_failover_SUITE,
+                                                                       exercise_host_loss,
+                                                                       240},
+                                                                      {quod_agent_failover_SUITE,
+                                                                       validator_host_loss_recovers_state,
+                                                                       220},
+                                                                      {test_server,
+                                                                       ts_tc,
+                                                                       1796},
+                                                                      {test_server,
+                                                                       run_test_case_eval1,
+                                                                       1305},
+                                                                      {test_server,
+                                                                       run_test_case_eval,
+                                                                       1237}]
+=elapsed       0.019554s
+=== *** FAILED test case 17 of 150 ***
+=case          quod_agent_failover_SUITE:abrupt_host_loss_recovers_state
+=logfile       quod_agent_failover_suite.abrupt_host_loss_recovers_state.html
+=started       2026-11-18 16:19:10
+=ended         2026-11-18 16:19:20
+=result        failed: {{assertMatch,
+                         [{module,quod_agent_failover_SUITE},
+                          {line,240},
+                          {expression,
+                           "call ( Administrator , ? MODULE , submit_node , [ { node_authorized_goal , ? NS , Anchor , { assertz , unauthorized_recovery } } ] )"},
+                          {pattern,
+                           "{ ok , _ , { normalized , { failed , _ } } }"},
+                          {value,
+                           {ok,
+                            #{request =>
+                               #{mode => execute,
+                                 not_after_ms => 1795015190407,
+                                 agent_namespace => <<"failover-node-2">>,
+                                 agent_genesis_anchor =>
+                                  <<57,74,143,184,0,30,132,153,154,156,186,201,
+                                    247,253,100,143,215,209,214,155,119,145,
+                                    237,88,146,227,246,191,160,153,230,32>>,
+                                 signing_public_key =>
+                                  <<68,245,51,74,53,5,134,59,167,169,164,191,
+                                    50,58,236,188,250,200,47,116,139,53,110,
+                                    119,38,144,228,194,235,71,184,61>>,
+                                 network_identity =>
+                                  <<31,228,241,232,14,125,101,49,235,88,109,
+                                    185,229,23,29,54,125,210,23,217,73,141,231,
+                                    181,132,68,111,213,119,207,192,190>>,
+                                 parser_version => 3,
+                                 operation_id =>
+                                  <<120,225,201,1,86,232,63,181,159,217,95,236,
+                                    26,219,31,209,209,79,199,176,63,163,107,
+                                    144,148,116,60,61,235,151,189,105>>,
+                                 agent_instance_text =>
+                                  <<"'\\x70\\\\x68\\\\x79\\\\x73\\\\x69\\\\x63\\\\x61\\\\x6C\\\\x5F\\\\x6E\\\\x6F\\\\x64\\\\x65\\'.">>,
+                                 goal_text =>
+                                  <<"node_authorized_goal(<<\"agent:failover\">>, <<\"\\x3\\\\xB2\\r[\\xC2\\^\\xBD\\\\x9F\\j\\x9E\\\\x1C\\\\xB5\\t\\x96\\\\xEF\\\\x80\\\\xE7\\3\\x80\\4:\\x1\\f\\x2\\\\xAB\\\\x9F\\\\x17\\b\\x6\\\\xB8\\)\\xC0\\\">>, assertz(unauthorized_recovery)).">>},
+                              signature =>
+                               <<27,108,100,7,8,246,114,243,152,38,188,200,155,
+                                 80,40,48,123,17,223,250,139,174,32,53,123,220,
+                                 240,131,104,27,63,105,132,39,37,174,206,84,
+                                 248,89,220,86,43,86,177,252,231,123,231,254,
+                                 14,24,96,221,149,203,179,218,48,48,119,120,
+                                 161,3>>,
+                              request_digest =>
+                               <<153,93,75,254,116,120,55,80,196,237,130,124,
+                                 64,250,221,1,205,87,88,10,101,222,77,71,164,
+                                 41,176,66,252,9,65,188>>,
+                              agent_ref_blob =>
+                               <<131,104,2,97,4,108,0,0,0,4,104,2,97,0,109,0,0,
+                                 0,18,97,103,101,110,116,95,105,110,115,116,97,
+                                 110,99,101,95,114,101,102,104,2,97,1,109,0,0,
+                                 0,15,102,97,105,108,111,118,101,114,45,110,
+                                 111,100,101,45,50,104,2,97,1,109,0,0,0,32,57,
+                                 74,143,184,0,30,132,153,154,156,186,201,247,
+                                 253,100,143,215,209,214,155,119,145,237,88,
+                                 146,227,246,191,160,153,230,32,104,2,97,0,109,
+                                 0,0,0,13,112,104,121,115,105,99,97,108,95,110,
+                                 111,100,101,106>>,
+                              goal =>
+                               {{'$quod_symbol',<<"node_authorized_goal">>},
+                                <<"agent:failover">>,
+                                <<3,178,114,91,194,94,189,159,106,158,28,181,
+                                  116,150,239,128,231,51,128,52,58,1,102,2,171,
+                                  159,23,98,6,184,41,192>>,
+                                {{'$quod_symbol',<<"assertz">>},
+                                 {'$quod_symbol',
+                                  <<"unauthorized_recovery">>}}},
+                              variables => [],
+                              operation_ref =>
+                               {operation,<<"failover-node-2">>,
+                                <<57,74,143,184,0,30,132,153,154,156,186,201,
+                                  247,253,100,143,215,209,214,155,119,145,237,
+                                  88,146,227,246,191,160,153,230,32>>,
+                                <<131,104,2,97,4,108,0,0,0,4,104,2,97,0,109,0,
+                                  0,0,18,97,103,101,110,116,95,105,110,115,116,
+                                  97,110,99,101,95,114,101,102,104,2,97,1,109,
+                                  0,0,0,15,102,97,105,108,111,118,101,114,45,
+                                  110,111,100,101,45,50,104,2,97,1,109,0,0,0,
+                                  32,57,74,143,184,0,30,132,153,154,156,186,
+                                  201,247,253,100,143,215,209,214,155,119,145,
+                                  237,88,146,227,246,191,160,153,230,32,104,2,
+                                  97,0,109,0,0,0,13,112,104,121,115,105,99,97,
+                                  108,95,110,111,100,101,106>>,
+                                <<120,225,201,1,86,232,63,181,159,217,95,236,
+                                  26,219,31,209,209,79,199,176,63,163,107,144,
+                                  148,116,60,61,235,151,189,105>>},
+                              request_bytes =>
+                               <<113,117,111,100,46,97,103,101,110,116,46,103,
+                                 111,97,108,46,118,49,0,31,228,241,232,14,125,
+                                 101,49,235,88,109,185,229,23,29,54,125,210,23,
+                                 217,73,141,231,181,132,68,111,213,119,207,192,
+                                 190,68,245,51,74,53,5,134,59,167,169,164,191,
+                                 50,58,236,188,250,200,47,116,139,53,110,119,
+                                 38,144,228,194,235,71,184,61,120,225,201,1,86,
+                                 232,63,181,159,217,95,236,26,219,31,209,209,
+                                 79,199,176,63,163,107,144,148,116,60,61,235,
+                                 151,189,105,0,15,102,97,105,108,111,118,101,
+                                 114,45,110,111,100,101,45,50,57,74,143,184,0,
+                                 30,132,153,154,156,186,201,247,253,100,143,
+                                 215,209,214,155,119,145,237,88,146,227,246,
+                                 191,160,153,230,32,0,0,0,68,39,92,120,55,48,
+                                 92,92,120,54,56,92,92,120,55,57,92,92,120,55,
+                                 51,92,92,120,54,57,92,92,120,54,51,92,92,120,
+                                 54,49,92,92,120,54,67,92,92,120,53,70,92,92,
+                                 120,54,69,92,92,120,54,70,92,92,120,54,52,92,
+                                 92,120,54,53,92,39,46,1,3,0,0,1,161,239,62,39,
+                                 135,0,0,0,195,110,111,100,101,95,97,117,116,
+                                 104,111,114,105,122,101,100,95,103,111,97,108,
+                                 40,60,60,34,97,103,101,110,116,58,102,97,105,
+                                 108,111,118,101,114,34,62,62,44,32,60,60,34,
+                                 92,120,51,92,92,120,66,50,92,114,91,92,120,67,
+                                 50,92,94,92,120,66,68,92,92,120,57,70,92,106,
+                                 92,120,57,69,92,92,120,49,67,92,92,120,66,53,
+                                 92,116,92,120,57,54,92,92,120,69,70,92,92,120,
+                                 56,48,92,92,120,69,55,92,51,92,120,56,48,92,
+                                 52,58,92,120,49,92,102,92,120,50,92,92,120,65,
+                                 66,92,92,120,57,70,92,92,120,49,55,92,98,92,
+                                 120,54,92,92,120,66,56,92,41,92,120,67,48,92,
+                                 34,62,62,44,32,97,115,115,101,114,116,122,40,
+                                 117,110,97,117,116,104,111,114,105,122,101,
+                                 100,95,114,101,99,111,118,101,114,121,41,41,46>>,
+                              goal_blob =>
+                               <<131,104,2,97,4,108,0,0,0,4,104,2,97,0,109,0,
+                                 0,0,20,110,111,100,101,95,97,117,116,104,111,
+                                 114,105,122,101,100,95,103,111,97,108,104,2,
+                                 97,1,109,0,0,0,14,97,103,101,110,116,58,102,
+                                 97,105,108,111,118,101,114,104,2,97,1,109,0,
+                                 0,0,32,3,178,114,91,194,94,189,159,106,158,
+                                 28,181,116,150,239,128,231,51,128,52,58,1,
+                                 102,2,171,159,23,98,6,184,41,192,104,2,97,4,
+                                 108,0,0,0,2,104,2,97,0,109,0,0,0,7,97,115,
+                                 115,101,114,116,122,104,2,97,0,109,0,0,0,21,
+                                 117,110,97,117,116,104,111,114,105,122,101,
+                                 100,95,114,101,99,111,118,101,114,121,106,106>>},
+                            {normalized,fail}}}]},
+                        [{quod_agent_failover_SUITE,exercise_host_loss,1,
+                          [{file,
+                            "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_agent_failover_SUITE.erl"},
+                           {line,240}]},
+                         {quod_agent_failover_SUITE,
+                          validator_host_loss_recovers_state,1,
+                          [{file,
+                            "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_agent_failover_SUITE.erl"},
+                           {line,220}]},
+                         {test_server,ts_tc,3,
+                          [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                          [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                          [{file,"test_server.erl"},{line,1237}]}]}, [{quod_agent_failover_SUITE,
+                                                                       exercise_host_loss,
+                                                                       240},
+                                                                      {quod_agent_failover_SUITE,
+                                                                       validator_host_loss_recovers_state,
+                                                                       220},
+                                                                      {test_server,
+                                                                       ts_tc,
+                                                                       1796},
+                                                                      {test_server,
+                                                                       run_test_case_eval1,
+                                                                       1305},
+                                                                      {test_server,
+                                                                       run_test_case_eval,
+                                                                       1237}]
+=elapsed       0.015757s
+=== *** FAILED test case 18 of 150 ***
+=case          quod_agent_failover_SUITE:suspended_host_retires_stale_process
+=logfile       quod_agent_failover_suite.suspended_host_retires_stale_process.html
+=started       2026-11-18 16:19:20
+=ended         2026-11-18 16:19:30
+=result        failed: {{assertMatch,
+                         [{module,quod_agent_failover_SUITE},
+                          {line,240},
+                          {expression,
+                           "call ( Administrator , ? MODULE , submit_node , [ { node_authorized_goal , ? NS , Anchor , { assertz , unauthorized_recovery } } ] )"},
+                          {pattern,
+                           "{ ok , _ , { normalized , { failed , _ } } }"},
+                          {value,
+                           {ok,
+                            #{request =>
+                               #{mode => execute,
+                                 not_after_ms => 1795015200810,
+                                 agent_namespace => <<"failover-node-2">>,
+                                 agent_genesis_anchor =>
+                                  <<148,106,254,217,217,39,7,6,136,111,139,33,
+                                    140,182,238,221,142,163,193,223,100,172,
+                                    164,25,48,49,112,102,164,233,62,226>>,
+                                 signing_public_key =>
+                                  <<148,75,83,147,141,3,196,89,80,122,136,78,
+                                    48,181,8,99,208,239,62,181,21,35,48,154,
+                                    137,218,45,239,99,123,160,83>>,
+                                 network_identity =>
+                                  <<153,170,190,134,31,44,88,81,161,226,168,
+                                    128,17,151,104,96,173,199,54,46,140,106,74,
+                                    120,209,37,181,219,190,21,52,111>>,
+                                 parser_version => 3,
+                                 operation_id =>
+                                  <<89,227,164,149,190,133,163,18,15,175,106,
+                                    93,168,108,107,74,30,103,7,28,98,1,132,176,
+                                    185,23,131,203,72,81,25,122>>,
+                                 agent_instance_text =>
+                                  <<"'\\x70\\\\x68\\\\x79\\\\x73\\\\x69\\\\x63\\\\x61\\\\x6C\\\\x5F\\\\x6E\\\\x6F\\\\x64\\\\x65\\'.">>,
+                                 goal_text =>
+                                  <<"node_authorized_goal(<<\"agent:failover\">>, <<\"\\x11\\\\xB3\\\\xF\\\\x22\\\\xCD\\\\xAE\\\\xD8\\\\xBC\\\\xE0\\\\xE0\\\\xD2\\\\x90\\\\xBA\\\\xA2\\\\xE8\\\\x90\\\\xFA\\5\\x91\\\\xAE\\\\xD\\\\x8D\\d\\x85\\ \\x9D\\t\\x8C\\4\\xA4\\j\\x9B\\\">>, assertz(unauthorized_recovery)).">>},
+                              signature =>
+                               <<191,19,133,146,153,36,251,168,89,180,14,218,
+                                 244,0,164,82,219,79,124,209,198,226,169,170,
+                                 208,28,73,194,144,9,115,174,114,248,96,99,240,
+                                 144,106,169,69,95,87,94,213,98,202,189,152,
+                                 133,187,217,32,45,84,124,83,98,71,230,253,109,
+                                 210,1>>,
+                              request_digest =>
+                               <<95,227,204,25,201,214,97,162,58,129,48,202,
+                                 111,40,218,187,80,114,126,163,162,170,155,199,
+                                 108,209,13,18,216,220,214,5>>,
+                              agent_ref_blob =>
+                               <<131,104,2,97,4,108,0,0,0,4,104,2,97,0,109,0,0,
+                                 0,18,97,103,101,110,116,95,105,110,115,116,97,
+                                 110,99,101,95,114,101,102,104,2,97,1,109,0,0,
+                                 0,15,102,97,105,108,111,118,101,114,45,110,
+                                 111,100,101,45,50,104,2,97,1,109,0,0,0,32,148,
+                                 106,254,217,217,39,7,6,136,111,139,33,140,182,
+                                 238,221,142,163,193,223,100,172,164,25,48,49,
+                                 112,102,164,233,62,226,104,2,97,0,109,0,0,0,
+                                 13,112,104,121,115,105,99,97,108,95,110,111,
+                                 100,101,106>>,
+                              goal =>
+                               {{'$quod_symbol',<<"node_authorized_goal">>},
+                                <<"agent:failover">>,
+                                <<17,179,15,34,205,174,216,188,224,224,210,144,
+                                  186,162,232,144,250,53,145,174,13,141,100,
+                                  133,32,157,116,140,52,164,106,155>>,
+                                {{'$quod_symbol',<<"assertz">>},
+                                 {'$quod_symbol',
+                                  <<"unauthorized_recovery">>}}},
+                              variables => [],
+                              operation_ref =>
+                               {operation,<<"failover-node-2">>,
+                                <<148,106,254,217,217,39,7,6,136,111,139,33,
+                                  140,182,238,221,142,163,193,223,100,172,164,
+                                  25,48,49,112,102,164,233,62,226>>,
+                                <<131,104,2,97,4,108,0,0,0,4,104,2,97,0,109,0,
+                                  0,0,18,97,103,101,110,116,95,105,110,115,116,
+                                  97,110,99,101,95,114,101,102,104,2,97,1,109,
+                                  0,0,0,15,102,97,105,108,111,118,101,114,45,
+                                  110,111,100,101,45,50,104,2,97,1,109,0,0,0,
+                                  32,148,106,254,217,217,39,7,6,136,111,139,33,
+                                  140,182,238,221,142,163,193,223,100,172,164,
+                                  25,48,49,112,102,164,233,62,226,104,2,97,0,
+                                  109,0,0,0,13,112,104,121,115,105,99,97,108,
+                                  95,110,111,100,101,106>>,
+                                <<89,227,164,149,190,133,163,18,15,175,106,93,
+                                  168,108,107,74,30,103,7,28,98,1,132,176,185,
+                                  23,131,203,72,81,25,122>>},
+                              request_bytes =>
+                               <<113,117,111,100,46,97,103,101,110,116,46,103,
+                                 111,97,108,46,118,49,0,153,170,190,134,31,44,
+                                 88,81,161,226,168,128,17,151,104,96,173,199,
+                                 54,46,140,106,74,120,209,37,181,219,190,21,52,
+                                 111,148,75,83,147,141,3,196,89,80,122,136,78,
+                                 48,181,8,99,208,239,62,181,21,35,48,154,137,
+                                 218,45,239,99,123,160,83,89,227,164,149,190,
+                                 133,163,18,15,175,106,93,168,108,107,74,30,
+                                 103,7,28,98,1,132,176,185,23,131,203,72,81,25,
+                                 122,0,15,102,97,105,108,111,118,101,114,45,
+                                 110,111,100,101,45,50,148,106,254,217,217,39,
+                                 7,6,136,111,139,33,140,182,238,221,142,163,
+                                 193,223,100,172,164,25,48,49,112,102,164,233,
+                                 62,226,0,0,0,68,39,92,120,55,48,92,92,120,54,
+                                 56,92,92,120,55,57,92,92,120,55,51,92,92,120,
+                                 54,57,92,92,120,54,51,92,92,120,54,49,92,92,
+                                 120,54,67,92,92,120,53,70,92,92,120,54,69,92,
+                                 92,120,54,70,92,92,120,54,52,92,92,120,54,53,
+                                 92,39,46,1,3,0,0,1,161,239,62,80,42,0,0,0,217,
+                                 110,111,100,101,95,97,117,116,104,111,114,105,
+                                 122,101,100,95,103,111,97,108,40,60,60,34,97,
+                                 103,101,110,116,58,102,97,105,108,111,118,101,
+                                 114,34,62,62,44,32,60,60,34,92,120,49,49,92,
+                                 92,120,66,51,92,92,120,70,92,92,120,50,50,92,
+                                 92,120,67,68,92,92,120,65,69,92,92,120,68,56,
+                                 92,92,120,66,67,92,92,120,69,48,92,92,120,69,
+                                 48,92,92,120,68,50,92,92,120,57,48,92,92,120,
+                                 66,65,92,92,120,65,50,92,92,120,69,56,92,92,
+                                 120,57,48,92,92,120,70,65,92,53,92,120,57,49,
+                                 92,92,120,65,69,92,92,120,68,92,92,120,56,68,
+                                 92,100,92,120,56,53,92,32,92,120,57,68,92,116,
+                                 92,120,56,67,92,52,92,120,65,52,92,106,92,120,
+                                 57,66,92,34,62,62,44,32,97,115,115,101,114,
+                                 116,122,40,117,110,97,117,116,104,111,114,105,
+                                 122,101,100,95,114,101,99,111,118,101,114,121,
+                                 41,41,46>>,
+                              goal_blob =>
+                               <<131,104,2,97,4,108,0,0,0,4,104,2,97,0,109,0,
+                                 0,0,20,110,111,100,101,95,97,117,116,104,111,
+                                 114,105,122,101,100,95,103,111,97,108,104,2,
+                                 97,1,109,0,0,0,14,97,103,101,110,116,58,102,
+                                 97,105,108,111,118,101,114,104,2,97,1,109,0,
+                                 0,0,32,17,179,15,34,205,174,216,188,224,224,
+                                 210,144,186,162,232,144,250,53,145,174,13,
+                                 141,100,133,32,157,116,140,52,164,106,155,
+                                 104,2,97,4,108,0,0,0,2,104,2,97,0,109,0,0,0,
+                                 7,97,115,115,101,114,116,122,104,2,97,0,109,
+                                 0,0,0,21,117,110,97,117,116,104,111,114,105,
+                                 122,101,100,95,114,101,99,111,118,101,114,
+                                 121,106,106>>},
+                            {normalized,fail}}}]},
+                        [{quod_agent_failover_SUITE,exercise_host_loss,1,
+                          [{file,
+                            "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_agent_failover_SUITE.erl"},
+                           {line,240}]},
+                         {quod_agent_failover_SUITE,
+                          validator_host_loss_recovers_state,1,
+                          [{file,
+                            "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_agent_failover_SUITE.erl"},
+                           {line,220}]},
+                         {test_server,ts_tc,3,
+                          [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                          [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                          [{file,"test_server.erl"},{line,1237}]}]}, [{quod_agent_failover_SUITE,
+                                                                       exercise_host_loss,
+                                                                       240},
+                                                                      {quod_agent_failover_SUITE,
+                                                                       validator_host_loss_recovers_state,
+                                                                       220},
+                                                                      {test_server,
+                                                                       ts_tc,
+                                                                       1796},
+                                                                      {test_server,
+                                                                       run_test_case_eval1,
+                                                                       1305},
+                                                                      {test_server,
+                                                                       run_test_case_eval,
+                                                                       1237}]
+=elapsed       0.015536s
+=== *** FAILED test case 19 of 150 ***
+=case          quod_agent_failover_SUITE:uncertain_claim_recovers_after_quorum_loss
+=logfile       quod_agent_failover_suite.uncertain_claim_recovers_after_quorum_loss.html
+=started       2026-11-18 16:19:30
+=ended         2026-11-18 16:20:16
+=result        ok
+=elapsed       35.390358s
+=case          quod_agent_failover_SUITE:uncertain_claim_recovers_after_target_restart
+=logfile       quod_agent_failover_suite.uncertain_claim_recovers_after_target_restart.html
+=started       2026-11-18 16:20:16
+=ended         2026-11-18 16:21:02
+=result        ok
+=elapsed       35.735238s
+=case          ct_framework:end_per_suite
+=logfile       ct_framework.end_per_suite.html
+=group_props   [{suite,quod_agent_failover_SUITE}]
+=started       2026-11-18 16:21:02
+=ended         2026-11-18 16:21:02
+=result        ok
+=elapsed       0.000000s
+=group_time    121.790s
+=case          quod_ask_SUITE:init_per_suite
+=logfile       quod_ask_suite.init_per_suite.html
+=started       2026-11-18 16:21:02
+=ended         2026-11-18 16:21:06
+=result        ok
+=elapsed       4.042141s
+=case          quod_ask_SUITE:remote_signed_transaction_savepoints
+=logfile       quod_ask_suite.remote_signed_transaction_savepoints.html
+=started       2026-11-18 16:21:06
+=ended         2026-11-18 16:21:08
+=result        failed: {{assertMatch,
+                            [{module,quod_ask_SUITE},
+                             {line,403},
+                             {expression,
+                                 "peer : call ( Peer , quod_prolog , prove , [ Ns , { RemoveAtom , { 'X' } } ] )"},
+                             {pattern,"{ fail , _ }"},
+                             {value,fail}]},
+                        [{quod_ask_SUITE,
+                             '-remote_signed_transaction_savepoints/1-fun-5-',
+                             3,
+                             [{file,
+                                  "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_ask_SUITE.erl"},
+                              {line,403}]},
+                         {lists,foreach_1,2,[{file,"lists.erl"},{line,2641}]},
+                         {test_server,ts_tc,3,
+                             [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                             [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                             [{file,"test_server.erl"},{line,1237}]}]}, [{quod_ask_SUITE,
+                                                                          '-remote_signed_transaction_savepoints/1-fun-5-',
+                                                                          403},
+                                                                         {lists,
+                                                                          foreach_1,
+                                                                          2641},
+                                                                         {test_server,
+                                                                          ts_tc,
+                                                                          1796},
+                                                                         {test_server,
+                                                                          run_test_case_eval1,
+                                                                          1305},
+                                                                         {test_server,
+                                                                          run_test_case_eval,
+                                                                          1237}]
+=elapsed       2.082833s
+=== *** FAILED test case 22 of 150 ***
+=case          quod_ask_SUITE:cut_findall_local_and_cohosted
+=logfile       quod_ask_suite.cut_findall_local_and_cohosted.html
+=started       2026-11-18 16:21:08
+=ended         2026-11-18 16:21:08
+=result        ok
+=elapsed       0.001035s
+=case          quod_ask_SUITE:cut_findall_remote_boundaries
+=logfile       quod_ask_suite.cut_findall_remote_boundaries.html
+=started       2026-11-18 16:21:08
+=ended         2026-11-18 16:21:08
+=result        ok
+=elapsed       0.008391s
+=case          quod_ask_SUITE:cut_findall_signed_multiscope_savepoints
+=logfile       quod_ask_suite.cut_findall_signed_multiscope_savepoints.html
+=started       2026-11-18 16:21:08
+=ended         2026-11-18 16:21:11
+=result        failed: {{assertMatch,
+                            [{module,quod_ask_SUITE},
+                             {line,449},
+                             {expression,
+                                 "peer : call ( Peer , quod_prolog , prove , [ Ns , { cut_keep , 2 } ] )"},
+                             {pattern,"{ fail , _ }"},
+                             {value,fail}]},
+                        [{quod_ask_SUITE,
+                             '-cut_findall_signed_multiscope_savepoints/1-fun-6-',
+                             1,
+                             [{file,
+                                  "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_ask_SUITE.erl"},
+                              {line,449}]},
+                         {lists,foreach_1,2,[{file,"lists.erl"},{line,2641}]},
+                         {test_server,ts_tc,3,
+                             [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                             [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                             [{file,"test_server.erl"},{line,1237}]}]}, [{quod_ask_SUITE,
+                                                                          '-cut_findall_signed_multiscope_savepoints/1-fun-6-',
+                                                                          449},
+                                                                         {lists,
+                                                                          foreach_1,
+                                                                          2641},
+                                                                         {test_server,
+                                                                          ts_tc,
+                                                                          1796},
+                                                                         {test_server,
+                                                                          run_test_case_eval1,
+                                                                          1305},
+                                                                         {test_server,
+                                                                          run_test_case_eval,
+                                                                          1237}]
+=elapsed       3.080792s
+=== *** FAILED test case 25 of 150 ***
+=case          quod_ask_SUITE:remote_plain_read_excludes_live_observer
+=logfile       quod_ask_suite.remote_plain_read_excludes_live_observer.html
+=started       2026-11-18 16:21:11
+=ended         2026-11-18 16:21:11
+=result        ok
+=elapsed       0.013091s
+=case          quod_ask_SUITE:remote_native_read_uses_selected_observer
+=logfile       quod_ask_suite.remote_native_read_uses_selected_observer.html
+=started       2026-11-18 16:21:11
+=ended         2026-11-18 16:21:11
+=result        failed: {{assertMatch,
+                            [{module,quod_ask_SUITE},
+                             {line,753},
+                             {expression,
+                                 "peer : call ( Observer , quod_prolog , prove_ro , [ ? NS , native_scope_write ] )"},
+                             {pattern,"{ fail , _ }"},
+                             {value,fail}]},
+                        [{quod_ask_SUITE,
+                             remote_native_read_uses_selected_observer,1,
+                             [{file,
+                                  "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_ask_SUITE.erl"},
+                              {line,753}]},
+                         {test_server,ts_tc,3,
+                             [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                             [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                             [{file,"test_server.erl"},{line,1237}]}]}, [{quod_ask_SUITE,
+                                                                          remote_native_read_uses_selected_observer,
+                                                                          753},
+                                                                         {test_server,
+                                                                          ts_tc,
+                                                                          1796},
+                                                                         {test_server,
+                                                                          run_test_case_eval1,
+                                                                          1305},
+                                                                         {test_server,
+                                                                          run_test_case_eval,
+                                                                          1237}]
+=elapsed       0.022107s
+=== *** FAILED test case 27 of 150 ***
+=case          quod_ask_SUITE:remote_plain_read_rejects_lying_validator
+=logfile       quod_ask_suite.remote_plain_read_rejects_lying_validator.html
+=started       2026-11-18 16:21:11
+=ended         2026-11-18 16:21:11
+=result        ok
+=elapsed       0.024582s
+=case          quod_ask_SUITE:remote_scope_solutions
+=logfile       quod_ask_suite.remote_scope_solutions.html
+=started       2026-11-18 16:21:11
+=ended         2026-11-18 16:21:11
+=result        ok
+=elapsed       0.003696s
+=case          quod_ask_SUITE:remote_scope_trace_parentage
+=logfile       quod_ask_suite.remote_scope_trace_parentage.html
+=started       2026-11-18 16:21:11
+=ended         2026-11-18 16:21:11
+=result        ok
+=elapsed       0.027496s
+=case          quod_ask_SUITE:proof_policy_refusal_local_and_remote
+=logfile       quod_ask_suite.proof_policy_refusal_local_and_remote.html
+=started       2026-11-18 16:21:11
+=ended         2026-11-18 16:21:12
+=result        ok
+=elapsed       0.073151s
+=case          quod_ask_SUITE:answer_policy_producer_consumer_and_signed_change
+=logfile       quod_ask_suite.answer_policy_producer_consumer_and_signed_change.html
+=started       2026-11-18 16:21:12
+=ended         2026-11-18 16:21:12
+=result        ok
+=elapsed       0.364752s
+=case          quod_ask_SUITE:remote_scope_symbol_safety
+=logfile       quod_ask_suite.remote_scope_symbol_safety.html
+=started       2026-11-18 16:21:12
+=ended         2026-11-18 16:21:12
+=result        failed: {{assertMatch,
+                            [{module,quod_ask_SUITE},
+                             {line,1181},
+                             {expression,
+                                 "peer : call ( Asker , quod_prolog , prove , [ ? ASKER_NS , Unknown ] , 60000 )"},
+                             {pattern,"{ fail , [ _ | _ ] }"},
+                             {value,fail}]},
+                        [{quod_ask_SUITE,remote_scope_symbol_safety,1,
+                             [{file,
+                                  "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_ask_SUITE.erl"},
+                              {line,1181}]},
+                         {test_server,ts_tc,3,
+                             [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                             [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                             [{file,"test_server.erl"},{line,1237}]}]}, [{quod_ask_SUITE,
+                                                                          remote_scope_symbol_safety,
+                                                                          1181},
+                                                                         {test_server,
+                                                                          ts_tc,
+                                                                          1796},
+                                                                         {test_server,
+                                                                          run_test_case_eval1,
+                                                                          1305},
+                                                                         {test_server,
+                                                                          run_test_case_eval,
+                                                                          1237}]
+=elapsed       0.003130s
+=== *** FAILED test case 33 of 150 ***
+=case          quod_ask_SUITE:remote_signed_fresh_nested_symbol
+=logfile       quod_ask_suite.remote_signed_fresh_nested_symbol.html
+=started       2026-11-18 16:21:12
+=ended         2026-11-18 16:21:12
+=result        ok
+=elapsed       0.047774s
+=case          quod_ask_SUITE:remote_scope_chain_policy
+=logfile       quod_ask_suite.remote_scope_chain_policy.html
+=started       2026-11-18 16:21:12
+=ended         2026-11-18 16:21:12
+=result        ok
+=elapsed       0.005501s
+=case          quod_ask_SUITE:remote_scope_failure_reasons
+=logfile       quod_ask_suite.remote_scope_failure_reasons.html
+=started       2026-11-18 16:21:12
+=ended         2026-11-18 16:21:12
+=result        failed: {{assertMatch,
+                            [{module,quod_ask_SUITE},
+                             {line,1275},
+                             {expression,
+                                 "peer : call ( Asker , quod_prolog , prove , [ ? ASKER_NS , Recover ] , 60000 )"},
+                             {pattern,
+                                 "{ ok , [ # { 'Outer' := Remote } ] , _ }"},
+                             {value,{fail,[{impossible_to_link,bob}]}}]},
+                        [{quod_ask_SUITE,remote_scope_failure_reasons,1,
+                             [{file,
+                                  "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_ask_SUITE.erl"},
+                              {line,1275}]},
+                         {test_server,ts_tc,3,
+                             [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                             [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                             [{file,"test_server.erl"},{line,1237}]}]}, [{quod_ask_SUITE,
+                                                                          remote_scope_failure_reasons,
+                                                                          1275},
+                                                                         {test_server,
+                                                                          ts_tc,
+                                                                          1796},
+                                                                         {test_server,
+                                                                          run_test_case_eval1,
+                                                                          1305},
+                                                                         {test_server,
+                                                                          run_test_case_eval,
+                                                                          1237}]
+=elapsed       0.001617s
+=== *** FAILED test case 36 of 150 ***
+=case          quod_ask_SUITE:remote_scope_nested_failure_reasons
+=logfile       quod_ask_suite.remote_scope_nested_failure_reasons.html
+=started       2026-11-18 16:21:12
+=ended         2026-11-18 16:21:12
+=result        failed: {{assertMatch,
+                            [{module,quod_ask_SUITE},
+                             {line,1285},
+                             {expression,
+                                 "peer : call ( Asker , quod_prolog , prove , [ ? ASKER_NS , recover_third_failure ] , 60000 )"},
+                             {pattern,"{ ok , [ # { } ] , _ }"},
+                             {value,{fail,[third_declined]}}]},
+                        [{quod_ask_SUITE,remote_scope_nested_failure_reasons,
+                             1,
+                             [{file,
+                                  "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_ask_SUITE.erl"},
+                              {line,1285}]},
+                         {test_server,ts_tc,3,
+                             [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                             [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                             [{file,"test_server.erl"},{line,1237}]}]}, [{quod_ask_SUITE,
+                                                                          remote_scope_nested_failure_reasons,
+                                                                          1285},
+                                                                         {test_server,
+                                                                          ts_tc,
+                                                                          1796},
+                                                                         {test_server,
+                                                                          run_test_case_eval1,
+                                                                          1305},
+                                                                         {test_server,
+                                                                          run_test_case_eval,
+                                                                          1237}]
+=elapsed       0.003397s
+=== *** FAILED test case 37 of 150 ***
+=case          quod_ask_SUITE:remote_scope_deep_failure_reasons
+=logfile       quod_ask_suite.remote_scope_deep_failure_reasons.html
+=started       2026-11-18 16:21:12
+=ended         2026-11-18 16:21:12
+=result        failed: {{assert,
+                            [{module,quod_ask_SUITE},
+                             {line,1303},
+                             {expression,"length ( Reasons ) > 64"},
+                             {expected,true},
+                             {value,false}]},
+                        [{quod_ask_SUITE,remote_scope_deep_failure_reasons,1,
+                             [{file,
+                                  "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_ask_SUITE.erl"},
+                              {line,1303}]},
+                         {test_server,ts_tc,3,
+                             [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                             [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                             [{file,"test_server.erl"},{line,1237}]}]}, [{quod_ask_SUITE,
+                                                                          remote_scope_deep_failure_reasons,
+                                                                          1303},
+                                                                         {test_server,
+                                                                          ts_tc,
+                                                                          1796},
+                                                                         {test_server,
+                                                                          run_test_case_eval1,
+                                                                          1305},
+                                                                         {test_server,
+                                                                          run_test_case_eval,
+                                                                          1237}]
+=elapsed       0.003736s
+=== *** FAILED test case 38 of 150 ***
+=case          quod_ask_SUITE:remote_scope_structural_reason_depth
+=logfile       quod_ask_suite.remote_scope_structural_reason_depth.html
+=started       2026-11-18 16:21:12
+=ended         2026-11-18 16:21:12
+=result        failed: {{assertEqual,
+                         [{module,quod_ask_SUITE},
+                          {line,1338},
+                          {expression,"hd ( Reasons )"},
+                          {expected,{'::',<<"animals">>,deep_reason}},
+                          {value,
+                           [[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[{'$quod_symbol',
+                                                                                                  <<"deep_bottom">>}]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]}]},
+                        [{quod_ask_SUITE,
+                          remote_scope_structural_reason_depth,1,
+                          [{file,
+                            "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_ask_SUITE.erl"},
+                           {line,1338}]},
+                         {test_server,ts_tc,3,
+                          [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                          [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                          [{file,"test_server.erl"},{line,1237}]}]}, [{quod_ask_SUITE,
+                                                                       remote_scope_structural_reason_depth,
+                                                                       1338},
+                                                                      {test_server,
+                                                                       ts_tc,
+                                                                       1796},
+                                                                      {test_server,
+                                                                       run_test_case_eval1,
+                                                                       1305},
+                                                                      {test_server,
+                                                                       run_test_case_eval,
+                                                                       1237}]
+=elapsed       0.002908s
+=== *** FAILED test case 39 of 150 ***
+=case          quod_ask_SUITE:remote_scope_cancel
+=logfile       quod_ask_suite.remote_scope_cancel.html
+=started       2026-11-18 16:21:12
+=ended         2026-11-18 16:21:12
+=result        ok
+=elapsed       0.021929s
+=case          quod_ask_SUITE:remote_scope_transport_reuse
+=logfile       quod_ask_suite.remote_scope_transport_reuse.html
+=started       2026-11-18 16:21:12
+=ended         2026-11-18 16:21:12
+=result        ok
+=elapsed       0.013917s
+=case          quod_ask_SUITE:remote_signed_gateway_read_execute_cursor
+=logfile       quod_ask_suite.remote_signed_gateway_read_execute_cursor.html
+=started       2026-11-18 16:21:12
+=ended         2026-11-18 16:21:13
+=result        ok
+=elapsed       0.339898s
+=case          quod_ask_SUITE:remote_signed_read_certified_write
+=logfile       quod_ask_suite.remote_signed_read_certified_write.html
+=started       2026-11-18 16:21:13
+=ended         2026-11-18 16:21:13
+=result        ok
+=elapsed       0.171386s
+=case          quod_ask_SUITE:remote_exact_claim_redelivery
+=logfile       quod_ask_suite.remote_exact_claim_redelivery.html
+=started       2026-11-18 16:21:13
+=ended         2026-11-18 16:21:13
+=result        ok
+=elapsed       0.230499s
+=case          quod_ask_SUITE:local_write_with_foreign_read
+=logfile       quod_ask_suite.local_write_with_foreign_read.html
+=started       2026-11-18 16:21:13
+=ended         2026-11-18 16:21:13
+=result        ok
+=elapsed       0.056565s
+=case          quod_ask_SUITE:read_certificate_stale_rejected
+=logfile       quod_ask_suite.read_certificate_stale_rejected.html
+=started       2026-11-18 16:21:13
+=ended         2026-11-18 16:21:13
+=result        ok
+=elapsed       0.042922s
+=case          quod_ask_SUITE:remote_signed_origin_read_certificate_stale_rejected
+=logfile       quod_ask_suite.remote_signed_origin_read_certificate_stale_rejected.html
+=started       2026-11-18 16:21:13
+=ended         2026-11-18 16:21:13
+=result        ok
+=elapsed       0.039712s
+=case          quod_ask_SUITE:remote_signed_two_gateway_race
+=logfile       quod_ask_suite.remote_signed_two_gateway_race.html
+=started       2026-11-18 16:21:13
+=ended         2026-11-18 16:21:13
+=result        ok
+=elapsed       0.180371s
+=case          quod_ask_SUITE:remote_signed_gateway_group
+=logfile       quod_ask_suite.remote_signed_gateway_group.html
+=started       2026-11-18 16:21:13
+=ended         2026-11-18 16:21:14
+=result        ok
+=elapsed       0.088325s
+=case          quod_ask_SUITE:remote_independent_routes
+=logfile       quod_ask_suite.remote_independent_routes.html
+=started       2026-11-18 16:21:14
+=ended         2026-11-18 16:21:14
+=result        ok
+=elapsed       0.377236s
+=case          quod_ask_SUITE:independent_action_multiscope_rollback
+=logfile       quod_ask_suite.independent_action_multiscope_rollback.html
+=started       2026-11-18 16:21:14
+=ended         2026-11-18 16:21:14
+=result        ok
+=elapsed       0.301580s
+=case          quod_ask_SUITE:independent_action_remote_errors
+=logfile       quod_ask_suite.independent_action_remote_errors.html
+=started       2026-11-18 16:21:14
+=ended         2026-11-18 16:21:14
+=result        ok
+=elapsed       0.137782s
+=case          quod_ask_SUITE:remote_independent_root_effect
+=logfile       quod_ask_suite.remote_independent_root_effect.html
+=started       2026-11-18 16:21:14
+=ended         2026-11-18 16:21:20
+=result        failed: {test_case_failed,
+                           {not_ready,<<"ct:s8-effect-418">>,
+                               {error,no_such_namespace}}}, [{quod_ask_SUITE,
+                                                              remote_independent_root_effect,
+                                                              1945},
+                                                             {test_server,
+                                                              ts_tc,1796},
+                                                             {test_server,
+                                                              run_test_case_eval1,
+                                                              1305},
+                                                             {test_server,
+                                                              run_test_case_eval,
+                                                              1237}]
+=elapsed       5.085812s
+=== *** FAILED test case 53 of 150 ***
+=case          quod_ask_SUITE:independent_action_remote_prepared_rollback
+=logfile       quod_ask_suite.independent_action_remote_prepared_rollback.html
+=started       2026-11-18 16:21:20
+=ended         2026-11-18 16:21:25
+=result        failed: {{assertEqual,
+                            [{module,quod_ask_SUITE},
+                             {line,1925},
+                             {expression,
+                                 "peer : call ( Target , quod_ontology , local_state , [ Kept ] )"},
+                             {expected,{ok,ready}},
+                             {value,{ok,not_hosted}}]},
+                        [{quod_ask_SUITE,
+                             independent_action_remote_prepared_rollback,1,
+                             [{file,
+                                  "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_ask_SUITE.erl"},
+                              {line,1925}]},
+                         {test_server,ts_tc,3,
+                             [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                             [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                             [{file,"test_server.erl"},{line,1237}]}]}, [{quod_ask_SUITE,
+                                                                          independent_action_remote_prepared_rollback,
+                                                                          1925},
+                                                                         {test_server,
+                                                                          ts_tc,
+                                                                          1796},
+                                                                         {test_server,
+                                                                          run_test_case_eval1,
+                                                                          1305},
+                                                                         {test_server,
+                                                                          run_test_case_eval,
+                                                                          1237}]
+=elapsed       5.126928s
+=== *** FAILED test case 54 of 150 ***
+=case          quod_ask_SUITE:remote_independent_partial_outcome
+=logfile       quod_ask_suite.remote_independent_partial_outcome.html
+=started       2026-11-18 16:21:25
+=ended         2026-11-18 16:21:25
+=result        ok
+=elapsed       0.345087s
+=case          quod_ask_SUITE:remote_independent_branch_provenance
+=logfile       quod_ask_suite.remote_independent_branch_provenance.html
+=started       2026-11-18 16:21:25
+=ended         2026-11-18 16:21:25
+=result        failed: {{assertMatch,
+                            [{module,quod_ask_SUITE},
+                             {line,2091},
+                             {expression,
+                                 "peer : call ( Target , quod_prolog , prove , [ ? NS , Fact ] )"},
+                             {pattern,"{ fail , _ }"},
+                             {value,fail}]},
+                        [{quod_ask_SUITE,
+                             '-remote_independent_branch_provenance/1-fun-8-',
+                             3,
+                             [{file,
+                                  "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_ask_SUITE.erl"},
+                              {line,2091}]},
+                         {lists,foreach_1,2,[{file,"lists.erl"},{line,2641}]},
+                         {quod_ask_SUITE,
+                             remote_independent_branch_provenance,1,
+                             [{file,
+                                  "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_ask_SUITE.erl"},
+                              {line,2090}]},
+                         {test_server,ts_tc,3,
+                             [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                             [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                             [{file,"test_server.erl"},{line,1237}]}]}, [{quod_ask_SUITE,
+                                                                          '-remote_independent_branch_provenance/1-fun-8-',
+                                                                          2091},
+                                                                         {lists,
+                                                                          foreach_1,
+                                                                          2641},
+                                                                         {quod_ask_SUITE,
+                                                                          remote_independent_branch_provenance,
+                                                                          2090},
+                                                                         {test_server,
+                                                                          ts_tc,
+                                                                          1796},
+                                                                         {test_server,
+                                                                          run_test_case_eval1,
+                                                                          1305},
+                                                                         {test_server,
+                                                                          run_test_case_eval,
+                                                                          1237}]
+=elapsed       0.316419s
+=== *** FAILED test case 56 of 150 ***
+=case          quod_ask_SUITE:remote_independent_nesting_and_auth
+=logfile       quod_ask_suite.remote_independent_nesting_and_auth.html
+=started       2026-11-18 16:21:25
+=ended         2026-11-18 16:21:25
+=result        failed: {{assertMatch,
+                            [{module,quod_ask_SUITE},
+                             {line,2113},
+                             {expression,
+                                 "peer : call ( ? config ( target , Config ) , quod_prolog , prove , [ ? NS , s6_invalid_auth ] )"},
+                             {pattern,"{ fail , _ }"},
+                             {value,fail}]},
+                        [{quod_ask_SUITE,remote_independent_nesting_and_auth,
+                             1,
+                             [{file,
+                                  "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_ask_SUITE.erl"},
+                              {line,2113}]},
+                         {test_server,ts_tc,3,
+                             [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                             [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                             [{file,"test_server.erl"},{line,1237}]}]}, [{quod_ask_SUITE,
+                                                                          remote_independent_nesting_and_auth,
+                                                                          2113},
+                                                                         {test_server,
+                                                                          ts_tc,
+                                                                          1796},
+                                                                         {test_server,
+                                                                          run_test_case_eval1,
+                                                                          1305},
+                                                                         {test_server,
+                                                                          run_test_case_eval,
+                                                                          1237}]
+=elapsed       0.037036s
+=== *** FAILED test case 57 of 150 ***
+=case          quod_ask_SUITE:remote_independent_cursor_selects_only_accepted_answer
+=logfile       quod_ask_suite.remote_independent_cursor_selects_only_accepted_answer.html
+=started       2026-11-18 16:21:25
+=ended         2026-11-18 16:21:26
+=result        ok
+=elapsed       0.211683s
+=case          quod_ask_SUITE:remote_signed_concurrent_gateway_groups
+=logfile       quod_ask_suite.remote_signed_concurrent_gateway_groups.html
+=started       2026-11-18 16:21:26
+=ended         2026-11-18 16:21:26
+=result        ok
+=elapsed       0.711948s
+=case          quod_ask_SUITE:remote_signed_queued_occ_abort
+=logfile       quod_ask_suite.remote_signed_queued_occ_abort.html
+=started       2026-11-18 16:21:26
+=ended         2026-11-18 16:21:27
+=result        ok
+=elapsed       0.225687s
+=case          quod_ask_SUITE:remote_signed_gateway_group_with_root_effect
+=logfile       quod_ask_suite.remote_signed_gateway_group_with_root_effect.html
+=started       2026-11-18 16:21:27
+=ended         2026-11-18 16:21:33
+=result        failed: {test_case_failed,
+                           {effect_state_timeout,<<"ct:remote-effect-898">>,
+                               {group,<<"pets">>,
+                                   <<80,163,77,250,58,118,203,252,109,216,203,
+                                     191,34,27,56,164,198,5,192,140,236,143,
+                                     112,221,190,14,194,90,116,253,9,107>>,
+                                   <<51,14,149,107,34,147,31,211,230,116,122,
+                                     98,164,93,96,44,41,152,167,30,150,161,175,
+                                     222,8,227,34,67,255,237,55,185>>,
+                                   <<137,84,80,90,147,146,32,27,79,170,145,20,
+                                     186,12,38,241,40,103,104,152,18,26,165,
+                                     221,5,102,247,23,95,228,103,45>>,
+                                   <<95,224,243,35,117,36,60,241,232,104,251,
+                                     10,141,239,142,136,237,41,254,74,208,219,
+                                     182,123,119,115,170,78,4,35,151,179>>},
+                               applied}}, [{quod_ask_SUITE,
+                                            remote_signed_gateway_group_with_root_effect,
+                                            2386},
+                                           {test_server,ts_tc,1796},
+                                           {test_server,run_test_case_eval1,
+                                            1305},
+                                           {test_server,run_test_case_eval,
+                                            1237}]
+=elapsed       6.388238s
+=== *** FAILED test case 61 of 150 ***
+=case          quod_ask_SUITE:remote_bound_effect_recovers_without_activation
+=logfile       quod_ask_suite.remote_bound_effect_recovers_without_activation.html
+=started       2026-11-18 16:21:33
+=ended         2026-11-18 16:21:43
+=result        ok
+=elapsed       10.315473s
+=case          quod_ask_SUITE:remote_signed_group_uses_exact_agent_request
+=logfile       quod_ask_suite.remote_signed_group_uses_exact_agent_request.html
+=started       2026-11-18 16:21:43
+=ended         2026-11-18 16:21:44
+=result        ok
+=elapsed       0.086788s
+=case          quod_ask_SUITE:remote_group_recovers_after_origin_crash
+=logfile       quod_ask_suite.remote_group_recovers_after_origin_crash.html
+=started       2026-11-18 16:21:44
+=ended         2026-11-18 16:21:44
+=result        ok
+=elapsed       0.652090s
+=case          quod_ask_SUITE:remote_four_scope_chain_recovers_empty_routes
+=logfile       quod_ask_suite.remote_four_scope_chain_recovers_empty_routes.html
+=started       2026-11-18 16:21:44
+=ended         2026-11-18 16:21:44
+=result        ok
+=elapsed       0.027087s
+=case          quod_ask_SUITE:remote_gui_opening_observer_receiver
+=logfile       quod_ask_suite.remote_gui_opening_observer_receiver.html
+=started       2026-11-18 16:21:44
+=ended         2026-11-18 16:21:47
+=result        ok
+=elapsed       2.976126s
+=case          quod_ask_SUITE:node_enrollment_remote_custodian
+=logfile       quod_ask_suite.node_enrollment_remote_custodian.html
+=started       2026-11-18 16:21:47
+=ended         2026-11-18 16:22:17
+=result        failed: {timeout,
+                        {gen_server,call,
+                         [<0.9026.0>,
+                          {call,quod_prolog,execute,
+                           [<<"quod:root">>,
+                            {create_ontology,<<"node:remote-custodian">>,
+                             [{terms,
+                               [{node_ontology,<<"node:remote-custodian">>},
+                                {instance_of,node,me},
+                                {agent_key,me,
+                                 <<237,27,90,93,217,215,219,230,151,120,69,93,
+                                   32,153,17,102,87,160,104,68,120,126,231,87,
+                                   231,79,156,212,237,0,212,188>>,
+                                 active}]},
+                              {source,
+                               <<"%% Explicit delegation constructed by this node's own trusted handler. Source\n%% identity and permission are checked in the consequence's signed proof; a\n%% hosting declaration alone grants no node signing authority.\nnode_authorized_goal(Source, Anchor, Goal) :-\n    can_execute_for(Source, Anchor, Goal),\n    Source::(current_ontology_identity(Source, Anchor), call(Goal)).\n\n%% The node identity and hosting policy live in its own ontology. Founding\n%% supplies node_ontology/1 and the node instance/key. The signed-request\n%% boundary verifies the principal's exact anchor before this entry policy.\nnode_instance_reference(agent_instance_ref(Namespace, _, Instance)) :-\n    node_ontology(Namespace),\n    instance_of(node, Instance).\n\ncan_invoke(_, Principal, [Namespace], Namespace) :-\n    node_ontology(Namespace), node_instance_reference(Principal).\ncan_invoke(host_ontology(Node, Namespace, Anchor, Visibility), Principal, Chain, Target) :-\n    node_hosting_context(Principal, Chain, Target),\n    can_host_ontology(Principal, Node, Namespace, Anchor, Visibility).\ncan_invoke(request_ontology_hosting(Principal, _, _, _, _), Principal, Chain, Target) :-\n    node_hosting_context(Principal, Chain, Target).\n\n%% Every hosting entry shares the self-authority restriction. A foreign helper\n%% still acting as this node cannot recover its privileges through an alternate\n%% grant; independent callers retain their ordinary hosting policy checks.\nnode_hosting_context(Principal, Chain, Namespace) :-\n    (node_instance_reference(Principal) ->\n        node_ontology(Namespace), Chain = [Namespace]\n    ; true).\n\n%% Applications may add narrower can_host_ontology/5 rules to this node's\n%% policy. A user login or a hosting declaration alone grants no authority.\ncan_host_ontology(Node, Node, _, _, _) :- node_instance_reference(Node).\n%% Entry binds the requester to the authenticated principal. Foreign policy\n%% belongs in the ordinary proof, not the strictly local admission predicate.\nrequest_ontology_hosting(Principal, Node, Namespace, Anchor, Visibility) :-\n    can_host_ontology(Principal, Node, Namespace, Anchor, Visibility),\n    host_ontology(Node, Namespace, Anchor, Visibility).\nrequest_ontology_hosting(Principal, Node, Namespace, Anchor, Visibility) :-\n    ontology_hosting_policy(Policy, PolicyAnchor),\n    Policy::(current_ontology_identity(Policy, PolicyAnchor),\n             ontology_hosting_allowed(Principal, Node, Namespace, Anchor, Visibility)),\n    host_ontology(Node, Namespace, Anchor, Visibility).\n\naction(host_ontology(Node, Namespace, Anchor, Visibility),\n       [ontology_hosting_request(Node, Namespace, Anchor, Visibility)],\n       hosts_ontology(Node, Namespace, Anchor, Visibility)).\n\n%% Entry policy applies even when the desired fact already exists. A changed\n%% identity or visibility requires an explicit policy change, not an overwrite.\nhost_ontology(Node, Namespace, Anchor, Visibility) :-\n    ontology_hosting_request(Node, Namespace, Anchor, Visibility),\n    (hosts_ontology(Node, Namespace, Anchor, Visibility) -> true\n    ; \\+ hosts_ontology(Node, Namespace, _, _),\n      assertz(hosts_ontology(Node, Namespace, Anchor, Visibility))).\n\nontology_hosting_request(Node, Namespace, Anchor, Visibility) :-\n    term_variables(host(Node, Namespace, Anchor, Visibility), []),\n    node_instance_reference(Node),\n    binary_codes(Namespace, [_|_]),\n    binary_codes(Anchor, Bytes), length(Bytes, 32),\n    (Visibility = private ; Visibility = discoverable).\n\nnode_ontology_hosting_projection(Hosts, Contacts) :-\n    findall(host(NodeRef, Namespace, Anchor, Visibility),\n            hosts_ontology(NodeRef, Namespace, Anchor, Visibility), Hosts),\n    findall(contact(NodeRef, Namespace, Anchor, HostNodeRef),\n            knows_ontology_host(NodeRef, Namespace, Anchor, HostNodeRef), Contacts).\n\n%% Only this node's behavior constructs a goal to execute with its identity.\n%% Runtime supplies validated data from the affected ontology and retains the\n%% original observation in private match metadata for custody validation.\nreact_on(observed(agent_recovery_ready(Observer, Target, Host, Epoch, Expected,\n                                      Round, Report, Kind, Preparation)), Goal) :-\n    recovery_observation(agent_recovery_ready(Observer, Target, Host, Epoch, Expected,\n                                               Round, Report, Kind, Preparation)),\n    me(Observer),\n    Report = observation(_, _, Expiry),\n    limit_reaction_expiry(Expiry),\n    node_recovery_goal(Target, Host, Epoch, Expected, Round, Report, Kind, Preparation, Goal).\n\nnode_recovery_goal(Target, Host, Epoch, Expected, Round, Report, Kind, required,\n                   node_authorized_goal(Source, Anchor, Operation)) :-\n    Target = agent_instance_ref(Source, Anchor, _),\n    prepare_agent_custody(Target, Epoch, Prepared),\n    Operation = quod:agent::report_agent_observation_with_custody(Target, Host, Epoch,\n                                                     Expected, Round, Report, Kind, Prepared).\nnode_recovery_goal(Target, Host, Epoch,\n                   Expected, Round, Report, Kind, none,\n                   node_authorized_goal(Source, Anchor,\n                     quod:agent::report_agent_observation(Target, Host, Epoch, Expected, Round, Report, Kind))) :-\n    Target = agent_instance_ref(Source, Anchor, _).\n">>},
+                              {external_predicate_modules,
+                               [quod_ontology_predicates]}],
+                             {'A'}}]},
+                          30000]}}, [{gen_server,call,1301},
+                                     {peer,call,494},
+                                     {quod_ask_SUITE,
+                                      node_enrollment_remote_custodian,132},
+                                     {test_server,ts_tc,1796},
+                                     {test_server,run_test_case_eval1,1305},
+                                     {test_server,run_test_case_eval,1237}]
+=elapsed       30.035275s
+=== *** FAILED test case 67 of 150 ***
+=case          quod_ask_SUITE:end_per_suite
+=logfile       quod_ask_suite.end_per_suite.html
+=started       2026-11-18 16:22:17
+=ended         2026-11-18 16:22:17
+=result        ok
+=elapsed       0.000115s
+=group_time    75.424s
+=case          quod_names_SUITE:init_per_suite
+=logfile       quod_names_suite.init_per_suite.html
+=started       2026-11-18 16:22:17
+=ended         2026-11-18 16:22:20
+=result        ok
+=elapsed       2.271748s
+=case          quod_names_SUITE:remote_completion_of_deep_proof
+=logfile       quod_names_suite.remote_completion_of_deep_proof.html
+=started       2026-11-18 16:22:20
+=ended         2026-11-18 16:22:20
+=result        ok
+=elapsed       0.221758s
+=case          quod_names_SUITE:cohosted_draw_labels_an_agent
+=logfile       quod_names_suite.cohosted_draw_labels_an_agent.html
+=started       2026-11-18 16:22:20
+=ended         2026-11-18 16:22:20
+=result        failed: {{assertMatch,
+                            [{module,quod_names_SUITE},
+                             {line,127},
+                             {expression,
+                                 "quod_ct : peer_prove ( Target , ? NAMES_NS , { attribute , me , display_name , { '_' } } )"},
+                             {pattern,"{ fail , _ }"},
+                             {value,fail}]},
+                        [{quod_names_SUITE,cohosted_draw_labels_an_agent,1,
+                             [{file,
+                                  "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_names_SUITE.erl"},
+                              {line,127}]},
+                         {test_server,ts_tc,3,
+                             [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                             [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                             [{file,"test_server.erl"},{line,1237}]}]}, [{quod_names_SUITE,
+                                                                          cohosted_draw_labels_an_agent,
+                                                                          127},
+                                                                         {test_server,
+                                                                          ts_tc,
+                                                                          1796},
+                                                                         {test_server,
+                                                                          run_test_case_eval1,
+                                                                          1305},
+                                                                         {test_server,
+                                                                          run_test_case_eval,
+                                                                          1237}]
+=elapsed       0.240307s
+=== *** FAILED test case 69 of 150 ***
+=case          quod_names_SUITE:remote_draw_from_non_hosting_node
+=logfile       quod_names_suite.remote_draw_from_non_hosting_node.html
+=started       2026-11-18 16:22:20
+=ended         2026-11-18 16:22:20
+=result        ok
+=elapsed       0.258491s
+=case          quod_names_SUITE:public_queries_open_mutation_refused
+=logfile       quod_names_suite.public_queries_open_mutation_refused.html
+=started       2026-11-18 16:22:20
+=ended         2026-11-18 16:22:20
+=result        failed: {{assertMatch,
+                            [{module,quod_names_SUITE},
+                             {line,198},
+                             {expression,
+                                 "quod_ct : peer_prove ( Target , ? NAMES_NS , { elements , << \"zz\" >> , { '_' } } )"},
+                             {pattern,"{ fail , _ }"},
+                             {value,fail}]},
+                        [{quod_names_SUITE,
+                             public_queries_open_mutation_refused,1,
+                             [{file,
+                                  "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_names_SUITE.erl"},
+                              {line,198}]},
+                         {test_server,ts_tc,3,
+                             [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                             [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                             [{file,"test_server.erl"},{line,1237}]}]}, [{quod_names_SUITE,
+                                                                          public_queries_open_mutation_refused,
+                                                                          198},
+                                                                         {test_server,
+                                                                          ts_tc,
+                                                                          1796},
+                                                                         {test_server,
+                                                                          run_test_case_eval1,
+                                                                          1305},
+                                                                         {test_server,
+                                                                          run_test_case_eval,
+                                                                          1237}]
+=elapsed       0.025847s
+=== *** FAILED test case 71 of 150 ***
+=case          quod_names_SUITE:creator_narrows_the_policy
+=logfile       quod_names_suite.creator_narrows_the_policy.html
+=started       2026-11-18 16:22:20
+=ended         2026-11-18 16:22:21
+=result        failed: {{assertMatch,
+                            [{module,quod_names_SUITE},
+                             {line,280},
+                             {expression,
+                                 "quod_ct : peer_prove ( Target , ? NAMES_NS , { pool , << \"testfolk\" >> , { '_' } , { '_' } , { '_' } } )"},
+                             {pattern,"{ fail , _ }"},
+                             {value,fail}]},
+                        [{quod_names_SUITE,creator_narrows_the_policy,1,
+                             [{file,
+                                  "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_names_SUITE.erl"},
+                              {line,280}]},
+                         {test_server,ts_tc,3,
+                             [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                             [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                             [{file,"test_server.erl"},{line,1237}]}]}, [{quod_names_SUITE,
+                                                                          creator_narrows_the_policy,
+                                                                          280},
+                                                                         {test_server,
+                                                                          ts_tc,
+                                                                          1796},
+                                                                         {test_server,
+                                                                          run_test_case_eval1,
+                                                                          1305},
+                                                                         {test_server,
+                                                                          run_test_case_eval,
+                                                                          1237}]
+=elapsed       0.159710s
+=== *** FAILED test case 72 of 150 ***
+=case          quod_names_SUITE:backtracking_cut_and_savepoint
+=logfile       quod_names_suite.backtracking_cut_and_savepoint.html
+=started       2026-11-18 16:22:21
+=ended         2026-11-18 16:22:21
+=result        failed: {{assertMatch,
+                            [{module,quod_names_SUITE},
+                             {line,326},
+                             {expression,
+                                 "quod_ct : peer_prove ( Target , ? AGENT_NS , { rolled , { '_' } } )"},
+                             {pattern,"{ fail , _ }"},
+                             {value,fail}]},
+                        [{quod_names_SUITE,backtracking_cut_and_savepoint,1,
+                             [{file,
+                                  "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_names_SUITE.erl"},
+                              {line,326}]},
+                         {test_server,ts_tc,3,
+                             [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                             [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                             [{file,"test_server.erl"},{line,1237}]}]}, [{quod_names_SUITE,
+                                                                          backtracking_cut_and_savepoint,
+                                                                          326},
+                                                                         {test_server,
+                                                                          ts_tc,
+                                                                          1796},
+                                                                         {test_server,
+                                                                          run_test_case_eval1,
+                                                                          1305},
+                                                                         {test_server,
+                                                                          run_test_case_eval,
+                                                                          1237}]
+=elapsed       0.059380s
+=== *** FAILED test case 73 of 150 ***
+=case          quod_names_SUITE:restart_recovery
+=logfile       quod_names_suite.restart_recovery.html
+=started       2026-11-18 16:22:21
+=ended         2026-11-18 16:22:21
+=result        ok
+=elapsed       0.111827s
+=case          quod_names_SUITE:cold_peer_joins_quod_names
+=logfile       quod_names_suite.cold_peer_joins_quod_names.html
+=started       2026-11-18 16:22:21
+=ended         2026-11-18 16:22:21
+=result        ok
+=elapsed       0.429662s
+=case          quod_names_SUITE:founder_restarts_and_replays
+=logfile       quod_names_suite.founder_restarts_and_replays.html
+=started       2026-11-18 16:22:21
+=ended         2026-11-18 16:22:24
+=result        ok
+=elapsed       2.574736s
+=case          quod_names_SUITE:end_per_suite
+=logfile       quod_names_suite.end_per_suite.html
+=started       2026-11-18 16:22:24
+=ended         2026-11-18 16:22:24
+=result        ok
+=elapsed       0.000065s
+=group_time    6.581s
+=case          ct_framework:init_per_suite
+=logfile       ct_framework.init_per_suite.1026.html
+=group_props   [{suite,quod_ns_SUITE}]
+=started       2026-11-18 16:22:24
+=ended         2026-11-18 16:22:24
+=result        ok
+=elapsed       0.000000s
+=case          quod_ns_SUITE:t_admit_grows_committee
+=logfile       quod_ns_suite.t_admit_grows_committee.html
+=started       2026-11-18 16:22:24
+=ended         2026-11-18 16:22:24
+=result        failed: {{assertMatch,
+                            [{module,quod_ns_SUITE},
+                             {line,54},
+                             {expression,
+                                 "rp ( Ns , { admit , Joiner , \"10.0.0.9\" , 9000 } )"},
+                             {pattern,"{ fail , [ _ | _ ] }"},
+                             {value,fail}]},
+                        [{quod_ns_SUITE,t_admit_grows_committee,1,
+                             [{file,
+                                  "/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_ns_SUITE.erl"},
+                              {line,54}]},
+                         {test_server,ts_tc,3,
+                             [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                             [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                             [{file,"test_server.erl"},{line,1237}]}]}, [{quod_ns_SUITE,
+                                                                          t_admit_grows_committee,
+                                                                          54},
+                                                                         {test_server,
+                                                                          ts_tc,
+                                                                          1796},
+                                                                         {test_server,
+                                                                          run_test_case_eval1,
+                                                                          1305},
+                                                                         {test_server,
+                                                                          run_test_case_eval,
+                                                                          1237}]
+=elapsed       0.012091s
+=== *** FAILED test case 77 of 150 ***
+=case          quod_ns_SUITE:t_cannot_remove_last
+=logfile       quod_ns_suite.t_cannot_remove_last.html
+=started       2026-11-18 16:22:24
+=ended         2026-11-18 16:22:24
+=result        ok
+=elapsed       0.001292s
+=case          quod_ns_SUITE:t_gate_rejects_raw_wedge
+=logfile       quod_ns_suite.t_gate_rejects_raw_wedge.html
+=started       2026-11-18 16:22:24
+=ended         2026-11-18 16:22:24
+=result        ok
+=elapsed       0.034575s
+=case          ct_framework:end_per_suite
+=logfile       ct_framework.end_per_suite.1186.html
+=group_props   [{suite,quod_ns_SUITE}]
+=started       2026-11-18 16:22:24
+=ended         2026-11-18 16:22:24
+=result        ok
+=elapsed       0.000000s
+=group_time    0.313s
+=case          quod_peer_capacity_SUITE:init_per_suite
+=logfile       quod_peer_capacity_suite.init_per_suite.html
+=started       2026-11-18 16:22:24
+=ended         2026-11-18 16:22:26
+=result        ok
+=elapsed       1.415782s
+=case          quod_peer_capacity_SUITE:acquired_contact_is_retained_before_loss_subscription
+=logfile       quod_peer_capacity_suite.acquired_contact_is_retained_before_loss_subscription.html
+=started       2026-11-18 16:22:26
+=ended         2026-11-18 16:22:26
+=result        ok
+=elapsed       0.000258s
+=case          quod_peer_capacity_SUITE:last_consumer_death_releases_capacity
+=logfile       quod_peer_capacity_suite.last_consumer_death_releases_capacity.html
+=started       2026-11-18 16:22:26
+=ended         2026-11-18 16:22:26
+=result        ok
+=elapsed       0.000267s
+=case          quod_peer_capacity_SUITE:dead_queued_acquisition_preserves_capacity_wakeup
+=logfile       quod_peer_capacity_suite.dead_queued_acquisition_preserves_capacity_wakeup.html
+=started       2026-11-18 16:22:26
+=ended         2026-11-18 16:22:26
+=result        ok
+=elapsed       0.000318s
+=case          quod_peer_capacity_SUITE:withdrawn_contact_releases_waiting_observers
+=logfile       quod_peer_capacity_suite.withdrawn_contact_releases_waiting_observers.html
+=started       2026-11-18 16:22:26
+=ended         2026-11-18 16:22:26
+=result        ok
+=elapsed       0.000353s
+=case          quod_peer_capacity_SUITE:idle_contact_survives_until_acquisition_pressure
+=logfile       quod_peer_capacity_suite.idle_contact_survives_until_acquisition_pressure.html
+=started       2026-11-18 16:22:26
+=ended         2026-11-18 16:22:26
+=result        ok
+=elapsed       0.000338s
+=case          quod_peer_capacity_SUITE:node_key_rotation_replaces_the_retained_slot
+=logfile       quod_peer_capacity_suite.node_key_rotation_replaces_the_retained_slot.html
+=started       2026-11-18 16:22:26
+=ended         2026-11-18 16:22:26
+=result        ok
+=elapsed       0.000200s
+=case          quod_peer_capacity_SUITE:end_per_suite
+=logfile       quod_peer_capacity_suite.end_per_suite.html
+=started       2026-11-18 16:22:26
+=ended         2026-11-18 16:22:26
+=result        ok
+=elapsed       0.001286s
+=group_time    1.578s
+=case          quod_peer_observation_SUITE:init_per_suite
+=logfile       quod_peer_observation_suite.init_per_suite.html
+=started       2026-11-18 16:22:26
+=ended         2026-11-18 16:22:26
+=result        ok
+=elapsed       0.004790s
+=case          quod_peer_observation_SUITE:cold_timeout_is_shared_physical_suspicion
+=logfile       quod_peer_observation_suite.cold_timeout_is_shared_physical_suspicion.html
+=started       2026-11-18 16:22:26
+=ended         2026-11-18 16:22:29
+=result        ok
+=elapsed       3.001675s
+=case          quod_peer_observation_SUITE:contact_survives_consumer_restart_and_expiry
+=logfile       quod_peer_observation_suite.contact_survives_consumer_restart_and_expiry.html
+=started       2026-11-18 16:22:29
+=ended         2026-11-18 16:22:30
+=result        ok
+=elapsed       1.003314s
+=case          quod_peer_observation_SUITE:newer_contact_fences_same_key_history
+=logfile       quod_peer_observation_suite.newer_contact_fences_same_key_history.html
+=started       2026-11-18 16:22:30
+=ended         2026-11-18 16:22:34
+=result        ok
+=elapsed       4.003564s
+=case          quod_peer_observation_SUITE:withdrawal_fences_pending_physical_completion
+=logfile       quod_peer_observation_suite.withdrawal_fences_pending_physical_completion.html
+=started       2026-11-18 16:22:34
+=ended         2026-11-18 16:22:37
+=result        ok
+=elapsed       3.001653s
+=case          quod_peer_observation_SUITE:end_per_suite
+=logfile       quod_peer_observation_suite.end_per_suite.html
+=started       2026-11-18 16:22:37
+=ended         2026-11-18 16:22:37
+=result        ok
+=elapsed       0.001178s
+=group_time    11.128s
+=case          quod_quic_SUITE:init_per_suite
+=logfile       quod_quic_suite.init_per_suite.html
+=started       2026-11-18 16:22:37
+=ended         2026-11-18 16:22:37
+=result        ok
+=elapsed       0.004751s
+=case          quod_quic_SUITE:open_link_succeeds
+=logfile       quod_quic_suite.open_link_succeeds.html
+=started       2026-11-18 16:22:37
+=ended         2026-11-18 16:22:37
+=result        ok
+=elapsed       0.002448s
+=case          quod_quic_SUITE:message_roundtrip
+=logfile       quod_quic_suite.message_roundtrip.html
+=started       2026-11-18 16:22:37
+=ended         2026-11-18 16:22:37
+=result        ok
+=elapsed       0.000642s
+=case          quod_quic_SUITE:bidirectional_reuse
+=logfile       quod_quic_suite.bidirectional_reuse.html
+=started       2026-11-18 16:22:37
+=ended         2026-11-18 16:22:37
+=result        ok
+=elapsed       0.000566s
+=case          quod_quic_SUITE:stream_priorities_survive_reopen
+=logfile       quod_quic_suite.stream_priorities_survive_reopen.html
+=started       2026-11-18 16:22:37
+=ended         2026-11-18 16:22:37
+=result        ok
+=elapsed       0.002719s
+=case          quod_quic_SUITE:priority_mixed_traffic
+=logfile       quod_quic_suite.priority_mixed_traffic.html
+=started       2026-11-18 16:22:37
+=ended         2026-11-18 16:22:37
+=result        ok
+=elapsed       0.078195s
+=case          quod_quic_SUITE:tagged_catchup_open_preserves_pools
+=logfile       quod_quic_suite.tagged_catchup_open_preserves_pools.html
+=started       2026-11-18 16:22:37
+=ended         2026-11-18 16:22:37
+=result        ok
+=elapsed       0.037841s
+=case          quod_quic_SUITE:channel_stream_reset_isolated
+=logfile       quod_quic_suite.channel_stream_reset_isolated.html
+=started       2026-11-18 16:22:37
+=ended         2026-11-18 16:22:37
+=result        ok
+=elapsed       0.000785s
+=case          quod_quic_SUITE:ordered_send_waits_for_send_ready_fifo
+=logfile       quod_quic_suite.ordered_send_waits_for_send_ready_fifo.html
+=started       2026-11-18 16:22:37
+=ended         2026-11-18 16:22:37
+=result        ok
+=elapsed       0.050843s
+=case          quod_quic_SUITE:connection_death_resolves_pending_waiters
+=logfile       quod_quic_suite.connection_death_resolves_pending_waiters.html
+=started       2026-11-18 16:22:37
+=ended         2026-11-18 16:22:38
+=result        ok
+=elapsed       0.103988s
+=case          quod_quic_SUITE:inbound_channel_reset_is_scoped
+=logfile       quod_quic_suite.inbound_channel_reset_is_scoped.html
+=started       2026-11-18 16:22:38
+=ended         2026-11-18 16:22:38
+=result        ok
+=elapsed       0.101649s
+=case          quod_quic_SUITE:explicit_link_retires_with_last_owner
+=logfile       quod_quic_suite.explicit_link_retires_with_last_owner.html
+=started       2026-11-18 16:22:38
+=ended         2026-11-18 16:22:38
+=result        ok
+=elapsed       0.000413s
+=case          quod_quic_SUITE:pinned_leases_share_link_until_last_release
+=logfile       quod_quic_suite.pinned_leases_share_link_until_last_release.html
+=started       2026-11-18 16:22:38
+=ended         2026-11-18 16:22:38
+=result        ok
+=elapsed       0.100852s
+=case          quod_quic_SUITE:pinned_lease_release_is_connection_exact
+=logfile       quod_quic_suite.pinned_lease_release_is_connection_exact.html
+=started       2026-11-18 16:22:38
+=ended         2026-11-18 16:22:38
+=result        ok
+=elapsed       0.003431s
+=case          quod_quic_SUITE:late_released_link_cannot_consume_replacement_waiter
+=logfile       quod_quic_suite.late_released_link_cannot_consume_replacement_waiter.html
+=started       2026-11-18 16:22:38
+=ended         2026-11-18 16:22:38
+=result        ok
+=elapsed       0.000020s
+=case          quod_quic_SUITE:non_dialable_node_id
+=logfile       quod_quic_suite.non_dialable_node_id.html
+=started       2026-11-18 16:22:38
+=ended         2026-11-18 16:22:38
+=result        ok
+=elapsed       0.000011s
+=case          quod_quic_SUITE:unacked_stream_no_link_up
+=logfile       quod_quic_suite.unacked_stream_no_link_up.html
+=started       2026-11-18 16:22:38
+=ended         2026-11-18 16:22:43
+=result        ok
+=elapsed       5.002669s
+=case          quod_quic_SUITE:dialer_presents_cert
+=logfile       quod_quic_suite.dialer_presents_cert.html
+=started       2026-11-18 16:22:43
+=ended         2026-11-18 16:22:43
+=result        ok
+=elapsed       0.051902s
+=case          quod_quic_SUITE:mismatched_header_cannot_poison_cache
+=logfile       quod_quic_suite.mismatched_header_cannot_poison_cache.html
+=started       2026-11-18 16:22:43
+=ended         2026-11-18 16:22:43
+=result        ok
+=elapsed       0.201791s
+=case          quod_quic_SUITE:authenticated_coalesced_header_payload_delivered_once
+=logfile       quod_quic_suite.authenticated_coalesced_header_payload_delivered_once.html
+=started       2026-11-18 16:22:43
+=ended         2026-11-18 16:22:43
+=result        ok
+=elapsed       0.102404s
+=case          quod_quic_SUITE:no_learn_is_monotone_across_streams
+=logfile       quod_quic_suite.no_learn_is_monotone_across_streams.html
+=started       2026-11-18 16:22:43
+=ended         2026-11-18 16:22:43
+=result        ok
+=elapsed       0.002659s
+=case          quod_quic_SUITE:resolve_and_dial_by_pubkey
+=logfile       quod_quic_suite.resolve_and_dial_by_pubkey.html
+=started       2026-11-18 16:22:43
+=ended         2026-11-18 16:22:43
+=result        ok
+=elapsed       0.000316s
+=case          quod_quic_SUITE:ordinary_pubkey_dial_rejects_wrong_cert
+=logfile       quod_quic_suite.ordinary_pubkey_dial_rejects_wrong_cert.html
+=started       2026-11-18 16:22:43
+=ended         2026-11-18 16:22:43
+=result        ok
+=elapsed       0.001770s
+=case          quod_quic_SUITE:connection_is_owned_by_transport
+=logfile       quod_quic_suite.connection_is_owned_by_transport.html
+=started       2026-11-18 16:22:43
+=ended         2026-11-18 16:22:43
+=result        ok
+=elapsed       0.000389s
+=case          quod_quic_SUITE:authenticated_peer_connections
+=logfile       quod_quic_suite.authenticated_peer_connections.html
+=started       2026-11-18 16:22:43
+=ended         2026-11-18 16:22:44
+=result        ok
+=elapsed       0.503135s
+=case          quod_quic_SUITE:connection_confirmation_without_stream
+=logfile       quod_quic_suite.connection_confirmation_without_stream.html
+=started       2026-11-18 16:22:44
+=ended         2026-11-18 16:22:44
+=result        ok
+=elapsed       0.002955s
+=case          quod_quic_SUITE:shared_peer_loss_confirmation
+=logfile       quod_quic_suite.shared_peer_loss_confirmation.html
+=started       2026-11-18 16:22:44
+=ended         2026-11-18 16:22:52
+=result        ok
+=elapsed       8.206553s
+=case          quod_quic_SUITE:ontology_observer_shares_physical_failure
+=logfile       quod_quic_suite.ontology_observer_shares_physical_failure.html
+=started       2026-11-18 16:22:52
+=ended         2026-11-18 16:23:02
+=result        ok
+=elapsed       10.009809s
+=case          quod_quic_SUITE:terminal_confirmation_preserves_observation_time
+=logfile       quod_quic_suite.terminal_confirmation_preserves_observation_time.html
+=started       2026-11-18 16:23:02
+=ended         2026-11-18 16:23:04
+=result        ok
+=elapsed       2.003018s
+=case          quod_quic_SUITE:recovery_round_reconfirms_existing_connection
+=logfile       quod_quic_suite.recovery_round_reconfirms_existing_connection.html
+=started       2026-11-18 16:23:04
+=ended         2026-11-18 16:23:07
+=result        ok
+=elapsed       3.065242s
+=case          quod_quic_SUITE:inbound_owner_death_closes_wire_connection
+=logfile       quod_quic_suite.inbound_owner_death_closes_wire_connection.html
+=started       2026-11-18 16:23:07
+=ended         2026-11-18 16:23:07
+=result        ok
+=elapsed       0.082907s
+=case          quod_quic_SUITE:observer_confirmation_deadline_releases_pending
+=logfile       quod_quic_suite.observer_confirmation_deadline_releases_pending.html
+=started       2026-11-18 16:23:07
+=ended         2026-11-18 16:23:15
+=result        ok
+=elapsed       8.028086s
+=case          quod_quic_SUITE:inconclusive_loss_confirmation_is_reobserved
+=logfile       quod_quic_suite.inconclusive_loss_confirmation_is_reobserved.html
+=started       2026-11-18 16:23:15
+=ended         2026-11-18 16:23:48
+=result        ok
+=elapsed       32.006121s
+=case          quod_quic_SUITE:pinned_dial_suppresses_hint_learning
+=logfile       quod_quic_suite.pinned_dial_suppresses_hint_learning.html
+=started       2026-11-18 16:23:48
+=ended         2026-11-18 16:23:48
+=result        ok
+=elapsed       0.000344s
+=case          quod_quic_SUITE:pinned_reverse_stream_suppresses_hint_learning
+=logfile       quod_quic_suite.pinned_reverse_stream_suppresses_hint_learning.html
+=started       2026-11-18 16:23:48
+=ended         2026-11-18 16:23:48
+=result        ok
+=elapsed       0.000805s
+=case          quod_quic_SUITE:identified_dial_suppresses_hint_learning
+=logfile       quod_quic_suite.identified_dial_suppresses_hint_learning.html
+=started       2026-11-18 16:23:48
+=ended         2026-11-18 16:23:48
+=result        ok
+=elapsed       0.002318s
+=case          quod_quic_SUITE:ordinary_dial_still_learns_hint
+=logfile       quod_quic_suite.ordinary_dial_still_learns_hint.html
+=started       2026-11-18 16:23:48
+=ended         2026-11-18 16:23:48
+=result        ok
+=elapsed       0.000357s
+=case          quod_quic_SUITE:pinned_dial_rejects_wrong_cert
+=logfile       quod_quic_suite.pinned_dial_rejects_wrong_cert.html
+=started       2026-11-18 16:23:48
+=ended         2026-11-18 16:23:48
+=result        ok
+=elapsed       0.002266s
+=case          quod_quic_SUITE:end_per_suite
+=logfile       quod_quic_suite.end_per_suite.html
+=started       2026-11-18 16:23:48
+=ended         2026-11-18 16:23:48
+=result        ok
+=elapsed       0.001581s
+=group_time    70.621s
+=case          ct_framework:init_per_suite
+=logfile       ct_framework.init_per_suite.1570.html
+=group_props   [{suite,quod_read_set_SUITE}]
+=started       2026-11-18 16:23:48
+=ended         2026-11-18 16:23:48
+=result        ok
+=elapsed       0.000000s
+=case          quod_read_set_SUITE:reconnect_mixed_symbols
+=logfile       quod_read_set_suite.reconnect_mixed_symbols.html
+=started       2026-11-18 16:23:48
+=ended         2026-11-18 16:23:52
+=result        ok
+=elapsed       0.217418s
+=case          quod_read_set_SUITE:reconnect_missing_route
+=logfile       quod_read_set_suite.reconnect_missing_route.html
+=started       2026-11-18 16:23:52
+=ended         2026-11-18 16:24:06
+=result        ok
+=elapsed       10.179635s
+=case          quod_read_set_SUITE:reconnect_route_recovery
+=logfile       quod_read_set_suite.reconnect_route_recovery.html
+=started       2026-11-18 16:24:06
+=ended         2026-11-18 16:24:15
+=result        ok
+=elapsed       5.221800s
+=case          ct_framework:end_per_suite
+=logfile       ct_framework.end_per_suite.1795.html
+=group_props   [{suite,quod_read_set_SUITE}]
+=started       2026-11-18 16:24:15
+=ended         2026-11-18 16:24:16
+=result        ok
+=elapsed       0.000000s
+=group_time    27.828s
+=case          ct_framework:init_per_suite
+=logfile       ct_framework.init_per_suite.1827.html
+=group_props   [{suite,quod_simplex_SUITE}]
+=started       2026-11-18 16:24:16
+=ended         2026-11-18 16:24:16
+=result        ok
+=elapsed       0.000000s
+=case          quod_simplex_SUITE:t_founder_bootstrap
+=logfile       quod_simplex_suite.t_founder_bootstrap.html
+=started       2026-11-18 16:24:16
+=ended         2026-11-18 16:24:16
+=result        ok
+=elapsed       0.008634s
+=case          quod_simplex_SUITE:t_genesis_seeds_content
+=logfile       quod_simplex_suite.t_genesis_seeds_content.html
+=started       2026-11-18 16:24:16
+=ended         2026-11-18 16:24:16
+=result        ok
+=elapsed       0.018299s
+=case          quod_simplex_SUITE:t_append_commits_and_persists
+=logfile       quod_simplex_suite.t_append_commits_and_persists.html
+=started       2026-11-18 16:24:16
+=ended         2026-11-18 16:24:16
+=result        ok
+=elapsed       0.062481s
+=case          quod_simplex_SUITE:t_restart_replays
+=logfile       quod_simplex_suite.t_restart_replays.html
+=started       2026-11-18 16:24:16
+=ended         2026-11-18 16:24:16
+=result        ok
+=elapsed       0.091778s
+=case          quod_simplex_SUITE:t_unsigned_history_rejected
+=logfile       quod_simplex_suite.t_unsigned_history_rejected.html
+=started       2026-11-18 16:24:16
+=ended         2026-11-18 16:24:16
+=result        ok
+=elapsed       0.038225s
+=case          quod_simplex_SUITE:t_status_stats
+=logfile       quod_simplex_suite.t_status_stats.html
+=started       2026-11-18 16:24:16
+=ended         2026-11-18 16:24:16
+=result        ok
+=elapsed       0.035409s
+=case          quod_simplex_SUITE:t_multi_member_accepted
+=logfile       quod_simplex_suite.t_multi_member_accepted.html
+=started       2026-11-18 16:24:16
+=ended         2026-11-18 16:24:16
+=result        ok
+=elapsed       0.009358s
+=case          quod_simplex_SUITE:t_commit_carries_cert
+=logfile       quod_simplex_suite.t_commit_carries_cert.html
+=started       2026-11-18 16:24:16
+=ended         2026-11-18 16:24:16
+=result        ok
+=elapsed       0.036118s
+=case          quod_simplex_SUITE:t_concurrent_appends_batch
+=logfile       quod_simplex_suite.t_concurrent_appends_batch.html
+=started       2026-11-18 16:24:16
+=ended         2026-11-18 16:24:16
+=result        ok
+=elapsed       0.063731s
+=case          quod_simplex_SUITE:t_join_anchor_validation
+=logfile       quod_simplex_suite.t_join_anchor_validation.html
+=started       2026-11-18 16:24:16
+=ended         2026-11-18 16:24:16
+=result        ok
+=elapsed       0.010482s
+=case          quod_simplex_SUITE:t_fresh_foundings_are_distinct
+=logfile       quod_simplex_suite.t_fresh_foundings_are_distinct.html
+=started       2026-11-18 16:24:16
+=ended         2026-11-18 16:24:16
+=result        ok
+=elapsed       0.018754s
+=case          quod_simplex_SUITE:t_genesis_hash_is_lock_free_and_lifetime_bound
+=logfile       quod_simplex_suite.t_genesis_hash_is_lock_free_and_lifetime_bound.html
+=started       2026-11-18 16:24:16
+=ended         2026-11-18 16:24:17
+=result        ok
+=elapsed       1.010135s
+=case          ct_framework:end_per_suite
+=logfile       ct_framework.end_per_suite.1922.html
+=group_props   [{suite,quod_simplex_SUITE}]
+=started       2026-11-18 16:24:17
+=ended         2026-11-18 16:24:17
+=result        ok
+=elapsed       0.000000s
+=group_time    1.697s
+=case          simplex_SUITE:init_per_suite
+=logfile       simplex_suite.init_per_suite.html
+=started       2026-11-18 16:24:17
+=ended         2026-11-18 16:24:22
+=result        ok
+=elapsed       4.608463s
+=case          simplex_SUITE:commits_across_committee
+=logfile       simplex_suite.commits_across_committee.html
+=started       2026-11-18 16:24:22
+=ended         2026-11-18 16:24:22
+=result        ok
+=elapsed       0.193838s
+=case          simplex_SUITE:follower_relays
+=logfile       simplex_suite.follower_relays.html
+=started       2026-11-18 16:24:22
+=ended         2026-11-18 16:24:22
+=result        ok
+=elapsed       0.192961s
+=case          simplex_SUITE:consensus_commits_with_ingress_down
+=logfile       simplex_suite.consensus_commits_with_ingress_down.html
+=started       2026-11-18 16:24:22
+=ended         2026-11-18 16:24:23
+=result        ok
+=elapsed       0.834324s
+=case          simplex_SUITE:burst_commits_without_busy
+=logfile       simplex_suite.burst_commits_without_busy.html
+=started       2026-11-18 16:24:23
+=ended         2026-11-18 16:24:23
+=result        ok
+=elapsed       0.125809s
+=case          simplex_SUITE:byzantine_retract_rejected
+=logfile       simplex_suite.byzantine_retract_rejected.html
+=started       2026-11-18 16:24:23
+=ended         2026-11-18 16:24:27
+=result        ok
+=elapsed       4.123251s
+=case          simplex_SUITE:byzantine_admit_rejected
+=logfile       simplex_suite.byzantine_admit_rejected.html
+=started       2026-11-18 16:24:27
+=ended         2026-11-18 16:24:32
+=result        ok
+=elapsed       4.125189s
+=case          simplex_SUITE:leader_failover
+=logfile       simplex_suite.leader_failover.html
+=started       2026-11-18 16:24:32
+=ended         2026-11-18 16:24:36
+=result        ok
+=elapsed       4.122118s
+=case          simplex_SUITE:over_fault_restart_recovers
+=logfile       simplex_suite.over_fault_restart_recovers.html
+=started       2026-11-18 16:24:36
+=ended         2026-11-18 16:24:51
+=result        ok
+=elapsed       14.814938s
+=case          simplex_SUITE:membership_survives_leader_loss
+=logfile       simplex_suite.membership_survives_leader_loss.html
+=started       2026-11-18 16:24:51
+=ended         2026-11-18 16:25:03
+=result        ok
+=elapsed       12.615184s
+=case          simplex_SUITE:end_per_suite
+=logfile       simplex_suite.end_per_suite.html
+=started       2026-11-18 16:25:03
+=ended         2026-11-18 16:25:03
+=result        ok
+=elapsed       0.000107s
+=group_time    45.988s
+=== TEST COMPLETE, 116 ok, 34 failed of 150 test cases
+
+=finished      2026-11-18 16:25:03
+=failed        34
+=successful    116
+=user_skipped  0
+=auto_skipped  0
+=elapsed_time  389344515

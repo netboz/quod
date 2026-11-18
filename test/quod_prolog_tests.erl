@@ -20,7 +20,7 @@ native_execution_uses_ordinary_acl_and_commit_test_() ->
           ?assertMatch({ok, _, _}, quod_prolog:execute(Ns, Allowed)),
           ?assertMatch({ok, [_], _}, quod_prolog:prove_ro(Ns, native_committed)),
           ?assertMatch({fail, _}, quod_prolog:execute(Ns, {assertz, native_refused})),
-          ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, native_refused))
+          ?assertMatch(fail, quod_prolog:prove_ro(Ns, native_refused))
       end) end}.
 
 origin_heap_policy_refusal_preserves_engine_and_committed_height_test_() ->
@@ -57,7 +57,7 @@ native_async_execute_rejects_a_replaced_target_test_() ->
         receive {quod_proof_reply, Engine, Call, Result} ->
             ?assertEqual({error, wrong_genesis_anchor}, Result)
         after 5000 -> error(stale_native_target_not_refused) end,
-        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, wrong_incarnation))
+        ?assertMatch(fail, quod_prolog:prove_ro(Ns, wrong_incarnation))
     end) end}.
 
 native_engine_loss_after_checkpoint_retains_the_actual_operation_test_() ->
@@ -117,7 +117,7 @@ native_caller_loss_cancels_its_proof_without_stopping_the_engine_test_() ->
             receive {'DOWN', Monitor, process, Worker, _} -> ok
             after 5000 -> error(orphaned_cancelled_native_proof) end,
             ?assert(is_process_alive(Engine)),
-            ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, cancelled_native_write))
+            ?assertMatch(fail, quod_prolog:prove_ro(Ns, cancelled_native_write))
         after exit(Caller, kill) end
     end) end}.
 
@@ -141,7 +141,7 @@ owned_async_execute_preserves_absolute_deadline_test_() ->
         receive {quod_proof_reply, Engine, Expired, Result} ->
                     ?assertEqual({error, deadline_exceeded}, Result)
         after 5000 -> error(expired_request_not_refused) end,
-        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, expired_request)),
+        ?assertMatch(fail, quod_prolog:prove_ro(Ns, expired_request)),
         true = quod_reg:reg({host_test, local_proof}),
         try
             Call = make_ref(),
@@ -156,7 +156,7 @@ owned_async_execute_preserves_absolute_deadline_test_() ->
             after 5000 -> error(absolute_deadline_not_enforced) end,
             receive {'DOWN', Monitor, process, Worker, _} -> ok
             after 1000 -> error(deadline_left_live_reader) end,
-            ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, expired_during_proof))
+            ?assertMatch(fail, quod_prolog:prove_ro(Ns, expired_during_proof))
         after gproc:unreg(quod_reg:name({host_test, local_proof})) end
     end) end}.
 
@@ -793,7 +793,7 @@ outcome_unknown_timeout_test_() ->
              ?assertEqual(0, maps:get(proof_workers, quod_prolog:stats(Ns))),
              %% Waiting for consensus no longer consumes the sole derivation
              %% slot: an independent read can still run immediately.
-             ?assertMatch({fail, [_ | _]},
+             ?assertMatch(fail,
                           quod_prolog:prove(Ns, {missing, fact})),
              Result = receive
                           {ProofRef, ProofResult} -> ProofResult
@@ -811,7 +811,7 @@ outcome_unknown_timeout_test_() ->
                 quod_prolog:outcome(Ref)),
              ?assertEqual(1, maps:get(park_timeouts, quod_prolog:stats(Ns))),
              ?assertEqual(0, maps:get(proof_waiters, quod_prolog:stats(Ns))),
-             ?assertMatch({fail, [_ | _]},
+             ?assertMatch(fail,
                           quod_prolog:prove(Ns, {timeout_fact, x})),
              ?assertEqual(1, maps:get(park_timeouts, quod_prolog:stats(Ns)))
          end
@@ -916,7 +916,7 @@ unavailable_append_reply_waits_for_outcome_unknown_test_() ->
                       [parked, park_timeouts],
                       quod_prolog:stats(Ns))),
                  ?assertMatch(
-                    {fail, [_ | _]},
+                    fail,
                     quod_prolog:prove(
                       Ns, {unavailable_fact, x})),
                  %% The exact transaction may still finalize. Applying the
@@ -1243,9 +1243,9 @@ install_host_policy(Ns) ->
 t_unknown_fails({Ns, _}) ->
     fun() ->
         ok = install_host_policy(Ns),
-        %% A missing predicate fails with its call as the default diagnostic.
+        %% A missing predicate fails without inventing an explicit refusal.
         ?assertEqual(
-           {fail, [{nonexistent, foo}]},
+           fail,
            quod_prolog:prove(Ns, {nonexistent, foo})),
         %% routing: unknown namespace is distinct from goal-failure
         ?assertEqual({error, no_such_namespace},
@@ -1259,7 +1259,7 @@ t_explicit_failure_reason_and_internal_bare_fail({Ns, _}) ->
         ok = ab(Ns, 1, with_host_policy(
                          Ns, batch(change(Ns, diff_for(Rule), #{})))),
         ?assertEqual(
-           {fail, [{blocked, bob}, {impossible_to_link, bob}]},
+           {fail, [{impossible_to_link, bob}]},
            quod_prolog:prove(Ns, {blocked, bob})),
         {ok, Est, 1, _} = quod_prolog:attach_runtime(Ns),
         ?assertEqual(fail, quod_prolog:prove_est({blocked, bob}, Est)),
@@ -1291,7 +1291,7 @@ t_occ_reject({Ns, _}) ->
         %% is FIFO-ordered before the following prove call, so the effect is visible.
         Stale = change(Ns, diff_for({sibling, x}), #{{parent, 2} => never_present}),
         ok = ab(Ns, 2, batch(Stale)),
-        ?assertMatch({fail, [_ | _]}, quod_prolog:prove(Ns, {sibling, x})),
+        ?assertMatch(fail, quod_prolog:prove(Ns, {sibling, x})),
         %% a non-stale read-set (parent/2 last mutated at height 1) commits fine
         Good = change(Ns, diff_for({sibling, y}), #{{parent, 2} => {present, 1}}),
         ?assertEqual(ok, ab(Ns, 3, batch(Good))),
@@ -1315,7 +1315,7 @@ t_policy_self_seal({Ns, _}) ->
                   height => 2,
                   ref => outcome_ref(Ns, Removal)}},
            quod_prolog:outcome(outcome_ref(Ns, Removal))),
-        ?assertMatch({fail, [_ | _]}, quod_prolog:prove(Ns, missing_after_reject)),
+        ?assertMatch(fail, quod_prolog:prove(Ns, missing_after_reject)),
 
         %% One transaction may atomically replace the last clause because the
         %% invariant observes the final candidate rather than operation order.
@@ -1338,7 +1338,7 @@ t_policy_self_seal({Ns, _}) ->
                   reason := policy_self_seal_forbidden,
                   height := 4}},
            quod_prolog:outcome(outcome_ref(Ns, ReplayRemoval))),
-        ?assertMatch({fail, [_ | _]}, quod_prolog:prove(Ns, missing_after_replay))
+        ?assertMatch(fail, quod_prolog:prove(Ns, missing_after_replay))
     end.
 
 outcome_ref(Ns, #transaction{tx_id = Tx}) ->
@@ -1359,7 +1359,7 @@ t_batch_apply({Ns, _}) ->
         ?assertEqual({error, bad_block},
                      quod_ledger:new_block({<<1:256>>, 1}, {<<1:256>>, 0, <<0:256>>},
                                            2, {batch, [Partial | bad_tail]}, 0)),
-        ?assertMatch({fail, [_ | _]},
+        ?assertMatch(fail,
                      quod_prolog:prove(Ns, {must_not_apply, x})),
         Stats2 = quod_prolog:stats(Ns),
         ?assertEqual(1, maps:get(applied, Stats2)),
@@ -1403,7 +1403,7 @@ t_same_block_read_after_write({Ns, _}) ->
                       #{{parent, 2} => {present, 1}}),
         ok = ab(Ns, 2, {batch, [W, Raw, Blind, Self]}),
         ?assertEqual({ok, [#{}], 2}, quod_prolog:prove(Ns, {k, one})),
-        ?assertMatch({fail, [_ | _]}, quod_prolog:prove(Ns, {dependent, x})),
+        ?assertMatch(fail, quod_prolog:prove(Ns, {dependent, x})),
         ?assertEqual({ok, [#{}], 2}, quod_prolog:prove(Ns, {unrelated, y})),
         ?assertEqual({ok, [#{}], 2}, quod_prolog:prove(Ns, {parent, tom, sue}))
     end.
@@ -1714,7 +1714,7 @@ t_signed_operation_uses_the_same_content_verdict_path({Ns, _}) ->
             ?assertEqual(
                {ok, [#{}], 2}, quod_prolog:prove(Ns, {saved, ok})),
             ?assertMatch(
-               {fail, [_ | _]}, quod_prolog:prove(Ns, {saved, other}))
+               fail, quod_prolog:prove(Ns, {saved, other}))
           end)
     end.
 
@@ -1930,7 +1930,7 @@ t_lockstep({Ns, _}) ->
         %% content tx with an equally-stale read_check → still rejected (widget/z never asserted)
         StaleContent = change(Ns, diff_for({widget, z}), #{{widget, 1} => {present, 12345}}),
         ok = ab(Ns, 3, batch(StaleContent)),
-        ?assertMatch({fail, [_ | _]}, quod_prolog:prove(Ns, {widget, z}))
+        ?assertMatch({fail, [{not_allowed, Ns}]}, quod_prolog:prove(Ns, {widget, z}))
     end.
 
 %% A cast that does NOT advance the height — an already-applied no-op (Index =< applied) or a forward
@@ -2007,7 +2007,7 @@ t_live_reject_emits_event({Ns, _}) ->
         ?assertNot(maps:is_key(diff, Env)),
         ok = refute_rt(applied_live),
         %% and the rejected diff did not touch D
-        ?assertMatch({fail, [_ | _]}, quod_prolog:prove(Ns, {sibling, x}))
+        ?assertMatch(fail, quod_prolog:prove(Ns, {sibling, x}))
     end.
 
 %% (b) a REPLAY apply rebuilds D (fact readable) but publishes NO applied_live event — only the

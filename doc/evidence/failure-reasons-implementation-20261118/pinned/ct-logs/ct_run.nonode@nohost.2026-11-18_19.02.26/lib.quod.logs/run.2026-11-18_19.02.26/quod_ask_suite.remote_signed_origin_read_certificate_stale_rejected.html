@@ -1,0 +1,96 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<title>Test quod_ask_SUITE:remote_signed_origin_read_certificate_stale_rejected result</title>
+<meta http-equiv="cache-control" content="no-cache"></meta>
+<meta http-equiv="content-type" content="text/html; charset=utf-8"></meta>
+<link rel="stylesheet" href="../../ct_default.css" type="text/css"></link>
+<script type="text/javascript" src="../../jquery-latest.js"></script>
+<script type="text/javascript" src="../../jquery.tablesorter.min.js"></script>
+</head>
+<body>
+
+<a name="top"></a><pre>
+=== Test case: <a href="quod_ask_suite.src.html#remote_signed_origin_read_certificate_stale_rejected-1">quod_ask_SUITE:remote_signed_origin_read_certificate_stale_rejected/1</a> (click for source code)
+
+=== Config value:
+
+    [{target,&lt;0.8863.0&gt;},
+     {asker,&lt;0.8865.0&gt;},
+     {third,&lt;0.8864.0&gt;},
+     {target_pub,&lt;&lt;83,136,124,183,154,52,152,66,254,62,243,99,77,220,45,164,
+                   231,251,85,223,82,174,117,204,148,131,155,155,157,195,106,
+                   166&gt;&gt;},
+     {asker_pub,&lt;&lt;31,59,176,60,82,197,13,177,89,23,71,106,180,201,247,29,194,
+                  207,37,58,178,214,71,187,106,65,209,244,54,206,148,175&gt;&gt;},
+     {target_addr,{"127.0.0.1",15970}},
+     {third_pub,&lt;&lt;4,248,93,33,255,172,200,36,124,219,135,41,238,46,181,240,81,
+                  21,202,112,223,220,163,211,215,62,53,56,101,62,214,137&gt;&gt;},
+     {third_addr,{"127.0.0.1",15972}},
+     {network_id,&lt;&lt;222,20,69,66,11,152,80,198,121,73,92,107,206,136,22,22,163,
+                   237,153,56,5,7,0,121,95,115,24,152,87,194,239,145&gt;&gt;},
+     {target_anchor,&lt;&lt;103,247,139,25,70,239,81,206,16,116,113,17,193,48,25,84,
+                      237,209,244,205,151,147,101,66,142,193,3,187,228,54,95,
+                      68&gt;&gt;},
+     {third_anchor,&lt;&lt;254,49,46,77,226,233,170,158,99,251,54,198,128,161,126,4,
+                     10,133,167,90,64,217,251,30,31,207,239,84,60,197,29,84&gt;&gt;},
+     {fourth_anchor,&lt;&lt;250,168,46,197,93,96,230,122,89,215,34,144,159,234,228,
+                      140,45,18,80,83,227,14,14,176,73,221,8,199,202,128,4,185&gt;&gt;},
+     {asker_anchor,&lt;&lt;41,73,102,93,110,240,135,239,203,228,142,122,50,143,75,
+                     136,18,161,15,53,18,110,89,20,109,218,191,179,208,109,83,
+                     107&gt;&gt;},
+     {filter_symbol_name,&lt;&lt;"quod_r4_target_only_0290DF00E3B8906D"&gt;&gt;},
+     {agent_ref,{agent_instance_ref,&lt;&lt;"pets"&gt;&gt;,
+                                    &lt;&lt;41,73,102,93,110,240,135,239,203,228,142,
+                                      122,50,143,75,136,18,161,15,53,18,110,89,
+                                      20,109,218,191,179,208,109,83,107&gt;&gt;,
+                                    {human_user,test_agent}}},
+     {agent_key,{&lt;&lt;137,242,52,23,138,26,31,253,81,25,27,48,120,119,159,224,24,
+                   60,239,119,246,16,92,175,151,126,234,238,71,26,138,94&gt;&gt;,
+                 &lt;&lt;92,135,188,167,62,138,82,200,125,80,123,250,228,90,190,76,
+                   154,11,149,58,185,44,139,203,230,23,78,158,138,229,178,166&gt;&gt;}},
+     {agent_pub,&lt;&lt;137,242,52,23,138,26,31,253,81,25,27,48,120,119,159,224,24,
+                  60,239,119,246,16,92,175,151,126,234,238,71,26,138,94&gt;&gt;},
+     {client_peer,{127,0,0,1}},
+     {client_session,#{public_key =&gt;
+                           &lt;&lt;137,242,52,23,138,26,31,253,81,25,27,48,120,119,
+                             159,224,24,60,239,119,246,16,92,175,151,126,234,
+                             238,71,26,138,94&gt;&gt;,
+                       session_id =&gt;
+                           &lt;&lt;195,242,198,144,82,0,159,101,154,168,179,42,78,
+                             237,58,240,181,55,199,118,62,110,154,127,233,106,
+                             140,222,62,79,176,143&gt;&gt;,
+                       expires_ms =&gt; 1795026108911}},
+     {client_auth,&lt;86868.209.0&gt;},
+     {watchdog,&lt;0.8862.0&gt;},
+     {tc_logfile,"/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_19.02.26/lib.quod.logs/run.2026-11-18_19.02.26/quod_ask_suite.remote_signed_origin_read_certificate_stale_rejected.html"},
+     {tc_group_properties,[]},
+     {tc_group_path,[]},
+     {data_dir,"/home/yan/src/quod/_build/test/lib/quod/test/quod_ask_SUITE_data/"},
+     {priv_dir,"/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_19.02.26/lib.quod.logs/run.2026-11-18_19.02.26/log_private/"}]
+
+=== Current directory is "/home/yan/src/quod/_build/test/logs/ct_run.nonode@nohost.2026-11-18_19.02.26"
+
+=== Started at 2026-11-18 19:06:56
+
+<br />
+<a name="end"></a>
+
+
+=== Ended at 2026-11-18 19:06:56
+=== successfully completed test case
+=== === Returned value: ok
+</pre>
+<center>
+<br /><hr /><p>
+<a href="../../../all_runs.html">Test run history
+</a>  |  <a href="../../../index.html">Top level test index
+</a>  |  <a href="../../../suite.log.latest.html">Latest test result</a>
+</p>
+<div class="copyright">Copyright &copy; 2026 <a href="http://www.erlang.org">Open Telecom Platform</a><br />
+Updated: <!--date-->Wed Nov 18 2026 19:06:56<!--/date--><br />
+</div>
+</center>
+</body>
+</html>

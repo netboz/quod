@@ -1,0 +1,15 @@
+Extracted VM function/stack evidence; heap and process data omitted.
+Current call: erts_debug:same/2
+Program counter: 0x00007fec73b89ac0 (erts_debug:is_term_seen/2 + 112)
+0x00007fec6ccd8c08:SReturn addr 0x73B89898 (erts_debug:remember_term/2 + 424)
+0x00007fec6ccd8c30:SReturn addr 0x73B88A8C (erts_debug:size/3 + 204)
+0x00007fec6ccd8c58:SReturn addr 0x73B88F74 (erts_debug:tuple_size/5 + 220)
+0x00007fec6ccd8c78:SReturn addr 0x73B88B1C (erts_debug:size/3 + 348)
+0x00007fec6ccd8c88:SReturn addr 0x73B88F74 (erts_debug:tuple_size/5 + 220)
+0x00007fec6ccd8ca8:SReturn addr 0x73B88B1C (erts_debug:size/3 + 348)
+0x00007fec6ccd8cb8:SReturn addr 0x73B88F74 (erts_debug:tuple_size/5 + 220)
+0x00007fec6ccd8cd8:SReturn addr 0x73B88B1C (erts_debug:size/3 + 348)
+0x00007fec6ccd8ce8:SReturn addr 0x73B88F74 (erts_debug:tuple_size/5 + 220)
+0x00007fec6ccd8d08:SReturn addr 0x73B88F74 (erts_debug:tuple_size/5 + 220)
+0x00007fec6ccd8d28:SReturn addr 0x73B88998 (erts_debug:size/1 + 184)
+0x00007fec6ccd8d30:SReturn addr 0x73A2C3E0 (measure_explicit_failure_scenes:run/2 + 1520)

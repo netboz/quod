@@ -1,0 +1,384 @@
+{
+  "engines": {
+    "explicit-baseline": [
+      "engine=\"/home/yan/src/quod/_build/proof-scenes-explicit-baseline/ebin/erlog_int.beam\" otp=\"28\" schedulers=8"
+    ],
+    "sharing": [
+      "engine=\"/home/yan/src/quod/_build/test/checkouts/erlog/ebin/erlog_int.beam\" otp=\"28\" schedulers=8"
+    ]
+  },
+  "groups": [
+    {
+      "engine": "explicit-baseline",
+      "mode": "valid",
+      "marks": 300,
+      "seconds": {
+        "min": 0.426516,
+        "median": 0.444801,
+        "max": 0.445829
+      },
+      "first_seconds": 0.426516,
+      "repeat_seconds": {
+        "min": 0.444801,
+        "median": 0.445315,
+        "max": 0.445829
+      },
+      "held_process_bytes": {
+        "min": 85563832,
+        "median": 85563832,
+        "max": 85563832
+      },
+      "reductions": {
+        "min": 56097636,
+        "median": 56122972,
+        "max": 56135336
+      },
+      "allocated_words": {
+        "min": 111524978,
+        "median": 111525505,
+        "max": 111529166
+      }
+    },
+    {
+      "engine": "explicit-baseline",
+      "mode": "valid",
+      "marks": 600,
+      "seconds": {
+        "min": 1.326258,
+        "median": 1.374236,
+        "max": 1.389505
+      },
+      "first_seconds": 1.326258,
+      "repeat_seconds": {
+        "min": 1.374236,
+        "median": 1.3818705,
+        "max": 1.389505
+      },
+      "held_process_bytes": {
+        "min": 306588000,
+        "median": 306588000,
+        "max": 306588000
+      },
+      "reductions": {
+        "min": 178702446,
+        "median": 178925802,
+        "max": 178932802
+      },
+      "allocated_words": {
+        "min": 290666351,
+        "median": 290697730,
+        "max": 290698257
+      }
+    },
+    {
+      "engine": "explicit-baseline",
+      "mode": "valid",
+      "marks": 1200,
+      "seconds": {
+        "min": 4.509636,
+        "median": 4.512436,
+        "max": 4.54387
+      },
+      "first_seconds": 4.54387,
+      "repeat_seconds": {
+        "min": 4.509636,
+        "median": 4.511036000000001,
+        "max": 4.512436
+      },
+      "held_process_bytes": {
+        "min": 1098557560,
+        "median": 1098557560,
+        "max": 1098557560
+      },
+      "reductions": {
+        "min": 623811498,
+        "median": 623861746,
+        "max": 624003473
+      },
+      "allocated_words": {
+        "min": 851644343,
+        "median": 851644870,
+        "max": 851699889
+      }
+    },
+    {
+      "engine": "explicit-baseline",
+      "mode": "refused",
+      "marks": 300,
+      "seconds": {
+        "min": 0.342198,
+        "median": 0.344174,
+        "max": 0.351931
+      },
+      "first_seconds": 0.351931,
+      "repeat_seconds": {
+        "min": 0.342198,
+        "median": 0.343186,
+        "max": 0.344174
+      },
+      "held_process_bytes": {
+        "min": 88688,
+        "median": 88688,
+        "max": 88688
+      },
+      "reductions": {
+        "min": 39781320,
+        "median": 39781532,
+        "max": 39790735
+      },
+      "allocated_words": {
+        "min": 94080630,
+        "median": 94081172,
+        "max": 94162898
+      }
+    },
+    {
+      "engine": "explicit-baseline",
+      "mode": "refused",
+      "marks": 600,
+      "seconds": {
+        "min": 0.941988,
+        "median": 0.944005,
+        "max": 0.957988
+      },
+      "first_seconds": 0.941988,
+      "repeat_seconds": {
+        "min": 0.944005,
+        "median": 0.9509965,
+        "max": 0.957988
+      },
+      "held_process_bytes": {
+        "min": 230544,
+        "median": 230544,
+        "max": 230544
+      },
+      "reductions": {
+        "min": 112266171,
+        "median": 112324063,
+        "max": 112338373
+      },
+      "allocated_words": {
+        "min": 221698209,
+        "median": 221766835,
+        "max": 221793087
+      }
+    },
+    {
+      "engine": "explicit-baseline",
+      "mode": "refused",
+      "marks": 1200,
+      "seconds": {
+        "min": 3.006701,
+        "median": 3.009092,
+        "max": 3.012793
+      },
+      "first_seconds": 3.012793,
+      "repeat_seconds": {
+        "min": 3.006701,
+        "median": 3.0078965,
+        "max": 3.009092
+      },
+      "held_process_bytes": {
+        "min": 372400,
+        "median": 372400,
+        "max": 372400
+      },
+      "reductions": {
+        "min": 357074980,
+        "median": 357102072,
+        "max": 357115161
+      },
+      "allocated_words": {
+        "min": 578537258,
+        "median": 578537785,
+        "max": 578541941
+      }
+    },
+    {
+      "engine": "sharing",
+      "mode": "valid",
+      "marks": 300,
+      "seconds": {
+        "min": 0.301257,
+        "median": 0.313507,
+        "max": 0.315267
+      },
+      "first_seconds": 0.315267,
+      "repeat_seconds": {
+        "min": 0.301257,
+        "median": 0.307382,
+        "max": 0.313507
+      },
+      "held_process_bytes": {
+        "min": 16583688,
+        "median": 16583688,
+        "max": 19900216
+      },
+      "reductions": {
+        "min": 52649261,
+        "median": 52653507,
+        "max": 52654017
+      },
+      "allocated_words": {
+        "min": 76245934,
+        "median": 76246476,
+        "max": 76252679
+      }
+    },
+    {
+      "engine": "sharing",
+      "mode": "valid",
+      "marks": 600,
+      "seconds": {
+        "min": 0.769175,
+        "median": 0.776812,
+        "max": 0.828402
+      },
+      "first_seconds": 0.776812,
+      "repeat_seconds": {
+        "min": 0.769175,
+        "median": 0.7987885,
+        "max": 0.828402
+      },
+      "held_process_bytes": {
+        "min": 34386808,
+        "median": 34386808,
+        "max": 34386808
+      },
+      "reductions": {
+        "min": 165661297,
+        "median": 165699988,
+        "max": 165735416
+      },
+      "allocated_words": {
+        "min": 152497581,
+        "median": 152498123,
+        "max": 152504324
+      }
+    },
+    {
+      "engine": "sharing",
+      "mode": "valid",
+      "marks": 1200,
+      "seconds": {
+        "min": 2.132578,
+        "median": 2.159567,
+        "max": 2.167035
+      },
+      "first_seconds": 2.167035,
+      "repeat_seconds": {
+        "min": 2.132578,
+        "median": 2.1460725,
+        "max": 2.159567
+      },
+      "held_process_bytes": {
+        "min": 71303368,
+        "median": 71303368,
+        "max": 71303368
+      },
+      "reductions": {
+        "min": 572998554,
+        "median": 573103136,
+        "max": 573106704
+      },
+      "allocated_words": {
+        "min": 304948930,
+        "median": 304949473,
+        "max": 305036040
+      }
+    },
+    {
+      "engine": "sharing",
+      "mode": "refused",
+      "marks": 300,
+      "seconds": {
+        "min": 0.268368,
+        "median": 0.270467,
+        "max": 0.271056
+      },
+      "first_seconds": 0.270467,
+      "repeat_seconds": {
+        "min": 0.268368,
+        "median": 0.269712,
+        "max": 0.271056
+      },
+      "held_process_bytes": {
+        "min": 88688,
+        "median": 88688,
+        "max": 88688
+      },
+      "reductions": {
+        "min": 37831385,
+        "median": 37831545,
+        "max": 37849353
+      },
+      "allocated_words": {
+        "min": 75726818,
+        "median": 75727360,
+        "max": 75733282
+      }
+    },
+    {
+      "engine": "sharing",
+      "mode": "refused",
+      "marks": 600,
+      "seconds": {
+        "min": 0.593596,
+        "median": 0.601451,
+        "max": 0.622998
+      },
+      "first_seconds": 0.622998,
+      "repeat_seconds": {
+        "min": 0.593596,
+        "median": 0.5975235,
+        "max": 0.601451
+      },
+      "held_process_bytes": {
+        "min": 230544,
+        "median": 230544,
+        "max": 230544
+      },
+      "reductions": {
+        "min": 105208349,
+        "median": 105209402,
+        "max": 105300693
+      },
+      "allocated_words": {
+        "min": 151205663,
+        "median": 151206205,
+        "max": 151212125
+      }
+    },
+    {
+      "engine": "sharing",
+      "mode": "refused",
+      "marks": 1200,
+      "seconds": {
+        "min": 1.48044,
+        "median": 1.492548,
+        "max": 1.516544
+      },
+      "first_seconds": 1.516544,
+      "repeat_seconds": {
+        "min": 1.48044,
+        "median": 1.486494,
+        "max": 1.492548
+      },
+      "held_process_bytes": {
+        "min": 372400,
+        "median": 372400,
+        "max": 372400
+      },
+      "reductions": {
+        "min": 329807391,
+        "median": 329808392,
+        "max": 329814092
+      },
+      "allocated_words": {
+        "min": 302104749,
+        "median": 302105291,
+        "max": 302191770
+      }
+    }
+  ]
+}

@@ -337,7 +337,9 @@ signed(C,Goal) ->
     {ok,Evidence,_} = Result,
     Op = quod_client_goal:operation_ref(Evidence),
     ?assertMatch(#{operation_state:=terminal},quod_ct:await_operation_complete(element(2,Op),Op,10000)).
-failed(R) -> ?assertMatch({ok,_,{normalized,{failed,_}}},R).
+failed({ok,_,{normalized,fail}}) -> ok;
+failed({ok,_,{normalized,{failed,_}}}) -> ok;
+failed(Other) -> error({expected_logical_failure,Other}).
 denied_creation(C,Target,Inputs) -> denied_creation(C,Target,Inputs,near_agent).
 denied_creation(C,Target,Inputs,Placement) ->
     Before = instances(Target),
@@ -349,7 +351,7 @@ placements(Ns) ->
     {ok,[#{'Rows':=Rows}],_} = quod_prolog:prove_ro(Ns,
         {findall,{placement,{'S'},{'I'},{'R'}},{space_placement,{'S'},{'I'},{'R'}},{'Rows'}}), Rows.
 holds(Ns,Goal) -> ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,Goal)).
-fails(Ns,Goal) -> ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,Goal)).
+fails(Ns,Goal) -> ?assertMatch(fail,quod_prolog:prove_ro(Ns,Goal)).
 edit(Ns,Goal) ->
     case quod_prolog:execute(Ns,Goal) of
         {ok,_,_} -> ok; Other -> error({fixture_edit_failed,Ns,Goal,Other})

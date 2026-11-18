@@ -1,0 +1,464 @@
+[
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/growth_suite.admit_refused_mid_catchup.html",
+    "private_key_octet_strings": 5,
+    "original_sha256": "978e320bf92c3583dd8b713f5f642eb876448d6f6f0717255f6fa2f434a0090a",
+    "redacted_sha256": "6222571108f72150b8b122a96eeee9d52c4f66d1cd5f5ecbebe0eb7bfb20c401"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/growth_suite.byzantine_on_grown_committee.html",
+    "private_key_octet_strings": 5,
+    "original_sha256": "e3b54782d606d02f4c48768111b25e6a6706ef63f63af19595f638e63dcbe897",
+    "redacted_sha256": "1af150cd5d6f78eb0c165b8aebc9da78d4eb1f2f492ec83686a2278a1354ecd5"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/growth_suite.dead_member_removed.html",
+    "private_key_octet_strings": 5,
+    "original_sha256": "6c3070b032a541b5feb5a58448733c13efff32e79ba09f89ca6427ecd8963e73",
+    "redacted_sha256": "d1a7895b952b0e5ade38cff142ea3da0226ff9686e5aa6e1baeb003741813afb"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/growth_suite.demote_to_observer.html",
+    "private_key_octet_strings": 5,
+    "original_sha256": "c869a33eb991aa7bd72d843d4907a88b661c141cb277dbe668e89cc876dfed87",
+    "redacted_sha256": "4fe7fc931186d8d09221902adb8136745577dd44c860eaf5756b6d556811c2f5"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/growth_suite.end_per_suite.html",
+    "private_key_octet_strings": 5,
+    "original_sha256": "1af043932c21f6d164ffec380a6d3f833f436e625a2af41e0ef4f7bca5da89fc",
+    "redacted_sha256": "a24a238564f6931b5dca1fd97f3d9303331905662db37a8a2f88d1737ebcee28"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/growth_suite.grow_to_four.html",
+    "private_key_octet_strings": 5,
+    "original_sha256": "9bd4759a91bf4d81efcd7b1f43ce987751d4080b152579ac5fb442dfbbb6db19",
+    "redacted_sha256": "8cc04b2e05198913c4cc2f37769f6d1f561f62c42d19be259b6a8349fc2b4c42"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/growth_suite.grow_to_three.html",
+    "private_key_octet_strings": 5,
+    "original_sha256": "da55e13ce1b674d17c1e7eef5fd48a2e72aec50c15e7565c1c23f3e1f0281bb0",
+    "redacted_sha256": "4c5a05685782e54bb5b899943ea8c19c4ed7137b15662c2c469e3075d1e8aa6d"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/growth_suite.grow_to_two.html",
+    "private_key_octet_strings": 5,
+    "original_sha256": "0b1a18d03da14936765333e6ebd8f47837a28d43e9a8563e55a5b7b6f86417bf",
+    "redacted_sha256": "0b5874fb2467d67de846a04d4e2c82ad6fd9fd8055dbcd168c0e76df898155f5"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/growth_suite.init_per_suite.html",
+    "private_key_octet_strings": 5,
+    "original_sha256": "c057752e21280e490eae1e7fe2503e7055b7f59fd36b86fec8aba8d8713346b4",
+    "redacted_sha256": "e402d4c55b9cce3e0e952a18a7091c43eaad06840e4a330ad4b4f9695dbe4247"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/growth_suite.policy_upgrade_live.html",
+    "private_key_octet_strings": 5,
+    "original_sha256": "bd3ab1ad3276a5f021609f75965c38181b104e94ea982a66101cf4bf6a194ed8",
+    "redacted_sha256": "ed94690d20d49bf2c1587e8a6a0fce0958e0e5910b364a8a50ce3791f5b8095c"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/growth_suite.rotation_sweep.html",
+    "private_key_octet_strings": 5,
+    "original_sha256": "ec6098a424c2a7e7363274adaab79ca76407b9ef15c6a3959e5176fe8c4bc48b",
+    "redacted_sha256": "e66cda19144227f7b2dc80701e3487db6c8262e4ac5365cf4c62c03fe6d45cea"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_peer_capacity_suite.acquired_contact_is_retained_before_loss_subscription.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "f8e50d67cf0e7838f6290ea993bd309e69a01c8aeccbcc3029d2607f1cd757bc",
+    "redacted_sha256": "d5699ff6c4bf6dac60876fb7c00fcc33f9af195a1155f08f27271f7290d3cf71"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_peer_capacity_suite.dead_queued_acquisition_preserves_capacity_wakeup.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "8e9f9cccb2d35aaa818b16387a36e4d37f2a10d8426456c0372ec7d60e377668",
+    "redacted_sha256": "b8fa63c837fa6b541c897318d208ee9a8457511f06057c454034c421d9171634"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_peer_capacity_suite.end_per_suite.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "12f87351c49ec4863b768c6c0424674e9b79bd09e42ea586726db23a556fd6df",
+    "redacted_sha256": "c76b41857ff5174a970b7a1f7aaf33c548eeaa74ce826bd6085b079fdd08bbb6"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_peer_capacity_suite.idle_contact_survives_until_acquisition_pressure.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "72c2c880334cd5c472f869bd3aebe47fa7066f86e30464bbb90390db0d992468",
+    "redacted_sha256": "79123bf86f24ab95552942628018c8a4882714aa77077bc8c1932b5bd4a7dca4"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_peer_capacity_suite.init_per_suite.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "8a1ece9bfc97f30ce8c1f4223d5b858d1f72a54573c818b7321f7dccfd753494",
+    "redacted_sha256": "2be31ba86ddc5517615d71c35fe94fe758ac14fb7dd3d2db180dad13eaf9c294"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_peer_capacity_suite.last_consumer_death_releases_capacity.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "7aa0f19c1b078e4ac31721c13c1816e07f9e42f30989c0165230730cfb52d900",
+    "redacted_sha256": "fc50aa829007ddfa11c7364f5e2655f3c3dbd7f798cf6134e882dfa89153c3e4"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_peer_capacity_suite.node_key_rotation_replaces_the_retained_slot.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "7830dd1a2955cc561d4d5c33542497c52bb3d07a8b062189b514bb4a5410a90e",
+    "redacted_sha256": "a5a5275750537bfe0e0c96513144267036a7766efe4c5023ffaa2c5c8fb6170c"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_peer_capacity_suite.withdrawn_contact_releases_waiting_observers.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "d0a2adeb32ed384936d295504e5b47d404730bdecbd36d685ec949e15b1a045e",
+    "redacted_sha256": "400020538bbc90069eb8fdad157f83d50af859a70f0b8e360972b03ea795bd28"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_peer_observation_suite.cold_timeout_is_shared_physical_suspicion.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "d5f4b056eee81ac1980a6993da04bf7495f15d4215d3d0f31ed250e5d22c32df",
+    "redacted_sha256": "1730c5c04bab89d1e5d50b3fc1acca71f211585d3c5a6e7f217287a83b26dc22"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_peer_observation_suite.contact_survives_consumer_restart_and_expiry.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "ae3a353bc23de12011857a3e701979259cf60c11d2a9df548deb7600be2b4351",
+    "redacted_sha256": "ffd3e765e02f1507f8110308978800acb64eae6293757153381cbb01a1e8ddba"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_peer_observation_suite.end_per_suite.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "c4555aef13d552dfc29a159068bf7ba2f6270f3c11f271185a44557ab9facf75",
+    "redacted_sha256": "5fcc67fc676efa2954d33d422abe17bc62d11a6ab0d7f3577724a93d15f68f0e"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_peer_observation_suite.init_per_suite.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "99da9f6721aac46b48403d057fa483801c590daddc92b5ce495f11ebd9a0d165",
+    "redacted_sha256": "b927e94b4cf23af22ed05c6fb48a4f9062e8afefe07fd4ae8fef9fe8797a8430"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_peer_observation_suite.newer_contact_fences_same_key_history.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "c7cb90c90997314d08d0402e603808d86c763056092a11344d0641b8b10b9283",
+    "redacted_sha256": "64df551c75b501ff6951098ffa5820c229e76c8aa906b7edb1d93c1b5719663b"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_peer_observation_suite.withdrawal_fences_pending_physical_completion.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "76f9a7d31343fec919d4a2b1dc353909767333fe4555ad362c230ec19688aea0",
+    "redacted_sha256": "665021494904fba080f10f3403649c0b5fd4fe314a20841d6bb959bdbaab6057"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.authenticated_coalesced_header_payload_delivered_once.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "e503e29a1d9a081580114a69f30ddbf8817e1927e7ac7969d00ea87244bf9a3c",
+    "redacted_sha256": "fd7130d5fa490d861e02953553e310105bc24541b577c0e807bb6630522f7214"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.authenticated_peer_connections.html",
+    "private_key_octet_strings": 2,
+    "original_sha256": "f84e0dc890aa505d8e7c0578037b18e0ff700a6adc0b11fdbd2c9161fc0de7cb",
+    "redacted_sha256": "314681c2dcceba00e0d7dc0e52da7e09306f9d0f4a618526898126e9439e7c11"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.bidirectional_reuse.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "4023092c61e97543a89ea6253d7f568fd560807d3b78cfd75403536ddb579324",
+    "redacted_sha256": "05fa021a8d5e3e5e6ba2306facbd0146a38b7d5238059f546ec8ca241473593f"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.channel_stream_reset_isolated.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "32370cce37349a44a5a749d3cfdad9578993cdd36d04a47ae97ef8319627ecbd",
+    "redacted_sha256": "d4d14bffc64f4d23eb74959fab6539066719881dd2fff3687eb45acb18d1dbc3"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.connection_confirmation_without_stream.html",
+    "private_key_octet_strings": 2,
+    "original_sha256": "f718c13bd65cf96b197ee7ab5b74bfcad31a15a3c569c57e039aa9d2eea50972",
+    "redacted_sha256": "568e2f695c5741bd3a6137975068f5054aadfa7668fa661c4741a9e1cf71ae12"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.connection_death_resolves_pending_waiters.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "d86f4720d89c6428d3596daa8f4ccdab67a61d32719b25763725ba660ea9559d",
+    "redacted_sha256": "435b9e224827cc45c203713d32e5646ccb845149915738e4d06855a72ea3567b"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.connection_is_owned_by_transport.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "63acbb13e9485dba4d4c614ade6696ba504a075caceb357eef6441bd0c1eae7c",
+    "redacted_sha256": "2d2be207a048d6d1fbb15abf3fba06140ff58f09cb6340e0f57dd1d182c69646"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.dialer_presents_cert.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "e9c4d7f8394f8ff76584026168d4f638d7681ca99ebc3b9a1aae1dc65cad9592",
+    "redacted_sha256": "fe1c1b99c941c6b1d2e872aa85ee7eb4430c97c739d577739fd6ed93cf33fb75"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.end_per_suite.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "47deff670e628e3d395678f90ae1f39f43c7f26c98e52343845f335eab3c1deb",
+    "redacted_sha256": "dc6fbf8e9fca7529327207ba6bd893409e953e1b4f0ef9b224379a530d087e45"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.explicit_link_retires_with_last_owner.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "53011ac9a1f1a9ebfa927b9ed3d2eecb1a9e5861d6c087cde916302c7cb69a62",
+    "redacted_sha256": "6bcee67558b3d7c18a8487747a32db3e5fa040203257357a3afe42d1dab2031a"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.identified_dial_suppresses_hint_learning.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "6de44c8849c0eb90c4010a3f30bf2fec5fc61e7be99ac4898bafee0f9018d0f8",
+    "redacted_sha256": "98ea3bb59dbc6e127c42b08526c127a4f27f43b701e35c1b61433863bdcd92d0"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.inbound_channel_reset_is_scoped.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "45d32fa33d4337eb56cf903f2ae22d8eddbc7fbac027846e235ef8bae9fd166a",
+    "redacted_sha256": "5b985391020b0dead8605e30ee63298c7e3c638e893cdbc9ff29c7dfab1b8abd"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.inbound_owner_death_closes_wire_connection.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "29174115bb70af50f54e9305bbae1c9c6ff1b5a8331430c7c04283281f8a3cfc",
+    "redacted_sha256": "a1cca847b114c1acd78504e838a9e845fb6a9b2cb0bcb5d22c11494401758b71"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.inconclusive_loss_confirmation_is_reobserved.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "90e24110510843798a4f65646200480e9683d98cec6678f0b3765d36f340a664",
+    "redacted_sha256": "3893f3bca085f40438815c2683b5ac5a72748e458ccd8124ec52ee00b12836b1"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.init_per_suite.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "9c32c9bbb01568514d7a8e03323e62e68a1e72a8116f5c7d1601f304ed5b419c",
+    "redacted_sha256": "e9afc36d00233e0106550d27b329301beeea2fe6f951938ae3c1cdef28237847"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.late_released_link_cannot_consume_replacement_waiter.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "1ceb45c3ebfb8898b078bf89f25d803a0db08e814a3dafbf70784bdc6848652f",
+    "redacted_sha256": "0cfbe1e0d1c24f12602685044c6eeddf87e7e678ccbe26a0460ec85c9efb1cf5"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.message_roundtrip.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "c55af6dd4394ae0d6b3097e0fcbfb6beaa8881f79280eabaea3d0d97069bf8e5",
+    "redacted_sha256": "278fcc596c4dd36abd3c2a9dccad15dc24c7d4a82b8a4a54ea147835246dc26b"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.mismatched_header_cannot_poison_cache.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "e4b2cfcb5eca298a1caad4a457a657c5efa5a052b5d22ed8d02487d049066e04",
+    "redacted_sha256": "3c65f78d645fb42d7eaa6d87c6de7ef730d4af76e8a1528899f76f0127b991a7"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.no_learn_is_monotone_across_streams.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "4d94f7efcdb7cf888d47bf2a16d73b07d91320205dc2f77278a9cff502fd6291",
+    "redacted_sha256": "1052381cea49e2a58d369ed83294fdb7b60faf6bb2811bafbc5c06f225a05778"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.non_dialable_node_id.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "1aa6a0bb91d12a3df13d49b2ab81d08b5e4a5cb509be7946db1a7c91f2b325b1",
+    "redacted_sha256": "d290ff29ea275909916dfafa5a8297c2dffc0c3d6fe89a52177d30970c502283"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.observer_confirmation_deadline_releases_pending.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "dce7d612baeb519d21fda003c36ad2e7b67083e3c2f4c71374fc74583b7c91b1",
+    "redacted_sha256": "ace87f826edbbd5e058867c62fa35158ff15eaa2a70eed098e29ca01e17f4ef7"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.ontology_observer_shares_physical_failure.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "4dc63dc75aa9bd388dec1e446b45f80a29f189a648c4d54cb2abd5647a779951",
+    "redacted_sha256": "890c7965087d956245df13a93588368eabb9c9a19d97c2d065196e597c58bc68"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.open_link_succeeds.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "52e3d6d7e34c7e026318a796075d1dbc5ff614c93d2264742670189f5ab63fcd",
+    "redacted_sha256": "7941670dbe8aca45254f5a2eaace129960acefc90c4ebf28e6128b101daccaf0"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.ordered_send_waits_for_send_ready_fifo.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "b9b13378e63fc80f00cd30667e588e0b86850bb4ef473680bc9f079b964a4709",
+    "redacted_sha256": "1c3eb2a358d964a55c5640a3dac824270aad6a7f9a1ba46a03b87c9d11b5bd8d"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.ordinary_dial_still_learns_hint.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "c9a50962ea655d70dd352095f0a3c45ece2cd34c87eeda10801d452b74132d87",
+    "redacted_sha256": "b8e4a426ac99e61e1ebade1532a57315039c66f7f36348e6bd1c1783e9a951f5"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.ordinary_pubkey_dial_rejects_wrong_cert.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "cebe00b401551c08f04f0d6d5854072f36b28ea313436d85b6e5f7892044fec2",
+    "redacted_sha256": "5586a2357d368d72e782026fa6445dbd8c38b39fde35f7dcf4e18777c52b9676"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.pinned_dial_rejects_wrong_cert.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "b74d4718065c4abffd6a85444512a98f4250d88d557aca44aa5ceac5ab29e018",
+    "redacted_sha256": "7e36fce1792c88ce9b46768e95ab18d8f573de4cb311812e2289c6e6c6e15327"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.pinned_dial_suppresses_hint_learning.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "6c4743dc9433d124ef5cbcc3cc36731b5f2c2b629c3149bddd2207a3eb86950d",
+    "redacted_sha256": "cdb430336f606fbb9da40bd99cd6035c451a77b558145fcd21f8c6e6aed135a3"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.pinned_lease_release_is_connection_exact.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "c1fe5f420ecc36d915465cd5834e0939c6b818aedd2ef016396f946a18195e1b",
+    "redacted_sha256": "369847bdadf3ca7d7146af26018d9339a824a577c4e963d3cbadd748f483876c"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.pinned_leases_share_link_until_last_release.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "52aba20ac8d079e1a2664d7cd691493c5ea6c8f92c85a37c155739fc85aa81c5",
+    "redacted_sha256": "824805d7b45e381c2c09f4bf5c9a3114ae23cebfe705802295b7114ed4c45739"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.pinned_reverse_stream_suppresses_hint_learning.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "0b7c21bcefae847d10678e8314c1e6dc4e9c8549488c2e612808f1e0c80e5aad",
+    "redacted_sha256": "5215c45cecca80baf73fab8bbc9f4d290625ce7a639b0615d8623cb62a04b531"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.priority_mixed_traffic.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "1199b9c22ec4c4f3c45d03eb33df6adb11a347157a9c7f0b1b3986037a90d111",
+    "redacted_sha256": "63ee88e3fee5c8146da2b3610825fefcf69f9dc1987b346f5883c78e0dd4fca8"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.recovery_round_reconfirms_existing_connection.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "a3138d49e5361672e17578ede16fef96d771a7c73cd57e1b38b97b6fffb84c9c",
+    "redacted_sha256": "ba48e6c4b10e99e1acd5d60c2184f02e8e1998629029635a7950230d959ecb27"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.resolve_and_dial_by_pubkey.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "1940426061c5462edc9a2e6a1652ef4b9cd3931978c579a76985ccd33f205d53",
+    "redacted_sha256": "ba0acb954792fc1a656ebf634a8acf8b5e5375e738e3d1f280420c6a25bb75b0"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.shared_peer_loss_confirmation.html",
+    "private_key_octet_strings": 5,
+    "original_sha256": "87c5ca2b607f513570d3dbe3412905f51eb2545451b27bd496345a894268bd96",
+    "redacted_sha256": "2152e51e3b347efc15e0b5ad62603fcbe3815a6a33a869207066690cd635acf7"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.stream_priorities_survive_reopen.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "eeacd957d6aabd78d1bd71b097b420df376dfd605709b9eb145518438f7625df",
+    "redacted_sha256": "bc542788aa8fcbe76114830f74dcaeb94dbc694850db6e411b72a93d296a1e90"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.tagged_catchup_open_preserves_pools.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "5c1c572ad86587e3b09b5c8463b2b2a047de34bdfb0c0e89a44557bfade0f53a",
+    "redacted_sha256": "c89857b9817d8a1e78845e58cd25a126ed59a6f403be8ef4f4738cb0785eefba"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.terminal_confirmation_preserves_observation_time.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "09a263e99b1dcf68edadafc41f6edb3f3979617b1c170617e54f22b227d3b584",
+    "redacted_sha256": "2f7b54c559b52b28f8fff7395f812781d38f2a47ee886882c51e3a0cb18f2ba4"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/quod_quic_suite.unacked_stream_no_link_up.html",
+    "private_key_octet_strings": 1,
+    "original_sha256": "d0adebcd063fd2595aa1bc59384f383dacdc795c96f4164e08dfb6fd672516c6",
+    "redacted_sha256": "703bf66c6e3bcf68376faac2027920a79d360e583d1abece3cc620bb80250c32"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/simplex_suite.burst_commits_without_busy.html",
+    "private_key_octet_strings": 4,
+    "original_sha256": "58fa50dd6d047c4758a67d8f00a64710eaa51546ec189a08e2c56a3e0bc856eb",
+    "redacted_sha256": "334f096b6ac3950e3e26381c64b6442bd13a8a208ca1d5f3bb12461af180578e"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/simplex_suite.byzantine_admit_rejected.html",
+    "private_key_octet_strings": 4,
+    "original_sha256": "0b2017810ac367c570d4ae3f87888f08c7c5059d257c948c15b67a16d4743b72",
+    "redacted_sha256": "6f54408760890544e09d32382dfe94127c23bd2226572e004c1355c553c939dd"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/simplex_suite.byzantine_retract_rejected.html",
+    "private_key_octet_strings": 4,
+    "original_sha256": "67c66903511d6d66b1c1511ac5ce9dfb55b7fa0b6216b6ea829ad27ad8d26b0a",
+    "redacted_sha256": "7a059d1d441d22f051d22b0a46a9446dcf4d306a938e9ceda0e37fd8f90a0a2f"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/simplex_suite.commits_across_committee.html",
+    "private_key_octet_strings": 4,
+    "original_sha256": "fecbdbf683d6b7ea979e100356fcc25898ee6943eac34aa0ada34b96ffeb5ffb",
+    "redacted_sha256": "2be34019051da7b45d8af0bfd78d8f769216dfea67555ebf1fde41c91142604a"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/simplex_suite.consensus_commits_with_ingress_down.html",
+    "private_key_octet_strings": 4,
+    "original_sha256": "dd399a1f01816fe6346ba83b8ca367101124cfc169046ab840cd67ac5c6a222c",
+    "redacted_sha256": "a8aca083ba015e44b9378a6c8e793e5c08a8dc0c23c923a1cce7de6525756800"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/simplex_suite.end_per_suite.html",
+    "private_key_octet_strings": 4,
+    "original_sha256": "392a07b56a696f4b0e04b4faa2645602b45c03224df1ba153198d91e74b685ca",
+    "redacted_sha256": "aa514310095f3e9b02b6a04eac677e59fef94d70e816defe403a0995ad09b12d"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/simplex_suite.follower_relays.html",
+    "private_key_octet_strings": 4,
+    "original_sha256": "750ca0e763347241c5396dcc636263e0a7ec89145dc6190020c8e458b4b0a10a",
+    "redacted_sha256": "80cbbb78b85ee6e1fbda1e25dc547b1925f146728857031d627ce78ad6badb3f"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/simplex_suite.init_per_suite.html",
+    "private_key_octet_strings": 4,
+    "original_sha256": "591cbcff399c4afc025a160a943f83a6462bb768d3b9a70f55fce198c30dc26f",
+    "redacted_sha256": "d098cf38e38e55c594b69564c6337bd754c1f058f893b5c9447aeb5239e52119"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/simplex_suite.leader_failover.html",
+    "private_key_octet_strings": 4,
+    "original_sha256": "8db9bcc470eda1b1a6220faa6db0010ce7b90685bd4426f226e8ffa94536e32b",
+    "redacted_sha256": "19ed7998caedc7258457e75bc8b5831b6288d5c3c6d3e7d0f8133c01921ec0ed"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/simplex_suite.membership_survives_leader_loss.html",
+    "private_key_octet_strings": 4,
+    "original_sha256": "917967cf40e151b8a44fee3e226854e3fea841fec4d14a246e7afb6a92792ccd",
+    "redacted_sha256": "23bd42f15b205f1c9bff81466aa2af5fddd7f1a132c31a328faf54f09c1064b6"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/simplex_suite.over_fault_restart_recovers.html",
+    "private_key_octet_strings": 4,
+    "original_sha256": "5c40d02fc3b064f6a1648a8fa4091d7328b040e41958db82fb85dacb210ae7c5",
+    "redacted_sha256": "e2a6745c4584cc49f0a5349549ae4dd711c7b3f9e6fe0c0928dc33df0dbf22c9"
+  },
+  {
+    "path": "ct-logs/ct_run.nonode@nohost.2026-11-18_16.18.34/lib.quod.logs/run.2026-11-18_16.18.34/unexpected_io.log.html",
+    "private_key_octet_strings": 2,
+    "original_sha256": "76d2eca02d08ec15c9e584dc7e06e3516b11c5848896b2d5d081ad934e19a06a",
+    "redacted_sha256": "48d10d280c61b10e575ace8eb7e6228f17a2d516f2e70f53be815c9ef95eea79"
+  },
+  {
+    "path": "quod-eunit-01.log",
+    "private_key_octet_strings": 15,
+    "original_sha256": "359611d77acdd45d98de9d2e73d986153491fe6955f21a110239e09a84a2e0dd",
+    "redacted_sha256": "98542f5ed10977121014cc58a70f3a01ec0807ab8f28696de9be84811b01696f"
+  }
+]

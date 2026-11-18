@@ -71,7 +71,7 @@ user() ->
         {controllers_vocabulary, <<"quod:controllers">>, pin(<<"quod:controllers">>)},
         {space_vocabulary, <<"quod:space">>, pin(<<"quod:space">>)}],
     Found = found(<<"quod:user">>, ["quod_user.pl"], Pins ++ [{signup_host, Node}], [quod_agent_predicates]),
-    {fail, _} = quod_prolog:prove_ro(?ROOT, {root_administrator_agent, Node}),
+    fail = quod_prolog:prove_ro(?ROOT, {root_administrator_agent, Node}),
     {ok, [_], _} = quod_prolog:execute(?ROOT, {transaction, {assertz, {root_administrator_agent, Node}}}),
     {ok, [_], _} = quod_prolog:prove_ro(?ROOT, {root_administrator_agent, Node}),
     Found#{root_administrator => true}.

@@ -1,0 +1,12 @@
+{
+  "removed": [
+    "_build/test/logs/ct_run.nonode@nohost.2026-11-18_17.18.54",
+    "_build/test/logs/ct_run.nonode@nohost.2026-11-18_17.25.02",
+    "_build/test/logs/ct_run.nonode@nohost.2026-11-18_17.28.23",
+    "_build/test/logs/ct_run.nonode@nohost.2026-11-18_17.47.31",
+    "_build/proof-scenes-explicit-baseline",
+    "_build/proof-scenes-explicit-baseline-01",
+    "_build/proof-scenes-sharing-01"
+  ],
+  "preserved_preexisting_ct_runs": 43
+}

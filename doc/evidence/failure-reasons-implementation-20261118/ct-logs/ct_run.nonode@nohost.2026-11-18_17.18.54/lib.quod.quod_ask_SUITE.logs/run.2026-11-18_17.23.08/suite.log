@@ -1,0 +1,336 @@
+=== Suite started at 2026-11-18 17:23:08
+=== Starting test, 46 test cases
+=cases         46
+=user          yan
+=host          nohost
+=hosts         nohost 
+=emulator_vsn  16.0.2
+=emulator      beam
+=otp_release   28
+=started       2026-11-18 17:23:08
+=case          quod_ask_SUITE:init_per_suite
+=logfile       quod_ask_suite.init_per_suite.html
+=started       2026-11-18 17:23:08
+=ended         2026-11-18 17:23:12
+=result        ok
+=elapsed       4.065876s
+=case          quod_ask_SUITE:remote_signed_transaction_savepoints
+=logfile       quod_ask_suite.remote_signed_transaction_savepoints.html
+=started       2026-11-18 17:23:12
+=ended         2026-11-18 17:23:15
+=result        ok
+=elapsed       2.384574s
+=case          quod_ask_SUITE:cut_findall_local_and_cohosted
+=logfile       quod_ask_suite.cut_findall_local_and_cohosted.html
+=started       2026-11-18 17:23:15
+=ended         2026-11-18 17:23:15
+=result        ok
+=elapsed       0.000959s
+=case          quod_ask_SUITE:cut_findall_remote_boundaries
+=logfile       quod_ask_suite.cut_findall_remote_boundaries.html
+=started       2026-11-18 17:23:15
+=ended         2026-11-18 17:23:15
+=result        ok
+=elapsed       0.008438s
+=case          quod_ask_SUITE:cut_findall_signed_multiscope_savepoints
+=logfile       quod_ask_suite.cut_findall_signed_multiscope_savepoints.html
+=started       2026-11-18 17:23:15
+=ended         2026-11-18 17:23:18
+=result        ok
+=elapsed       2.931029s
+=case          quod_ask_SUITE:remote_plain_read_excludes_live_observer
+=logfile       quod_ask_suite.remote_plain_read_excludes_live_observer.html
+=started       2026-11-18 17:23:18
+=ended         2026-11-18 17:23:18
+=result        ok
+=elapsed       0.013727s
+=case          quod_ask_SUITE:remote_native_read_uses_selected_observer
+=logfile       quod_ask_suite.remote_native_read_uses_selected_observer.html
+=started       2026-11-18 17:23:18
+=ended         2026-11-18 17:23:18
+=result        failed: {{assertMatch,
+                            [{module,quod_ask_SUITE},
+                             {line,749},
+                             {expression,
+                                 "Read ( Identity , { current_executor_key , Key } )"},
+                             {pattern,"fail"},
+                             {value,{fail,[]}}]},
+                        [{quod_ask_SUITE,
+                             remote_native_read_uses_selected_observer,1,
+                             [{file,
+                                  "/home/yan/src/quod/test/quod_ask_SUITE.erl"},
+                              {line,749}]},
+                         {test_server,ts_tc,3,
+                             [{file,"test_server.erl"},{line,1796}]},
+                         {test_server,run_test_case_eval1,6,
+                             [{file,"test_server.erl"},{line,1305}]},
+                         {test_server,run_test_case_eval,9,
+                             [{file,"test_server.erl"},{line,1237}]}]}, [{quod_ask_SUITE,
+                                                                          remote_native_read_uses_selected_observer,
+                                                                          749},
+                                                                         {test_server,
+                                                                          ts_tc,
+                                                                          1796},
+                                                                         {test_server,
+                                                                          run_test_case_eval1,
+                                                                          1305},
+                                                                         {test_server,
+                                                                          run_test_case_eval,
+                                                                          1237}]
+=elapsed       0.007683s
+=== *** FAILED test case 6 of 46 ***
+=case          quod_ask_SUITE:remote_plain_read_rejects_lying_validator
+=logfile       quod_ask_suite.remote_plain_read_rejects_lying_validator.html
+=started       2026-11-18 17:23:18
+=ended         2026-11-18 17:23:18
+=result        ok
+=elapsed       0.013690s
+=case          quod_ask_SUITE:remote_scope_solutions
+=logfile       quod_ask_suite.remote_scope_solutions.html
+=started       2026-11-18 17:23:18
+=ended         2026-11-18 17:23:18
+=result        ok
+=elapsed       0.003553s
+=case          quod_ask_SUITE:remote_scope_trace_parentage
+=logfile       quod_ask_suite.remote_scope_trace_parentage.html
+=started       2026-11-18 17:23:18
+=ended         2026-11-18 17:23:18
+=result        ok
+=elapsed       0.033465s
+=case          quod_ask_SUITE:proof_policy_refusal_local_and_remote
+=logfile       quod_ask_suite.proof_policy_refusal_local_and_remote.html
+=started       2026-11-18 17:23:18
+=ended         2026-11-18 17:23:18
+=result        ok
+=elapsed       0.073967s
+=case          quod_ask_SUITE:answer_policy_producer_consumer_and_signed_change
+=logfile       quod_ask_suite.answer_policy_producer_consumer_and_signed_change.html
+=started       2026-11-18 17:23:18
+=ended         2026-11-18 17:23:19
+=result        ok
+=elapsed       0.365705s
+=case          quod_ask_SUITE:remote_scope_symbol_safety
+=logfile       quod_ask_suite.remote_scope_symbol_safety.html
+=started       2026-11-18 17:23:19
+=ended         2026-11-18 17:23:19
+=result        ok
+=elapsed       0.003136s
+=case          quod_ask_SUITE:remote_signed_fresh_nested_symbol
+=logfile       quod_ask_suite.remote_signed_fresh_nested_symbol.html
+=started       2026-11-18 17:23:19
+=ended         2026-11-18 17:23:19
+=result        ok
+=elapsed       0.048401s
+=case          quod_ask_SUITE:remote_scope_chain_policy
+=logfile       quod_ask_suite.remote_scope_chain_policy.html
+=started       2026-11-18 17:23:19
+=ended         2026-11-18 17:23:19
+=result        ok
+=elapsed       0.004729s
+=case          quod_ask_SUITE:remote_scope_failure_reasons
+=logfile       quod_ask_suite.remote_scope_failure_reasons.html
+=started       2026-11-18 17:23:19
+=ended         2026-11-18 17:23:19
+=result        ok
+=elapsed       0.001692s
+=case          quod_ask_SUITE:remote_scope_nested_failure_reasons
+=logfile       quod_ask_suite.remote_scope_nested_failure_reasons.html
+=started       2026-11-18 17:23:19
+=ended         2026-11-18 17:23:19
+=result        ok
+=elapsed       0.003856s
+=case          quod_ask_SUITE:remote_scope_deep_failure_reasons
+=logfile       quod_ask_suite.remote_scope_deep_failure_reasons.html
+=started       2026-11-18 17:23:19
+=ended         2026-11-18 17:23:19
+=result        ok
+=elapsed       0.004979s
+=case          quod_ask_SUITE:remote_scope_structural_reason_depth
+=logfile       quod_ask_suite.remote_scope_structural_reason_depth.html
+=started       2026-11-18 17:23:19
+=ended         2026-11-18 17:23:19
+=result        ok
+=elapsed       0.002920s
+=case          quod_ask_SUITE:remote_scope_cancel
+=logfile       quod_ask_suite.remote_scope_cancel.html
+=started       2026-11-18 17:23:19
+=ended         2026-11-18 17:23:19
+=result        ok
+=elapsed       0.022657s
+=case          quod_ask_SUITE:remote_scope_transport_reuse
+=logfile       quod_ask_suite.remote_scope_transport_reuse.html
+=started       2026-11-18 17:23:19
+=ended         2026-11-18 17:23:19
+=result        ok
+=elapsed       0.014546s
+=case          quod_ask_SUITE:remote_signed_gateway_read_execute_cursor
+=logfile       quod_ask_suite.remote_signed_gateway_read_execute_cursor.html
+=started       2026-11-18 17:23:19
+=ended         2026-11-18 17:23:19
+=result        ok
+=elapsed       0.339199s
+=case          quod_ask_SUITE:remote_signed_read_certified_write
+=logfile       quod_ask_suite.remote_signed_read_certified_write.html
+=started       2026-11-18 17:23:19
+=ended         2026-11-18 17:23:19
+=result        ok
+=elapsed       0.172864s
+=case          quod_ask_SUITE:remote_exact_claim_redelivery
+=logfile       quod_ask_suite.remote_exact_claim_redelivery.html
+=started       2026-11-18 17:23:19
+=ended         2026-11-18 17:23:20
+=result        ok
+=elapsed       0.223425s
+=case          quod_ask_SUITE:local_write_with_foreign_read
+=logfile       quod_ask_suite.local_write_with_foreign_read.html
+=started       2026-11-18 17:23:20
+=ended         2026-11-18 17:23:20
+=result        ok
+=elapsed       0.056441s
+=case          quod_ask_SUITE:read_certificate_stale_rejected
+=logfile       quod_ask_suite.read_certificate_stale_rejected.html
+=started       2026-11-18 17:23:20
+=ended         2026-11-18 17:23:20
+=result        ok
+=elapsed       0.043111s
+=case          quod_ask_SUITE:remote_signed_origin_read_certificate_stale_rejected
+=logfile       quod_ask_suite.remote_signed_origin_read_certificate_stale_rejected.html
+=started       2026-11-18 17:23:20
+=ended         2026-11-18 17:23:20
+=result        ok
+=elapsed       0.039337s
+=case          quod_ask_SUITE:remote_signed_two_gateway_race
+=logfile       quod_ask_suite.remote_signed_two_gateway_race.html
+=started       2026-11-18 17:23:20
+=ended         2026-11-18 17:23:20
+=result        ok
+=elapsed       0.184409s
+=case          quod_ask_SUITE:remote_signed_gateway_group
+=logfile       quod_ask_suite.remote_signed_gateway_group.html
+=started       2026-11-18 17:23:20
+=ended         2026-11-18 17:23:20
+=result        ok
+=elapsed       0.078775s
+=case          quod_ask_SUITE:remote_independent_routes
+=logfile       quod_ask_suite.remote_independent_routes.html
+=started       2026-11-18 17:23:20
+=ended         2026-11-18 17:23:21
+=result        ok
+=elapsed       0.381010s
+=case          quod_ask_SUITE:independent_action_multiscope_rollback
+=logfile       quod_ask_suite.independent_action_multiscope_rollback.html
+=started       2026-11-18 17:23:21
+=ended         2026-11-18 17:23:21
+=result        ok
+=elapsed       0.300294s
+=case          quod_ask_SUITE:independent_action_remote_errors
+=logfile       quod_ask_suite.independent_action_remote_errors.html
+=started       2026-11-18 17:23:21
+=ended         2026-11-18 17:23:21
+=result        ok
+=elapsed       0.136822s
+=case          quod_ask_SUITE:remote_independent_root_effect
+=logfile       quod_ask_suite.remote_independent_root_effect.html
+=started       2026-11-18 17:23:21
+=ended         2026-11-18 17:23:21
+=result        ok
+=elapsed       0.335559s
+=case          quod_ask_SUITE:independent_action_remote_prepared_rollback
+=logfile       quod_ask_suite.independent_action_remote_prepared_rollback.html
+=started       2026-11-18 17:23:21
+=ended         2026-11-18 17:23:22
+=result        ok
+=elapsed       0.407078s
+=case          quod_ask_SUITE:remote_independent_partial_outcome
+=logfile       quod_ask_suite.remote_independent_partial_outcome.html
+=started       2026-11-18 17:23:22
+=ended         2026-11-18 17:23:22
+=result        ok
+=elapsed       0.351942s
+=case          quod_ask_SUITE:remote_independent_branch_provenance
+=logfile       quod_ask_suite.remote_independent_branch_provenance.html
+=started       2026-11-18 17:23:22
+=ended         2026-11-18 17:23:23
+=result        ok
+=elapsed       0.329109s
+=case          quod_ask_SUITE:remote_independent_nesting_and_auth
+=logfile       quod_ask_suite.remote_independent_nesting_and_auth.html
+=started       2026-11-18 17:23:23
+=ended         2026-11-18 17:23:23
+=result        ok
+=elapsed       0.038637s
+=case          quod_ask_SUITE:remote_independent_cursor_selects_only_accepted_answer
+=logfile       quod_ask_suite.remote_independent_cursor_selects_only_accepted_answer.html
+=started       2026-11-18 17:23:23
+=ended         2026-11-18 17:23:23
+=result        ok
+=elapsed       0.217217s
+=case          quod_ask_SUITE:remote_signed_concurrent_gateway_groups
+=logfile       quod_ask_suite.remote_signed_concurrent_gateway_groups.html
+=started       2026-11-18 17:23:23
+=ended         2026-11-18 17:23:24
+=result        ok
+=elapsed       0.775217s
+=case          quod_ask_SUITE:remote_signed_queued_occ_abort
+=logfile       quod_ask_suite.remote_signed_queued_occ_abort.html
+=started       2026-11-18 17:23:24
+=ended         2026-11-18 17:23:24
+=result        ok
+=elapsed       0.206307s
+=case          quod_ask_SUITE:remote_signed_gateway_group_with_root_effect
+=logfile       quod_ask_suite.remote_signed_gateway_group_with_root_effect.html
+=started       2026-11-18 17:23:24
+=ended         2026-11-18 17:23:24
+=result        ok
+=elapsed       0.106002s
+=case          quod_ask_SUITE:remote_bound_effect_recovers_without_activation
+=logfile       quod_ask_suite.remote_bound_effect_recovers_without_activation.html
+=started       2026-11-18 17:23:24
+=ended         2026-11-18 17:23:34
+=result        ok
+=elapsed       10.321038s
+=case          quod_ask_SUITE:remote_signed_group_uses_exact_agent_request
+=logfile       quod_ask_suite.remote_signed_group_uses_exact_agent_request.html
+=started       2026-11-18 17:23:34
+=ended         2026-11-18 17:23:35
+=result        ok
+=elapsed       0.097352s
+=case          quod_ask_SUITE:remote_group_recovers_after_origin_crash
+=logfile       quod_ask_suite.remote_group_recovers_after_origin_crash.html
+=started       2026-11-18 17:23:35
+=ended         2026-11-18 17:23:35
+=result        ok
+=elapsed       0.617906s
+=case          quod_ask_SUITE:remote_four_scope_chain_recovers_empty_routes
+=logfile       quod_ask_suite.remote_four_scope_chain_recovers_empty_routes.html
+=started       2026-11-18 17:23:35
+=ended         2026-11-18 17:23:35
+=result        ok
+=elapsed       0.035669s
+=case          quod_ask_SUITE:remote_gui_opening_observer_receiver
+=logfile       quod_ask_suite.remote_gui_opening_observer_receiver.html
+=started       2026-11-18 17:23:35
+=ended         2026-11-18 17:23:39
+=result        ok
+=elapsed       3.643436s
+=case          quod_ask_SUITE:node_enrollment_remote_custodian
+=logfile       quod_ask_suite.node_enrollment_remote_custodian.html
+=started       2026-11-18 17:23:39
+=ended         2026-11-18 17:24:09
+=result        ok
+=elapsed       30.380399s
+=case          quod_ask_SUITE:end_per_suite
+=logfile       quod_ask_suite.end_per_suite.html
+=started       2026-11-18 17:24:09
+=ended         2026-11-18 17:24:09
+=result        ok
+=elapsed       0.000106s
+=group_time    60.886s
+=== TEST COMPLETE, 45 ok, 1 failed of 46 test cases
+
+=finished      2026-11-18 17:24:09
+=failed        1
+=successful    45
+=user_skipped  0
+=auto_skipped  0
+=elapsed_time  60952598

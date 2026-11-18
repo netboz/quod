@@ -55,7 +55,7 @@ signed_contents_and_selected_editor_withdraw_test_() ->
             ?assert(contains(After, empty_defined)),
             ?assertMatch({ok, [#{<<"V0">> := []}], _}, quod_lobby_tests:read(Ctx,
                 scope(Ns, Anchor, {entity_eidolons, Subject, {0}}))),
-            ?assertMatch({fail, _}, quod_lobby_tests:read(Ctx,
+            ?assertMatch(fail, quod_lobby_tests:read(Ctx,
                 scope(Ns, Anchor, {client_eidolon, Subject, Choice, {0}}))),
             %% Repeat the missing selection without replay/rebuild/write work.
             quod_lobby_tests:assert_read_has_no_io(fun() ->

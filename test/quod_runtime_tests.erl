@@ -816,7 +816,7 @@ subscribed_reaction_observes_event_only_atomic_resolve_once_test_() ->
                      reactions_executed := 0, reaction_failures := 0}) -> true;
                   (_) -> false
                end),
-        ?assertMatch({fail, _}, quod_prolog:prove(
+        ?assertMatch(fail, quod_prolog:prove(
                                   TargetNs,
                                   {dtx_remote_ping, committed_once})),
         ?assertMatch({ok, _, _}, rp(OtherNs,
@@ -978,7 +978,7 @@ local_explicit_event_repeats_without_mutating_facts_test_() ->
                      reactions_executed := 0}) -> true;
                   (_) -> false
                end),
-        ?assertMatch({fail, _}, quod_prolog:prove(Ns, {alarm, critical}))
+        ?assertMatch(fail, quod_prolog:prove(Ns, {alarm, critical}))
     after cleanup_founded(F) end
     end}.
 
@@ -1167,7 +1167,7 @@ failed_resource_is_not_installed_by_later_events_test_() ->
         ?assertMatch({error, {resource_selection_failed, _}},
                      quod_runtime:reconcile_resource(Ns, H, agent_hosts, write,
                                                      quod_time:mono_ms() + 5000)),
-        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, illegal_selector_write)),
+        ?assertMatch(fail, quod_prolog:prove_ro(Ns, illegal_selector_write)),
         ?assertMatch({ok, _, _}, rp(Ns, {assertz, unrelated})),
         ok = wait_stats(Ns, fun(#{height := Height, runner_active := false, queue_len := 0}) ->
                                     Height > H; (_) -> false end),

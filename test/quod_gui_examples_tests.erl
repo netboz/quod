@@ -40,7 +40,7 @@ world_library() ->
             ?assertMatch({ok,[#{<<"V0">> := []}],_},read(Ctx,Ns,{world_library,{0}})),
             ?assertMatch({ok,[#{<<"V0">> := setup_required}],_},read(Ctx,Ns,{world_library_status,{0}})),
             ?assertMatch({fail,_},read(Ctx#{instance => <<"human_user(other_agent).">>},Ns,{world_library,{0}})),
-            ?assertMatch({ok,_,{normalized,{failed,_}}},quod_lobby_tests:submit(Ctx,execute,
+            ?assertMatch({ok,_,{normalized,fail}},quod_lobby_tests:submit(Ctx,execute,
                 scope(Ns,{world_creation_entered,<<"Forged">>,{recipe,meadow,1947,1000,bounded,32,128,100,15}}))),
             {ok,[#{<<"V0">> := {prepared,Node,Key}}],_} = read(Ctx,Ns,{world_library_preparation,{0}}),
             commit(Ctx,scope(Ns,{world_library_initialize,Node,Key})),
@@ -64,7 +64,7 @@ world_library() ->
                     after 30000 -> error(world_creation_completion_missing) end,
                     ?assert(quod_prolog:applied(Ns) >= Before+2),
                     ?assertMatch({ok,[#{<<"V0">> := []}],_},read(Ctx,HumanNs,gui({gui_pending_questions,{0}}))),
-                    ?assertMatch({ok,_,{normalized,{failed,_}}},quod_lobby_tests:submit(Ctx,execute,
+                    ?assertMatch({ok,_,{normalized,fail}},quod_lobby_tests:submit(Ctx,execute,
                         scope(Ns,gui({gui_submit,question_ref(Ns,Q),Revision,create_world,Fields})))),
                     {ok,[#{<<"V0">> := Rows}],_} = read(Ctx,Ns,{world_library,{0}}),Rows
                 end,
@@ -318,7 +318,7 @@ voxel_form_creates_user_owned_terrain_and_rejects_a_dig_stale_submission_test_()
                     commit(Ctx,scope(Ns,{voxel_edit,land,1,Versions,Brush})),
                     {ok,[#{<<"V0">> := AfterDig}],_} = read(Ctx,Ns,{gui_schema,Form,{0},{1}}),
                     ?assertNotEqual(BeforeDig,AfterDig),
-                    ?assertMatch({ok,_,{normalized,{failed,_}}},quod_lobby_tests:submit(Ctx,execute,
+                    ?assertMatch({ok,_,{normalized,fail}},quod_lobby_tests:submit(Ctx,execute,
                         scope(ResponderNs,gui({gui_submit,question_ref(ResponderNs,StaleQ),BeforeDig,{generate_voxel,land},Fields})))),
                     commit(Ctx,scope(ResponderNs,gui({gui_cancel,question_ref(ResponderNs,StaleQ)})))
                 end),
@@ -414,7 +414,7 @@ examples() ->
                     {Lobby, 1} ->
                         Choice = {atmosphere_panorama, dusk, <<"Dusk">>},
                         commit(Ctx, scope(Lobby, {retract, Choice})),
-                        ?assertMatch({ok, _, {normalized, {failed, _}}},
+                        ?assertMatch({ok, _, {normalized, fail}},
                             quod_lobby_tests:submit(Ctx, execute, Submit)),
                         ?assertMatch({ok, [_], _}, read(Ctx, ResponderNs, Row)),
                         commit(Ctx, scope(Lobby, {assertz, Choice}));
@@ -429,7 +429,7 @@ examples() ->
                         ?assertEqual(quod_client_goal_parser:parse(ExpectedText,3),
                                      quod_client_goal_parser:parse(CompletionText,3))
                 after 10000 -> error(example_completion_missing) end,
-                ?assertMatch({fail, _}, read(Ctx, ResponderNs,
+                ?assertMatch(fail, read(Ctx, ResponderNs,
                     {gui_question, Q, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}})),
                 ?assertMatch({ok, [#{<<"V0">> := []}], _},
                     read(Ctx, HumanNs, gui({gui_pending_questions, {0}}))),
@@ -443,7 +443,7 @@ examples() ->
             setelement(1, InstrumentState, current_instrument_configuration))),
         ?assertMatch({ok, [_], _}, read(Ctx, Lobby, {lobby_sky, personal_sky,
             {sky, personal_sky, dusk, 80000, 45, 650, <<"#FFFFFF">>}})),
-        ?assertMatch({fail, _}, read(Ctx, InstrumentNs, {instance_of, space, {'_'}})),
+        ?assertMatch(fail, read(Ctx, InstrumentNs, {instance_of, space, {'_'}})),
         ?assertEqual(#{}, gen_server:call(quod_reg:via({quod_runtime, InstrumentNs}), physics_worlds))
     after
         quod_lobby_tests:stop_process(Application)

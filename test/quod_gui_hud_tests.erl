@@ -67,7 +67,7 @@ hud_composes_standing_context_and_contributions_test_() ->
         ?assertEqual(Before,strip(C)), fails(Ns,{hud_offered,my_hud,{'_'},{'_'},{'_'}}),
         executed(S,{hud_offer,Closet,EnterHere}),
         {Bytes2,Sig2} = node_signed(Ns,{hud_withdraw_offer,Closet,EnterHere}),
-        ?assertMatch({ok,_,{normalized,{failed,_}}},quod_client_goal_ingress:submit(Bytes2,Sig2)),
+        ?assertMatch({ok,_,{normalized,fail}},quod_client_goal_ingress:submit(Bytes2,Sig2)),
         executed(S,{hud_withdraw_offer,Closet,EnterHere}),
         fails(Ns,{hud_offered,my_hud,{'_'},{'_'},{'_'}}),
         %% A contribution whose source cannot be read stays, dimmed, with a reason.
@@ -153,7 +153,7 @@ node_signed(Ns,Goal) ->
     {Bytes,Sig}.
 
 
-fails(Ns,Goal) -> ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,Goal)).
+fails(Ns,Goal) -> ?assertMatch(fail,quod_prolog:prove_ro(Ns,Goal)).
 options({component,Id,_,Properties,Children},Wanted) ->
     case Id of Wanted -> proplists:get_value(options,[{K,V} || {property,K,V} <- Properties]);
         _ -> lists:append([case options(Ch,Wanted) of undefined -> []; O -> O end || Ch <- Children]) end.

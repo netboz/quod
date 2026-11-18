@@ -125,7 +125,7 @@ non_space_binding_and_updates_test_() ->
         [Next] = views(C,Ns,Ref), ?assertNotEqual(element(4,Rename),element(4,Next)),
         ?assertEqual([{field,note_name,<<"Changed">>}],element(7,Next)),
         {Stale,_} = submit(C,Ns,Rename,[{field,note_name,<<"Stale">>}]),
-        ?assertMatch({ok,_,{normalized,{failed,_}}},Stale),
+        ?assertMatch({ok,_,{normalized,fail}},Stale),
         ?assertEqual([],views(C,Ns,setelement(3,Ref,<<0:256>>)))
     end) end}.
 
@@ -195,6 +195,7 @@ views(C,Ns,Subject) ->
 read(C,Goal) ->
     {Bytes,Signature} = quod_personal_agent_tests:request(C,read,Goal),
     read_result(quod_client_goal_ingress:submit(Bytes,Signature)).
+read_result({ok,_,{normalized,{read,_,fail}}}) -> [];
 read_result({ok,_,{normalized,{read,_,{failed,_}}}}) -> [];
 read_result({ok,_,{normalized,{read,_,{answers,_,[Blob]}}}}) ->
     {ok,Bindings} = quod_client_result:decode_binding(Blob),
@@ -222,4 +223,4 @@ wait({ok,Evidence,{normalized,{committed,_,_}}}) ->
     ?assertMatch(#{operation_state:=terminal},quod_ct:await_operation_complete(element(2,Op),Op,10000)).
 edit(Ns,Goal) -> ?assertMatch({ok,_,_},quod_prolog:execute(Ns,Goal)).
 holds(Ns,Goal) -> ?assertMatch({ok,[_],_},quod_prolog:prove_ro(Ns,Goal)).
-fails(Ns,Goal) -> ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,Goal)).
+fails(Ns,Goal) -> ?assertMatch(fail,quod_prolog:prove_ro(Ns,Goal)).

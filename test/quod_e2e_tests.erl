@@ -95,7 +95,7 @@ t_write_read({Dir, Ns, Cfg}) ->
            rp(Ns, {assertz, {parent, tom, bob}})),
         ?assertMatch({ok, [#{'X' := bob}], _}, rp(Ns, {parent, tom, {'X'}})),
         %% an unknown predicate fails (does not crash) — unknown=fail
-        ?assertMatch({fail, [_ | _]}, rp(Ns, {grandparent, tom, {'Y'}})),
+        ?assertMatch(fail, rp(Ns, {grandparent, tom, {'Y'}})),
         %% index 1 is the durable genesis {add, self} config entry, so the first write
         %% commits at index 2 (the committee now survives restart — see quod_simplex).
         ?assertMatch(#{committed := 2, last_applied := 2, appends := 1},
@@ -268,7 +268,7 @@ t_prolog_restart_rebuild({_Dir, Ns, Cfg}) ->
         %% facts survive via rebuild from quod_simplex (which never restarted)
         ?assertMatch({ok, [#{}], _}, rp(Ns, {item, sword})),
         ?assertMatch({ok, [#{}], _}, rp(Ns, {item, shield})),
-        ?assertMatch({fail, [_ | _]}, rp(Ns, {item, bow}))
+        ?assertMatch(fail, rp(Ns, {item, bow}))
     end.
 
 %% Every failing/unknown proof used to leak its read-set ETS table; after the fix
@@ -276,9 +276,9 @@ t_prolog_restart_rebuild({_Dir, Ns, Cfg}) ->
 t_failing_proofs_no_ets_leak({_Dir, Ns, Cfg}) ->
     fun() ->
         _Pid = start_ns(Ns, Cfg),
-        ?assertMatch({fail, [_ | _]}, rp(Ns, {nope, x})),   %% also waits for readiness
+        ?assertMatch(fail, rp(Ns, {nope, x})),   %% also waits for readiness
         Before = length(ets:all()),
-        _ = [?assertMatch({fail, [_ | _]},
+        _ = [?assertMatch(fail,
                           quod_prolog:prove(Ns, {undefined_pred, k}))
              || _ <- lists:seq(1, 50)],
         After = length(ets:all()),

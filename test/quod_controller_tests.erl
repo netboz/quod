@@ -17,7 +17,7 @@ preferences_use_existing_instruction_and_form_test_() ->
             ?assertMatch({controller_view,0,Digest,Mapping},value(Result))
         end,
         quod_outcome_result_tests:assert_unchanged_reads([Ns,Gui],Read,0),
-        ?assertMatch({fail,_},quod_prolog:prove_ro(Ns,{attribute,me,controller_preferences,{'_'}})),
+        ?assertMatch(fail,quod_prolog:prove_ro(Ns,{attribute,me,controller_preferences,{'_'}})),
         Subject = {entity_ref,Ns,quod_simplex:genesis_hash(Ns),me},
         [Offer] = value(submit_read(C,{gui_operations,Subject,{'V'}})),
         {operation_view,controller_settings,Subject,Revision,_,_,Fields,controller_save,_,requires_input} = Offer,
@@ -50,7 +50,7 @@ shared_mapping_rejects_conflicts_and_unknown_outputs_test_() ->
           {settings,Roles,Set,[{replace,{bind,drive,navigation,pad,{axes_while,trigger},{control,drive}}}]},
           {settings,Roles,Set,[{disable,menu},{replace,{bind,drive,any,pad,{axes_while,grip},{control,drive}}}]},
           {settings,Roles,Set,[{replace,{bind,teleport,navigation,pad,{sector,forward,500,grip},{control,{teleport,1001}}}}]}],
-        [?assertMatch({fail,_},quod_prolog:prove_ro(Gui,{controller_configuration,S,{'_'}})) || S <- Invalid],
+        [?assertMatch(fail,quod_prolog:prove_ro(Gui,{controller_configuration,S,{'_'}})) || S <- Invalid],
         Swapped = {settings,[{role,navigation,{hand,right}},{role,menu,{hand,left}}],Set,[]},
         ?assertMatch({mapping,1,_,_,_},read(Gui,{controller_configuration,Swapped,{'V'}}))
     end) end}.

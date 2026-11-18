@@ -1,0 +1,255 @@
+{"cwd": "/home/yan/src/quod/_build/failure-reasons-20261118/quod", "command": ["erl", "-noshell", "-pa", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/accept/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/acceptor_pool/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/chatterbox/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/cowboy/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/cowlib/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ctx/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/erlang_qq/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/getopt/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/gproc/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/grpcbox/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/hocon/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/hpack/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry_api/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry_exporter/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/prometheus/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/prometheus_httpd/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quantile_estimator/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quic/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quod/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ranch/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ssl_verify_fun/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/tls_certificate_check/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/typerefl/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/checkouts/erlog/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quod/test", "-eval", "io:format(\"engine=~p~n\",[code:which(erlog_int)]),case eunit:test(quod_operation_claim_tests,[verbose]) of ok -> halt(0); _ -> halt(1) end."]}
+engine="/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/checkouts/erlog/ebin/erlog_int.beam"
+======================== EUnit ========================
+module 'quod_operation_claim_tests'
+  quod_operation_claim_tests: canonical_prediction_one_two_four_test...[0.113 s] ok
+  quod_operation_claim_tests: source_writer_remains_an_ordinary_post_claim_application_test...[0.017 s] ok
+  quod_operation_claim_tests: direct_multi_claim_cannot_bypass_slice8_authority_gate_test...[0.055 s] ok
+  quod_operation_claim_tests: complete_receipt_is_monotone_and_target_complete_across_reopen_test...[0.034 s] ok
+  quod_operation_claim_tests: exact_bundle_set_required_test...[0.017 s] ok
+  quod_operation_claim_tests: wrong_anchored_selector_refused_before_materialization_test...[0.017 s] ok
+  quod_operation_claim_tests: altered_bundle_and_request_bindings_refused_test...[0.018 s] ok
+  quod_operation_claim_tests: certified_vector_selects_each_target_and_preserves_ids_test...[0.153 s] ok
+  quod_operation_claim_tests: receipt_complete_set_and_evidence_independence_test...[0.036 s] ok
+  [done in 0.487 s]
+=======================================================
+  All 9 tests passed.
+{"target": "quod_operation_claim_tests", "exit_code": 0}
+{"cwd": "/home/yan/src/quod/_build/failure-reasons-20261118/quod", "command": ["erl", "-noshell", "-pa", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/accept/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/acceptor_pool/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/chatterbox/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/cowboy/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/cowlib/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ctx/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/erlang_qq/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/getopt/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/gproc/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/grpcbox/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/hocon/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/hpack/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry_api/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry_exporter/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/prometheus/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/prometheus_httpd/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quantile_estimator/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quic/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quod/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ranch/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ssl_verify_fun/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/tls_certificate_check/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/typerefl/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/checkouts/erlog/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quod/test", "-eval", "io:format(\"engine=~p~n\",[code:which(erlog_int)]),case eunit:test(quod_operation_receipt_tests,[verbose]) of ok -> halt(0); _ -> halt(1) end."]}
+engine="/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/checkouts/erlog/ebin/erlog_int.beam"
+======================== EUnit ========================
+module 'quod_operation_receipt_tests'
+  quod_operation_receipt_tests: -remote_receipt_recovers_claim_bindings_test_/0-fun-1- (applied)...[0.167 s] ok
+  quod_operation_receipt_tests: -remote_receipt_recovers_claim_bindings_test_/0-fun-1- ({rejected,conflict_retry})...[0.032 s] ok
+  quod_operation_receipt_tests: -remote_receipt_decode_is_a_fail_closed_boundary_test_/0-fun-1- (malformed)...[0.028 s] ok
+  quod_operation_receipt_tests: -remote_receipt_decode_is_a_fail_closed_boundary_test_/0-fun-1- (uncorrelated)...[0.026 s] ok
+  quod_operation_receipt_tests: -remote_receipt_decode_is_a_fail_closed_boundary_test_/0-fun-1- (valid_unavailable)...[0.029 s] ok
+  quod_operation_receipt_tests: -remote_receipt_decode_is_a_fail_closed_boundary_test_/0-fun-1- (expired)...[0.028 s] ok
+  quod_operation_receipt_tests: remote_receipt_checks_correlation_once_test...[0.038 s] ok
+  [done in 0.369 s]
+=======================================================
+  All 7 tests passed.
+{"target": "quod_operation_receipt_tests", "exit_code": 0}
+{"cwd": "/home/yan/src/quod/_build/failure-reasons-20261118/quod", "command": ["erl", "-noshell", "-pa", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/accept/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/acceptor_pool/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/chatterbox/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/cowboy/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/cowlib/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ctx/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/erlang_qq/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/getopt/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/gproc/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/grpcbox/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/hocon/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/hpack/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry_api/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry_exporter/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/prometheus/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/prometheus_httpd/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quantile_estimator/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quic/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quod/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ranch/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ssl_verify_fun/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/tls_certificate_check/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/typerefl/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/checkouts/erlog/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quod/test", "-eval", "io:format(\"engine=~p~n\",[code:which(erlog_int)]),case eunit:test(quod_outcome_endpoint_tests,[verbose]) of ok -> halt(0); _ -> halt(1) end."]}
+engine="/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/checkouts/erlog/ebin/erlog_int.beam"
+======================== EUnit ========================
+module 'quod_outcome_endpoint_tests'
+  quod_outcome_endpoint_tests: -fixture_observations_end_with_owner_test_/0-fun-7- (normal)...[0.188 s] ok
+  quod_outcome_endpoint_tests: -fixture_observations_end_with_owner_test_/0-fun-7- (exception)...[0.060 s] ok
+  quod_outcome_endpoint_tests: replay_ready_at_unchanged_height_releases_the_same_request_test...ok
+  quod_outcome_endpoint_tests: snapshot_result_racing_newer_head_is_resampled_test...ok
+  quod_outcome_endpoint_tests: unchanged_stale_snapshot_parks_without_a_resampling_loop_test...[0.062 s] ok
+  quod_outcome_endpoint_tests: runtime_edge_queued_before_owner_decision_is_not_lost_test...ok
+  quod_outcome_endpoint_tests: wrong_anchor_or_era_is_refused_without_a_worker_test...[0.031 s] ok
+  quod_outcome_endpoint_tests: parked_request_refuses_a_changed_committee_test...ok
+  quod_outcome_endpoint_tests: parked_deadline_removes_worker_and_subscription_test...[0.101 s] ok
+  quod_outcome_endpoint_tests: owner_death_releases_parked_worker_and_subscription_test...ok
+  quod_outcome_endpoint_tests: operation_applied_pins_history_and_waits_for_durable_publication_test...[0.090 s] ok
+  quod_outcome_endpoint_tests: operation_applied_signs_historical_not_current_committee_test...[0.028 s] ok
+  quod_outcome_endpoint_tests: operation_applied_current_member_cannot_replace_historical_signer_test...[0.028 s] ok
+  quod_outcome_endpoint_tests: operation_applied_wrong_occurrence_is_not_signed_test...[0.028 s] ok
+  quod_outcome_endpoint_tests: operation_applied_deadline_does_not_restart_while_parked_test...[0.178 s] ok
+  quod_outcome_endpoint_tests: operation_applied_owner_death_releases_the_pinned_capture_test...[0.029 s] ok
+  quod_outcome_endpoint_tests: operation_collector_uses_the_real_endpoint_and_exact_result_test...[0.031 s] ok
+  quod_outcome_endpoint_tests: operation_collector_expiry_keeps_inclusion_but_invents_no_verdict_test...[0.227 s] ok
+  quod_outcome_endpoint_tests: target_endpoint_refuses_a_signed_vector_without_its_own_independent_seal_test...[0.078 s] ok
+  quod_outcome_endpoint_tests: exact_claim_reuses_live_consensus_custody_test...[0.048 s] ok
+  quod_outcome_endpoint_tests: -uncertain_claim_redelivery_test_/0-fun-1- (caller_expired)...[0.594 s] ok
+  quod_outcome_endpoint_tests: -uncertain_claim_redelivery_test_/0-fun-1- (custody_expired)...[0.072 s] ok
+  quod_outcome_endpoint_tests: -uncertain_claim_redelivery_test_/0-fun-1- (restarted)...[0.580 s] ok
+  quod_outcome_endpoint_tests: -pending_application_joins_the_existing_owner_test_/0-fun-1- (committed)...[0.070 s] ok
+  quod_outcome_endpoint_tests: -pending_application_joins_the_existing_owner_test_/0-fun-1- (rejected)...[0.061 s] ok
+  quod_outcome_endpoint_tests: -pending_application_joins_the_existing_owner_test_/0-fun-1- (committed_before_apply)...[0.069 s] ok
+  [done in 2.731 s]
+=======================================================
+  All 26 tests passed.
+{"target": "quod_outcome_endpoint_tests", "exit_code": 0}
+{"cwd": "/home/yan/src/quod/_build/failure-reasons-20261118/quod", "command": ["erl", "-noshell", "-pa", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/accept/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/acceptor_pool/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/chatterbox/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/cowboy/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/cowlib/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ctx/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/erlang_qq/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/getopt/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/gproc/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/grpcbox/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/hocon/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/hpack/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry_api/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry_exporter/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/prometheus/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/prometheus_httpd/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quantile_estimator/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quic/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quod/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ranch/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ssl_verify_fun/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/tls_certificate_check/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/typerefl/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/checkouts/erlog/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quod/test", "-eval", "io:format(\"engine=~p~n\",[code:which(erlog_int)]),case eunit:test(quod_prolog_scope_target_tests,[verbose]) of ok -> halt(0); _ -> halt(1) end."]}
+engine="/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/checkouts/erlog/ebin/erlog_int.beam"
+======================== EUnit ========================
+module 'quod_prolog_scope_target_tests'
+  quod_prolog_scope_target_tests: reentrant_scope_command_correlation_is_lifo_test...[0.008 s] ok
+  quod_prolog_scope_target_tests: out_of_order_terminal_reply_is_rejected_test...ok
+  quod_prolog_scope_target_tests: pending_remote_open_reserves_shared_capacity_test...ok
+  quod_prolog_scope_target_tests: unknown_internal_error_is_not_put_on_the_wire_test...[0.001 s] ok
+  quod_prolog_scope_target_tests: signed_scope_authentication_is_verified_and_bound_test...[0.049 s] ok
+  quod_prolog_scope_target_tests: signed_scope_waits_when_network_identity_is_temporarily_unavailable_test...ok
+  quod_prolog_scope_target_tests: expired_signed_scope_is_refused_before_execution_test...ok
+  quod_prolog_scope_target_tests: target_owns_scope_timeout_classification_test...ok
+  quod_prolog_scope_target_tests: remote_worker_death_has_one_wire_safe_failure_class_test...[0.002 s] ok
+  quod_prolog_scope_target_tests: target_deadline_reserves_terminal_event_delivery_time_test...ok
+  quod_prolog_scope_target_tests: cleanup_remains_valid_after_execution_budget_expires_test...ok
+  quod_prolog_scope_target_tests: sealed_target_accepts_only_attestation_terminal_submit_and_close_test...[0.002 s] ok
+  quod_prolog_scope_target_tests: read_certificate_reply_uses_the_existing_scope_seam_test...[0.001 s] ok
+  quod_prolog_scope_target_tests: idle_expiry_reuses_exact_last_command_correlation_test...ok
+  quod_prolog_scope_target_tests: top_level_deadline_and_crash_use_current_public_errors_test...ok
+  quod_prolog_scope_target_tests: public_proof_engine_death_is_checkpoint_sensitive_test...ok
+  quod_prolog_scope_target_tests: public_proof_normal_reply_wins_after_checkpoint_test...ok
+  [done in 0.114 s]
+=======================================================
+  All 17 tests passed.
+{"target": "quod_prolog_scope_target_tests", "exit_code": 0}
+{"cwd": "/home/yan/src/quod/_build/failure-reasons-20261118/quod", "command": ["erl", "-noshell", "-pa", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/accept/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/acceptor_pool/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/chatterbox/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/cowboy/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/cowlib/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ctx/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/erlang_qq/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/getopt/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/gproc/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/grpcbox/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/hocon/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/hpack/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry_api/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry_exporter/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/prometheus/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/prometheus_httpd/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quantile_estimator/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quic/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quod/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ranch/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ssl_verify_fun/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/tls_certificate_check/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/typerefl/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/checkouts/erlog/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quod/test", "-eval", "io:format(\"engine=~p~n\",[code:which(erlog_int)]),case eunit:test(quod_proof_trace_tests,[verbose]) of ok -> halt(0); _ -> halt(1) end."]}
+engine="/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/checkouts/erlog/ebin/erlog_int.beam"
+======================== EUnit ========================
+module 'quod_proof_trace_tests'
+  quod_proof_trace_tests: ordinary_proof_spans_preserve_spawn_parent_and_stage_boundaries_test...[0.129 s] ok
+  quod_proof_trace_tests: failed_proof_keeps_failure_and_finishes_cleanup_without_exporting_goal_test...*failed*
+in function quod_proof_trace_tests:'-failed_proof_keeps_failure_and_finishes_cleanup_without_exporting_goal_test/0-fun-5-'/1 (/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_proof_trace_tests.erl, line 77)
+in call from quod_trace_tests:with_tracer/1 (/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_trace_tests.erl, line 121)
+in call from quod_proof_trace_tests:with_engine/1 (/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_proof_trace_tests.erl, line 268)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 285)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+**error:{assertEqual,
+    [{module,quod_proof_trace_tests},
+     {line,77},
+     {expression,"quod_prolog : prove ( Ns , Goal )"},
+     {expected,
+         {fail,[{missing_trace_predicate,<<"trace-proof-secret-not-a"...>>}]}},
+     {value,fail}]}
+  output:<<"">>
+
+  quod_proof_trace_tests: single_write_apply_and_publication_trace_boundaries_test...[0.029 s] ok
+  quod_proof_trace_tests: shared_batch_is_applied_once_with_two_other_request_links_test...[0.019 s] ok
+  quod_proof_trace_tests: sampled_batch_request_is_not_hidden_by_an_earlier_unsampled_request_test...[0.020 s] ok
+  quod_proof_trace_tests: uncorrelated_apply_does_not_create_request_spans_test...[0.024 s] ok
+  [done in 0.256 s]
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 5.
+{"target": "quod_proof_trace_tests", "exit_code": 1}
+{"cwd": "/home/yan/src/quod/_build/failure-reasons-20261118/quod", "command": ["erl", "-noshell", "-pa", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/accept/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/acceptor_pool/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/chatterbox/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/cowboy/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/cowlib/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ctx/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/erlang_qq/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/getopt/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/gproc/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/grpcbox/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/hocon/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/hpack/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry_api/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry_exporter/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/prometheus/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/prometheus_httpd/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quantile_estimator/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quic/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quod/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ranch/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ssl_verify_fun/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/tls_certificate_check/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/typerefl/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/checkouts/erlog/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quod/test", "-eval", "io:format(\"engine=~p~n\",[code:which(erlog_int)]),case eunit:test(quod_retained_dtx_renewal_tests,[verbose]) of ok -> halt(0); _ -> halt(1) end."]}
+engine="/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/checkouts/erlog/ebin/erlog_int.beam"
+======================== EUnit ========================
+module 'quod_retained_dtx_renewal_tests'
+  quod_retained_dtx_renewal_tests: -stale_alternative_resolve_retires_without_signing_test_/0-fun-0-...[0.194 s] ok
+  quod_retained_dtx_renewal_tests: -unrelated_resolve_commit_renews_live_retained_resolve_test_/0-fun-0-...[0.065 s] ok
+  quod_retained_dtx_renewal_tests: -exact_resolve_digests_drain_without_renewal_test_/0-fun-0-...[0.065 s] ok
+  quod_retained_dtx_renewal_tests: -stale_signature_only_invariant_has_bounded_diagnostic_test_/0-fun-0-...=ERROR REPORT==== 18-Nov-2026::16:25:34.169354 ===
+    record_digest: <<"0BDE7F0A1DF376CCC0483F74442963C539D266EF8145D6E304D00982538789B1">>
+    committed_floor: 2
+    committed_height: 2
+    event: stale_retained_dtx
+    group_digest: <<"2D061C9754CD1A31458F1333513C440A9EA4EFD602FCC26B31B7E28787BEA0E7">>
+    namespace: <<"quod:renewal-target-5b408b16c27548caad2ab086">>
+    old_sequence: 1
+    phase: resolve
+    proposed_sequence: 3
+    readiness: stale
+[0.069 s] ok
+  quod_retained_dtx_renewal_tests: -diagnostic_namespace_bounds_test_/0-fun-1- (namespace_255)...=ERROR REPORT==== 18-Nov-2026::16:25:34.240566 ===
+    record_digest: <<"24C503A2F21CB0410C6E96DC448F2D0043FE12EF4777F33BAE3D1A7A92B65348">>
+    committed_floor: 2
+    committed_height: 2
+    event: stale_retained_dtx
+    group_digest: <<"12EDB0FF1A123D436C7A5190CD8777F5657F7493AAD1142CA2210AE8BD888E3C">>
+    namespace: <<"quod:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">>
+    old_sequence: 1
+    phase: resolve
+    proposed_sequence: 3
+    readiness: stale
+[0.065 s] ok
+  quod_retained_dtx_renewal_tests: -diagnostic_namespace_bounds_test_/0-fun-1- (oversized_printable)...=ERROR REPORT==== 18-Nov-2026::16:25:34.309004 ===
+    record_digest: <<"58F3295CF7E6D2FD3EDEF924192355CB1BC88F7CAC5733107262CFAAEFEC8F8D">>
+    committed_floor: 2
+    committed_height: 2
+    event: stale_retained_dtx
+    group_digest: <<"048637E86779ACFAF37AD9639133FE7D1ABA81C9B538D0D61759D69FD5DFF316">>
+    namespace: {truncated,<<"quod:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">>,
+                          1029}
+    old_sequence: 1
+    phase: resolve
+    proposed_sequence: 3
+    readiness: stale
+[0.066 s] ok
+  quod_retained_dtx_renewal_tests: -diagnostic_namespace_bounds_test_/0-fun-1- (oversized_nonprintable)...=ERROR REPORT==== 18-Nov-2026::16:25:34.377849 ===
+    record_digest: <<"F30A1FC325D07CDCF528B80BFD48C30C94E617691081A3B5B1C97A5103022E5C">>
+    committed_floor: 2
+    committed_height: 2
+    event: stale_retained_dtx
+    group_digest: <<"243A766F4DA6FF4B3B9D4D17613D71459E3AA5A7CF337D15B9B51CFF153B7FB6">>
+    namespace: {truncated,<<113,117,111,100,58,255,0,10,13,27,255,0,10,13,27,
+                            255,0,10,13,27,255,0,10,13,27,255,0,10,13,27,255,0,
+                            10,13,27,255,0,10,13,27,255,0,10,13,27,255,0,10,13,
+                            27,255,0,10,13,27,255,0,10,13,27,255,0,10,13,27,
+                            255,0,10,13,27,255,0,10,13,27,255,0,10,13,27,255,0,
+                            10,13,27,255,0,10,13,27,255,0,10,13,27,255,0,10,13,
+                            27,255,0,10,13,27,255,0,10,13,27,255,0,10,13,27,
+                            255,0,10,13,27,255,0,10,13,27,255,0,10,13,27,255,0,
+                            10,13,27,255,0,10,13,27,255,0,10,13,27,255,0,10,13,
+                            27,255,0,10,13,27,255,0,10,13,27,255,0,10,13,27,
+                            255,0,10,13,27,255,0,10,13,27,255,0,10,13,27,255,0,
+                            10,13,27,255,0,10,13,27,255,0,10,13,27,255,0,10,13,
+                            27,255,0,10,13,27,255,0,10,13,27,255,0,10,13,27,
+                            255,0,10,13,27,255,0,10,13,27,255,0,10,13,27,255,0,
+                            10,13,27,255,0,10,13,27,255,0,10,13,27,255,0,10,13,
+                            27,255,0,10,13,27>>,
+                          1029}
+    old_sequence: 1
+    phase: resolve
+    proposed_sequence: 3
+    readiness: stale
+[0.067 s] ok
+  [done in 0.612 s]
+=======================================================
+  All 7 tests passed.
+{"target": "quod_retained_dtx_renewal_tests", "exit_code": 0}
+{"cwd": "/home/yan/src/quod/_build/failure-reasons-20261118/quod", "command": ["erl", "-noshell", "-pa", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/accept/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/acceptor_pool/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/chatterbox/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/cowboy/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/cowlib/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ctx/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/erlang_qq/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/getopt/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/gproc/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/grpcbox/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/hocon/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/hpack/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry_api/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry_exporter/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/prometheus/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/prometheus_httpd/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quantile_estimator/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quic/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quod/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ranch/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ssl_verify_fun/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/tls_certificate_check/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/typerefl/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/checkouts/erlog/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quod/test", "-eval", "io:format(\"engine=~p~n\",[code:which(erlog_int)]),case eunit:test(quod_retained_dtx_vote_order_tests,[verbose]) of ok -> halt(0); _ -> halt(1) end."]}
+engine="/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/checkouts/erlog/ebin/erlog_int.beam"
+======================== EUnit ========================
+module 'quod_retained_dtx_vote_order_tests'
+  quod_retained_dtx_vote_order_tests: -publication_order_test_/0-fun-1- (live)...[0.178 s] ok
+  quod_retained_dtx_vote_order_tests: -publication_order_test_/0-fun-1- (catchup)...[0.052 s] ok
+  quod_retained_dtx_vote_order_tests: -publication_order_test_/0-fun-1- (catchup_paused)...[0.052 s] ok
+  [done in 0.291 s]
+=======================================================
+  All 3 tests passed.
+{"target": "quod_retained_dtx_vote_order_tests", "exit_code": 0}
+{"cwd": "/home/yan/src/quod/_build/failure-reasons-20261118/quod", "command": ["erl", "-noshell", "-pa", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/accept/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/acceptor_pool/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/chatterbox/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/cowboy/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/cowlib/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ctx/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/erlang_qq/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/getopt/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/gproc/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/grpcbox/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/hocon/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/hpack/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry_api/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry_exporter/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/prometheus/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/prometheus_httpd/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quantile_estimator/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quic/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quod/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ranch/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ssl_verify_fun/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/tls_certificate_check/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/typerefl/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/checkouts/erlog/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quod/test", "-eval", "io:format(\"engine=~p~n\",[code:which(erlog_int)]),case eunit:test(quod_suffix_material_tests,[verbose]) of ok -> halt(0); _ -> halt(1) end."]}
+engine="/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/checkouts/erlog/ebin/erlog_int.beam"
+======================== EUnit ========================
+module 'quod_suffix_material_tests'
+  quod_suffix_material_tests: signature_counts_exclude_other_owners_test...[0.011 s] ok
+  quod_suffix_material_tests: -suffix_checks_finality_without_reauthenticating_content_test_/0-fun-8-...[0.560 s] ok
+  quod_suffix_material_tests: authentication_receipt_never_substitutes_for_binding_test...[0.052 s] ok
+  quod_suffix_material_tests: request_context_is_rechecked_without_reverifying_signature_test...[0.046 s] ok
+  quod_suffix_material_tests: history_still_rejects_wrong_admission_and_invalid_finality_test...[0.046 s] ok
+  quod_suffix_material_tests: wire_never_carries_or_accepts_authentication_receipts_test...[0.045 s] ok
+  quod_suffix_material_tests: duplicate_dormant_handoff_keeps_exact_custody_test...[0.009 s] ok
+  quod_suffix_material_tests: duplicate_effect_handoff_keeps_exact_custody_test...[0.005 s] ok
+  [done in 0.799 s]
+=======================================================
+  All 8 tests passed.
+{"target": "quod_suffix_material_tests", "exit_code": 0}
+{"cwd": "/home/yan/src/quod/_build/failure-reasons-20261118/quod", "command": ["erl", "-noshell", "-pa", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/accept/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/acceptor_pool/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/chatterbox/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/cowboy/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/cowlib/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ctx/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/erlang_qq/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/getopt/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/gproc/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/grpcbox/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/hocon/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/hpack/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry_api/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/opentelemetry_exporter/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/prometheus/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/prometheus_httpd/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quantile_estimator/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quic/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quod/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ranch/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/ssl_verify_fun/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/tls_certificate_check/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/typerefl/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/checkouts/erlog/ebin", "/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/lib/quod/test", "-eval", "io:format(\"engine=~p~n\",[code:which(erlog_int)]),case eunit:test(quod_lobby_tests:failed_hosting_selector_is_not_inactive_test_(),[verbose]) of ok -> halt(0); _ -> halt(1) end."]}
+engine="/home/yan/src/quod/_build/failure-reasons-20261118/quod/_build/test/checkouts/erlog/ebin/erlog_int.beam"
+======================== EUnit ========================
+quod_lobby_tests: -failed_hosting_selector_is_not_inactive_test_/0-fun-3-...*failed*
+in function quod_lobby_tests:'-failed_hosting_selector_is_not_inactive_test_/0-fun-2-'/1 (/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_lobby_tests.erl, line 237)
+in call from quod_agent_hosting_tests:with_host/4 (/home/yan/src/quod/_build/failure-reasons-20261118/quod/test/quod_agent_hosting_tests.erl, line 1813)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 83)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 554)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 379)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 537)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 479)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 369)
+**error:{assertMatch,
+    [{module,quod_lobby_tests},
+     {line,237},
+     {expression,
+         "quod_runtime : reconcile_resource ( Ns , quod_prolog : applied ( Ns ) , agent_hosts , all , quod_time : mono_ms ( ) + 10000 )"},
+     {pattern,
+         "{ error , { resource_selection_failed , { no_solution , { agent_hosting_projection , 4 } , [ _ | _ ] } } }"},
+     {value,
+         {error,
+             {resource_selection_failed,
+                 {no_solution,{agent_hosting_projection,4},[]}}}}]}
+  output:<<"Failed hosted-agent fixture retained at /tmp/quod_hosted_FECABEC26E949F08
+">>
+
+=======================================================
+  Failed: 1.  Skipped: 0.  Passed: 0.
+{"target": "quod_lobby_tests:failed_hosting_selector_is_not_inactive_test_", "exit_code": 1}
+{"isolated_failures": ["quod_proof_trace_tests", "quod_lobby_tests:failed_hosting_selector_is_not_inactive_test_"]}

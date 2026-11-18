@@ -87,13 +87,13 @@ worker_refuses_custody_for_wrong_target_anchor_test_() ->
                 Child ! {agent_release, self(), 1},
                 receive
                     {agent_request_finished, _, Child, _, Ref, Result} ->
-                        ?assertMatch({ok, _, {normalized, {failed, _}}}, Result),
+                        ?assertMatch({ok, _, {normalized, fail}}, Result),
                         {ok, #{request := Request}, _} = Result,
                         {ok, #{goal := Parsed}} = quod_client_goal_parser:parse(maps:get(goal_text, Request), 3),
                         ?assertEqual(quod_wire_term:encode_canonical(
                             {probe, {unavailable, preparation_not_authorized}}),
                             quod_wire_term:encode_canonical(Parsed)),
-                        ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns,
+                        ?assertMatch(fail, quod_prolog:prove_ro(Ns,
                             {agent_hosted, actor, Node, 2, {'_'}}))
                 after 5000 -> error(prepared_worker_did_not_finish) end
             after
@@ -158,7 +158,6 @@ exercise_preparation(#{namespace := Ns, reference := AgentRef, node := Node,
             {agent_request_finished, _, Child, #{source := {NodeNs, NodeAnchor}}, Token, Result} ->
                 case Kind of
                     invalid_acl ->
-                        ?assertMatch({ok, _, {normalized, {failed, _}}}, Result),
                         {ok, _, {normalized, {failed, Encoded}}} = Result,
                         {ok, Reasons} = quod_wire_term:decode_failure_reasons(Encoded),
                         ?assert(lists:member({not_allowed,Ns},Reasons));
@@ -177,7 +176,7 @@ assert_preparation_result(prepared, Ns, AgentRef, Node, _Old, OldKey, _Episode, 
     {ok, Pub} = quod_agent_vault:prepare(Blob, 1),
     ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {agent_hosted, actor, Node, 2, Pub})),
     ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {agent_key, actor, OldKey, revoked})),
-    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {agent_candidate_key, actor, {'_'}, {'_'}, {'_'}, {'_'}})),
+    ?assertMatch(fail, quod_prolog:prove_ro(Ns, {agent_candidate_key, actor, {'_'}, {'_'}, {'_'}, {'_'}})),
     receive {agent_installed, _, _, #{reference := AgentRef, epoch := 2}, _} -> ok
     after 5000 -> error({prepared_assignment_not_installed,
                          quod_runtime:stats(Ns), quod_runtime:agents(Ns)}) end;
@@ -186,11 +185,11 @@ assert_preparation_result(unavailable, Ns, _AgentRef, Node, Old, OldKey, Episode
     ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns,
         {agent_failure_report, actor, Old, 1, Episode, Node,
          {observation, 1, Episode, Expiry}, suspected_unreachable})),
-    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {agent_candidate_key, actor, {'_'}, {'_'}, {'_'}, {'_'}}));
+    ?assertMatch(fail, quod_prolog:prove_ro(Ns, {agent_candidate_key, actor, {'_'}, {'_'}, {'_'}, {'_'}}));
 assert_preparation_result(invalid_acl, Ns, _AgentRef, _Node, Old, OldKey, _Episode, _Expiry) ->
     ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {agent_hosted, actor, Old, 1, OldKey})),
-    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {agent_candidate_key, actor, {'_'}, {'_'}, {'_'}, {'_'}})),
-    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns,
+    ?assertMatch(fail, quod_prolog:prove_ro(Ns, {agent_candidate_key, actor, {'_'}, {'_'}, {'_'}, {'_'}})),
+    ?assertMatch(fail, quod_prolog:prove_ro(Ns,
         {agent_failure_report, actor, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}, {'_'}})).
 
 commit(Ns, Goal) -> ?assertMatch({ok, _, _}, quod_ct:rp(Ns, Goal)).

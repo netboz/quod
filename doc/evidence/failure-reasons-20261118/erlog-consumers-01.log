@@ -1,0 +1,133 @@
+doc/user_guide.txt:43:fail_with_reason/1, get_fail_reasons/1
+doc/user_guide.txt:102:fail_with_reason(Reason) records a ground diagnostic term and immediately
+doc/user_guide.txt:103:fails. get_fail_reasons(Reasons) unifies Reasons with the current proof's
+doc/user_guide.txt:108:reached, fail_reasons_truncated appears once in the stack.
+src/erlog_bips.erl:75:	   {fail_with_reason,1},
+src/erlog_bips.erl:76:	   {get_fail_reasons,1},
+src/erlog_bips.erl:185:prove_goal({fail_with_reason,Reason0}, _Next, St) ->
+src/erlog_bips.erl:186:    fail_with_reason_predicate(Reason0, St);
+src/erlog_bips.erl:187:prove_goal({get_fail_reasons,Reasons}, Next, St) ->
+src/erlog_bips.erl:188:    get_fail_reasons_predicate(Reasons, Next, St);
+src/erlog_bips.erl:245:fail_with_reason_predicate(Reason0, #est{bs=Bs}=St) ->
+src/erlog_bips.erl:249:	    case erlog_int:valid_failure_reason(Reason) of
+src/erlog_bips.erl:250:		true -> fail(erlog_int:add_failure_reason(Reason, St));
+src/erlog_bips.erl:251:		false -> erlog_int:domain_error(failure_reason, Reason, St)
+src/erlog_bips.erl:257:get_fail_reasons_predicate(Reasons, Next, #est{fail_reasons=Stored}=St) ->
+src/erlog_int.erl:132:	 set_failure_reason_policy/2,
+src/erlog_int.erl:134:	 add_failure_reason/2,valid_failure_reason/1,merge_failure_reasons/2]).
+src/erlog_int.erl:221:		  fail_reasons=[],
+src/erlog_int.erl:222:		  fail_reasons_truncated=false},			%Update state
+src/erlog_int.erl:225:%% set_failure_reason_policy(Policy, State) -> State.
+src/erlog_int.erl:233:set_failure_reason_policy(native,
+src/erlog_int.erl:234:			  #est{fail_reasons=[],
+src/erlog_int.erl:235:			       fail_reasons_truncated=false}=St) ->
+src/erlog_int.erl:237:set_failure_reason_policy({Mod,Fun}=Policy,
+src/erlog_int.erl:238:			  #est{fail_reasons=[],
+src/erlog_int.erl:239:			       fail_reasons_truncated=false}=St)
+src/erlog_int.erl:242:	 failure_stack_allowed([fail_reasons_truncated], Policy) of
+src/erlog_int.erl:246:set_failure_reason_policy(_, _) ->
+src/erlog_int.erl:249:%% add_failure_reason(Reason, State) -> State.
+src/erlog_int.erl:250:%% merge_failure_reasons(Reasons, State) -> {ok,State} | error.
+src/erlog_int.erl:258:add_failure_reason(fail_reasons_truncated, St) ->
+src/erlog_int.erl:259:    mark_failure_reasons_truncated(St);
+src/erlog_int.erl:262:add_failure_reason(Reason,
+src/erlog_int.erl:263:                   #est{fail_reasons=Reasons,fail_reason_policy=native}=St) ->
+src/erlog_int.erl:264:    case valid_failure_reason(Reason) of
+src/erlog_int.erl:265:        true -> St#est{fail_reasons=[Reason|Reasons]};
+src/erlog_int.erl:266:        false -> mark_failure_reasons_truncated(St)
+src/erlog_int.erl:268:add_failure_reason(Reason,
+src/erlog_int.erl:269:		   #est{fail_reasons=Reasons,
+src/erlog_int.erl:270:			fail_reasons_truncated=true,
+src/erlog_int.erl:274:	true -> St#est{fail_reasons=Candidate};
+src/erlog_int.erl:277:add_failure_reason(Reason,
+src/erlog_int.erl:278:		   #est{fail_reasons=Reasons,
+src/erlog_int.erl:281:    Reserved = [fail_reasons_truncated|Candidate],
+src/erlog_int.erl:284:	    St#est{fail_reasons=Candidate};
+src/erlog_int.erl:286:	    mark_failure_reasons_truncated(St)
+src/erlog_int.erl:289:merge_failure_reasons(Reasons, #est{fail_reason_policy=Policy}=St)
+src/erlog_int.erl:292:	true -> {ok,lists:foldr(fun add_failure_reason/2, St, Reasons)};
+src/erlog_int.erl:295:merge_failure_reasons(_, _) ->
+src/erlog_int.erl:298:mark_failure_reasons_truncated(#est{fail_reasons_truncated=true}=St) ->
+src/erlog_int.erl:300:mark_failure_reasons_truncated(#est{fail_reasons=Reasons,
+src/erlog_int.erl:302:    Marked = [fail_reasons_truncated|Reasons],
+src/erlog_int.erl:304:    St#est{fail_reasons=Marked,
+src/erlog_int.erl:305:	   fail_reasons_truncated=true}.
+src/erlog_int.erl:307:valid_failure_reason(Reason) ->
+src/erlog_int.erl:308:    erlog:vars_in(Reason) =:= [] andalso portable_failure_reason(Reason).
+src/erlog_int.erl:317:    valid_failure_reason(Reason) andalso valid_failure_stack_shape(Reasons);
+src/erlog_int.erl:321:portable_failure_reason(T) when is_atom(T); is_number(T); is_binary(T) -> true;
+src/erlog_int.erl:322:portable_failure_reason([]) -> true;
+src/erlog_int.erl:323:portable_failure_reason([H|T]) ->
+src/erlog_int.erl:324:    portable_failure_reason(H) andalso portable_failure_reason(T);
+src/erlog_int.erl:325:portable_failure_reason(T) when ?IS_FUNCTOR(T) ->
+src/erlog_int.erl:326:    portable_failure_reason_args(T, 2, tuple_size(T));
+src/erlog_int.erl:330:portable_failure_reason(T) when is_tuple(T), tuple_size(T) >= 2 ->
+src/erlog_int.erl:333:	    portable_failure_reason_args(T, 2, tuple_size(T));
+src/erlog_int.erl:336:portable_failure_reason(_) -> false.
+src/erlog_int.erl:338:portable_failure_reason_args(_T, I, Size) when I > Size -> true;
+src/erlog_int.erl:339:portable_failure_reason_args(T, I, Size) ->
+src/erlog_int.erl:340:    portable_failure_reason(element(I, T)) andalso
+src/erlog_int.erl:341:	portable_failure_reason_args(T, I+1, Size).
+src/erlog_int.erl:564:		    ?FAIL(add_predicate_failure_reason(G, St))
+src/erlog_int.erl:579:predicate_failure_boundary({fail_with_reason,_Reason}, St) ->
+src/erlog_int.erl:581:predicate_failure_boundary({get_fail_reasons,_Reasons}, St) ->
+src/erlog_int.erl:591:add_predicate_failure_reason(Goal, St) ->
+src/erlog_int.erl:594:	false -> add_failure_reason(freeze_failure_term(Goal), St)
+src/erlog_int.erl:668:    fail(Cps, add_predicate_failure_reason(Goal, St)).
+src/erlog_int.hrl:34:	      fail_reasons = [],		%Newest explicit failure reason first
+src/erlog_int.hrl:35:	      fail_reasons_truncated = false,	%Whether omissions are represented
+test/erlog_choicepoint_checkpoint_tests.erl:82:failure_reasons_survive_database_restore_test() ->
+test/erlog_choicepoint_checkpoint_tests.erl:84:            {fail_with_reason, rejected_branch},
+test/erlog_choicepoint_checkpoint_tests.erl:85:            {get_fail_reasons, {'Reasons'}}},
+test/erlog_failure_reasons_tests.erl:1:-module(erlog_failure_reasons_tests).
+test/erlog_failure_reasons_tests.erl:8:direct_failure_reason_test() ->
+test/erlog_failure_reasons_tests.erl:9:    {fail, Final} = prove({fail_with_reason, impossible_to_link}),
+test/erlog_failure_reasons_tests.erl:10:    ?assertEqual([impossible_to_link], Final#est.fail_reasons).
+test/erlog_failure_reasons_tests.erl:14:    ?assertEqual([{atom, 42}], Final#est.fail_reasons).
+test/erlog_failure_reasons_tests.erl:23:                 Final#est.fail_reasons).
+test/erlog_failure_reasons_tests.erl:28:           {fail_with_reason, {impossible_to_link, {'X'}}}},
+test/erlog_failure_reasons_tests.erl:33:                 Final#est.fail_reasons).
+test/erlog_failure_reasons_tests.erl:41:    ?assertEqual([{outer, 42}], Final#est.fail_reasons).
+test/erlog_failure_reasons_tests.erl:55:    ?assertEqual([{missing, unbound}], Final#est.fail_reasons).
+test/erlog_failure_reasons_tests.erl:61:    ?assertEqual([{missing, opaque}], Final#est.fail_reasons).
+test/erlog_failure_reasons_tests.erl:65:            {fail_with_reason, impossible_to_link},
+test/erlog_failure_reasons_tests.erl:66:            {get_fail_reasons, {'Reasons'}}},
+test/erlog_failure_reasons_tests.erl:72:            {';', {fail_with_reason, first}, {fail_with_reason, second}},
+test/erlog_failure_reasons_tests.erl:73:            {get_fail_reasons, {'Reasons'}}},
+test/erlog_failure_reasons_tests.erl:79:            {fail_with_reason, before_cut},
+test/erlog_failure_reasons_tests.erl:80:            {',', {get_fail_reasons, {'Reasons'}}, '!'}},
+test/erlog_failure_reasons_tests.erl:85:    {fail, Failed} = prove({fail_with_reason, old_reason}),
+test/erlog_failure_reasons_tests.erl:87:                         {get_fail_reasons, {'Reasons'}}, Failed),
+test/erlog_failure_reasons_tests.erl:92:            {'\\+', {fail_with_reason, negated_failure}},
+test/erlog_failure_reasons_tests.erl:93:            {get_fail_reasons, {'Reasons'}}},
+test/erlog_failure_reasons_tests.erl:99:            {findall, {'X'}, {fail_with_reason, generator_failure}, {'Found'}},
+test/erlog_failure_reasons_tests.erl:100:            {get_fail_reasons, {'Reasons'}}},
+test/erlog_failure_reasons_tests.erl:108:            {get_fail_reasons, {'Reasons'}}},
+test/erlog_failure_reasons_tests.erl:115:            {get_fail_reasons, {'Reasons'}}},
+test/erlog_failure_reasons_tests.erl:120:get_fail_reasons_does_not_frame_itself_test() ->
+test/erlog_failure_reasons_tests.erl:121:    Goal = {',', {get_fail_reasons, {'Reasons'}}, fail},
+test/erlog_failure_reasons_tests.erl:123:    ?assertEqual([], Final#est.fail_reasons).
+test/erlog_failure_reasons_tests.erl:131:    ?assertNot(Final#est.fail_reasons_truncated).
+test/erlog_failure_reasons_tests.erl:135:                 catch prove({fail_with_reason, {'Reason'}})).
+test/erlog_failure_reasons_tests.erl:138:    ?assertMatch({erlog_error, {domain_error, failure_reason, _}, _},
+test/erlog_failure_reasons_tests.erl:139:                 catch prove({fail_with_reason, self()})).
+test/erlog_failure_reasons_tests.erl:143:    {fail, Final} = prove({fail_with_reason, Reason}),
+test/erlog_failure_reasons_tests.erl:144:    ?assertEqual([Reason], Final#est.fail_reasons).
+test/erlog_failure_reasons_tests.erl:148:    Inner = erlog_int:add_failure_reason(Oversized, state()),
+test/erlog_failure_reasons_tests.erl:149:    Outer = erlog_int:add_failure_reason({outer, failed}, Inner),
+test/erlog_failure_reasons_tests.erl:150:    ?assertEqual([{outer, failed}, Oversized], Outer#est.fail_reasons).
+test/erlog_failure_reasons_tests.erl:155:              fun(N, St) -> erlog_int:add_failure_reason({reason, N, Reason}, St) end,
+test/erlog_failure_reasons_tests.erl:157:    ?assertEqual([{reason, N, Reason} || N <- lists:seq(10, 1, -1)], Final#est.fail_reasons),
+test/erlog_failure_reasons_tests.erl:158:    ?assertNot(Final#est.fail_reasons_truncated).
+test/erlog_failure_reasons_tests.erl:161:    St0 = erlog_int:set_failure_reason_policy(
+test/erlog_failure_reasons_tests.erl:163:    St1 = erlog_int:add_failure_reason(first, St0),
+test/erlog_failure_reasons_tests.erl:164:    St2 = erlog_int:add_failure_reason(second, St1),
+test/erlog_failure_reasons_tests.erl:165:    ?assertEqual([fail_reasons_truncated, first], St2#est.fail_reasons),
+test/erlog_failure_reasons_tests.erl:167:    ?assert(St2#est.fail_reasons_truncated).
+test/erlog_failure_reasons_tests.erl:170:    Local = erlog_int:add_failure_reason(local, state()),
+test/erlog_failure_reasons_tests.erl:171:    {ok, Merged} = erlog_int:merge_failure_reasons([remote_new, remote_old], Local),
+test/erlog_failure_reasons_tests.erl:172:    ?assertEqual([remote_new, remote_old, local], Merged#est.fail_reasons),
+test/erlog_failure_reasons_tests.erl:174:    ?assertMatch({ok, _}, erlog_int:merge_failure_reasons([Opaque], Local)),
+test/erlog_failure_reasons_tests.erl:175:    ?assertEqual(error, erlog_int:merge_failure_reasons([{'Unbound'}], Local)),
+test/erlog_failure_reasons_tests.erl:176:    ?assertEqual(error, erlog_int:merge_failure_reasons([self()], Local)),
+test/erlog_failure_reasons_tests.erl:178:    ?assertMatch({ok, _}, erlog_int:merge_failure_reasons([Oversized], Local)).

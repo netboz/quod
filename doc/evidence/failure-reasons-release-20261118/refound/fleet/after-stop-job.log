@@ -1,0 +1,39 @@
+ID            = quod
+Name          = quod
+Submit Date   = 2026-11-18T19:57:39+01:00
+Type          = service
+Priority      = 50
+Datacenters   = qengho
+Namespace     = default
+Node Pool     = default
+Status        = dead (stopped)
+Periodic      = false
+Parameterized = false
+
+Summary
+Task Group  Queued  Starting  Running  Failed  Complete  Lost  Unknown
+quod-cloud  0       0         0        4       269       4     0
+quod-node   0       0         0        0       1115      2     0
+
+Latest Deployment
+ID          = 838f2459
+Status      = successful
+Description = Deployment completed successfully
+
+Deployed
+Task Group  Desired  Placed  Healthy  Unhealthy  Progress Deadline
+quod-node   8        8       8        0          2026-11-17T01:20:17+01:00
+
+Allocations
+ID        Node ID   Task Group  Version  Desired  Status    Created    Modified
+89ada5ff  3e390ebd  quod-node   276      stop     complete  1d18h ago  6s ago
+0c32e31e  c8f9edef  quod-node   276      stop     complete  1d18h ago  6s ago
+2f7a2a49  75b1a578  quod-node   276      stop     complete  1d18h ago  6s ago
+663b9945  c8f9edef  quod-node   276      stop     complete  1d18h ago  6s ago
+7e370359  3e390ebd  quod-node   276      stop     complete  1d18h ago  6s ago
+8fce48b4  75b1a578  quod-node   276      stop     complete  1d18h ago  6s ago
+c4c8f0c6  75b1a578  quod-node   276      stop     complete  1d18h ago  6s ago
+ef804617  3e390ebd  quod-node   276      stop     complete  1d18h ago  6s ago
+
+
+==> View job details and metrics in the Web UI: http://192.168.1.10:4646/ui/jobs/quod@default

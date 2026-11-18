@@ -1,0 +1,50 @@
+[
+  {
+    "ID": "aeb32185-ff05-0285-75e3-5c9b3d5c39fc",
+    "Name": "quod-node-local[0]",
+    "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+    "State": "ready"
+  },
+  {
+    "ID": "e76509ea-3d86-a775-73f4-040efad20358",
+    "Name": "quod-node-local[1]",
+    "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+    "State": "ready"
+  },
+  {
+    "ID": "b11b7174-8d5a-a749-d0d2-7680102e2950",
+    "Name": "quod-node-local[2]",
+    "NodeID": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+    "State": "ready"
+  },
+  {
+    "ID": "9e181e5d-c435-2756-0337-ea53348db51a",
+    "Name": "quod-node-local[3]",
+    "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+    "State": "ready"
+  },
+  {
+    "ID": "96487a69-59d5-db27-6837-2c6bec2f4b14",
+    "Name": "quod-node-local[4]",
+    "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+    "State": "ready"
+  },
+  {
+    "ID": "946b1f92-7823-2b2d-fdcc-62d9ff91f02d",
+    "Name": "quod-node-local[5]",
+    "NodeID": "c8f9edef-853b-fc43-e3fb-d884418f7061",
+    "State": "ready"
+  },
+  {
+    "ID": "15833ccd-6653-9a21-d4a0-1bf1c1dbc9d9",
+    "Name": "quod-node-local[6]",
+    "NodeID": "3e390ebd-5557-a67c-b64e-07b728144297",
+    "State": "ready"
+  },
+  {
+    "ID": "0276ecb2-a618-74e7-d582-52d6bc1312cb",
+    "Name": "quod-node-local[7]",
+    "NodeID": "75b1a578-a5f6-e5b9-70cb-9e3aca6baac0",
+    "State": "ready"
+  }
+]

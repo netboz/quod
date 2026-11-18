@@ -1,0 +1,5 @@
+{
+  "target": "local",
+  "on": "quod-rehearsal-failure-reasons-20261118",
+  "expression": "quod_refound_operator:signed_user_registration(binary:decode_hex(<<\"71D0B5B60EC8BED1D0ACCE11522ED74A32E9BE7D27693DF4F8C33E95FCB998DE\">>))"
+}

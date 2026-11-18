@@ -1,0 +1,35 @@
+Dynamic Host Volumes
+ID        Name                Namespace  Plugin ID  Node ID   Node Pool  State
+0276ecb2  quod-node-local[7]  default    mkdir      75b1a578  default    ready
+15833ccd  quod-node-local[6]  default    mkdir      3e390ebd  default    ready
+946b1f92  quod-node-local[5]  default    mkdir      c8f9edef  default    ready
+96487a69  quod-node-local[4]  default    mkdir      75b1a578  default    ready
+9e181e5d  quod-node-local[3]  default    mkdir      3e390ebd  default    ready
+aeb32185  quod-node-local[0]  default    mkdir      3e390ebd  default    ready
+b11b7174  quod-node-local[2]  default    mkdir      c8f9edef  default    ready
+e76509ea  quod-node-local[1]  default    mkdir      75b1a578  default    ready
+
+Container Storage Interface
+ID                     Name                   Namespace  Plugin ID  Schedulable  Access Mode
+calibre-config         calibre-config         default    ceph-rbd   true         single-node-writer
+calibre-novels-config  calibre-novels-config  default    ceph-rbd   true         single-node-writer
+comfyui-data           comfyui-data           default    ceph-rbd   true         <none>
+crowdsec-data          crowdsec-data          default    ceph-rbd   true         single-node-writer
+esphome-config         esphome-config         default    ceph-rbd   true         single-node-writer
+flowise-data           flowise-data           default    ceph-rbd   true         <none>
+forgejo-data           forgejo-data           default    ceph-rbd   true         single-node-writer
+forgejo-runner-cache   forgejo-runner-cache   default    ceph-rbd   true         <none>
+frigate-config         frigate-config         default    ceph-rbd   true         <none>
+max-classifier-cache   max-classifier-cache   default    ceph-rbd   true         <none>
+mosquitto-data         mosquitto-data         default    ceph-rbd   true         <none>
+navidrome-data         navidrome-data         default    ceph-rbd   true         single-node-writer
+ollama-models          ollama-models          default    ceph-rbd   true         <none>
+openclaw-data          openclaw-data          default    ceph-rbd   true         <none>
+openwebui-data         openwebui-data         default    ceph-rbd   true         <none>
+prowlarr-config        prowlarr-config        default    ceph-rbd   true         single-node-writer
+qbittorrent-config     qbittorrent-config     default    ceph-rbd   true         <none>
+sabnzbd-config         sabnzbd-config         default    ceph-rbd   true         <none>
+stalwart-mail-data     stalwart-mail-data     default    ceph-rbd   true         <none>
+traefik-edge-acme      traefik-edge-acme      default    ceph-rbd   true         single-node-writer
+uptime-kuma-data       uptime-kuma-data       default    ceph-rbd   true         single-node-writer
+vaultwarden-data       vaultwarden-data       default    ceph-rbd   true         single-node-writer

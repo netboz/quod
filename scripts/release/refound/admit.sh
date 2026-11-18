@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # admit.sh <work-dir>: admit compute joiners idx 1..7 one at a time through validator idx 0,
 # with the same goal and retry shape as scripts/loadtest.sh. Each admission waits
-# for the founder's committee size to grow before the next one.
+# for the founder's committee to include all members admitted so far.
 set -u
 export NOMAD_ADDR=http://192.168.1.10:4646
 NS=quod:root
@@ -28,10 +28,10 @@ for idx in 1 2 3 4 5 6 7; do
   cand=$(alloc_of $idx); [ -n "$cand" ] || { echo "idx=$idx no running allocation" | tee -a $LOG; exit 1; }
   IFS='|' read -r pk host port <<< "$(identity "$cand")"
   [ -n "$pk" ] || { echo "idx=$idx ${cand:0:8} identity unreadable" | tee -a $LOG; exit 1; }
-  before=$(committee "$admitter")
   r=$(timeout -k 5 70 nomad alloc exec -task quod "$admitter" /opt/quod/bin/quod eval "$(admit_code "$pk" "$host" "$port")" 2>/dev/null)
-  cs=$before
-  for i in $(seq 1 24); do cs=$(committee "$admitter"); [ "${cs:-0}" -gt "${before:-0}" ] && break; sleep 5; done
+  expected=$((idx + 1))
+  cs=0
+  for i in $(seq 1 24); do cs=$(committee "$admitter"); [ "${cs:-0}" -ge "$expected" ] && break; sleep 5; done
   echo "idx=$idx ${cand:0:8} $host:$port admit=$r committee=$cs" | tee -a $LOG
-  [ "${cs:-0}" -gt "${before:-0}" ] || { echo "idx=$idx committee did not grow; stopping" | tee -a $LOG; exit 1; }
+  [ "${cs:-0}" -ge "$expected" ] || { echo "idx=$idx committee has not reached $expected; stopping" | tee -a $LOG; exit 1; }
 done

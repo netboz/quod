@@ -1,0 +1,5 @@
+{
+  "target": "local",
+  "on": "quod-rehearsal-failure-reasons-20261118",
+  "expression": "quod_refound_operator:catalogue()"
+}

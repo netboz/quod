@@ -447,6 +447,8 @@ The [baseline experiment](evidence/failure-reasons-20261118/report.md) and
 retain the semantic, lifecycle and scene-cost evidence for this contract.
 The [published-pin checks](evidence/failure-reasons-implementation-20261118/pinned/report.md)
 verify the committed engine dependency without a development checkout override.
+The [0.7.295 refound receipt](evidence/failure-reasons-release-20261118/report.md)
+records the separately authorized deployment on a new network identity.
 
 ### Owner replies
 

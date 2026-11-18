@@ -1,0 +1,26 @@
+{
+  "anchors": {
+    "quod:agent": "814949F491A1DE5B95EFC7E01DF2ECA5384D69574E55B7A8ADC5A825BBDDFE80",
+    "quod:controllers": "81D7EFB5490D0D8585253CD1CD7B3B80184F547FCC1073DF5551453CB778B364",
+    "quod:gui": "8983E2C47A6FB40968667E4FDAE1F9F7909877B674C62250563856CBE7D344E1",
+    "quod:names": "D58F3A846199F0BF0652A7343330C536994F535E424B0C4230CB910B6BDB854E",
+    "quod:node": "8FF4373F601D283C60743F952384875535B24C8025AD3C2C3DB724D8F61E6474",
+    "quod:space": "DC46223F03E9FFE193FDDBBE3479FD2AB4B063A6D6A3BC6C03A63ECE528D668D",
+    "quod:user": "7FF98625868FDED58180E460F7C3415E8D5C9A8ACA6048F82185E7DCE13C8278"
+  },
+  "enrollment": "complete",
+  "height": 19,
+  "names": [
+    "quod:agent",
+    "quod:controllers",
+    "quod:gui",
+    "quod:names",
+    "quod:node",
+    "quod:space",
+    "quod:user"
+  ],
+  "node": "{agent_instance_ref,<<\"node:b2994b2e497d62f5db74c676f752add3b822cdc7fd97faae5609ec04792a6e00\">>,<<26,137,237,166,152,97,21,246,25,187,211,113,152,159,162,50,60,238,27,205,114,198,91,99,107,94,171,24,187,153,181,95>>,me}",
+  "node_hosting": true,
+  "place_names": 56802,
+  "user_hosting": true
+}

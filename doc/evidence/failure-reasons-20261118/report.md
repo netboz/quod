@@ -194,7 +194,7 @@ implemented or measured by this experiment, and no linear-time claim is made.
 
 ## Verified consumer findings
 
-The [implementation plan](../../../nimbalyst-local/plans/explicit-failure-reasons.md)
+The [approved implementation plan](../failure-reasons-implementation-20261118/approved-plan.md)
 contains the full per-file treatment and proposed spec text.
 
 - Atomic votes do not need an invented fallback. Failed proofs do not seal;
@@ -262,7 +262,8 @@ uncommitted pending Yan's approval.
 
 [Final checks](verification.json) confirm unchanged source checkouts, complete
 failure inventories, preserved log line links, redaction and cleanup.
-[Artifact hashes](artifacts.json) identify the retained tools, plan and evidence.
+[Artifact hashes](artifacts.json) identify the tools, plan and evidence at the
+experiment boundary; the completed plan is now retained in git history.
 
 ## Limits of this evidence
 

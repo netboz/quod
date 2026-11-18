@@ -1,0 +1,9 @@
+{
+  "anchor": "8FF4373F601D283C60743F952384875535B24C8025AD3C2C3DB724D8F61E6474",
+  "enrollment": "awaiting_identity",
+  "namespace": "quod:node",
+  "node": "{agent_instance_ref,<<\"node:b2994b2e497d62f5db74c676f752add3b822cdc7fd97faae5609ec04792a6e00\">>,<<26,137,237,166,152,97,21,246,25,187,211,113,152,159,162,50,60,238,27,205,114,198,91,99,107,94,171,24,187,153,181,95>>,me}",
+  "sources": {
+    "quod_node.pl": "624156C433E886E712EC91EAB89E1768B6E4D5EE6109B8177FC881CB369820A0"
+  }
+}

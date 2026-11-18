@@ -1,0 +1,7 @@
+{
+  "genesis": "8a9671e47f4cc9d3642ef5c614699a97455255456dd2a303d5a7ef5c6a977814",
+  "committee_size": 8,
+  "role": "validator",
+  "syncing": false,
+  "height": 73
+}
